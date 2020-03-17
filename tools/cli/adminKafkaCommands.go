@@ -78,7 +78,7 @@ const (
 )
 
 var (
-	r = regexp.MustCompile(`Partition: \d+, Offset: \d+, Key: [^\n]*\n`)
+	r = regexp.MustCompile(`Partition: .*?, Offset: .*?, Key: .*?`)
 )
 
 type writerChannel struct {

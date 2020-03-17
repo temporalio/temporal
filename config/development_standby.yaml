@@ -20,7 +20,7 @@ services:
   frontend:
     rpc:
       grpcPort: 8233
-      ringpopPort: 8933
+      membershipPort: 8933
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -32,7 +32,7 @@ services:
   matching:
     rpc:
       grpcPort: 8235
-      ringpopPort: 8935
+      membershipPort: 8935
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -44,7 +44,7 @@ services:
   history:
     rpc:
       grpcPort: 8234
-      ringpopPort: 8934
+      membershipPort: 8934
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -56,7 +56,7 @@ services:
   worker:
     rpc:
       grpcPort: 8240
-      ringpopPort: 8940
+      membershipPort: 8940
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -136,8 +136,12 @@ archival:
         fileMode: "0666"
         dirMode: "0766"
   visibility:
-    status: "disabled"
-    enableRead: false
+    status: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
 
 domainDefaults:
   archival:
@@ -145,7 +149,8 @@ domainDefaults:
       status: "enabled"
       URI: "file:///tmp/temporal_archival/development"
     visibility:
-      status: "disabled"
+      status: "enabled"
+      URI: "file:///tmp/cadence_vis_archival/development"
 
 publicClient:
   hostPort: "localhost:8933"

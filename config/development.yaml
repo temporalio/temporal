@@ -23,7 +23,7 @@ services:
   frontend:
     rpc:
       grpcPort: 7233
-      ringpopPort: 6933
+      membershipPort: 6933
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -35,7 +35,7 @@ services:
   matching:
     rpc:
       grpcPort: 7235
-      ringpopPort: 6935
+      membershipPort: 6935
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -47,7 +47,7 @@ services:
   history:
     rpc:
       grpcPort: 7234
-      ringpopPort: 6934
+      membershipPort: 6934
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -59,7 +59,7 @@ services:
   worker:
     rpc:
       grpcPort: 7239
-      ringpopPort: 6939
+      membershipPort: 6939
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -95,8 +95,12 @@ archival:
       gstorage:
         credentialsPath: "/tmp/gcloud/keyfile.json"
   visibility:
-    status: "disabled"
-    enableRead: false
+    status: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
 
 domainDefaults:
   archival:
@@ -104,7 +108,8 @@ domainDefaults:
       status: "enabled"
       URI: "file:///tmp/temporal_archival/development"
     visibility:
-      status: "disabled"
+      status: "enabled"
+      URI: "file:///tmp/cadence_vis_archival/development"
 
 kafka:
   tls:

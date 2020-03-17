@@ -192,7 +192,7 @@ FilterLoop:
 			// this must return without ack
 			return
 		default:
-			task.shouldProcessTask, err = task.processor.getTaskFilter()(task)
+			task.shouldProcessTask, err = task.processor.getTaskFilter()(task.task)
 			if err == nil {
 				break FilterLoop
 			}

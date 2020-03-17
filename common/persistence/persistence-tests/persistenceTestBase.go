@@ -32,6 +32,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
 
 	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
@@ -41,6 +42,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/cassandra"
 	"github.com/temporalio/temporal/common/persistence/client"
@@ -72,34 +74,31 @@ type (
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		suite.Suite
-		ShardMgr               p.ShardManager
-		ExecutionMgrFactory    client.Factory
-		ExecutionManager       p.ExecutionManager
-		TaskMgr                p.TaskManager
-		HistoryV2Mgr           p.HistoryManager
-		ClusterMetadataManager p.ClusterMetadataManager
-		MetadataManager        p.MetadataManager
-		VisibilityMgr          p.VisibilityManager
-		DomainReplicationQueue p.DomainReplicationQueue
-		ShardInfo              *pblobs.ShardInfo
-		TaskIDGenerator        TransferTaskIDGenerator
-		ClusterMetadata        cluster.Metadata
-		ReadLevel              int64
-		ReplicationReadLevel   int64
-		DefaultTestCluster     PersistenceTestCluster
-		VisibilityTestCluster  PersistenceTestCluster
-		logger                 log.Logger
+		ShardMgr                 p.ShardManager
+		AbstractDataStoreFactory client.AbstractDataStoreFactory
+		ExecutionMgrFactory      client.Factory
+		ExecutionManager         p.ExecutionManager
+		TaskMgr                  p.TaskManager
+		HistoryV2Mgr             p.HistoryManager
+		ClusterMetadataManager   p.ClusterMetadataManager
+		MetadataManager          p.MetadataManager
+		VisibilityMgr            p.VisibilityManager
+		DomainReplicationQueue   p.DomainReplicationQueue
+		ShardInfo                *pblobs.ShardInfo
+		TaskIDGenerator          TransferTaskIDGenerator
+		ClusterMetadata          cluster.Metadata
+		ReadLevel                int64
+		ReplicationReadLevel     int64
+		DefaultTestCluster       PersistenceTestCluster
+		VisibilityTestCluster    PersistenceTestCluster
+		logger                   log.Logger
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
 	PersistenceTestCluster interface {
-		DatabaseName() string
 		SetupTestDatabase()
 		TearDownTestDatabase()
-		DropDatabase()
 		Config() config.Persistence
-		LoadSchema(fileNames []string, schemaDir string)
-		LoadVisibilitySchema(fileNames []string, schemaDir string)
 	}
 
 	// TestTransferTaskIDGenerator helper
@@ -185,7 +184,9 @@ func (s *TestBase) Setup() {
 	}
 
 	cfg := s.DefaultTestCluster.Config()
-	factory := client.NewFactory(&cfg, clusterName, nil, s.logger)
+	scope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
+	metricsClient := metrics.NewClient(scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.logger))
+	factory := client.NewFactory(&cfg, nil, s.AbstractDataStoreFactory, clusterName, metricsClient, s.logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -209,7 +210,7 @@ func (s *TestBase) Setup() {
 	visibilityFactory := factory
 	if s.VisibilityTestCluster != s.DefaultTestCluster {
 		vCfg := s.VisibilityTestCluster.Config()
-		visibilityFactory = client.NewFactory(&vCfg, clusterName, nil, s.logger)
+		visibilityFactory = client.NewFactory(&vCfg, nil, nil, clusterName, nil, s.logger)
 	}
 	// SQL currently doesn't have support for visibility manager
 	s.VisibilityMgr, err = visibilityFactory.NewVisibilityManager()

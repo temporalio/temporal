@@ -374,6 +374,8 @@ const (
 	FrontendClientGetWorkflowExecutionHistoryScope
 	// FrontendClientGetWorkflowExecutionRawHistoryScope tracks RPC calls to frontend service
 	FrontendClientGetWorkflowExecutionRawHistoryScope
+	// FrontendClientPollForWorkflowExecutionRawHistoryScope tracks RPC calls to frontend service
+	FrontendClientPollForWorkflowExecutionRawHistoryScope
 	// FrontendClientListArchivedWorkflowExecutionsScope tracks RPC calls to frontend service
 	FrontendClientListArchivedWorkflowExecutionsScope
 	// FrontendClientListClosedWorkflowExecutionsScope tracks RPC calls to frontend service
@@ -482,6 +484,8 @@ const (
 	DCRedirectionGetWorkflowExecutionHistoryScope
 	// DCRedirectionGetWorkflowExecutionRawHistoryScope tracks RPC calls for dc redirection
 	DCRedirectionGetWorkflowExecutionRawHistoryScope
+	// DCRedirectionPollForWorkflowExecutionRawHistoryScope tracks RPC calls for dc redirection
+	DCRedirectionPollForWorkflowExecutionRawHistoryScope
 	// DCRedirectionListArchivedWorkflowExecutionsScope tracks RPC calls for dc redirection
 	DCRedirectionListArchivedWorkflowExecutionsScope
 	// DCRedirectionListClosedWorkflowExecutionsScope tracks RPC calls for dc redirection
@@ -717,6 +721,8 @@ const (
 	FrontendGetWorkflowExecutionHistoryScope
 	// FrontendGetWorkflowExecutionRawHistoryScope is the metric scope for frontend.GetWorkflowExecutionRawHistory
 	FrontendGetWorkflowExecutionRawHistoryScope
+	// FrontendPollForWorkflowExecutionRawHistoryScope is the metric scope for frontend.GetWorkflowExecutionRawHistory
+	FrontendPollForWorkflowExecutionRawHistoryScope
 	// FrontendSignalWorkflowExecutionScope is the metric scope for frontend.SignalWorkflowExecution
 	FrontendSignalWorkflowExecutionScope
 	// FrontendSignalWithStartWorkflowExecutionScope is the metric scope for frontend.SignalWithStartWorkflowExecution
@@ -965,6 +971,8 @@ const (
 	ReplicationTaskFetcherScope
 	// ReplicationTaskCleanupScope is scope used by all metrics emitted by ReplicationTaskProcessor cleanup
 	ReplicationTaskCleanupScope
+	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
+	ReplicationDLQStatsScope
 
 	NumHistoryScopes
 )
@@ -1029,6 +1037,8 @@ const (
 	ArchiverArchivalWorkflowScope
 	// TaskListScavengerScope is scope used by all metrics emitted by worker.tasklist.Scavenger module
 	TaskListScavengerScope
+	// ExecutionsScavengerScope is scope used by all metrics emitted by worker.executions.Scavenger module
+	ExecutionsScavengerScope
 	// BatcherScope is scope used by all metrics emitted by worker.Batcher module
 	BatcherScope
 	// HistoryScavengerScope is scope used by all metrics emitted by worker.history.Scavenger module
@@ -1128,141 +1138,143 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},
 
-		HistoryClientStartWorkflowExecutionScope:            {operation: "HistoryClientStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRecordActivityTaskHeartbeatScope:       {operation: "HistoryClientRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRespondDecisionTaskCompletedScope:      {operation: "HistoryClientRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRespondDecisionTaskFailedScope:         {operation: "HistoryClientRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRespondActivityTaskCompletedScope:      {operation: "HistoryClientRespondActivityTaskCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRespondActivityTaskFailedScope:         {operation: "HistoryClientRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRespondActivityTaskCanceledScope:       {operation: "HistoryClientRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientGetMutableStateScope:                   {operation: "HistoryClientGetMutableState", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientPollMutableStateScope:                  {operation: "HistoryClientPollMutableState", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientResetStickyTaskListScope:               {operation: "HistoryClientResetStickyTaskListScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientDescribeWorkflowExecutionScope:         {operation: "HistoryClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRecordDecisionTaskStartedScope:         {operation: "HistoryClientRecordDecisionTaskStarted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRecordActivityTaskStartedScope:         {operation: "HistoryClientRecordActivityTaskStarted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRequestCancelWorkflowExecutionScope:    {operation: "HistoryClientRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientSignalWorkflowExecutionScope:           {operation: "HistoryClientSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientSignalWithStartWorkflowExecutionScope:  {operation: "HistoryClientSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRemoveSignalMutableStateScope:          {operation: "HistoryClientRemoveSignalMutableStateScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientTerminateWorkflowExecutionScope:        {operation: "HistoryClientTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientResetWorkflowExecutionScope:            {operation: "HistoryClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientScheduleDecisionTaskScope:              {operation: "HistoryClientScheduleDecisionTask", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRecordChildExecutionCompletedScope:     {operation: "HistoryClientRecordChildExecutionCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientReplicateEventsScope:                   {operation: "HistoryClientReplicateEvents", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientReplicateRawEventsScope:                {operation: "HistoryClientReplicateRawEvents", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientReplicateEventsV2Scope:                 {operation: "HistoryClientReplicateEventsV2", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientSyncShardStatusScope:                   {operation: "HistoryClientSyncShardStatusScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientSyncActivityScope:                      {operation: "HistoryClientSyncActivityScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientGetReplicationTasksScope:               {operation: "HistoryClientGetReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientGetDLQReplicationTasksScope:            {operation: "HistoryClientGetDLQReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientQueryWorkflowScope:                     {operation: "HistoryClientQueryWorkflowScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientReapplyEventsScope:                     {operation: "HistoryClientReapplyEventsScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientReadDLQMessagesScope:                   {operation: "HistoryClientReadDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientPurgeDLQMessagesScope:                  {operation: "HistoryClientPurgeDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientMergeDLQMessagesScope:                  {operation: "HistoryClientMergeDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		HistoryClientRefreshWorkflowTasksScope:              {operation: "HistoryClientRefreshWorkflowTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
-		MatchingClientPollForDecisionTaskScope:              {operation: "MatchingClientPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientPollForActivityTaskScope:              {operation: "MatchingClientPollForActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientAddActivityTaskScope:                  {operation: "MatchingClientAddActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientAddDecisionTaskScope:                  {operation: "MatchingClientAddDecisionTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientQueryWorkflowScope:                    {operation: "MatchingClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientRespondQueryTaskCompletedScope:        {operation: "MatchingClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientCancelOutstandingPollScope:            {operation: "MatchingClientCancelOutstandingPoll", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientDescribeTaskListScope:                 {operation: "MatchingClientDescribeTaskList", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientListTaskListPartitionsScope:           {operation: "MatchingClientListTaskListPartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		FrontendClientDeprecateDomainScope:                  {operation: "FrontendClientDeprecateDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientDescribeDomainScope:                   {operation: "FrontendClientDescribeDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientDescribeTaskListScope:                 {operation: "FrontendClientDescribeTaskList", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientDescribeWorkflowExecutionScope:        {operation: "FrontendClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetWorkflowExecutionHistoryScope:      {operation: "FrontendClientGetWorkflowExecutionHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetWorkflowExecutionRawHistoryScope:   {operation: "FrontendClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientListArchivedWorkflowExecutionsScope:   {operation: "FrontendClientListArchivedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientListClosedWorkflowExecutionsScope:     {operation: "FrontendClientListClosedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientListDomainsScope:                      {operation: "FrontendClientListDomains", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientListOpenWorkflowExecutionsScope:       {operation: "FrontendClientListOpenWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientPollForActivityTaskScope:              {operation: "FrontendClientPollForActivityTask", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientPollForDecisionTaskScope:              {operation: "FrontendClientPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientQueryWorkflowScope:                    {operation: "FrontendClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRecordActivityTaskHeartbeatScope:      {operation: "FrontendClientRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRecordActivityTaskHeartbeatByIDScope:  {operation: "FrontendClientRecordActivityTaskHeartbeatByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRegisterDomainScope:                   {operation: "FrontendClientRegisterDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRequestCancelWorkflowExecutionScope:   {operation: "FrontendClientRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientResetStickyTaskListScope:              {operation: "FrontendClientResetStickyTaskList", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientResetWorkflowExecutionScope:           {operation: "FrontendClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskCanceledScope:      {operation: "FrontendClientRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskCanceledByIDScope:  {operation: "FrontendClientRespondActivityTaskCanceledByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskCompletedScope:     {operation: "FrontendClientRespondActivityTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskCompletedByIDScope: {operation: "FrontendClientRespondActivityTaskCompletedByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskFailedScope:        {operation: "FrontendClientRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskFailedByIDScope:    {operation: "FrontendClientRespondActivityTaskFailedByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondDecisionTaskCompletedScope:     {operation: "FrontendClientRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondDecisionTaskFailedScope:        {operation: "FrontendClientRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondQueryTaskCompletedScope:        {operation: "FrontendClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientSignalWithStartWorkflowExecutionScope: {operation: "FrontendClientSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientSignalWorkflowExecutionScope:          {operation: "FrontendClientSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientStartWorkflowExecutionScope:           {operation: "FrontendClientStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientTerminateWorkflowExecutionScope:       {operation: "FrontendClientTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientUpdateDomainScope:                     {operation: "FrontendClientUpdateDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientListWorkflowExecutionsScope:           {operation: "FrontendClientListWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientScanWorkflowExecutionsScope:           {operation: "FrontendClientScanWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientCountWorkflowExecutionsScope:          {operation: "FrontendClientCountWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetSearchAttributesScope:              {operation: "FrontendClientGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetReplicationTasksScope:              {operation: "FrontendClientGetReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetDomainReplicationTasksScope:        {operation: "FrontendClientGetDomainReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetDLQReplicationTasksScope:           {operation: "FrontendClientGetDLQReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientReapplyEventsScope:                    {operation: "FrontendClientReapplyEventsScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetClusterInfoScope:                   {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientListTaskListPartitionsScope:           {operation: "FrontendClientListTaskListPartitions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		AdminClientAddSearchAttributeScope:                  {operation: "AdminClientAddSearchAttribute", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientDescribeHistoryHostScope:                 {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientDescribeWorkflowExecutionScope:           {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientGetWorkflowExecutionRawHistoryScope:      {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientGetWorkflowExecutionRawHistoryV2Scope:    {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientDescribeClusterScope:                     {operation: "AdminClientDescribeCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientRefreshWorkflowTasksScope:                {operation: "AdminClientRefreshWorkflowTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientCloseShardScope:                          {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientReadDLQMessagesScope:                     {operation: "AdminClientReadDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientPurgeDLQMessagesScope:                    {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientMergeDLQMessagesScope:                    {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		DCRedirectionDeprecateDomainScope:                   {operation: "DCRedirectionDeprecateDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionDescribeDomainScope:                    {operation: "DCRedirectionDescribeDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionDescribeTaskListScope:                  {operation: "DCRedirectionDescribeTaskList", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionDescribeWorkflowExecutionScope:         {operation: "DCRedirectionDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionGetWorkflowExecutionHistoryScope:       {operation: "DCRedirectionGetWorkflowExecutionHistory", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionGetWorkflowExecutionRawHistoryScope:    {operation: "DCRedirectionGetWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionListArchivedWorkflowExecutionsScope:    {operation: "DCRedirectionListArchivedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionListClosedWorkflowExecutionsScope:      {operation: "DCRedirectionListClosedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionListDomainsScope:                       {operation: "DCRedirectionListDomains", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionListOpenWorkflowExecutionsScope:        {operation: "DCRedirectionListOpenWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionListWorkflowExecutionsScope:            {operation: "DCRedirectionListWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionScanWorkflowExecutionsScope:            {operation: "DCRedirectionScanWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionCountWorkflowExecutionsScope:           {operation: "DCRedirectionCountWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionGetSearchAttributesScope:               {operation: "DCRedirectionGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionPollForActivityTaskScope:               {operation: "DCRedirectionPollForActivityTask", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionPollForDecisionTaskScope:               {operation: "DCRedirectionPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionQueryWorkflowScope:                     {operation: "DCRedirectionQueryWorkflow", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRecordActivityTaskHeartbeatScope:       {operation: "DCRedirectionRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRecordActivityTaskHeartbeatByIDScope:   {operation: "DCRedirectionRecordActivityTaskHeartbeatByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRegisterDomainScope:                    {operation: "DCRedirectionRegisterDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRequestCancelWorkflowExecutionScope:    {operation: "DCRedirectionRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionResetStickyTaskListScope:               {operation: "DCRedirectionResetStickyTaskList", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionResetWorkflowExecutionScope:            {operation: "DCRedirectionResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskCanceledScope:       {operation: "DCRedirectionRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskCanceledByIDScope:   {operation: "DCRedirectionRespondActivityTaskCanceledByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskCompletedScope:      {operation: "DCRedirectionRespondActivityTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskCompletedByIDScope:  {operation: "DCRedirectionRespondActivityTaskCompletedByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskFailedScope:         {operation: "DCRedirectionRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskFailedByIDScope:     {operation: "DCRedirectionRespondActivityTaskFailedByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondDecisionTaskCompletedScope:      {operation: "DCRedirectionRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondDecisionTaskFailedScope:         {operation: "DCRedirectionRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondQueryTaskCompletedScope:         {operation: "DCRedirectionRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionSignalWithStartWorkflowExecutionScope:  {operation: "DCRedirectionSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionSignalWorkflowExecutionScope:           {operation: "DCRedirectionSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionStartWorkflowExecutionScope:            {operation: "DCRedirectionStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionTerminateWorkflowExecutionScope:        {operation: "DCRedirectionTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionUpdateDomainScope:                      {operation: "DCRedirectionUpdateDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionListTaskListPartitionsScope:            {operation: "DCRedirectionListTaskListPartitions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		HistoryClientStartWorkflowExecutionScope:              {operation: "HistoryClientStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRecordActivityTaskHeartbeatScope:         {operation: "HistoryClientRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondDecisionTaskCompletedScope:        {operation: "HistoryClientRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondDecisionTaskFailedScope:           {operation: "HistoryClientRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondActivityTaskCompletedScope:        {operation: "HistoryClientRespondActivityTaskCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondActivityTaskFailedScope:           {operation: "HistoryClientRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondActivityTaskCanceledScope:         {operation: "HistoryClientRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientGetMutableStateScope:                     {operation: "HistoryClientGetMutableState", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientPollMutableStateScope:                    {operation: "HistoryClientPollMutableState", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientResetStickyTaskListScope:                 {operation: "HistoryClientResetStickyTaskListScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientDescribeWorkflowExecutionScope:           {operation: "HistoryClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRecordDecisionTaskStartedScope:           {operation: "HistoryClientRecordDecisionTaskStarted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRecordActivityTaskStartedScope:           {operation: "HistoryClientRecordActivityTaskStarted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRequestCancelWorkflowExecutionScope:      {operation: "HistoryClientRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientSignalWorkflowExecutionScope:             {operation: "HistoryClientSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientSignalWithStartWorkflowExecutionScope:    {operation: "HistoryClientSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRemoveSignalMutableStateScope:            {operation: "HistoryClientRemoveSignalMutableStateScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientTerminateWorkflowExecutionScope:          {operation: "HistoryClientTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientResetWorkflowExecutionScope:              {operation: "HistoryClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientScheduleDecisionTaskScope:                {operation: "HistoryClientScheduleDecisionTask", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRecordChildExecutionCompletedScope:       {operation: "HistoryClientRecordChildExecutionCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientReplicateEventsScope:                     {operation: "HistoryClientReplicateEvents", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientReplicateRawEventsScope:                  {operation: "HistoryClientReplicateRawEvents", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientReplicateEventsV2Scope:                   {operation: "HistoryClientReplicateEventsV2", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientSyncShardStatusScope:                     {operation: "HistoryClientSyncShardStatusScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientSyncActivityScope:                        {operation: "HistoryClientSyncActivityScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientGetReplicationTasksScope:                 {operation: "HistoryClientGetReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientGetDLQReplicationTasksScope:              {operation: "HistoryClientGetDLQReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientQueryWorkflowScope:                       {operation: "HistoryClientQueryWorkflowScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientReapplyEventsScope:                       {operation: "HistoryClientReapplyEventsScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientReadDLQMessagesScope:                     {operation: "HistoryClientReadDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientPurgeDLQMessagesScope:                    {operation: "HistoryClientPurgeDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientMergeDLQMessagesScope:                    {operation: "HistoryClientMergeDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRefreshWorkflowTasksScope:                {operation: "HistoryClientRefreshWorkflowTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		MatchingClientPollForDecisionTaskScope:                {operation: "MatchingClientPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientPollForActivityTaskScope:                {operation: "MatchingClientPollForActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientAddActivityTaskScope:                    {operation: "MatchingClientAddActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientAddDecisionTaskScope:                    {operation: "MatchingClientAddDecisionTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientQueryWorkflowScope:                      {operation: "MatchingClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientRespondQueryTaskCompletedScope:          {operation: "MatchingClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientCancelOutstandingPollScope:              {operation: "MatchingClientCancelOutstandingPoll", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientDescribeTaskListScope:                   {operation: "MatchingClientDescribeTaskList", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientListTaskListPartitionsScope:             {operation: "MatchingClientListTaskListPartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		FrontendClientDeprecateDomainScope:                    {operation: "FrontendClientDeprecateDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDescribeDomainScope:                     {operation: "FrontendClientDescribeDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDescribeTaskListScope:                   {operation: "FrontendClientDescribeTaskList", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDescribeWorkflowExecutionScope:          {operation: "FrontendClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetWorkflowExecutionHistoryScope:        {operation: "FrontendClientGetWorkflowExecutionHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetWorkflowExecutionRawHistoryScope:     {operation: "FrontendClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientPollForWorkflowExecutionRawHistoryScope: {operation: "FrontendClientPollForWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListArchivedWorkflowExecutionsScope:     {operation: "FrontendClientListArchivedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListClosedWorkflowExecutionsScope:       {operation: "FrontendClientListClosedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListDomainsScope:                        {operation: "FrontendClientListDomains", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListOpenWorkflowExecutionsScope:         {operation: "FrontendClientListOpenWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientPollForActivityTaskScope:                {operation: "FrontendClientPollForActivityTask", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientPollForDecisionTaskScope:                {operation: "FrontendClientPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientQueryWorkflowScope:                      {operation: "FrontendClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRecordActivityTaskHeartbeatScope:        {operation: "FrontendClientRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRecordActivityTaskHeartbeatByIDScope:    {operation: "FrontendClientRecordActivityTaskHeartbeatByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRegisterDomainScope:                     {operation: "FrontendClientRegisterDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRequestCancelWorkflowExecutionScope:     {operation: "FrontendClientRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientResetStickyTaskListScope:                {operation: "FrontendClientResetStickyTaskList", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientResetWorkflowExecutionScope:             {operation: "FrontendClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskCanceledScope:        {operation: "FrontendClientRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskCanceledByIDScope:    {operation: "FrontendClientRespondActivityTaskCanceledByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskCompletedScope:       {operation: "FrontendClientRespondActivityTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskCompletedByIDScope:   {operation: "FrontendClientRespondActivityTaskCompletedByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskFailedScope:          {operation: "FrontendClientRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskFailedByIDScope:      {operation: "FrontendClientRespondActivityTaskFailedByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondDecisionTaskCompletedScope:       {operation: "FrontendClientRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondDecisionTaskFailedScope:          {operation: "FrontendClientRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondQueryTaskCompletedScope:          {operation: "FrontendClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientSignalWithStartWorkflowExecutionScope:   {operation: "FrontendClientSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientSignalWorkflowExecutionScope:            {operation: "FrontendClientSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientStartWorkflowExecutionScope:             {operation: "FrontendClientStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientTerminateWorkflowExecutionScope:         {operation: "FrontendClientTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientUpdateDomainScope:                       {operation: "FrontendClientUpdateDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListWorkflowExecutionsScope:             {operation: "FrontendClientListWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientScanWorkflowExecutionsScope:             {operation: "FrontendClientScanWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientCountWorkflowExecutionsScope:            {operation: "FrontendClientCountWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetSearchAttributesScope:                {operation: "FrontendClientGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetReplicationTasksScope:                {operation: "FrontendClientGetReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetDomainReplicationTasksScope:          {operation: "FrontendClientGetDomainReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetDLQReplicationTasksScope:             {operation: "FrontendClientGetDLQReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientReapplyEventsScope:                      {operation: "FrontendClientReapplyEventsScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetClusterInfoScope:                     {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListTaskListPartitionsScope:             {operation: "FrontendClientListTaskListPartitions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		AdminClientAddSearchAttributeScope:                    {operation: "AdminClientAddSearchAttribute", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientDescribeHistoryHostScope:                   {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientDescribeWorkflowExecutionScope:             {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetWorkflowExecutionRawHistoryScope:        {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetWorkflowExecutionRawHistoryV2Scope:      {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientDescribeClusterScope:                       {operation: "AdminClientDescribeCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientRefreshWorkflowTasksScope:                  {operation: "AdminClientRefreshWorkflowTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientCloseShardScope:                            {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientReadDLQMessagesScope:                       {operation: "AdminClientReadDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientPurgeDLQMessagesScope:                      {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientMergeDLQMessagesScope:                      {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		DCRedirectionDeprecateDomainScope:                     {operation: "DCRedirectionDeprecateDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeDomainScope:                      {operation: "DCRedirectionDescribeDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeTaskListScope:                    {operation: "DCRedirectionDescribeTaskList", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeWorkflowExecutionScope:           {operation: "DCRedirectionDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionGetWorkflowExecutionHistoryScope:         {operation: "DCRedirectionGetWorkflowExecutionHistory", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionGetWorkflowExecutionRawHistoryScope:      {operation: "DCRedirectionGetWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionPollForWorkflowExecutionRawHistoryScope:  {operation: "DCRedirectionPollForWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListArchivedWorkflowExecutionsScope:      {operation: "DCRedirectionListArchivedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListClosedWorkflowExecutionsScope:        {operation: "DCRedirectionListClosedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListDomainsScope:                         {operation: "DCRedirectionListDomains", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListOpenWorkflowExecutionsScope:          {operation: "DCRedirectionListOpenWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListWorkflowExecutionsScope:              {operation: "DCRedirectionListWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionScanWorkflowExecutionsScope:              {operation: "DCRedirectionScanWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionCountWorkflowExecutionsScope:             {operation: "DCRedirectionCountWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionGetSearchAttributesScope:                 {operation: "DCRedirectionGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionPollForActivityTaskScope:                 {operation: "DCRedirectionPollForActivityTask", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionPollForDecisionTaskScope:                 {operation: "DCRedirectionPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionQueryWorkflowScope:                       {operation: "DCRedirectionQueryWorkflow", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRecordActivityTaskHeartbeatScope:         {operation: "DCRedirectionRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRecordActivityTaskHeartbeatByIDScope:     {operation: "DCRedirectionRecordActivityTaskHeartbeatByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRegisterDomainScope:                      {operation: "DCRedirectionRegisterDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRequestCancelWorkflowExecutionScope:      {operation: "DCRedirectionRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionResetStickyTaskListScope:                 {operation: "DCRedirectionResetStickyTaskList", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionResetWorkflowExecutionScope:              {operation: "DCRedirectionResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCanceledScope:         {operation: "DCRedirectionRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCanceledByIDScope:     {operation: "DCRedirectionRespondActivityTaskCanceledByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCompletedScope:        {operation: "DCRedirectionRespondActivityTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCompletedByIDScope:    {operation: "DCRedirectionRespondActivityTaskCompletedByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskFailedScope:           {operation: "DCRedirectionRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskFailedByIDScope:       {operation: "DCRedirectionRespondActivityTaskFailedByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondDecisionTaskCompletedScope:        {operation: "DCRedirectionRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondDecisionTaskFailedScope:           {operation: "DCRedirectionRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondQueryTaskCompletedScope:           {operation: "DCRedirectionRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionSignalWithStartWorkflowExecutionScope:    {operation: "DCRedirectionSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionSignalWorkflowExecutionScope:             {operation: "DCRedirectionSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionStartWorkflowExecutionScope:              {operation: "DCRedirectionStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionTerminateWorkflowExecutionScope:          {operation: "DCRedirectionTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionUpdateDomainScope:                        {operation: "DCRedirectionUpdateDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListTaskListPartitionsScope:              {operation: "DCRedirectionListTaskListPartitions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
@@ -1322,44 +1334,45 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminReapplyEventsScope:                    {operation: "ReapplyEvents"},
 		AdminRefreshWorkflowTasksScope:             {operation: "RefreshWorkflowTasks"},
 
-		FrontendStartWorkflowExecutionScope:           {operation: "StartWorkflowExecution"},
-		FrontendPollForDecisionTaskScope:              {operation: "PollForDecisionTask"},
-		FrontendPollForActivityTaskScope:              {operation: "PollForActivityTask"},
-		FrontendRecordActivityTaskHeartbeatScope:      {operation: "RecordActivityTaskHeartbeat"},
-		FrontendRecordActivityTaskHeartbeatByIDScope:  {operation: "RecordActivityTaskHeartbeatByID"},
-		FrontendRespondDecisionTaskCompletedScope:     {operation: "RespondDecisionTaskCompleted"},
-		FrontendRespondDecisionTaskFailedScope:        {operation: "RespondDecisionTaskFailed"},
-		FrontendRespondQueryTaskCompletedScope:        {operation: "RespondQueryTaskCompleted"},
-		FrontendRespondActivityTaskCompletedScope:     {operation: "RespondActivityTaskCompleted"},
-		FrontendRespondActivityTaskFailedScope:        {operation: "RespondActivityTaskFailed"},
-		FrontendRespondActivityTaskCanceledScope:      {operation: "RespondActivityTaskCanceled"},
-		FrontendRespondActivityTaskCompletedByIDScope: {operation: "RespondActivityTaskCompletedByID"},
-		FrontendRespondActivityTaskFailedByIDScope:    {operation: "RespondActivityTaskFailedByID"},
-		FrontendRespondActivityTaskCanceledByIDScope:  {operation: "RespondActivityTaskCanceledByID"},
-		FrontendGetWorkflowExecutionHistoryScope:      {operation: "GetWorkflowExecutionHistory"},
-		FrontendGetWorkflowExecutionRawHistoryScope:   {operation: "GetWorkflowExecutionRawHistory"},
-		FrontendSignalWorkflowExecutionScope:          {operation: "SignalWorkflowExecution"},
-		FrontendSignalWithStartWorkflowExecutionScope: {operation: "SignalWithStartWorkflowExecution"},
-		FrontendTerminateWorkflowExecutionScope:       {operation: "TerminateWorkflowExecution"},
-		FrontendResetWorkflowExecutionScope:           {operation: "ResetWorkflowExecution"},
-		FrontendRequestCancelWorkflowExecutionScope:   {operation: "RequestCancelWorkflowExecution"},
-		FrontendListArchivedWorkflowExecutionsScope:   {operation: "ListArchivedWorkflowExecutions"},
-		FrontendListOpenWorkflowExecutionsScope:       {operation: "ListOpenWorkflowExecutions"},
-		FrontendListClosedWorkflowExecutionsScope:     {operation: "ListClosedWorkflowExecutions"},
-		FrontendListWorkflowExecutionsScope:           {operation: "ListWorkflowExecutions"},
-		FrontendScanWorkflowExecutionsScope:           {operation: "ScanWorkflowExecutions"},
-		FrontendCountWorkflowExecutionsScope:          {operation: "CountWorkflowExecutions"},
-		FrontendRegisterDomainScope:                   {operation: "RegisterDomain"},
-		FrontendDescribeDomainScope:                   {operation: "DescribeDomain"},
-		FrontendListDomainsScope:                      {operation: "ListDomain"},
-		FrontendUpdateDomainScope:                     {operation: "UpdateDomain"},
-		FrontendDeprecateDomainScope:                  {operation: "DeprecateDomain"},
-		FrontendQueryWorkflowScope:                    {operation: "QueryWorkflow"},
-		FrontendDescribeWorkflowExecutionScope:        {operation: "DescribeWorkflowExecution"},
-		FrontendListTaskListPartitionsScope:           {operation: "FrontendListTaskListPartitions"},
-		FrontendDescribeTaskListScope:                 {operation: "DescribeTaskList"},
-		FrontendResetStickyTaskListScope:              {operation: "ResetStickyTaskList"},
-		FrontendGetSearchAttributesScope:              {operation: "GetSearchAttributes"},
+		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
+		FrontendPollForDecisionTaskScope:                {operation: "PollForDecisionTask"},
+		FrontendPollForActivityTaskScope:                {operation: "PollForActivityTask"},
+		FrontendRecordActivityTaskHeartbeatScope:        {operation: "RecordActivityTaskHeartbeat"},
+		FrontendRecordActivityTaskHeartbeatByIDScope:    {operation: "RecordActivityTaskHeartbeatByID"},
+		FrontendRespondDecisionTaskCompletedScope:       {operation: "RespondDecisionTaskCompleted"},
+		FrontendRespondDecisionTaskFailedScope:          {operation: "RespondDecisionTaskFailed"},
+		FrontendRespondQueryTaskCompletedScope:          {operation: "RespondQueryTaskCompleted"},
+		FrontendRespondActivityTaskCompletedScope:       {operation: "RespondActivityTaskCompleted"},
+		FrontendRespondActivityTaskFailedScope:          {operation: "RespondActivityTaskFailed"},
+		FrontendRespondActivityTaskCanceledScope:        {operation: "RespondActivityTaskCanceled"},
+		FrontendRespondActivityTaskCompletedByIDScope:   {operation: "RespondActivityTaskCompletedByID"},
+		FrontendRespondActivityTaskFailedByIDScope:      {operation: "RespondActivityTaskFailedByID"},
+		FrontendRespondActivityTaskCanceledByIDScope:    {operation: "RespondActivityTaskCanceledByID"},
+		FrontendGetWorkflowExecutionHistoryScope:        {operation: "GetWorkflowExecutionHistory"},
+		FrontendGetWorkflowExecutionRawHistoryScope:     {operation: "GetWorkflowExecutionRawHistory"},
+		FrontendPollForWorkflowExecutionRawHistoryScope: {operation: "PollForWorkflowExecutionRawHistory"},
+		FrontendSignalWorkflowExecutionScope:            {operation: "SignalWorkflowExecution"},
+		FrontendSignalWithStartWorkflowExecutionScope:   {operation: "SignalWithStartWorkflowExecution"},
+		FrontendTerminateWorkflowExecutionScope:         {operation: "TerminateWorkflowExecution"},
+		FrontendResetWorkflowExecutionScope:             {operation: "ResetWorkflowExecution"},
+		FrontendRequestCancelWorkflowExecutionScope:     {operation: "RequestCancelWorkflowExecution"},
+		FrontendListArchivedWorkflowExecutionsScope:     {operation: "ListArchivedWorkflowExecutions"},
+		FrontendListOpenWorkflowExecutionsScope:         {operation: "ListOpenWorkflowExecutions"},
+		FrontendListClosedWorkflowExecutionsScope:       {operation: "ListClosedWorkflowExecutions"},
+		FrontendListWorkflowExecutionsScope:             {operation: "ListWorkflowExecutions"},
+		FrontendScanWorkflowExecutionsScope:             {operation: "ScanWorkflowExecutions"},
+		FrontendCountWorkflowExecutionsScope:            {operation: "CountWorkflowExecutions"},
+		FrontendRegisterDomainScope:                     {operation: "RegisterDomain"},
+		FrontendDescribeDomainScope:                     {operation: "DescribeDomain"},
+		FrontendListDomainsScope:                        {operation: "ListDomain"},
+		FrontendUpdateDomainScope:                       {operation: "UpdateDomain"},
+		FrontendDeprecateDomainScope:                    {operation: "DeprecateDomain"},
+		FrontendQueryWorkflowScope:                      {operation: "QueryWorkflow"},
+		FrontendDescribeWorkflowExecutionScope:          {operation: "DescribeWorkflowExecution"},
+		FrontendListTaskListPartitionsScope:             {operation: "FrontendListTaskListPartitions"},
+		FrontendDescribeTaskListScope:                   {operation: "DescribeTaskList"},
+		FrontendResetStickyTaskListScope:                {operation: "ResetStickyTaskList"},
+		FrontendGetSearchAttributesScope:                {operation: "GetSearchAttributes"},
 	},
 	// History Scope Names
 	History: {
@@ -1462,6 +1475,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ArchiverClientScope:                                    {operation: "ArchiverClient"},
 		ReplicationTaskFetcherScope:                            {operation: "ReplicationTaskFetcher"},
 		ReplicationTaskCleanupScope:                            {operation: "ReplicationTaskCleanup"},
+		ReplicationDLQStatsScope:                               {operation: "ReplicationDLQStats"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -1494,6 +1508,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ArchiverPumpScope:                      {operation: "ArchiverPump"},
 		ArchiverArchivalWorkflowScope:          {operation: "ArchiverArchivalWorkflow"},
 		TaskListScavengerScope:                 {operation: "tasklistscavenger"},
+		ExecutionsScavengerScope:               {operation: "executionsscavenger"},
 		HistoryScavengerScope:                  {operation: "historyscavenger"},
 		BatcherScope:                           {operation: "batcher"},
 		ParentClosePolicyProcessorScope:        {operation: "ParentClosePolicyProcessor"},
@@ -1597,7 +1612,9 @@ const (
 	MatchingClientForwardedCounter
 	MatchingClientInvalidTaskListName
 
-	DomainReplicationTaskAckLevel
+	DomainReplicationTaskAckLevelGauge
+	DomainReplicationDLQAckLevelGauge
+	DomainReplicationDLQMaxLevelGauge
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -1619,6 +1636,7 @@ const (
 	TransferTaskThrottledCounter
 	TimerTaskThrottledCounter
 
+	ActivityE2ELatency
 	AckLevelUpdateCounter
 	AckLevelUpdateFailedCounter
 	DecisionTypeScheduleActivityCounter
@@ -1742,6 +1760,8 @@ const (
 	ReplicationTasksFetched
 	ReplicationTasksReturned
 	ReplicationDLQFailed
+	ReplicationDLQMaxLevelGauge
+	ReplicationDLQAckLevelGauge
 	GetReplicationMessagesForShardLatency
 	GetDLQReplicationMessagesLatency
 	EventReapplySkippedCount
@@ -1845,6 +1865,7 @@ const (
 	TaskListProcessedCount
 	TaskListDeletedCount
 	TaskListOutstandingCount
+	ExecutionsOutstandingCount
 	StartedCount
 	StoppedCount
 	ExecutorTasksDeferredCount
@@ -1856,6 +1877,7 @@ const (
 	HistoryScavengerSkipCount
 	ParentClosePolicyProcessorSuccess
 	ParentClosePolicyProcessorFailures
+	DomainReplicationEnqueueDLQCount
 
 	NumWorkerMetrics
 )
@@ -1944,7 +1966,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MatchingClientForwardedCounter:                            {metricName: "forwarded", metricType: Counter},
 		MatchingClientInvalidTaskListName:                         {metricName: "invalid_task_list_name", metricType: Counter},
 
-		DomainReplicationTaskAckLevel: {metricName: "domain_replication_task_ack_level", metricType: Gauge},
+		DomainReplicationTaskAckLevelGauge: {metricName: "domain_replication_task_ack_level", metricType: Gauge},
+		DomainReplicationDLQAckLevelGauge:  {metricName: "domain_dlq_ack_level", metricType: Gauge},
+		DomainReplicationDLQMaxLevelGauge:  {metricName: "domain_dlq_max_level", metricType: Gauge},
 	},
 	History: {
 		TaskRequests:                                      {metricName: "task_requests", metricType: Counter},
@@ -1960,6 +1984,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskBatchCompleteCounter:                          {metricName: "task_batch_complete_counter", metricType: Counter},
 		TransferTaskThrottledCounter:                      {metricName: "transfer_task_throttled_counter", metricType: Counter},
 		TimerTaskThrottledCounter:                         {metricName: "timer_task_throttled_counter", metricType: Counter},
+		ActivityE2ELatency:                                {metricName: "activity_end_to_end_latency", metricType: Timer},
 		AckLevelUpdateCounter:                             {metricName: "ack_level_update", metricType: Counter},
 		AckLevelUpdateFailedCounter:                       {metricName: "ack_level_update_failed", metricType: Counter},
 		DecisionTypeScheduleActivityCounter:               {metricName: "schedule_activity_decision", metricType: Counter},
@@ -2083,6 +2108,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ReplicationTasksFetched:                           {metricName: "replication_tasks_fetched", metricType: Timer},
 		ReplicationTasksReturned:                          {metricName: "replication_tasks_returned", metricType: Timer},
 		ReplicationDLQFailed:                              {metricName: "replication_dlq_enqueue_failed", metricType: Counter},
+		ReplicationDLQMaxLevelGauge:                       {metricName: "replication_dlq_max_level", metricType: Gauge},
+		ReplicationDLQAckLevelGauge:                       {metricName: "replication_dlq_ack_level", metricType: Gauge},
 		GetReplicationMessagesForShardLatency:             {metricName: "get_replication_messages_for_shard", metricType: Timer},
 		GetDLQReplicationMessagesLatency:                  {metricName: "get_dlq_replication_messages", metricType: Timer},
 		EventReapplySkippedCount:                          {metricName: "event_reapply_skipped_count", metricType: Counter},
@@ -2178,6 +2205,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskListProcessedCount:                        {metricName: "tasklist_processed", metricType: Gauge},
 		TaskListDeletedCount:                          {metricName: "tasklist_deleted", metricType: Gauge},
 		TaskListOutstandingCount:                      {metricName: "tasklist_outstanding", metricType: Gauge},
+		ExecutionsOutstandingCount:                    {metricName: "executions_outstanding", metricType: Gauge},
 		StartedCount:                                  {metricName: "started", metricType: Counter},
 		StoppedCount:                                  {metricName: "stopped", metricType: Counter},
 		ExecutorTasksDeferredCount:                    {metricName: "executor_deferred", metricType: Counter},
@@ -2189,6 +2217,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryScavengerSkipCount:                     {metricName: "scavenger_skips", metricType: Counter},
 		ParentClosePolicyProcessorSuccess:             {metricName: "parent_close_policy_processor_requests", metricType: Counter},
 		ParentClosePolicyProcessorFailures:            {metricName: "parent_close_policy_processor_errors", metricType: Counter},
+		DomainReplicationEnqueueDLQCount:              {metricName: "domain_replication_dlq_enqueue_requests", metricType: Counter},
 	},
 }
 

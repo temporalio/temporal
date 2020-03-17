@@ -373,18 +373,23 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 }
 
 func (s *matchingEngineSuite) TestAddActivityTasks() {
-	s.AddTasksTest(persistence.TaskListTypeActivity)
+	s.AddTasksTest(persistence.TaskListTypeActivity, false)
 }
 
 func (s *matchingEngineSuite) TestAddDecisionTasks() {
-	s.AddTasksTest(persistence.TaskListTypeDecision)
+	s.AddTasksTest(persistence.TaskListTypeDecision, false)
 }
 
-func (s *matchingEngineSuite) AddTasksTest(taskType int32) {
+func (s *matchingEngineSuite) TestAddDecisionTasksForwarded() {
+	s.AddTasksTest(persistence.TaskListTypeDecision, true)
+}
+
+func (s *matchingEngineSuite) AddTasksTest(taskType int32, isForwarded bool) {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
 	domainID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
+	forwardedFrom := "/__cadence_sys/makeToast/1"
 
 	taskList := &commonproto.TaskList{Name: tl}
 
@@ -406,7 +411,9 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int32) {
 				TaskList:                      taskList,
 				ScheduleToStartTimeoutSeconds: 1,
 			}
-
+			if isForwarded {
+				addRequest.ForwardedFrom = forwardedFrom
+			}
 			_, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		} else {
 			addRequest := matchingservice.AddDecisionTaskRequest{
@@ -416,12 +423,26 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int32) {
 				TaskList:                      taskList,
 				ScheduleToStartTimeoutSeconds: 1,
 			}
-
+			if isForwarded {
+				addRequest.ForwardedFrom = forwardedFrom
+			}
 			_, err = s.matchingEngine.AddDecisionTask(context.Background(), &addRequest)
 		}
-		s.NoError(err)
+
+		switch isForwarded {
+		case false:
+			s.NoError(err)
+		case true:
+			s.Equal(errRemoteSyncMatchFailed, err)
+		}
 	}
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(newTestTaskListID(domainID.String(), tl, taskType)))
+
+	switch isForwarded {
+	case false:
+		s.EqualValues(taskCount, s.taskManager.getTaskCount(newTestTaskListID(domainID.String(), tl, taskType)))
+	case true:
+		s.EqualValues(0, s.taskManager.getTaskCount(newTestTaskListID(domainID.String(), tl, taskType)))
+	}
 }
 
 func (s *matchingEngineSuite) TestTaskWriterShutdown() {
@@ -556,10 +577,12 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.Equal(int32(50), result.StartToCloseTimeoutSeconds)
 		s.Equal(int32(10), result.HeartbeatTimeoutSeconds)
 		taskToken := &token.Task{
-			DomainId:   domainID,
-			WorkflowId: workflowID,
-			RunId:      runID,
-			ScheduleId: scheduleID,
+			DomainId:     domainID,
+			WorkflowId:   workflowID,
+			RunId:        runID,
+			ScheduleId:   scheduleID,
+			ActivityId:   activityID,
+			ActivityType: activityTypeName,
 		}
 
 		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
@@ -703,10 +726,12 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
 		taskToken := &token.Task{
-			DomainId:   domainID,
-			WorkflowId: workflowID,
-			RunId:      runID,
-			ScheduleId: scheduleID,
+			DomainId:     domainID,
+			WorkflowId:   workflowID,
+			RunId:        runID,
+			ScheduleId:   scheduleID,
+			ActivityId:   activityID,
+			ActivityType: activityTypeName,
 		}
 
 		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
@@ -884,10 +909,12 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				s.EqualValues(activityHeader, result.Header)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &token.Task{
-					DomainId:   domainID,
-					WorkflowId: workflowID,
-					RunId:      runID,
-					ScheduleId: scheduleID,
+					DomainId:     domainID,
+					WorkflowId:   workflowID,
+					RunId:        runID,
+					ScheduleId:   scheduleID,
+					ActivityId:   activityID,
+					ActivityType: activityTypeName,
 				}
 				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
 				s.NoError(err)
@@ -1178,10 +1205,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &token.Task{
-					DomainId:   domainID,
-					WorkflowId: workflowID,
-					RunId:      runID,
-					ScheduleId: scheduleID,
+					DomainId:     domainID,
+					WorkflowId:   workflowID,
+					RunId:        runID,
+					ScheduleId:   scheduleID,
+					ActivityId:   activityID,
+					ActivityType: activityTypeName,
 				}
 				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {

@@ -39,8 +39,11 @@ type (
 	Scheduler interface {
 		common.Daemon
 		Submit(task PriorityTask) error
-		// TODO: add another method for non-blocking submit
+		TrySubmit(task PriorityTask) (bool, error)
 	}
+
+	// SchedulerType respresents the type of the task scheduler implementation
+	SchedulerType int
 
 	// State represents the current state of a task
 	State int
@@ -88,6 +91,13 @@ type (
 		// Len return the size of the queue
 		Len() int
 	}
+)
+
+const (
+	// SchedulerTypeFIFO is the scheduler type for FIFO scheduler implementation
+	SchedulerTypeFIFO SchedulerType = iota + 1
+	// SchedulerTypeWRR is the scheduler type for weighted round robin scheduler implementation
+	SchedulerTypeWRR
 )
 
 const (

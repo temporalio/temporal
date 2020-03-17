@@ -87,7 +87,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(task.DomainID), lastWriteVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, lastWriteVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
