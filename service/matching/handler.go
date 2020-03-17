@@ -305,10 +305,10 @@ func (h *Handler) handleErr(err error, scope int) error {
 		h.metricsClient.IncCounter(scope, metrics.ServiceFailures)
 		return err
 	case *serviceerror.InvalidArgument:
-		h.metricsClient.IncCounter(scope, metrics.ServiceErrBadRequestCounter)
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
 		return err
 	case *serviceerror.NotFound:
-		h.metricsClient.IncCounter(scope, metrics.ServiceErrEntityNotExistsCounter)
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
 		return err
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		h.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
@@ -320,7 +320,7 @@ func (h *Handler) handleErr(err error, scope int) error {
 		h.metricsClient.IncCounter(scope, metrics.ServiceErrQueryFailedCounter)
 		return err
 	case *serviceerror.ResourceExhausted:
-		h.metricsClient.IncCounter(scope, metrics.ServiceErrServiceBusyCounter)
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
 		return err
 	case *serviceerror.DomainNotActive:
 		h.metricsClient.IncCounter(scope, metrics.ServiceErrDomainNotActiveCounter)

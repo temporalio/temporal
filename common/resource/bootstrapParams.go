@@ -51,6 +51,7 @@ type (
 		MetricScope                  tally.Scope
 		MembershipFactoryInitializer MembershipFactoryInitializerFunc
 		RPCFactory                   common.RPCFactory
+		AbstractDatastoreFactory     persistenceClient.AbstractDataStoreFactory
 		PProfInitializer             common.PProfInitializer
 		PersistenceConfig            config.Persistence
 		ClusterMetadata              cluster.Metadata

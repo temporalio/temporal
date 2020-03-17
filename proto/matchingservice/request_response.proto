@@ -23,6 +23,7 @@ syntax = "proto3";
 package matchingservice;
 option go_package = "github.com/temporalio/temporal/.gen/proto/matchingservice";
 
+import "enums/enums.proto";
 import "common/common.proto";
 import "common/decision.proto";
 import "common/workflow_execution.proto";
@@ -90,6 +91,7 @@ message AddDecisionTaskRequest {
     int64 scheduleId = 4;
     int32 scheduleToStartTimeoutSeconds = 5;
     string forwardedFrom = 6;
+    enums.TaskSource source = 7;
 }
 
 message AddDecisionTaskResponse {
@@ -103,6 +105,7 @@ message AddActivityTaskRequest {
     int64 scheduleId = 5;
     int32 scheduleToStartTimeoutSeconds = 6;
     string forwardedFrom = 7;
+    enums.TaskSource source = 8;
 }
 
 message AddActivityTaskResponse {

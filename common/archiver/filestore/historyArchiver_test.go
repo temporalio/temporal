@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -215,8 +216,8 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 			},
 		},
 	}
-	historyBlob := &archiver.HistoryBlob{
-		Header: &archiver.HistoryBlobHeader{
+	historyBlob := &archiverproto.HistoryBlob{
+		Header: &archiverproto.HistoryBlobHeader{
 			IsLast: true,
 		},
 		Body: historyBatches,
@@ -293,8 +294,8 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			},
 		},
 	}
-	historyBlob := &archiver.HistoryBlob{
-		Header: &archiver.HistoryBlobHeader{
+	historyBlob := &archiverproto.HistoryBlob{
+		Header: &archiverproto.HistoryBlobHeader{
 			IsLast: true,
 		},
 		Body: historyBatches,
@@ -478,8 +479,8 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBlob := &archiver.HistoryBlob{
-		Header: &archiver.HistoryBlobHeader{
+	historyBlob := &archiverproto.HistoryBlob{
+		Header: &archiverproto.HistoryBlobHeader{
 			IsLast: true,
 		},
 		Body: s.historyBatchesV100,

@@ -97,7 +97,7 @@ func newReplicatorQueueProcessor(
 
 	logger = logger.WithTags(tag.ComponentReplicatorQueue)
 
-	replicationTaskFilter := func(taskInfo *taskInfo) (bool, error) {
+	replicationTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
 		return true, nil
 	}
 

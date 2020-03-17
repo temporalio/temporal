@@ -115,7 +115,8 @@ func (c *canaryImpl) startWorker() error {
 	}
 
 	archivalWorker := worker.New(c.archivalClient.Service, archivalDomain, archivalTaskListName, options)
-	registerArchival(archivalWorker)
+	registerHistoryArchival(archivalWorker)
+
 	defer archivalWorker.Stop()
 	if err := archivalWorker.Start(); err != nil {
 		return err

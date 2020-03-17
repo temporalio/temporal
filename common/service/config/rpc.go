@@ -89,7 +89,7 @@ func (d *RPCFactory) GetRingpopChannel() *tchannel.Channel {
 
 	if d.ringpopChannel == nil {
 		ringpopServiceName := fmt.Sprintf("%v-ringpop", d.serviceName)
-		ringpopHostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.RingpopPort)
+		ringpopHostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.MembershipPort)
 
 		var err error
 		d.ringpopChannel, err = tchannel.NewChannel(ringpopServiceName, nil)

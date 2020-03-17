@@ -102,7 +102,6 @@ func (s *server) Stop() {
 
 // startService starts a service with the given name and config
 func (s *server) startService() common.Daemon {
-
 	var err error
 
 	params := resource.BootstrapParams{}
@@ -152,7 +151,7 @@ func (s *server) startService() common.Daemon {
 	// This call performs a config check against the configured persistence store for immutable cluster metadata.
 	// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 	// This is to keep this check hidden from independent downstream daemons and keep this in a single place.
-	immutableClusterMetadataInitialization(params.Logger, &params.PersistenceConfig, &params.MetricsClient, clusterMetadata)
+	immutableClusterMetadataInitialization(params.Logger, dc, &params.PersistenceConfig, &params.AbstractDatastoreFactory, &params.MetricsClient, clusterMetadata)
 
 	params.ClusterMetadata = cluster.NewMetadata(
 		params.Logger,
@@ -251,13 +250,17 @@ func (s *server) startService() common.Daemon {
 
 func immutableClusterMetadataInitialization(
 	logger l.Logger,
+	dc *dynamicconfig.Collection,
 	persistenceConfig *config.Persistence,
+	abstractDatastoreFactory *persistenceClient.AbstractDataStoreFactory,
 	metricsClient *metrics.Client,
 	clusterMetadata *config.ClusterMetadata) {
 
 	logger = logger.WithTags(tag.ComponentMetadataInitializer)
 	clusterMetadataManager, err := persistenceClient.NewFactory(
 		persistenceConfig,
+		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
+		*abstractDatastoreFactory,
 		clusterMetadata.CurrentClusterName,
 		*metricsClient,
 		logger,

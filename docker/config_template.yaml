@@ -88,7 +88,7 @@ services:
     frontend:
         rpc:
             grpcPort: 7233
-            ringpopPort: 6933
+            membershipPort: 6933
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:
@@ -105,7 +105,7 @@ services:
     matching:
         rpc:
             grpcPort: 7235
-            ringpopPort: 6935
+            membershipPort: 6935
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:
@@ -122,7 +122,7 @@ services:
     history:
         rpc:
             grpcPort: 7234
-            ringpopPort: 6934
+            membershipPort: 6934
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:
@@ -139,7 +139,7 @@ services:
     worker:
         rpc:
             grpcPort: 7239
-            ringpopPort: 6939
+            membershipPort: 6939
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:

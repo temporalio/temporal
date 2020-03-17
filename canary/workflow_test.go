@@ -53,7 +53,7 @@ func TestWorkflowTestSuite(t *testing.T) {
 func (s *workflowTestSuite) SetupTest() {
 	s.env = s.NewTestWorkflowEnvironment()
 
-	registerArchival(s.env)
+	registerHistoryArchival(s.env)
 	registerBatch(s.env)
 	registerCancellation(s.env)
 	registerConcurrentExec(s.env)

@@ -34,7 +34,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
@@ -48,12 +47,10 @@ type (
 		controller *gomock.Controller
 		mockShard  *shardContextTest
 
-		mockProcessor   *MockTimerProcessor
-		mockQueueAckMgr *MockTimerQueueAckMgr
+		mockProcessor *MockTimerProcessor
 
 		scopeIdx         int
 		scope            metrics.Scope
-		clusterName      string
 		logger           log.Logger
 		notificationChan chan struct{}
 
@@ -89,9 +86,7 @@ func (s *taskProcessorSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.clusterName = cluster.TestAlternativeClusterName
 	s.mockProcessor = &MockTimerProcessor{}
-	s.mockQueueAckMgr = &MockTimerQueueAckMgr{}
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -114,7 +109,6 @@ func (s *taskProcessorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
 	s.mockProcessor.AssertExpectations(s.T())
-	s.mockQueueAckMgr.AssertExpectations(s.T())
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
@@ -130,10 +124,10 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr() {
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
-	var taskFilterErr taskFilter = func(task *taskInfo) (bool, error) {
+	var taskFilterErr taskFilter = func(task queueTaskInfo) (bool, error) {
 		return false, errors.New("some random error")
 	}
-	var taskFilter taskFilter = func(task *taskInfo) (bool, error) {
+	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
 	}
 	s.mockProcessor.On("getTaskFilter").Return(taskFilterErr).Once()
@@ -150,7 +144,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr()
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	task.shouldProcessTask = false
-	var taskFilter taskFilter = func(task *taskInfo) (bool, error) {
+	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return false, nil
 	}
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
@@ -165,7 +159,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
-	var taskFilter taskFilter = func(task *taskInfo) (bool, error) {
+	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
 	}
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
@@ -181,7 +175,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessErrNoErr() {
 	err := errors.New("some random err")
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
-	var taskFilter taskFilter = func(task *taskInfo) (bool, error) {
+	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
 	}
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()

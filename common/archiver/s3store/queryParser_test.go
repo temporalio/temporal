@@ -45,7 +45,7 @@ func (s *queryParserSuite) SetupTest() {
 	s.parser = NewQueryParser()
 }
 
-func (s *queryParserSuite) TestParseWorkflowID() {
+func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 	testCases := []struct {
 		query       string
 		expectErr   bool
@@ -59,11 +59,19 @@ func (s *queryParserSuite) TestParseWorkflowID() {
 			},
 		},
 		{
-			query:     "WorkflowID = \"random workflowID\" and WorkflowID = \"random workflowID\"",
+			query:     "WorkflowTypeName = \"random workflowTypeName\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: common.StringPtr("random workflowID"),
+				workflowTypeName: common.StringPtr("random workflowTypeName"),
 			},
+		},
+		{
+			query:     "WorkflowID = \"random workflowID\" and WorkflowTypeName = \"random workflowTypeName\"",
+			expectErr: true,
+		},
+		{
+			query:     "WorkflowID = \"random workflowID\" and WorkflowID = \"random workflowID\"",
+			expectErr: true,
 		},
 		{
 			query:     "RunID = \"random runID\"",
@@ -112,10 +120,9 @@ func (s *queryParserSuite) TestParseWorkflowID() {
 			continue
 		}
 		s.NoError(err)
-		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
-		if !tc.parsedQuery.emptyResult {
-			s.Equal(tc.parsedQuery.workflowID, parsedQuery.workflowID)
-		}
+		s.Equal(tc.parsedQuery.workflowID, parsedQuery.workflowID)
+		s.Equal(tc.parsedQuery.workflowTypeName, parsedQuery.workflowTypeName)
+
 	}
 }
 
@@ -214,10 +221,8 @@ func (s *queryParserSuite) TestParseCloseTime() {
 			continue
 		}
 		s.NoError(err)
-		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
-		if !tc.parsedQuery.emptyResult {
-			s.Equal(tc.parsedQuery.closeTime, parsedQuery.closeTime)
-		}
+		s.Equal(tc.parsedQuery.closeTime, parsedQuery.closeTime)
+
 	}
 }
 
@@ -260,9 +265,6 @@ func (s *queryParserSuite) TestParseStartTime() {
 			continue
 		}
 		s.NoError(err)
-		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
-		if !tc.parsedQuery.emptyResult {
-			s.Equal(tc.parsedQuery.closeTime, parsedQuery.closeTime)
-		}
+		s.Equal(tc.parsedQuery.closeTime, parsedQuery.closeTime)
 	}
 }

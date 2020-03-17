@@ -41,6 +41,8 @@ const (
 	listOpenWorkflowsFailureCount     = "list-open-workflows.failures"
 	listWorkflowsCount                = "list-workflows"
 	listWorkflowsFailureCount         = "list-workflows.failures"
+	listArchivedWorkflowCount         = "list-archived-workflows"
+	listArchivedWorkflowFailureCount  = "list-archived-workflows.failures"
 	getWorkflowHistoryCount           = "get-workflow-history"
 	getWorkflowHistoryFailureCount    = "get-workflow-history.failures"
 	errTimeoutCount                   = "errors.timeout"
@@ -49,13 +51,14 @@ const (
 
 // latency metrics go here
 const (
-	latency                   = "latency"
-	startLatency              = "latency.schedule-to-start"
-	startWorkflowLatency      = "latency.startworkflow"
-	listOpenWorkflowsLatency  = "latency.list-open-workflows"
-	listWorkflowsLatency      = "latency.list-workflows"
-	getWorkflowHistoryLatency = "latency.get-workflow-history"
-	timerDriftLatency         = "latency.timer-drift"
+	latency                      = "latency"
+	startLatency                 = "latency.schedule-to-start"
+	startWorkflowLatency         = "latency.startworkflow"
+	listOpenWorkflowsLatency     = "latency.list-open-workflows"
+	listWorkflowsLatency         = "latency.list-workflows"
+	listArchivedWorkflowsLatency = "latency.list-archived-workflows"
+	getWorkflowHistoryLatency    = "latency.get-workflow-history"
+	timerDriftLatency            = "latency.timer-drift"
 )
 
 // workflowMetricsProfile is the state that's needed to

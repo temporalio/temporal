@@ -22,6 +22,7 @@ package matching
 
 import (
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -53,6 +54,7 @@ type (
 		query            *queryTaskInfo   // non-nil for a query task that's locally sync matched
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
 		domainName       string
+		source           enums.TaskSource
 		forwardedFrom    string     // name of the child partition this task is forwarded from (empty if not forwarded)
 		responseC        chan error // non-nil only where there is a caller waiting for response (sync-match)
 		backlogCountHint int64
@@ -62,6 +64,7 @@ type (
 func newInternalTask(
 	info *persistenceblobs.AllocatedTaskInfo,
 	completionFunc func(*persistenceblobs.AllocatedTaskInfo, error),
+	source enums.TaskSource,
 	forwardedFrom string,
 	forSyncMatch bool,
 ) *internalTask {
@@ -70,6 +73,7 @@ func newInternalTask(
 			AllocatedTaskInfo: info,
 			completionFunc:    completionFunc,
 		},
+		source:        source,
 		forwardedFrom: forwardedFrom,
 	}
 	if forSyncMatch {
@@ -87,7 +91,8 @@ func newInternalQueryTask(
 			taskID:  taskID,
 			request: request,
 		},
-		responseC: make(chan error, 1),
+		forwardedFrom: request.GetForwardedFrom(),
+		responseC:     make(chan error, 1),
 	}
 }
 
