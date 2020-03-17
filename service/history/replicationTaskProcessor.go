@@ -513,15 +513,15 @@ func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error)
 	case *serviceerror.ShardOwnershipLost:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
 	case *serviceerror.InvalidArgument:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrBadRequestCounter)
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.DomainNotActive:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrDomainNotActiveCounter)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
 	case *serviceerror.NotFound:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrEntityNotExistsCounter)
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
 	case *serviceerror.ResourceExhausted:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrLimitExceededCounter)
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
 	case *serviceerror.RetryTask:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.DeadlineExceeded:

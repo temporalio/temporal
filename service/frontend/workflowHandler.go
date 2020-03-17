@@ -3404,16 +3404,16 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog
 		scope.IncCounter(metrics.ServiceFailures)
 		return err
 	case *serviceerror.InvalidArgument:
-		scope.IncCounter(metrics.ServiceErrBadRequestCounter)
+		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
 		return err
 	case *serviceerror.DomainNotActive:
-		scope.IncCounter(metrics.ServiceErrBadRequestCounter)
+		scope.IncCounter(metrics.ServiceErrDomainNotActiveCounter)
 		return err
 	case *serviceerror.ResourceExhausted:
-		scope.IncCounter(metrics.ServiceErrServiceBusyCounter)
+		scope.IncCounter(metrics.ServiceErrResourceExhaustedCounter)
 		return err
 	case *serviceerror.NotFound:
-		scope.IncCounter(metrics.ServiceErrEntityNotExistsCounter)
+		scope.IncCounter(metrics.ServiceErrNotFoundCounter)
 		return err
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		scope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedCounter)
