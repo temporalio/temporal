@@ -1,17 +1,17 @@
 // The MIT License (MIT)
-// 
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -74,11 +74,6 @@ type Interface interface {
 		GetRequest *shared.GetWorkflowExecutionHistoryRequest,
 	) (*shared.GetWorkflowExecutionHistoryResponse, error)
 
-	GetWorkflowExecutionRawHistory(
-		ctx context.Context,
-		GetRequest *shared.GetWorkflowExecutionRawHistoryRequest,
-	) (*shared.GetWorkflowExecutionRawHistoryResponse, error)
-
 	ListArchivedWorkflowExecutions(
 		ctx context.Context,
 		ListRequest *shared.ListArchivedWorkflowExecutionsRequest,
@@ -118,11 +113,6 @@ type Interface interface {
 		ctx context.Context,
 		PollRequest *shared.PollForDecisionTaskRequest,
 	) (*shared.PollForDecisionTaskResponse, error)
-
-	PollForWorkflowExecutionRawHistory(
-		ctx context.Context,
-		GetRequest *shared.PollForWorkflowExecutionRawHistoryRequest,
-	) (*shared.PollForWorkflowExecutionRawHistoryResponse, error)
 
 	QueryWorkflow(
 		ctx context.Context,
@@ -335,17 +325,6 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
-				Name: "GetWorkflowExecutionRawHistory",
-				HandlerSpec: thrift.HandlerSpec{
-
-					Type:  transport.Unary,
-					Unary: thrift.UnaryHandler(h.GetWorkflowExecutionRawHistory),
-				},
-				Signature:    "GetWorkflowExecutionRawHistory(GetRequest *shared.GetWorkflowExecutionRawHistoryRequest) (*shared.GetWorkflowExecutionRawHistoryResponse)",
-				ThriftModule: cadence.ThriftModule,
-			},
-
-			thrift.Method{
 				Name: "ListArchivedWorkflowExecutions",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -430,17 +409,6 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.PollForDecisionTask),
 				},
 				Signature:    "PollForDecisionTask(PollRequest *shared.PollForDecisionTaskRequest) (*shared.PollForDecisionTaskResponse)",
-				ThriftModule: cadence.ThriftModule,
-			},
-
-			thrift.Method{
-				Name: "PollForWorkflowExecutionRawHistory",
-				HandlerSpec: thrift.HandlerSpec{
-
-					Type:  transport.Unary,
-					Unary: thrift.UnaryHandler(h.PollForWorkflowExecutionRawHistory),
-				},
-				Signature:    "PollForWorkflowExecutionRawHistory(GetRequest *shared.PollForWorkflowExecutionRawHistoryRequest) (*shared.PollForWorkflowExecutionRawHistoryResponse)",
 				ThriftModule: cadence.ThriftModule,
 			},
 
@@ -688,7 +656,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 40)
+	procedures := make([]transport.Procedure, 0, 38)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -847,25 +815,6 @@ func (h handler) GetWorkflowExecutionHistory(ctx context.Context, body wire.Valu
 	return response, err
 }
 
-func (h handler) GetWorkflowExecutionRawHistory(ctx context.Context, body wire.Value) (thrift.Response, error) {
-	var args cadence.WorkflowService_GetWorkflowExecutionRawHistory_Args
-	if err := args.FromWire(body); err != nil {
-		return thrift.Response{}, err
-	}
-
-	success, err := h.impl.GetWorkflowExecutionRawHistory(ctx, args.GetRequest)
-
-	hadError := err != nil
-	result, err := cadence.WorkflowService_GetWorkflowExecutionRawHistory_Helper.WrapResponse(success, err)
-
-	var response thrift.Response
-	if err == nil {
-		response.IsApplicationError = hadError
-		response.Body = result
-	}
-	return response, err
-}
-
 func (h handler) ListArchivedWorkflowExecutions(ctx context.Context, body wire.Value) (thrift.Response, error) {
 	var args cadence.WorkflowService_ListArchivedWorkflowExecutions_Args
 	if err := args.FromWire(body); err != nil {
@@ -1009,25 +958,6 @@ func (h handler) PollForDecisionTask(ctx context.Context, body wire.Value) (thri
 
 	hadError := err != nil
 	result, err := cadence.WorkflowService_PollForDecisionTask_Helper.WrapResponse(success, err)
-
-	var response thrift.Response
-	if err == nil {
-		response.IsApplicationError = hadError
-		response.Body = result
-	}
-	return response, err
-}
-
-func (h handler) PollForWorkflowExecutionRawHistory(ctx context.Context, body wire.Value) (thrift.Response, error) {
-	var args cadence.WorkflowService_PollForWorkflowExecutionRawHistory_Args
-	if err := args.FromWire(body); err != nil {
-		return thrift.Response{}, err
-	}
-
-	success, err := h.impl.PollForWorkflowExecutionRawHistory(ctx, args.GetRequest)
-
-	hadError := err != nil
-	result, err := cadence.WorkflowService_PollForWorkflowExecutionRawHistory_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

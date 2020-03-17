@@ -49,14 +49,15 @@ type (
 	IntegrationBase struct {
 		suite.Suite
 
-		testCluster        *TestCluster
-		testClusterConfig  *TestClusterConfig
-		engine             FrontendClient
-		adminClient        AdminClient
-		Logger             log.Logger
-		domainName         string
-		foreignDomainName  string
-		archivalDomainName string
+		testCluster              *TestCluster
+		testClusterConfig        *TestClusterConfig
+		engine                   FrontendClient
+		adminClient              AdminClient
+		Logger                   log.Logger
+		domainName               string
+		testRawHistoryDomainName string
+		foreignDomainName        string
+		archivalDomainName       string
 	}
 )
 
@@ -94,11 +95,12 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.engine = s.testCluster.GetFrontendClient()
 		s.adminClient = s.testCluster.GetAdminClient()
 	}
-
+	s.testRawHistoryDomainName = "TestRawHistoryDomain"
 	s.domainName = s.randomizeStr("integration-test-domain")
 	s.Require().NoError(
 		s.registerDomain(s.domainName, 1, workflow.ArchivalStatusDisabled, "", workflow.ArchivalStatusDisabled, ""))
-
+	s.Require().NoError(
+		s.registerDomain(s.testRawHistoryDomainName, 1, workflow.ArchivalStatusDisabled, "", workflow.ArchivalStatusDisabled, ""))
 	s.foreignDomainName = s.randomizeStr("integration-foreign-test-domain")
 	s.Require().NoError(
 		s.registerDomain(s.foreignDomainName, 1, workflow.ArchivalStatusDisabled, "", workflow.ArchivalStatusDisabled, ""))

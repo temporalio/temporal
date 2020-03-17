@@ -1,17 +1,17 @@
 // The MIT License (MIT)
-// 
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -84,12 +84,6 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.GetWorkflowExecutionHistoryResponse, error)
 
-	GetWorkflowExecutionRawHistory(
-		ctx context.Context,
-		GetRequest *shared.GetWorkflowExecutionRawHistoryRequest,
-		opts ...yarpc.CallOption,
-	) (*shared.GetWorkflowExecutionRawHistoryResponse, error)
-
 	ListArchivedWorkflowExecutions(
 		ctx context.Context,
 		ListRequest *shared.ListArchivedWorkflowExecutionsRequest,
@@ -137,12 +131,6 @@ type Interface interface {
 		PollRequest *shared.PollForDecisionTaskRequest,
 		opts ...yarpc.CallOption,
 	) (*shared.PollForDecisionTaskResponse, error)
-
-	PollForWorkflowExecutionRawHistory(
-		ctx context.Context,
-		GetRequest *shared.PollForWorkflowExecutionRawHistoryRequest,
-		opts ...yarpc.CallOption,
-	) (*shared.PollForWorkflowExecutionRawHistoryResponse, error)
 
 	QueryWorkflow(
 		ctx context.Context,
@@ -483,29 +471,6 @@ func (c client) GetWorkflowExecutionHistory(
 	return
 }
 
-func (c client) GetWorkflowExecutionRawHistory(
-	ctx context.Context,
-	_GetRequest *shared.GetWorkflowExecutionRawHistoryRequest,
-	opts ...yarpc.CallOption,
-) (success *shared.GetWorkflowExecutionRawHistoryResponse, err error) {
-
-	args := cadence.WorkflowService_GetWorkflowExecutionRawHistory_Helper.Args(_GetRequest)
-
-	var body wire.Value
-	body, err = c.c.Call(ctx, args, opts...)
-	if err != nil {
-		return
-	}
-
-	var result cadence.WorkflowService_GetWorkflowExecutionRawHistory_Result
-	if err = result.FromWire(body); err != nil {
-		return
-	}
-
-	success, err = cadence.WorkflowService_GetWorkflowExecutionRawHistory_Helper.UnwrapResponse(&result)
-	return
-}
-
 func (c client) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	_ListRequest *shared.ListArchivedWorkflowExecutionsRequest,
@@ -687,29 +652,6 @@ func (c client) PollForDecisionTask(
 	}
 
 	success, err = cadence.WorkflowService_PollForDecisionTask_Helper.UnwrapResponse(&result)
-	return
-}
-
-func (c client) PollForWorkflowExecutionRawHistory(
-	ctx context.Context,
-	_GetRequest *shared.PollForWorkflowExecutionRawHistoryRequest,
-	opts ...yarpc.CallOption,
-) (success *shared.PollForWorkflowExecutionRawHistoryResponse, err error) {
-
-	args := cadence.WorkflowService_PollForWorkflowExecutionRawHistory_Helper.Args(_GetRequest)
-
-	var body wire.Value
-	body, err = c.c.Call(ctx, args, opts...)
-	if err != nil {
-		return
-	}
-
-	var result cadence.WorkflowService_PollForWorkflowExecutionRawHistory_Result
-	if err = result.FromWire(body); err != nil {
-		return
-	}
-
-	success, err = cadence.WorkflowService_PollForWorkflowExecutionRawHistory_Helper.UnwrapResponse(&result)
 	return
 }
 
