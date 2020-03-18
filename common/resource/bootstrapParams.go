@@ -52,7 +52,6 @@ type (
 		MembershipFactoryInitializer MembershipFactoryInitializerFunc
 		RPCFactory                   common.RPCFactory
 		AbstractDatastoreFactory     persistenceClient.AbstractDataStoreFactory
-		PProfInitializer             common.PProfInitializer
 		PersistenceConfig            config.Persistence
 		ClusterMetadata              cluster.Metadata
 		ReplicatorConfig             config.Replicator

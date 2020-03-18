@@ -96,7 +96,10 @@ type (
 	}
 )
 
-const defaultTestValueOfESIndexMaxResultWindow = 5
+const (
+	defaultTestValueOfESIndexMaxResultWindow = 5
+	pprofTestPort                            = 7000
+)
 
 // NewCluster creates and sets up the test cluster
 func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
@@ -190,12 +193,27 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		MockAdminClient:               options.MockAdminClient,
 		DomainReplicationTaskExecutor: domain.NewReplicationTaskExecutor(testBase.MetadataManager, logger),
 	}
+
+	err := newPProfInitializerImpl(logger, pprofTestPort).Start()
+	if err != nil {
+		logger.Fatal("Failed to start pprof", tag.Error(err))
+	}
+
 	cluster := NewCadence(cadenceParams)
 	if err := cluster.Start(); err != nil {
 		return nil, err
 	}
 
 	return &TestCluster{testBase: testBase, archiverBase: archiverBase, host: cluster}, nil
+}
+
+func newPProfInitializerImpl(logger log.Logger, port int) common.PProfInitializer {
+	return &config.PProfInitializerImpl{
+		PProf: &config.PProf{
+			Port: port,
+		},
+		Logger: logger,
+	}
 }
 
 func setupShards(testBase persistencetests.TestBase, numHistoryShards int, logger log.Logger) {

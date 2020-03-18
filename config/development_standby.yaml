@@ -12,9 +12,12 @@ persistence:
         hosts: "127.0.0.1"
         keyspace: "temporal_visibility_standby"
 
-ringpop:
-  name: temporal_standby
-  maxJoinDuration: 30s
+server:
+  ringpop:
+    name: temporal_standby
+    maxJoinDuration: 30s
+  pprof:
+    port: 8936
 
 services:
   frontend:
@@ -26,8 +29,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal_standby"
-    pprof:
-      port: 8936
 
   matching:
     rpc:
@@ -38,8 +39,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal_standby"
-    pprof:
-      port: 8938
 
   history:
     rpc:
@@ -50,8 +49,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal_standby"
-    pprof:
-      port: 8937
 
   worker:
     rpc:
@@ -62,8 +59,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal_standby"
-    pprof:
-      port: 8941
 
 clusterMetadata:
   enableGlobalDomain: true

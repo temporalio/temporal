@@ -43,9 +43,9 @@ const (
 type (
 	// Config contains the configuration for a set of cadence services
 	Config struct {
-		// Ringpop is the ringpop related configuration
-		Ringpop Ringpop `yaml:"ringpop"`
-		// Persistence contains the configuration for cadence datastores
+		// Server is process-wide service-related configuration
+		Server Server `yaml:"server"`
+		// Persistence contains the configuration for temporal datastores
 		Persistence Persistence `yaml:"persistence"`
 		// Log is the logging config
 		Log Logger `yaml:"log"`
@@ -59,7 +59,7 @@ type (
 		Kafka messaging.KafkaConfig `yaml:"kafka"`
 		// Archival is the config for archival
 		Archival Archival `yaml:"archival"`
-		// PublicClient is config for connecting to cadence frontend
+		// PublicClient is config for connecting to temporal frontend
 		PublicClient PublicClient `yaml:"publicClient"`
 		// DynamicConfigClient is the config for setting up the file based dynamic config client
 		// Filepath should be relative to the root directory
@@ -74,8 +74,6 @@ type (
 		RPC RPC `yaml:"rpc"`
 		// Metrics is the metrics subsystem configuration
 		Metrics Metrics `yaml:"metrics"`
-		// PProf is the PProf configuration
-		PProf PProf `yaml:"pprof"`
 	}
 
 	// PProf contains the rpc config items
@@ -100,6 +98,14 @@ type (
 		DisableLogging bool `yaml:"disableLogging"`
 		// LogLevel is the desired log level
 		LogLevel string `yaml:"logLevel"`
+	}
+
+	// Server contains config items that apply process-wide to all services
+	Server struct {
+		// Ringpop is the ringpop related configuration
+		Ringpop Ringpop `yaml:"ringpop"`
+		// PProf is the PProf configuration
+		PProf PProf `yaml:"pprof"`
 	}
 
 	// Ringpop contains the ringpop config items

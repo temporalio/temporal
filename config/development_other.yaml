@@ -12,9 +12,12 @@ persistence:
         hosts: "127.0.0.1"
         keyspace: "temporal_visibility_other"
 
-ringpop:
-  name: temporal_other
-  maxJoinDuration: 30s
+server:
+  ringpop:
+    name: temporal_other
+    maxJoinDuration: 30s
+  pprof:
+    port: 9936
 
 services:
   frontend:
@@ -26,8 +29,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal_other"
-    pprof:
-      port: 9936
 
   matching:
     rpc:
@@ -38,8 +39,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal_other"
-    pprof:
-      port: 9938
 
   history:
     rpc:
@@ -50,8 +49,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal_other"
-    pprof:
-      port: 9937
 
   worker:
     rpc:
@@ -62,8 +59,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal_other"
-    pprof:
-      port: 9941
 
 clusterMetadata:
   enableGlobalDomain: true
