@@ -23,6 +23,7 @@ package matching
 import (
 	"context"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -243,6 +244,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 		}
 	}()
 
+	querySet := int32(0)
 	var remotePollErr error
 	var remotePollResp matchingservice.PollForDecisionTaskResponse
 	t.client.EXPECT().PollForDecisionTask(gomock.Any(), gomock.Any()).Do(
@@ -252,6 +254,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 				remotePollErr = err
 			} else if task.isQuery() {
 				task.finish(nil)
+				atomic.CompareAndSwapInt32(&querySet, 0, 1)
 				remotePollResp = matchingservice.PollForDecisionTaskResponse{
 					Query: &commonproto.WorkflowQuery{},
 				}
@@ -278,7 +281,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	t.NotNil(req)
 	t.NoError(err)
 	t.NotNil(result)
-	t.NotNil(remotePollResp.Query)
+	t.NotZero(atomic.LoadInt32(&querySet))
 	t.Equal("answer", string(result.QueryResult))
 	t.Equal(t.taskList.name, req.GetForwardedFrom())
 	t.Equal(t.taskList.Parent(20), req.GetTaskList().GetName())
