@@ -3,26 +3,6 @@ ARG TARGET=server
 # Can be used in case a proxy is necessary
 ARG GOPROXY
 
-# Build tcheck binary
-FROM golang:1.13.6-alpine AS tcheck
-
-RUN apk add --update --no-cache ca-certificates git curl
-
-ENV GO111MODULE=off
-
-RUN curl https://glide.sh/get | sh
-
-ENV TCHECK_VERSION=v1.1.0
-
-RUN go get -d github.com/uber/tcheck
-RUN cd /go/src/github.com/uber/tcheck && git checkout ${TCHECK_VERSION}
-
-WORKDIR /go/src/github.com/uber/tcheck
-
-RUN glide install
-
-RUN go install
-
 # Build Temporal binaries
 FROM golang:1.13.6-alpine AS builder
 
@@ -74,7 +54,6 @@ FROM alpine AS temporal-server
 ENV TEMPORAL_HOME /etc/temporal
 RUN mkdir -p /etc/temporal
 
-COPY --from=tcheck /go/bin/tcheck /usr/local/bin
 COPY --from=dockerize /usr/local/bin/dockerize /usr/local/bin
 COPY --from=builder /temporal/temporal-cassandra-tool /usr/local/bin
 COPY --from=builder /temporal/temporal-sql-tool /usr/local/bin
@@ -108,7 +87,6 @@ CMD /start.sh
 # Temporal CLI
 FROM alpine AS temporal-tctl
 
-COPY --from=tcheck /go/bin/tcheck /usr/local/bin
 COPY --from=builder /temporal/tctl /usr/local/bin
 
 ENTRYPOINT ["tctl"]
@@ -119,14 +97,12 @@ FROM alpine AS temporal-admin-tools
 ENV TEMPORAL_HOME /etc/temporal
 RUN mkdir -p /etc/temporal
 
-COPY --from=tcheck /go/bin/tcheck /usr/local/bin
 COPY --from=dockerize /usr/local/bin/dockerize /usr/local/bin
 COPY --from=builder /temporal/temporal-cassandra-tool /usr/local/bin
 COPY --from=builder /temporal/temporal-sql-tool /usr/local/bin
 COPY --from=builder /temporal/tctl /usr/local/bin
 COPY --from=builder /temporal/temporal-server /usr/local/bin
 COPY --from=builder /temporal/schema /etc/temporal/schema
-COPY --from=tcheck /go/bin/tcheck /usr/local/bin
 
 COPY docker/entrypoint.sh /docker-entrypoint.sh
 COPY config/dynamicconfig /etc/temporal/config/dynamicconfig
