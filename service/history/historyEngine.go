@@ -63,7 +63,7 @@ const (
 	activityCancellationMsgActivityIDUnknown  = "ACTIVITY_ID_UNKNOWN"
 	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
 	timerCancellationMsgTimerIDUnknown        = "TIMER_ID_UNKNOWN"
-	queryFirstDecisionTaskWaitTime            = time.Second
+	defaultQueryFirstDecisionTaskWaitTime     = time.Second
 	queryFirstDecisionTaskCheckInterval       = 200 * time.Millisecond
 )
 
@@ -183,7 +183,7 @@ var (
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
 	ErrQueryEnteredInvalidState = &workflow.BadRequestError{Message: "query entered invalid state, this should be impossible"}
 	// ErrQueryWorkflowBeforeFirstDecision is error indicating that query was attempted before first decision task completed
-	ErrQueryWorkflowBeforeFirstDecision = &workflow.BadRequestError{Message: "workflow must handle at least one decision task before it can be queried"}
+	ErrQueryWorkflowBeforeFirstDecision = &workflow.QueryFailedError{Message: "workflow must handle at least one decision task before it can be queried"}
 	// ErrConsistentQueryNotEnabled is error indicating that consistent query was requested but either cluster or domain does not enable consistent query
 	ErrConsistentQueryNotEnabled = &workflow.BadRequestError{Message: "cluster or domain does not enable strongly consistent query but strongly consistent query was requested"}
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
@@ -821,6 +821,14 @@ func (e *historyEngineImpl) QueryWorkflow(
 
 	// query cannot be processed unless at least one decision task has finished
 	// if first decision task has not finished wait for up to a second for it to complete
+	queryFirstDecisionTaskWaitTime := defaultQueryFirstDecisionTaskWaitTime
+	ctxDeadline, ok := ctx.Deadline()
+	if ok {
+		ctxWaitTime := ctxDeadline.Sub(time.Now()) - time.Second
+		if ctxWaitTime > queryFirstDecisionTaskWaitTime {
+			queryFirstDecisionTaskWaitTime = ctxWaitTime
+		}
+	}
 	deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
 	for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
 		<-time.After(queryFirstDecisionTaskCheckInterval)

@@ -326,7 +326,7 @@ func (f *factoryImpl) init(clusterName string, limiters map[string]quotas.Limite
 
 func buildRatelimiters(cfg *config.Persistence, maxQPS dynamicconfig.IntPropertyFn) map[string]quotas.Limiter {
 	result := make(map[string]quotas.Limiter, len(cfg.DataStores))
-	for dsName, _ := range cfg.DataStores {
+	for dsName := range cfg.DataStores {
 		if maxQPS != nil && maxQPS() > 0 {
 			result[dsName] = quotas.NewDynamicRateLimiter(func() float64 { return float64(maxQPS()) })
 		}
