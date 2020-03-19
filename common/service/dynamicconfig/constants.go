@@ -224,6 +224,7 @@ var keys = map[Key]string{
 	WorkerReplicationTaskMaxRetryCount:              "worker.replicationTaskMaxRetryCount",
 	WorkerReplicationTaskMaxRetryDuration:           "worker.replicationTaskMaxRetryDuration",
 	WorkerReplicationTaskContextDuration:            "worker.replicationTaskContextDuration",
+	WorkerReReplicationContextTimeout:               "worker.workerReReplicationContextTimeout",
 	WorkerIndexerConcurrency:                        "worker.indexerConcurrency",
 	WorkerESProcessorNumOfWorkers:                   "worker.ESProcessorNumOfWorkers",
 	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
@@ -578,6 +579,8 @@ const (
 	WorkerReplicationTaskMaxRetryDuration
 	// WorkerReplicationTaskContextDuration is the context timeout for apply replication tasks
 	WorkerReplicationTaskContextDuration
+	// WorkerReReplicationContextTimeout is the context timeout for end to end  re-replication process
+	WorkerReReplicationContextTimeout
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor
@@ -669,6 +672,7 @@ func (f Filter) String() string {
 var filters = []string{
 	"unknownFilter",
 	"domainName",
+	"domainID",
 	"taskListName",
 	"taskType",
 }
@@ -677,6 +681,8 @@ const (
 	unknownFilter Filter = iota
 	// DomainName is the domain name
 	DomainName
+	// DomainID is the domain id
+	DomainID
 	// TaskListName is the tasklist name
 	TaskListName
 	// TaskType is the task type (0:Decision, 1:Activity)
@@ -700,6 +706,13 @@ func TaskListFilter(name string) FilterOption {
 func DomainFilter(name string) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
 		filterMap[DomainName] = name
+	}
+}
+
+// DomainIDFilter filters by domain id
+func DomainIDFilter(domainID string) FilterOption {
+	return func(filterMap map[Filter]interface{}) {
+		filterMap[DomainID] = domainID
 	}
 }
 

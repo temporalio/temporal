@@ -95,6 +95,9 @@ type DurationPropertyFn func(opts ...FilterOption) time.Duration
 // DurationPropertyFnWithDomainFilter is a wrapper to get duration property from dynamic config with domain as filter
 type DurationPropertyFnWithDomainFilter func(domain string) time.Duration
 
+// DurationPropertyFnWithDomainIDFilter is a wrapper to get duration property from dynamic config with domainID as filter
+type DurationPropertyFnWithDomainIDFilter func(domainID string) time.Duration
+
 // DurationPropertyFnWithTaskListInfoFilters is a wrapper to get duration property from dynamic config  with three filters: domain, taskList, taskType
 type DurationPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) time.Duration
 
@@ -205,6 +208,18 @@ func (c *Collection) GetDurationProperty(key Key, defaultValue time.Duration) Du
 func (c *Collection) GetDurationPropertyFilteredByDomain(key Key, defaultValue time.Duration) DurationPropertyFnWithDomainFilter {
 	return func(domain string) time.Duration {
 		val, err := c.client.GetDurationValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, durationCompareEquals)
+		return val
+	}
+}
+
+// GetDurationPropertyFilteredByDomainID gets property with domainID filter and asserts that it's a duration
+func (c *Collection) GetDurationPropertyFilteredByDomainID(key Key, defaultValue time.Duration) DurationPropertyFnWithDomainIDFilter {
+	return func(domainID string) time.Duration {
+		val, err := c.client.GetDurationValue(key, getFilterMap(DomainIDFilter(domainID)), defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
