@@ -26,7 +26,6 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"google.golang.org/grpc/metadata"
 )
 
 const (
@@ -65,18 +64,6 @@ type (
 
 var (
 	_ VersionChecker = (*versionChecker)(nil)
-
-	versionHeaders = metadata.New(map[string]string{
-		SDKVersionHeaderName:        SupportedGoSDKVersion,
-		SDKFeatureVersionHeaderName: SupportedGoSDKVersion,
-		SDKImplHeaderName:           GoSDK,
-	})
-
-	cliVersionHeaders = metadata.New(map[string]string{
-		SDKVersionHeaderName:        SupportedCLIVersion,
-		SDKFeatureVersionHeaderName: SupportedCLIVersion,
-		SDKImplHeaderName:           CLI,
-	})
 )
 
 // NewVersionChecker constructs a new VersionChecker

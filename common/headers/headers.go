@@ -39,6 +39,20 @@ const (
 	SDKImplHeaderName = "temporal-sdk-name"
 )
 
+var (
+	versionHeaders = metadata.New(map[string]string{
+		SDKVersionHeaderName:        SupportedGoSDKVersion,
+		SDKFeatureVersionHeaderName: SupportedGoSDKVersion,
+		SDKImplHeaderName:           GoSDK,
+	})
+
+	cliVersionHeaders = metadata.New(map[string]string{
+		SDKVersionHeaderName:        SupportedCLIVersion,
+		SDKFeatureVersionHeaderName: SupportedCLIVersion,
+		SDKImplHeaderName:           CLI,
+	})
+)
+
 // GetValues returns header values for passed header names.
 // It always returns slice of the same size as number of passed header names.
 func GetValues(ctx context.Context, headerNames ...string) []string {
