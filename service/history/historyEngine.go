@@ -308,6 +308,7 @@ func NewEngineWithShardContext(
 		},
 		shard.GetService().GetPayloadSerializer(),
 		replicationTimeout,
+		nil,
 		shard.GetLogger(),
 	)
 	replicationTaskExecutor := newReplicationTaskExecutor(
@@ -319,6 +320,7 @@ func NewEngineWithShardContext(
 		shard.GetMetricsClient(),
 		shard.GetLogger(),
 	)
+
 	var replicationTaskProcessors []ReplicationTaskProcessor
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
 		replicationTaskProcessor := NewReplicationTaskProcessor(

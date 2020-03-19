@@ -101,6 +101,7 @@ func newTimerQueueProcessor(
 				},
 				shard.GetService().GetPayloadSerializer(),
 				historyRereplicationTimeout,
+				nil,
 				logger,
 			)
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
