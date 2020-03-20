@@ -920,7 +920,9 @@ func convertSearchAttributes(searchAttributes *commonproto.SearchAttributes,
 		return nil
 	}
 
-	result := &cliproto.SearchAttributes{}
+	result := &cliproto.SearchAttributes{
+		IndexedFields: map[string]string{},
+	}
 	ctx, cancel := newContext(c)
 	defer cancel()
 	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx, nil)
