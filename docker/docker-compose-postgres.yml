@@ -15,7 +15,7 @@ services:
       - "8125:8125"
       - "8126:8126"
   temporal:
-    image: temporalio/temporal:master-auto-setup
+    image: temporalio/temporal-auto-setup:latest
     ports:
      - "7233:7233"
      - "7234:7234"
@@ -35,11 +35,3 @@ services:
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
     depends_on:
       - postgres
-  cadence-web:
-    image: ubercadence/web:3.4.1
-    environment:
-      - "TEMPORAL_TCHANNEL_PEERS=temporal:7233"
-    ports:
-      - "8088:8088"
-    depends_on:
-      - temporal

@@ -32,7 +32,7 @@ services:
     environment:
       - discovery.type=single-node
   temporal:
-    image: temporalio/temporal:master-auto-setup
+    image: temporalio/temporal-auto-setup:latest
     ports:
      - "7233:7233"
      - "7234:7234"
@@ -54,12 +54,3 @@ services:
       - statsd
       - kafka
       - elasticsearch
-  cadence-web:
-    image: ubercadence/web:3.4.1
-    environment:
-      - "TEMPORAL_TCHANNEL_PEERS=temporal:7233"
-    ports:
-      - "8088:8088"
-    depends_on:
-      - temporal
-
