@@ -32,7 +32,7 @@ services:
     environment:
       - discovery.type=single-node
   temporal:
-    image: temporalio/temporal-auto-setup:latest
+    image: temporalio/auto-setup:latest
     ports:
      - "7233:7233"
      - "7234:7234"
