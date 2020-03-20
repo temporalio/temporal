@@ -130,9 +130,16 @@ func (b *historyBuilder) AddActivityTaskScheduledEvent(decisionCompletedEventID 
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddActivityTaskStartedEvent(scheduleEventID int64, attempt int32, requestID string,
-	identity string) *workflow.HistoryEvent {
-	event := b.newActivityTaskStartedEvent(scheduleEventID, attempt, requestID, identity)
+func (b *historyBuilder) AddActivityTaskStartedEvent(
+	scheduleEventID int64,
+	attempt int32,
+	requestID string,
+	identity string,
+	lastFailureReason string,
+	lastFailureDetails []byte,
+) *workflow.HistoryEvent {
+	event := b.newActivityTaskStartedEvent(scheduleEventID, attempt, requestID, identity, lastFailureReason,
+		lastFailureDetails)
 
 	return b.addEventToHistory(event)
 }
@@ -591,14 +598,22 @@ func (b *historyBuilder) newActivityTaskScheduledEvent(decisionTaskCompletedEven
 	return historyEvent
 }
 
-func (b *historyBuilder) newActivityTaskStartedEvent(scheduledEventID int64, attempt int32, requestID string,
-	identity string) *workflow.HistoryEvent {
+func (b *historyBuilder) newActivityTaskStartedEvent(
+	scheduledEventID int64,
+	attempt int32,
+	requestID string,
+	identity string,
+	lastFailureReason string,
+	lastFailureDetails []byte,
+) *workflow.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(workflow.EventTypeActivityTaskStarted)
 	attributes := &workflow.ActivityTaskStartedEventAttributes{}
 	attributes.ScheduledEventId = common.Int64Ptr(scheduledEventID)
 	attributes.Attempt = common.Int32Ptr(attempt)
 	attributes.Identity = common.StringPtr(identity)
 	attributes.RequestId = common.StringPtr(requestID)
+	attributes.LastFailureReason = common.StringPtr(lastFailureReason)
+	attributes.LastFailureDetails = lastFailureDetails
 	historyEvent.ActivityTaskStartedEventAttributes = attributes
 
 	return historyEvent
