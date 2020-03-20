@@ -13,11 +13,13 @@ persistence:
       cassandra:
         hosts: "127.0.0.1"
         keyspace: "temporal_visibility"
-
-ringpop:
-  name: cadence
-  maxJoinDuration: 30s
-  broadcastAddress: "127.0.0.1"
+server:
+  ringpop:
+    name: cadence
+    maxJoinDuration: 30s
+    broadcastAddress: "127.0.0.1"
+  pprof:
+    port: 7936
 
 services:
   frontend:
@@ -29,8 +31,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal"
-    pprof:
-      port: 7936
 
   matching:
     rpc:
@@ -41,8 +41,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal"
-    pprof:
-      port: 7938
 
   history:
     rpc:
@@ -53,8 +51,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal"
-    pprof:
-      port: 7937
 
   worker:
     rpc:
@@ -65,8 +61,6 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "temporal"
-    pprof:
-      port: 7940
 
 clusterMetadata:
   enableGlobalDomain: false

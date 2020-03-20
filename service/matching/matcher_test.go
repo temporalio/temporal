@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.uber.org/atomic"
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
@@ -243,6 +244,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 		}
 	}()
 
+	var querySet = atomic.NewBool(false)
 	var remotePollErr error
 	var remotePollResp matchingservice.PollForDecisionTaskResponse
 	t.client.EXPECT().PollForDecisionTask(gomock.Any(), gomock.Any()).Do(
@@ -252,6 +254,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 				remotePollErr = err
 			} else if task.isQuery() {
 				task.finish(nil)
+				querySet.Swap(true)
 				remotePollResp = matchingservice.PollForDecisionTaskResponse{
 					Query: &commonproto.WorkflowQuery{},
 				}
@@ -278,7 +281,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	t.NotNil(req)
 	t.NoError(err)
 	t.NotNil(result)
-	t.NotNil(remotePollResp.Query)
+	t.True(querySet.Load())
 	t.Equal("answer", string(result.QueryResult))
 	t.Equal(t.taskList.name, req.GetForwardedFrom())
 	t.Equal(t.taskList.Parent(20), req.GetTaskList().GetName())
