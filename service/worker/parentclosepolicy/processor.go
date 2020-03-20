@@ -23,16 +23,13 @@ package parentclosepolicy
 import (
 	"context"
 
-	"github.com/opentracing/opentracing-go"
-	"github.com/uber-go/tally"
 	"go.temporal.io/temporal/activity"
+	sdkclient "go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/workflow"
 
-	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/worker"
 
 	"github.com/temporalio/temporal/client"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -44,22 +41,19 @@ type (
 	BootstrapParams struct {
 		// Config contains the configuration for scanner
 		// ServiceClient is an instance of cadence service client
-		ServiceClient workflowservice.WorkflowServiceClient
+		ServiceClient sdkclient.Client
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client
 		Logger        log.Logger
-		// TallyScope is an instance of tally metrics scope
-		TallyScope tally.Scope
 		// ClientBean is an instance of client.Bean for a collection of clients
 		ClientBean client.Bean
 	}
 
 	// Processor is the background sub-system that execute workflow for ParentClosePolicy
 	Processor struct {
-		svcClient     workflowservice.WorkflowServiceClient
+		svcClient     sdkclient.Client
 		clientBean    client.Bean
 		metricsClient metrics.Client
-		tallyScope    tally.Scope
 		logger        log.Logger
 	}
 )
@@ -69,7 +63,6 @@ func New(params *BootstrapParams) *Processor {
 	return &Processor{
 		svcClient:     params.ServiceClient,
 		metricsClient: params.MetricsClient,
-		tallyScope:    params.TallyScope,
 		logger:        params.Logger.WithTags(tag.ComponentBatcher),
 		clientBean:    params.ClientBean,
 	}
@@ -79,11 +72,9 @@ func New(params *BootstrapParams) *Processor {
 func (s *Processor) Start() error {
 	ctx := context.WithValue(context.Background(), processorContextKey, s)
 	workerOpts := worker.Options{
-		MetricsScope:              s.tallyScope,
 		BackgroundActivityContext: ctx,
-		Tracer:                    opentracing.GlobalTracer(),
 	}
-	processorWorker := worker.New(s.svcClient, common.SystemLocalDomainName, processorTaskListName, workerOpts)
+	processorWorker := worker.New(s.svcClient, processorTaskListName, workerOpts)
 
 	processorWorker.RegisterWorkflowWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
 	processorWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})

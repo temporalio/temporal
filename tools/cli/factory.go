@@ -23,6 +23,7 @@ package cli
 import (
 	"github.com/urfave/cli"
 	"go.temporal.io/temporal-proto/workflowservice"
+	sdkclient "go.temporal.io/temporal/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -34,6 +35,7 @@ import (
 type ClientFactory interface {
 	FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient
 	AdminClient(c *cli.Context) adminservice.AdminServiceClient
+	SDKClient(c *cli.Context, domain string) sdkclient.Client
 }
 
 type clientFactory struct {
@@ -64,6 +66,24 @@ func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceCli
 	connection := b.createGRPCConnection(c.GlobalString(FlagAddress))
 
 	return adminservice.NewAdminServiceClient(connection)
+}
+
+// AdminClient builds an admin client (based on server side thrift interface)
+func (b *clientFactory) SDKClient(c *cli.Context, domain string) sdkclient.Client {
+	hostPort := c.GlobalString(FlagAddress)
+	if hostPort == "" {
+		hostPort = localHostPort
+	}
+
+	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
+		HostPort:   hostPort,
+		DomainName: domain,
+	})
+	if err != nil {
+		b.logger.Fatal("Failed to create SDK client", zap.Error(err))
+	}
+
+	return sdkClient
 }
 
 func (b *clientFactory) createGRPCConnection(hostPort string) *grpc.ClientConn {

@@ -29,7 +29,7 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
-	"go.temporal.io/temporal-proto/workflowservice"
+	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
@@ -95,7 +95,7 @@ type (
 
 		// internal services clients
 
-		sdkClient         workflowservice.WorkflowServiceClient
+		sdkClient         sdkclient.Client
 		frontendRawClient frontend.Client
 		frontendClient    frontend.Client
 		matchingRawClient matching.Client
@@ -474,7 +474,7 @@ func (h *Impl) GetWorkerServiceResolver() membership.ServiceResolver {
 // internal services clients
 
 // GetSDKClient return sdk client
-func (h *Impl) GetSDKClient() workflowservice.WorkflowServiceClient {
+func (h *Impl) GetSDKClient() sdkclient.Client {
 	return h.sdkClient
 }
 

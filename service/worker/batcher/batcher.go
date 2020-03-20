@@ -23,16 +23,12 @@ package batcher
 import (
 	"context"
 
-	"github.com/opentracing/opentracing-go"
-	"github.com/uber-go/tally"
 	"go.temporal.io/temporal/activity"
+	sdkclient "go.temporal.io/temporal/client"
+	"go.temporal.io/temporal/worker"
 	"go.temporal.io/temporal/workflow"
 
-	"go.temporal.io/temporal-proto/workflowservice"
-	"go.temporal.io/temporal/worker"
-
 	"github.com/temporalio/temporal/client"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -54,12 +50,10 @@ type (
 		// Config contains the configuration for scanner
 		Config Config
 		// ServiceClient is an instance of cadence service client
-		ServiceClient workflowservice.WorkflowServiceClient
+		ServiceClient sdkclient.Client
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client
 		Logger        log.Logger
-		// TallyScope is an instance of tally metrics scope
-		TallyScope tally.Scope
 		// ClientBean is an instance of client.Bean for a collection of clients
 		ClientBean client.Bean
 	}
@@ -68,10 +62,9 @@ type (
 	// It is also the context object that get's passed around within the scanner workflows / activities
 	Batcher struct {
 		cfg           Config
-		svcClient     workflowservice.WorkflowServiceClient
+		svcClient     sdkclient.Client
 		clientBean    client.Bean
 		metricsClient metrics.Client
-		tallyScope    tally.Scope
 		logger        log.Logger
 	}
 )
@@ -83,7 +76,6 @@ func New(params *BootstrapParams) *Batcher {
 		cfg:           cfg,
 		svcClient:     params.ServiceClient,
 		metricsClient: params.MetricsClient,
-		tallyScope:    params.TallyScope,
 		logger:        params.Logger.WithTags(tag.ComponentBatcher),
 		clientBean:    params.ClientBean,
 	}
@@ -94,11 +86,9 @@ func (s *Batcher) Start() error {
 	// start worker for batch operation workflows
 	ctx := context.WithValue(context.Background(), batcherContextKey, s)
 	workerOpts := worker.Options{
-		MetricsScope:              s.tallyScope,
 		BackgroundActivityContext: ctx,
-		Tracer:                    opentracing.GlobalTracer(),
 	}
-	batchWorker := worker.New(s.svcClient, common.SystemLocalDomainName, BatcherTaskListName, workerOpts)
+	batchWorker := worker.New(s.svcClient, BatcherTaskListName, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivityWithOptions(BatchActivity, activity.RegisterOptions{Name: batchActivityName})
 

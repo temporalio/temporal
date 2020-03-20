@@ -26,10 +26,8 @@ import (
 	"math/rand"
 	"time"
 
-	"go.temporal.io/temporal-proto/workflowservice"
-	cclient "go.temporal.io/temporal/client"
+	sdkclient "go.temporal.io/temporal/client"
 
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 )
@@ -44,7 +42,7 @@ type (
 	clientImpl struct {
 		metricsClient metrics.Client
 		logger        log.Logger
-		cadenceClient cclient.Client
+		cadenceClient sdkclient.Client
 		numWorkflows  int
 	}
 )
@@ -60,13 +58,13 @@ const (
 func NewClient(
 	metricsClient metrics.Client,
 	logger log.Logger,
-	publicClient workflowservice.WorkflowServiceClient,
+	publicClient sdkclient.Client,
 	numWorkflows int,
 ) Client {
 	return &clientImpl{
 		metricsClient: metricsClient,
 		logger:        logger,
-		cadenceClient: cclient.NewClient(publicClient, common.SystemLocalDomainName, &cclient.Options{}),
+		cadenceClient: publicClient,
 		numWorkflows:  numWorkflows,
 	}
 }
@@ -74,12 +72,12 @@ func NewClient(
 func (c *clientImpl) SendParentClosePolicyRequest(request Request) error {
 	randomID := rand.Intn(c.numWorkflows)
 	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, randomID)
-	workflowOptions := cclient.StartWorkflowOptions{
+	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                              workflowID,
 		TaskList:                        processorTaskListName,
 		ExecutionStartToCloseTimeout:    infiniteDuration,
 		DecisionTaskStartToCloseTimeout: time.Minute,
-		WorkflowIDReusePolicy:           cclient.WorkflowIDReusePolicyAllowDuplicate,
+		WorkflowIDReusePolicy:           sdkclient.WorkflowIDReusePolicyAllowDuplicate,
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
