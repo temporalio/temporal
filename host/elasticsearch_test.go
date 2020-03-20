@@ -326,7 +326,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(openExecution.GetExecutionTime() >= openExecution.GetStartTime().Value)
+	s.True(openExecution.GetExecutionTime() >= openExecution.GetStartTime().GetValue())
 	searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[key]
 	var searchVal int
 	json.Unmarshal(searchValBytes, &searchVal)
@@ -487,8 +487,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 		e1 := openExecutions[i-1]
 		e2 := openExecutions[i]
 		if e2.GetCloseTime() != nil {
-			s.NotNil(e1.GetCloseTime())
-			s.GreaterOrEqual(e2.GetCloseTime().Value, e1.GetCloseTime().Value)
+			s.NotEqual(0, e1.GetCloseTime().GetValue())
+			s.GreaterOrEqual(e2.GetCloseTime().GetValue(), e1.GetCloseTime().GetValue())
 		}
 	}
 
@@ -683,7 +683,7 @@ func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(runID, query strin
 	}
 	s.NotNil(openExecution)
 	s.Equal(runID, openExecution.GetExecution().GetRunId())
-	s.True(openExecution.GetExecutionTime() >= openExecution.GetStartTime().Value)
+	s.True(openExecution.GetExecutionTime() >= openExecution.GetStartTime().GetValue())
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string

@@ -869,8 +869,8 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	executionInfo := &cliproto.WorkflowExecutionInfo{
 		Execution:        info.Execution,
 		Type:             info.Type,
-		CloseTime:        convertTime(info.GetCloseTime().Value, false),
-		StartTime:        convertTime(info.GetStartTime().Value, false),
+		CloseTime:        convertTime(info.GetCloseTime().GetValue(), false),
+		StartTime:        convertTime(info.GetStartTime().GetValue(), false),
 		CloseStatus:      info.CloseStatus,
 		HistoryLength:    info.HistoryLength,
 		ParentDomainId:   info.ParentDomainId,
@@ -920,7 +920,9 @@ func convertSearchAttributes(searchAttributes *commonproto.SearchAttributes,
 		return nil
 	}
 
-	result := &cliproto.SearchAttributes{}
+	result := &cliproto.SearchAttributes{
+		IndexedFields: map[string]string{},
+	}
 	ctx, cancel := newContext(c)
 	defer cancel()
 	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx, nil)
@@ -1056,13 +1058,13 @@ func appendWorkflowExecutionsToTable(
 	for _, e := range executions {
 		var startTime, executionTime, closeTime string
 		if printRawTime {
-			startTime = fmt.Sprintf("%d", e.GetStartTime())
+			startTime = fmt.Sprintf("%d", e.GetStartTime().GetValue())
 			executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
-			closeTime = fmt.Sprintf("%d", e.GetCloseTime().Value)
+			closeTime = fmt.Sprintf("%d", e.GetCloseTime().GetValue())
 		} else {
-			startTime = convertTime(e.GetStartTime().Value, !printDateTime)
+			startTime = convertTime(e.GetStartTime().GetValue(), !printDateTime)
 			executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
-			closeTime = convertTime(e.GetCloseTime().Value, !printDateTime)
+			closeTime = convertTime(e.GetCloseTime().GetValue(), !printDateTime)
 		}
 		row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
 		if !queryOpen {
@@ -1275,13 +1277,13 @@ func scanWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 		for _, e := range result {
 			var startTime, executionTime, closeTime string
 			if printRawTime {
-				startTime = fmt.Sprintf("%d", e.GetStartTime())
+				startTime = fmt.Sprintf("%d", e.GetStartTime().GetValue())
 				executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
-				closeTime = fmt.Sprintf("%d", e.GetCloseTime())
+				closeTime = fmt.Sprintf("%d", e.GetCloseTime().GetValue())
 			} else {
-				startTime = convertTime(e.GetStartTime().Value, !printDateTime)
+				startTime = convertTime(e.GetStartTime().GetValue(), !printDateTime)
 				executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
-				closeTime = convertTime(e.GetCloseTime().Value, !printDateTime)
+				closeTime = convertTime(e.GetCloseTime().GetValue(), !printDateTime)
 			}
 			row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
 			if !queryOpen {
