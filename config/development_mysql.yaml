@@ -126,5 +126,6 @@ kafka:
     temporal-visibility-dev-dlq:
       cluster: test
 
-publicClient:
-  hostPort: "localhost:7933"
+clients:
+  frontend:
+    publicHostPort: "localhost:7933"

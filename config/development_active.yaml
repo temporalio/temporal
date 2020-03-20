@@ -146,5 +146,6 @@ domainDefaults:
       status: "enabled"
       URI: "file:///tmp/cadence_vis_archival/development"
 
-publicClient:
-  hostPort: "localhost:7933"
+clients:
+  frontend:
+    publicHostPort: "localhost:7933"

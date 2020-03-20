@@ -118,8 +118,9 @@ kafka:
     temporal-visibility-dev-dlq:
       cluster: test
 
-publicClient:
-  hostPort: "localhost:7233"
+clients:
+  frontend:
+    publicHostPort: "localhost:7233"
 
 dynamicConfigClient:
   filepath: "config/dynamicconfig/development.yaml"

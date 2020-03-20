@@ -59,13 +59,17 @@ type (
 		Kafka messaging.KafkaConfig `yaml:"kafka"`
 		// Archival is the config for archival
 		Archival Archival `yaml:"archival"`
-		// PublicClient is config for connecting to temporal frontend
-		PublicClient PublicClient `yaml:"publicClient"`
+		// Clients is connection configuration for temporal clients
+		Clients Clients `yaml:"clients" validate:"nonzero"`
 		// DynamicConfigClient is the config for setting up the file based dynamic config client
 		// Filepath should be relative to the root directory
 		DynamicConfigClient dynamicconfig.FileBasedClientConfig `yaml:"dynamicConfigClient"`
 		// DomainDefaults is the default config for every domain
 		DomainDefaults DomainDefaults `yaml:"domainDefaults"`
+	}
+
+	Clients struct {
+		Frontend FrontendClient `yaml:"frontend" validate:"nonzero"`
 	}
 
 	// Service contains the service specific config items
@@ -380,10 +384,10 @@ type (
 		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
 	}
 
-	// PublicClient is config for connecting to cadence frontend
-	PublicClient struct {
+	// FrontendClient is config for connecting to cadence frontend
+	FrontendClient struct {
 		// HostPort is the host port to connect on. Host can be DNS name
-		HostPort string `yaml:"hostPort" validate:"nonzero"`
+		PublicHostPort string `yaml:"publicHostPort" validate:"nonzero"`
 		// interval to refresh DNS. Default to 10s
 		RefreshInterval time.Duration `yaml:"RefreshInterval"`
 	}

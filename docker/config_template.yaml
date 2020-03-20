@@ -206,8 +206,9 @@ kafka:
             topic: temporal-visibility-dev
             dlq-topic: temporal-visibility-dev-dlq
 
-publicClient:
-    hostPort: {{ default .Env.BIND_ON_IP "127.0.0.1" }}:7233
+clients:
+  frontend:
+    publicHostPort: {{ default .Env.BIND_ON_IP "127.0.0.1" }}:7233
 
 dynamicConfigClient:
     filepath: {{ default .Env.DYNAMIC_CONFIG_FILE_PATH "/etc/temporal/config/dynamicconfig" }}

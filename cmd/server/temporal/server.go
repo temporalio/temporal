@@ -161,12 +161,12 @@ func (s *server) startService() common.Daemon {
 		clusterMetadata.ReplicationConsumer,
 	)
 
-	if s.cfg.PublicClient.HostPort == "" {
-		log.Fatalf("need to provide an endpoint config for PublicClient")
-	} else if h, _, err := net.SplitHostPort(s.cfg.PublicClient.HostPort); err != nil || len(h) == 0 {
-		log.Fatalf("Malformed PublicClient HostPort, must be host:port - '%v' - Error - %v", s.cfg.PublicClient.HostPort, err)
+	if s.cfg.Clients.Frontend.PublicHostPort == "" {
+		log.Fatalf("need to provide an endpoint config for Clients.Frontend.PublicHostPort")
+	} else if h, _, err := net.SplitHostPort(s.cfg.Clients.Frontend.PublicHostPort); err != nil || len(h) == 0 {
+		log.Fatalf("Malformed Clients.Frontend.PublicHostPort, must be host:port - '%v' - Error - %v", s.cfg.Clients.Frontend.PublicHostPort, err)
 	} else {
-		connection, err := rpc.Dial(s.cfg.PublicClient.HostPort)
+		connection, err := rpc.Dial(s.cfg.Clients.Frontend.PublicHostPort)
 		if err != nil {
 			log.Fatalf("failed to dial gRPC connection: %v", err)
 		}
