@@ -1,4 +1,4 @@
-// The MIT License (MIT)
+g// The MIT License (MIT)
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
@@ -1917,10 +1917,12 @@ func (v *ActivityTaskScheduledEventAttributes) IsSetHeader() bool {
 }
 
 type ActivityTaskStartedEventAttributes struct {
-	ScheduledEventId *int64  `json:"scheduledEventId,omitempty"`
-	Identity         *string `json:"identity,omitempty"`
-	RequestId        *string `json:"requestId,omitempty"`
-	Attempt          *int32  `json:"attempt,omitempty"`
+	ScheduledEventId   *int64  `json:"scheduledEventId,omitempty"`
+	Identity           *string `json:"identity,omitempty"`
+	RequestId          *string `json:"requestId,omitempty"`
+	Attempt            *int32  `json:"attempt,omitempty"`
+	LastFailureReason  *string `json:"lastFailureReason,omitempty"`
+	LastFailureDetails []byte  `json:"lastFailureDetails,omitempty"`
 }
 
 // ToWire translates a ActivityTaskStartedEventAttributes struct into a Thrift-level intermediate
@@ -1940,7 +1942,7 @@ type ActivityTaskStartedEventAttributes struct {
 //   }
 func (v *ActivityTaskStartedEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1976,6 +1978,22 @@ func (v *ActivityTaskStartedEventAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.LastFailureReason != nil {
+		w, err = wire.NewValueString(*(v.LastFailureReason)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.LastFailureDetails != nil {
+		w, err = wire.NewValueBinary(v.LastFailureDetails), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
 		i++
 	}
 
@@ -2044,6 +2062,24 @@ func (v *ActivityTaskStartedEventAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 50:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.LastFailureReason = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TBinary {
+				v.LastFailureDetails, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -2057,7 +2093,7 @@ func (v *ActivityTaskStartedEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [6]string
 	i := 0
 	if v.ScheduledEventId != nil {
 		fields[i] = fmt.Sprintf("ScheduledEventId: %v", *(v.ScheduledEventId))
@@ -2073,6 +2109,14 @@ func (v *ActivityTaskStartedEventAttributes) String() string {
 	}
 	if v.Attempt != nil {
 		fields[i] = fmt.Sprintf("Attempt: %v", *(v.Attempt))
+		i++
+	}
+	if v.LastFailureReason != nil {
+		fields[i] = fmt.Sprintf("LastFailureReason: %v", *(v.LastFailureReason))
+		i++
+	}
+	if v.LastFailureDetails != nil {
+		fields[i] = fmt.Sprintf("LastFailureDetails: %v", v.LastFailureDetails)
 		i++
 	}
 
@@ -2101,6 +2145,12 @@ func (v *ActivityTaskStartedEventAttributes) Equals(rhs *ActivityTaskStartedEven
 	if !_I32_EqualsPtr(v.Attempt, rhs.Attempt) {
 		return false
 	}
+	if !_String_EqualsPtr(v.LastFailureReason, rhs.LastFailureReason) {
+		return false
+	}
+	if !((v.LastFailureDetails == nil && rhs.LastFailureDetails == nil) || (v.LastFailureDetails != nil && rhs.LastFailureDetails != nil && bytes.Equal(v.LastFailureDetails, rhs.LastFailureDetails))) {
+		return false
+	}
 
 	return true
 }
@@ -2122,6 +2172,12 @@ func (v *ActivityTaskStartedEventAttributes) MarshalLogObject(enc zapcore.Object
 	}
 	if v.Attempt != nil {
 		enc.AddInt32("attempt", *v.Attempt)
+	}
+	if v.LastFailureReason != nil {
+		enc.AddString("lastFailureReason", *v.LastFailureReason)
+	}
+	if v.LastFailureDetails != nil {
+		enc.AddString("lastFailureDetails", base64.StdEncoding.EncodeToString(v.LastFailureDetails))
 	}
 	return err
 }
@@ -2184,6 +2240,36 @@ func (v *ActivityTaskStartedEventAttributes) GetAttempt() (o int32) {
 // IsSetAttempt returns true if Attempt is not nil.
 func (v *ActivityTaskStartedEventAttributes) IsSetAttempt() bool {
 	return v != nil && v.Attempt != nil
+}
+
+// GetLastFailureReason returns the value of LastFailureReason if it is set or its
+// zero value if it is unset.
+func (v *ActivityTaskStartedEventAttributes) GetLastFailureReason() (o string) {
+	if v != nil && v.LastFailureReason != nil {
+		return *v.LastFailureReason
+	}
+
+	return
+}
+
+// IsSetLastFailureReason returns true if LastFailureReason is not nil.
+func (v *ActivityTaskStartedEventAttributes) IsSetLastFailureReason() bool {
+	return v != nil && v.LastFailureReason != nil
+}
+
+// GetLastFailureDetails returns the value of LastFailureDetails if it is set or its
+// zero value if it is unset.
+func (v *ActivityTaskStartedEventAttributes) GetLastFailureDetails() (o []byte) {
+	if v != nil && v.LastFailureDetails != nil {
+		return v.LastFailureDetails
+	}
+
+	return
+}
+
+// IsSetLastFailureDetails returns true if LastFailureDetails is not nil.
+func (v *ActivityTaskStartedEventAttributes) IsSetLastFailureDetails() bool {
+	return v != nil && v.LastFailureDetails != nil
 }
 
 type ActivityTaskTimedOutEventAttributes struct {

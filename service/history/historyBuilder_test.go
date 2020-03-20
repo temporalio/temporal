@@ -73,16 +73,17 @@ func (s *historyBuilderSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockDomainCache = s.mockShard.resource.DomainCache
-	s.mockEventsCache = s.mockShard.mockEventsCache
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
-	s.logger = s.mockShard.GetLogger()
+	s.logger = log.NewNoop()
 
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.domainID = testDomainID
 	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
+
+	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
+	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
 		s.logger, testLocalDomainEntry)
@@ -148,7 +149,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	activity1Input := []byte("dynamic-historybuilder-success-activity1-input")
 	activity1Result := []byte("dynamic-historybuilder-success-activity1-result")
 	activity1ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity1ID, activity1Type,
-		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout)
+		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
 	s.validateActivityTaskScheduledEvent(activity1ScheduledEvent, 5, 4, activity1ID, activity1Type,
 		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(6), s.getNextEventID())
@@ -163,7 +164,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	activity2Reason := "dynamic-historybuilder-success-activity2-failed"
 	activity2Details := []byte("dynamic-historybuilder-success-activity2-callstack")
 	activity2ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity2ID, activity2Type,
-		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout)
+		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
 	s.validateActivityTaskScheduledEvent(activity2ScheduledEvent, 6, 4, activity2ID, activity2Type,
 		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(7), s.getNextEventID())
@@ -172,56 +173,122 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(common.EmptyEventID, ai2.StartedID)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
-	activityStartedEvent := s.addActivityTaskStartedEvent(5, activityTaskList, identity)
-	s.validateActivityTaskStartedEvent(activityStartedEvent, common.BufferedEventID, 5, identity)
-	s.Nil(s.msBuilder.FlushBufferedEvents())
-	s.validateActivityTaskStartedEvent(activityStartedEvent, 7, 5, identity)
+	activity3ID := "activity3"
+	activity3Type := "dynamic-historybuilder-success-activity3-type"
+	activity3Input := []byte("dynamic-historybuilder-success-activity3-input")
+	activity3RetryPolicy := &workflow.RetryPolicy{
+		InitialIntervalInSeconds:    common.Int32Ptr(1),
+		MaximumAttempts:             common.Int32Ptr(3),
+		MaximumIntervalInSeconds:    common.Int32Ptr(1),
+		NonRetriableErrorReasons:    []string{"bad-bug"},
+		BackoffCoefficient:          common.Float64Ptr(1),
+		ExpirationIntervalInSeconds: common.Int32Ptr(100),
+	}
+	activity3ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity3ID, activity3Type,
+		activityTaskList, activity3Input, activityTimeout, queueTimeout, hearbeatTimeout, activity3RetryPolicy)
+	s.validateActivityTaskScheduledEvent(activity3ScheduledEvent, 7, 4, activity3ID, activity3Type,
+		activityTaskList, activity3Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(8), s.getNextEventID())
-	ai3, activity1Running1 := s.msBuilder.GetActivityInfo(5)
-	s.True(activity1Running1)
-	s.Equal(int64(7), ai3.StartedID)
+	ai2, activity3Running0 := s.msBuilder.GetActivityInfo(6)
+	s.True(activity3Running0)
+	s.Equal(common.EmptyEventID, ai2.StartedID)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
-	activityCompletedEvent := s.addActivityTaskCompletedEvent(5, 7, activity1Result, identity)
-	s.validateActivityTaskCompletedEvent(activityCompletedEvent, common.BufferedEventID, 5, 7, activity1Result,
+	activityStartedEvent := s.addActivityTaskStartedEvent(5, activityTaskList, identity)
+	s.validateActivityTaskStartedEvent(activityStartedEvent, common.BufferedEventID, 5, identity,
+		0, "", nil)
+	s.Nil(s.msBuilder.FlushBufferedEvents())
+	s.validateActivityTaskStartedEvent(activityStartedEvent, 8, 5, identity,
+		0, "", nil)
+	s.Equal(int64(9), s.getNextEventID())
+	ai3, activity1Running1 := s.msBuilder.GetActivityInfo(5)
+	s.True(activity1Running1)
+	s.Equal(int64(8), ai3.StartedID)
+	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
+
+	activityCompletedEvent := s.addActivityTaskCompletedEvent(5, 8, activity1Result, identity)
+	s.validateActivityTaskCompletedEvent(activityCompletedEvent, common.BufferedEventID, 5, 8, activity1Result,
 		identity)
 	s.Nil(s.msBuilder.FlushBufferedEvents())
-	s.validateActivityTaskCompletedEvent(activityCompletedEvent, 8, 5, 7, activity1Result,
+	s.validateActivityTaskCompletedEvent(activityCompletedEvent, 9, 5, 8, activity1Result,
 		identity)
-	s.Equal(int64(9), s.getNextEventID())
+	s.Equal(int64(10), s.getNextEventID())
 	_, activity1Running2 := s.msBuilder.GetActivityInfo(5)
 	s.False(activity1Running2)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
 	di2 := s.addDecisionTaskScheduledEvent()
-	s.validateDecisionTaskScheduledEvent(di2, 9, tl, taskTimeout)
-	s.Equal(int64(10), s.getNextEventID())
-	di3, decisionRunning3 := s.msBuilder.GetDecisionInfo(9)
+	s.validateDecisionTaskScheduledEvent(di2, 10, tl, taskTimeout)
+	s.Equal(int64(11), s.getNextEventID())
+	di3, decisionRunning3 := s.msBuilder.GetDecisionInfo(10)
 	s.True(decisionRunning3)
 	s.Equal(common.EmptyEventID, di3.StartedID)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
 	activity2StartedEvent := s.addActivityTaskStartedEvent(6, activityTaskList, identity)
-	s.validateActivityTaskStartedEvent(activity2StartedEvent, common.BufferedEventID, 6, identity)
+	s.validateActivityTaskStartedEvent(activity2StartedEvent, common.BufferedEventID, 6, identity,
+		0, "", nil)
 	s.Nil(s.msBuilder.FlushBufferedEvents())
-	s.validateActivityTaskStartedEvent(activity2StartedEvent, 10, 6, identity)
-	s.Equal(int64(11), s.getNextEventID())
+	s.validateActivityTaskStartedEvent(activity2StartedEvent, 11, 6, identity,
+		0, "", nil)
+	s.Equal(int64(12), s.getNextEventID())
 	ai4, activity2Running1 := s.msBuilder.GetActivityInfo(6)
 	s.True(activity2Running1)
-	s.Equal(int64(10), ai4.StartedID)
+	s.Equal(int64(11), ai4.StartedID)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
-	activity2FailedEvent := s.addActivityTaskFailedEvent(6, 10, activity2Reason, activity2Details,
+	activity2FailedEvent := s.addActivityTaskFailedEvent(6, 11, activity2Reason, activity2Details,
 		identity)
-	s.validateActivityTaskFailedEvent(activity2FailedEvent, common.BufferedEventID, 6, 10, activity2Reason,
+	s.validateActivityTaskFailedEvent(activity2FailedEvent, common.BufferedEventID, 6, 11, activity2Reason,
 		activity2Details, identity)
 	s.Nil(s.msBuilder.FlushBufferedEvents())
-	s.validateActivityTaskFailedEvent(activity2FailedEvent, 11, 6, 10, activity2Reason,
+	s.validateActivityTaskFailedEvent(activity2FailedEvent, 12, 6, 11, activity2Reason,
 		activity2Details, identity)
-	s.Equal(int64(12), s.getNextEventID())
-	_, activity2Running2 := s.msBuilder.GetActivityInfo(6)
-	s.False(activity2Running2)
+	s.Equal(int64(13), s.getNextEventID())
+	_, activity2Running3 := s.msBuilder.GetActivityInfo(6)
+	s.False(activity2Running3)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
+
+	activity3StartedEvent := s.addActivityTaskStartedEvent(7, activityTaskList, identity)
+	s.validateTransientActivityTaskStartedEvent(activity3StartedEvent, common.TransientEventID, 7, identity)
+	s.Equal(int64(13), s.getNextEventID())
+	ai5, activity3Running1 := s.msBuilder.GetActivityInfo(7)
+	s.True(activity3Running1)
+	s.Equal(common.TransientEventID, ai5.StartedID)
+	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
+
+	activity3Reason := "dynamic-historybuilder-success-activity3-failed"
+	activity3Details := []byte("dynamic-historybuilder-success-activity3-callstack")
+	s.msBuilder.RetryActivity(ai5, activity3Reason, activity3Details)
+	ai6, activity3Running2 := s.msBuilder.GetActivityInfo(7)
+	s.Equal(activity3Reason, ai6.LastFailureReason)
+	s.Equal(activity3Details, ai6.LastFailureDetails)
+	s.True(activity3Running2)
+
+	activity3StartedEvent2 := s.addActivityTaskStartedEvent(7, activityTaskList, identity)
+	s.validateTransientActivityTaskStartedEvent(activity3StartedEvent2, common.TransientEventID, 7, identity)
+	s.Equal(int64(13), s.getNextEventID())
+	ai7, activity3Running3 := s.msBuilder.GetActivityInfo(7)
+	s.True(activity3Running3)
+	s.Equal(common.TransientEventID, ai7.StartedID)
+	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
+
+	activity3Result := []byte("dynamic-historybuilder-success-activity1-result")
+	activity3CompletedEvent := s.addActivityTaskCompletedEvent(7, common.TransientEventID, activity3Result, identity)
+	s.validateActivityTaskCompletedEvent(activity3CompletedEvent, common.BufferedEventID, 7, common.TransientEventID,
+		activity3Result, identity)
+	s.Nil(s.msBuilder.FlushBufferedEvents())
+	s.validateActivityTaskCompletedEvent(activity3CompletedEvent, 14, 7, 13, activity3Result, identity)
+	s.Equal(int64(15), s.getNextEventID())
+	ai8, activity3Running4 := s.msBuilder.GetActivityInfo(7)
+	s.Nil(ai8)
+	s.False(activity3Running4)
+	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
+
+	// Verify the last ActivityTaskStartedEvent which should show the error from the first attempt
+	historyEvents := s.msBuilder.GetHistoryBuilder().GetHistory().GetEvents()
+	s.Len(historyEvents, 14)
+	s.validateActivityTaskStartedEvent(historyEvents[12], 13, 7, identity, 1, activity3Reason, activity3Details)
 
 	markerDetails := []byte("dynamic-historybuilder-success-marker-details")
 	markerHeaderField1 := []byte("dynamic-historybuilder-success-marker-header1")
@@ -232,9 +299,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	}
 	markerEvent := s.addMarkerRecordedEvent(4, "testMarker", markerDetails,
 		&markerHeader)
-	s.validateMarkerRecordedEvent(markerEvent, 12, 4, "testMarker", markerDetails, &markerHeader)
+	s.validateMarkerRecordedEvent(markerEvent, 15, 4, "testMarker", markerDetails, &markerHeader)
 	s.Nil(s.msBuilder.FlushBufferedEvents())
-	s.Equal(int64(13), s.getNextEventID())
+	s.Equal(int64(16), s.getNextEventID())
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 }
 
@@ -437,7 +504,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	activity1Input := []byte("flush-buffered-events-activity1-input")
 	activity1Result := []byte("flush-buffered-events-activity1-result")
 	activity1ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity1ID, activity1Type,
-		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout)
+		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
 	s.validateActivityTaskScheduledEvent(activity1ScheduledEvent, 5, 4, activity1ID, activity1Type,
 		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(6), s.getNextEventID())
@@ -451,7 +518,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	activity2Type := "flush-buffered-events-activity2-type"
 	activity2Input := []byte("flush-buffered-events-activity2-input")
 	activity2ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity2ID, activity2Type,
-		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout)
+		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout, nil)
 	s.validateActivityTaskScheduledEvent(activity2ScheduledEvent, 6, 4, activity2ID, activity2Type,
 		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(7), s.getNextEventID())
@@ -462,9 +529,11 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 
 	// 7 activity1 started
 	activityStartedEvent := s.addActivityTaskStartedEvent(5, activityTaskList, identity)
-	s.validateActivityTaskStartedEvent(activityStartedEvent, common.BufferedEventID, 5, identity)
+	s.validateActivityTaskStartedEvent(activityStartedEvent, common.BufferedEventID, 5, identity,
+		0, "", nil)
 	s.Nil(s.msBuilder.FlushBufferedEvents())
-	s.validateActivityTaskStartedEvent(activityStartedEvent, 7, 5, identity)
+	s.validateActivityTaskStartedEvent(activityStartedEvent, 7, 5, identity,
+		0, "", nil)
 	s.Equal(int64(8), s.getNextEventID())
 	ai3, activity1Running1 := s.msBuilder.GetActivityInfo(5)
 	s.True(activity1Running1)
@@ -503,7 +572,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 
 	// 11 (buffered) activity2 started
 	activity2StartedEvent := s.addActivityTaskStartedEvent(6, activityTaskList, identity)
-	s.validateActivityTaskStartedEvent(activity2StartedEvent, common.BufferedEventID, 6, identity)
+	s.validateActivityTaskStartedEvent(activity2StartedEvent, common.BufferedEventID, 6, identity,
+		0, "", nil)
 	s.Equal(int64(11), s.getNextEventID())
 	ai4, activity2Running := s.msBuilder.GetActivityInfo(6)
 	s.True(activity2Running)
@@ -756,7 +826,7 @@ func (s *historyBuilderSuite) addDecisionTaskCompletedEvent(scheduleID, startedI
 }
 
 func (s *historyBuilderSuite) addActivityTaskScheduledEvent(decisionCompletedID int64, activityID, activityType,
-	taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32) (*workflow.HistoryEvent,
+	taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32, retryPolicy *workflow.RetryPolicy) (*workflow.HistoryEvent,
 	*persistence.ActivityInfo) {
 	event, ai, err := s.msBuilder.AddActivityTaskScheduledEvent(decisionCompletedID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
@@ -768,6 +838,7 @@ func (s *historyBuilderSuite) addActivityTaskScheduledEvent(decisionCompletedID 
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(queueTimeout),
 			HeartbeatTimeoutSeconds:       common.Int32Ptr(hearbeatTimeout),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
+			RetryPolicy:                   retryPolicy,
 		})
 	s.Nil(err)
 	return event, ai
@@ -922,7 +993,7 @@ func (s *historyBuilderSuite) validateActivityTaskScheduledEvent(event *workflow
 }
 
 func (s *historyBuilderSuite) validateActivityTaskStartedEvent(event *workflow.HistoryEvent, eventID, scheduleID int64,
-	identity string) {
+	identity string, attempt int64, lastFailureReason string, lastFailureDetails []byte) {
 	s.NotNil(event)
 	s.Equal(workflow.EventTypeActivityTaskStarted, *event.EventType)
 	s.Equal(eventID, *event.EventId)
@@ -930,6 +1001,18 @@ func (s *historyBuilderSuite) validateActivityTaskStartedEvent(event *workflow.H
 	s.NotNil(attributes)
 	s.Equal(scheduleID, *attributes.ScheduledEventId)
 	s.Equal(identity, *attributes.Identity)
+	s.Equal(lastFailureReason, *attributes.LastFailureReason)
+	s.Equal(lastFailureDetails, attributes.LastFailureDetails)
+}
+
+func (s *historyBuilderSuite) validateTransientActivityTaskStartedEvent(event *workflow.HistoryEvent, eventID, scheduleID int64,
+	identity string) {
+	s.Nil(event)
+	ai, ok := s.msBuilder.GetPendingActivityInfos()[scheduleID]
+	s.True(ok)
+	s.NotNil(ai)
+	s.Equal(scheduleID, ai.ScheduleID)
+	s.Equal(identity, ai.StartedIdentity)
 }
 
 func (s *historyBuilderSuite) validateActivityTaskCompletedEvent(event *workflow.HistoryEvent, eventID,

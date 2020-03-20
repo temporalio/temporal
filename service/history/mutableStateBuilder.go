@@ -2195,7 +2195,8 @@ func (e *mutableStateBuilder) addTransientActivityStartedEvent(
 	}
 
 	// activity task was started (as transient event), we need to add it now.
-	event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, ai.RequestID, ai.StartedIdentity)
+	event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, ai.RequestID, ai.StartedIdentity,
+		ai.LastFailureReason, ai.LastFailureDetails)
 	if !ai.StartedTime.IsZero() {
 		// overwrite started event time to the one recorded in ActivityInfo
 		event.Timestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
@@ -2216,7 +2217,8 @@ func (e *mutableStateBuilder) AddActivityTaskStartedEvent(
 	}
 
 	if !ai.HasRetryPolicy {
-		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, requestID, identity)
+		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, requestID, identity,
+			ai.LastFailureReason, ai.LastFailureDetails)
 		if err := e.ReplicateActivityTaskStartedEvent(event); err != nil {
 			return nil, err
 		}
