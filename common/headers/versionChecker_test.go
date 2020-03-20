@@ -62,42 +62,42 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext("unknown-client", "0.0.0"),
+			callContext:              s.constructCallContext("0.0.0", "unknown-client", BaseFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext(GoSDK, "malformed-version"),
+			callContext:              s.constructCallContext("malformed-version", GoSDK, BaseFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                true,
 		},
 		{
-			callContext:              s.constructCallContext(GoSDK, s.getHigherVersion(SupportedGoSDKVersion)),
+			callContext:              s.constructCallContext(s.getHigherVersion(SupportedGoSDKVersion), GoSDK, BaseFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                true,
 		},
 		{
-			callContext:              s.constructCallContext(JavaSDK, s.getHigherVersion(SupportedJavaSDKVersion)),
+			callContext:              s.constructCallContext(s.getHigherVersion(SupportedJavaSDKVersion), JavaSDK, BaseFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                true,
 		},
 		{
-			callContext:              s.constructCallContext(CLI, s.getHigherVersion(SupportedCLIVersion)),
+			callContext:              s.constructCallContext(s.getHigherVersion(SupportedCLIVersion), CLI, BaseFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                true,
 		},
 		{
-			callContext:              s.constructCallContext(GoSDK, SupportedGoSDKVersion),
+			callContext:              s.constructCallContext(SupportedGoSDKVersion, GoSDK, BaseFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext(JavaSDK, SupportedJavaSDKVersion),
+			callContext:              s.constructCallContext(SupportedJavaSDKVersion, JavaSDK, BaseFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext(CLI, SupportedCLIVersion),
+			callContext:              s.constructCallContext(SupportedCLIVersion, CLI, BaseFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
@@ -184,6 +184,6 @@ func (s *VersionCheckerSuite) getHigherVersion(version string) string {
 	return fmt.Sprintf("%v.%v.%v", split[0], split[1], split[2][0]-'0'+1)
 }
 
-func (s *VersionCheckerSuite) constructCallContext(clientImpl, featureVersion string) context.Context {
-	return SetVersionsForTests(context.Background(), SupportedGoSDKVersion, clientImpl, featureVersion)
+func (s *VersionCheckerSuite) constructCallContext(clientVersion, clientImpl, featureVersion string) context.Context {
+	return SetVersionsForTests(context.Background(), clientVersion, clientImpl, featureVersion)
 }

@@ -284,7 +284,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
-	clientHeaders := headers.GetValues(ctx, headers.SDKVersionHeaderName, headers.SDKFeatureVersionHeaderName, headers.SDKImplHeaderName)
+	clientHeaders := headers.GetValues(ctx, headers.ClientVersionHeaderName, headers.ClientFeatureVersionHeaderName, headers.ClientImplHeaderName)
 	clientLibVersion := clientHeaders[0]
 	clientFeatureVersion := clientHeaders[1]
 	clientImpl := clientHeaders[2]

@@ -29,22 +29,24 @@ import (
 )
 
 const (
-	// GoSDK is the header value for common.SDKImplHeaderName indicating a Go SDK.
+	// GoSDK is the header value for common.ClientImplHeaderName indicating a Go SDK.
 	GoSDK = "temporal-go"
-	// JavaSDK is the header value for common.SDKImplHeaderName indicating a Java SDK.
+	// JavaSDK is the header value for common.ClientImplHeaderName indicating a Java SDK.
 	JavaSDK = "temporal-java"
-	// CLI is the header value for common.SDKImplHeaderName indicating a CLI client.
+	// CLI is the header value for common.ClientImplHeaderName indicating a CLI client.
 	CLI = "cli"
 
-	// SupportedGoSDKVersion indicates the highest Go SDK feature version server will accept requests from.
+	// SupportedGoSDKVersion indicates the highest Go SDK version server will accept requests from.
 	SupportedGoSDKVersion = "0.20.0"
-	// SupportedJavaSDKVersion indicates the highest Java SDK feature version server will accept requests from.
+	// SupportedJavaSDKVersion indicates the highest Java SDK version server will accept requests from.
 	SupportedJavaSDKVersion = "0.20.0"
-	// SupportedCLIVersion indicates the highest CLI feature version server will accept requests from.
+	// SupportedCLIVersion indicates the highest CLI version server will accept requests from.
 	SupportedCLIVersion = "0.20.0"
 
-	// GoWorkerConsistentQueryVersion indicates the minimum client version of the Go worker which supports ConsistentQuery.
-	// GoWorkerConsistentQueryVersion = "0.20.0"
+	BaseFeatureVersion = "1.0.0"
+
+	// WorkerConsistentQueryFeatureVersion indicates the minimum client feature set version of the worker which supports ConsistentQuery.
+	// WorkerConsistentQueryFeatureVersion = "2.0.0"
 
 	// consistentQuery = "consistent-query"
 )
@@ -53,11 +55,11 @@ type (
 	// VersionChecker is used to check client/server compatibility and client's capabilities
 	VersionChecker interface {
 		ClientSupported(ctx context.Context, enableClientVersionCheck bool) error
-		// SupportsConsistentQuery(clientImpl string, clientFeatureVersion string) error
+		// SupportsConsistentQuery(clientFeatureVersion string) error
 	}
 
 	versionChecker struct {
-		supportedFeatures map[string]map[string]version.Constraints
+		supportedFeatures map[string]version.Constraints
 		supportedClients  map[string]version.Constraints
 	}
 )
@@ -68,12 +70,13 @@ var (
 
 // NewVersionChecker constructs a new VersionChecker
 func NewVersionChecker() *versionChecker {
-	supportedFeatures := map[string]map[string]version.Constraints{
-		GoSDK: {
-			// consistentQuery: mustNewConstraint(fmt.Sprintf(">=%v", GoWorkerConsistentQueryVersion)),
-		},
-		JavaSDK: {},
+	// Feature map indicates minimum feature set version for every feature.
+	supportedFeatures := map[string]version.Constraints{
+		// consistentQuery: mustNewConstraint(fmt.Sprintf(">=%v", WorkerConsistentQueryFeatureVersion)),
 	}
+
+	// Supported clients map indicates maximum client version that supported by server.
+	// See ClientSupported comments for details.
 	supportedClients := map[string]version.Constraints{
 		GoSDK:   mustNewConstraint(fmt.Sprintf("<=%v", SupportedGoSDKVersion)),
 		JavaSDK: mustNewConstraint(fmt.Sprintf("<=%v", SupportedJavaSDKVersion)),
@@ -86,61 +89,64 @@ func NewVersionChecker() *versionChecker {
 }
 
 // ClientSupported returns an error if client is unsupported, nil otherwise.
+//
+// This is to prevent NEW clients to connect to the OLD server.
+// Sometimes users update SDK to the latest version but forget to update server.
+// New SDKs might work incorrectly with old server. This check is to prevent this.
+// enableClientVersionCheck param value comes from config and allow to temporary disable client version check.
+//
 // In case client version lookup fails assume the client is supported.
 func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersionCheck bool) error {
 	if !enableClientVersionCheck {
 		return nil
 	}
 
-	headers := GetValues(ctx, SDKFeatureVersionHeaderName, SDKImplHeaderName)
-	featureVersion := headers[0]
+	headers := GetValues(ctx, ClientVersionHeaderName, ClientImplHeaderName)
+	clientVersion := headers[0]
 	clientImpl := headers[1]
 
-	// If client doesn't provide feature version, it means it is fine with any feature set (including current).
-	if featureVersion == "" {
+	// If client doesn't provide version, it means it is fine with any server version (including current).
+	if clientVersion == "" {
 		return nil
 	}
-	// If client doesn't provide client implementation, it means it is fine with any maximum server feature version (including current).
-	supportedVersions, ok := vc.supportedClients[clientImpl]
+	supportedVersion, ok := vc.supportedClients[clientImpl]
+	// If client doesn't provide client implementation, it means it is fine with any server version (including current).
 	if !ok {
 		return nil
 	}
-	featureVersionObj, err := version.NewVersion(featureVersion)
+	clientVersionObj, err := version.NewVersion(clientVersion)
 	if err != nil {
-		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, supportedVersions.String())
+		return serviceerror.NewClientVersionNotSupported(clientVersion, clientImpl, supportedVersion.String())
 	}
-	if !supportedVersions.Check(featureVersionObj) {
-		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, supportedVersions.String())
+	if !supportedVersion.Check(clientVersionObj) {
+		return serviceerror.NewClientVersionNotSupported(clientVersion, clientImpl, supportedVersion.String())
 	}
 	return nil
 }
 
 // SupportsConsistentQuery returns error if consistent query is not supported otherwise nil.
 // In case client version lookup fails assume the client does not support feature.
-// func (vc *versionChecker) SupportsConsistentQuery(clientImpl string, featureVersion string) error {
+// func (vc *versionChecker) SupportsConsistentQuery(featureVersion string) error {
 // 	return vc.featureSupported(clientImpl, featureVersion, consistentQuery)
 // }
 
-func (vc *versionChecker) featureSupported(clientImpl string, featureVersion string, feature string) error {
+func (vc *versionChecker) featureSupported(featureVersion string, feature string) error {
 	// If feature version is not provided, it means feature is not supported.
 	if featureVersion == "" {
-		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, "")
+		// TODO: serviceerror.NewFeatureVersionNotSupported()
+		// TODO: "Feature %s is not supported in feature set version %s. At least %s feature set version is required"
+		return serviceerror.NewClientVersionNotSupported(feature, featureVersion, "<unknown>")
 	}
-	// If client implementation is not provided, it means feature is not supported.
-	implMap, ok := vc.supportedFeatures[clientImpl]
+	supportedFeatureVersion, ok := vc.supportedFeatures[feature]
 	if !ok {
-		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, "")
-	}
-	supportedVersions, ok := implMap[feature]
-	if !ok {
-		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, "")
+		return serviceerror.NewClientVersionNotSupported(feature, featureVersion, "<unknown>")
 	}
 	featureVersionObj, err := version.NewVersion(featureVersion)
 	if err != nil {
-		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, supportedVersions.String())
+		return serviceerror.NewClientVersionNotSupported(feature, featureVersion, "<unknown>")
 	}
-	if !supportedVersions.Check(featureVersionObj) {
-		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, supportedVersions.String())
+	if !supportedFeatureVersion.Check(featureVersionObj) {
+		return serviceerror.NewClientVersionNotSupported(feature, featureVersion, supportedFeatureVersion.String())
 	}
 	return nil
 }
