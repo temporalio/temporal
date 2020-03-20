@@ -42,13 +42,13 @@ const (
 var (
 	versionHeaders = metadata.New(map[string]string{
 		ClientVersionHeaderName:        SupportedGoSDKVersion,
-		ClientFeatureVersionHeaderName: BaseFeatureVersion,
+		ClientFeatureVersionHeaderName: BaseFeaturesFeatureVersion,
 		ClientImplHeaderName:           GoSDK,
 	})
 
 	cliVersionHeaders = metadata.New(map[string]string{
 		ClientVersionHeaderName:        SupportedCLIVersion,
-		ClientFeatureVersionHeaderName: BaseFeatureVersion,
+		ClientFeatureVersionHeaderName: BaseFeaturesFeatureVersion,
 		ClientImplHeaderName:           CLI,
 	})
 )

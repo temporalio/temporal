@@ -43,19 +43,17 @@ const (
 	// SupportedCLIVersion indicates the highest CLI version server will accept requests from.
 	SupportedCLIVersion = "0.20.0"
 
-	BaseFeatureVersion = "1.0.0"
+	// BaseFeaturesFeatureVersion indicates the minimum client feature set version which supports all base features.
+	BaseFeaturesFeatureVersion = "1.0.0"
 
-	// WorkerConsistentQueryFeatureVersion indicates the minimum client feature set version of the worker which supports ConsistentQuery.
-	// WorkerConsistentQueryFeatureVersion = "2.0.0"
-
-	// consistentQuery = "consistent-query"
+	baseFeatures = "base-features"
 )
 
 type (
 	// VersionChecker is used to check client/server compatibility and client's capabilities
 	VersionChecker interface {
 		ClientSupported(ctx context.Context, enableClientVersionCheck bool) error
-		// SupportsConsistentQuery(clientFeatureVersion string) error
+		SupportsBaseFeatures(clientFeatureVersion string) error
 	}
 
 	versionChecker struct {
@@ -72,7 +70,7 @@ var (
 func NewVersionChecker() *versionChecker {
 	// Feature map indicates minimum feature set version for every feature.
 	supportedFeatures := map[string]version.Constraints{
-		// consistentQuery: mustNewConstraint(fmt.Sprintf(">=%v", WorkerConsistentQueryFeatureVersion)),
+		baseFeatures: mustNewConstraint(fmt.Sprintf(">=%v", BaseFeaturesFeatureVersion)),
 	}
 
 	// Supported clients map indicates maximum client version that supported by server.
@@ -124,11 +122,11 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 	return nil
 }
 
-// SupportsConsistentQuery returns error if consistent query is not supported otherwise nil.
+// SupportsBaseFeatures returns error if base features is not supported otherwise nil.
 // In case client version lookup fails assume the client does not support feature.
-// func (vc *versionChecker) SupportsConsistentQuery(featureVersion string) error {
-// 	return vc.featureSupported(clientImpl, featureVersion, consistentQuery)
-// }
+func (vc *versionChecker) SupportsBaseFeatures(featureVersion string) error {
+	return vc.featureSupported(featureVersion, baseFeatures)
+}
 
 func (vc *versionChecker) featureSupported(featureVersion string, feature string) error {
 	// If feature version is not provided, it means feature is not supported.

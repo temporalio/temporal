@@ -62,42 +62,42 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext("0.0.0", "unknown-client", BaseFeatureVersion),
+			callContext:              s.constructCallContext("0.0.0", "unknown-client", BaseFeaturesFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext("malformed-version", GoSDK, BaseFeatureVersion),
+			callContext:              s.constructCallContext("malformed-version", GoSDK, BaseFeaturesFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                true,
 		},
 		{
-			callContext:              s.constructCallContext(s.getHigherVersion(SupportedGoSDKVersion), GoSDK, BaseFeatureVersion),
+			callContext:              s.constructCallContext(s.getHigherVersion(SupportedGoSDKVersion), GoSDK, BaseFeaturesFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                true,
 		},
 		{
-			callContext:              s.constructCallContext(s.getHigherVersion(SupportedJavaSDKVersion), JavaSDK, BaseFeatureVersion),
+			callContext:              s.constructCallContext(s.getHigherVersion(SupportedJavaSDKVersion), JavaSDK, BaseFeaturesFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                true,
 		},
 		{
-			callContext:              s.constructCallContext(s.getHigherVersion(SupportedCLIVersion), CLI, BaseFeatureVersion),
+			callContext:              s.constructCallContext(s.getHigherVersion(SupportedCLIVersion), CLI, BaseFeaturesFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                true,
 		},
 		{
-			callContext:              s.constructCallContext(SupportedGoSDKVersion, GoSDK, BaseFeatureVersion),
+			callContext:              s.constructCallContext(SupportedGoSDKVersion, GoSDK, BaseFeaturesFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext(SupportedJavaSDKVersion, JavaSDK, BaseFeatureVersion),
+			callContext:              s.constructCallContext(SupportedJavaSDKVersion, JavaSDK, BaseFeaturesFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
 		{
-			callContext:              s.constructCallContext(SupportedCLIVersion, CLI, BaseFeatureVersion),
+			callContext:              s.constructCallContext(SupportedCLIVersion, CLI, BaseFeaturesFeatureVersion),
 			enableClientVersionCheck: true,
 			expectErr:                false,
 		},
@@ -115,68 +115,55 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 	}
 }
 
-// func (s *VersionCheckerSuite) TestSupportsConsistentQuery() {
-// 	testCases := []struct {
-// 		clientImpl           string
-// 		clientFeatureVersion string
-// 		expectErr            bool
-// 	}{
-// 		{
-// 			clientImpl: "",
-// 			expectErr:  true,
-// 		},
-// 		{
-// 			clientImpl:           "",
-// 			clientFeatureVersion: GoWorkerConsistentQueryVersion,
-// 			expectErr:            true,
-// 		},
-// 		{
-// 			clientImpl: GoSDK,
-// 			expectErr:  true,
-// 		},
-// 		{
-// 			clientImpl:           "unknown",
-// 			clientFeatureVersion: "0.0.0",
-// 			expectErr:            true,
-// 		},
-// 		{
-// 			clientImpl:           JavaSDK,
-// 			clientFeatureVersion: "1.5.0",
-// 			expectErr:            true,
-// 		},
-// 		{
-// 			clientImpl:           GoSDK,
-// 			clientFeatureVersion: "malformed-feature-version",
-// 			expectErr:            true,
-// 		},
-// 		{
-// 			clientImpl:           GoSDK,
-// 			clientFeatureVersion: GoWorkerConsistentQueryVersion,
-// 			expectErr:            false,
-// 		},
-// 		{
-// 			clientImpl:           GoSDK,
-// 			clientFeatureVersion: "1.4.0",
-// 			expectErr:            true,
-// 		},
-// 		{
-// 			clientImpl:           GoSDK,
-// 			clientFeatureVersion: "2.0.0",
-// 			expectErr:            false,
-// 		},
-// 	}
-//
-// 	for _, tc := range testCases {
-// 		vc := NewVersionChecker()
-// 		if tc.expectErr {
-// 			err := vc.SupportsConsistentQuery(tc.clientImpl, tc.clientFeatureVersion)
-// 			s.Error(err)
-// 			s.IsType(&serviceerror.ClientVersionNotSupported{}, err)
-// 		} else {
-// 			s.NoError(vc.SupportsConsistentQuery(tc.clientImpl, tc.clientFeatureVersion))
-// 		}
-// 	}
-// }
+func (s *VersionCheckerSuite) TestSupportsBaseFeatures() {
+	testCases := []struct {
+		clientFeatureVersion string
+		expectErr            bool
+	}{
+		{
+			expectErr: true,
+		},
+		{
+			clientFeatureVersion: BaseFeaturesFeatureVersion,
+			expectErr:            false,
+		},
+		{
+			clientFeatureVersion: "0.0.0",
+			expectErr:            true,
+		},
+		{
+			clientFeatureVersion: "0.9.0",
+			expectErr:            true,
+		},
+		{
+			clientFeatureVersion: "malformed-feature-version",
+			expectErr:            true,
+		},
+		{
+			clientFeatureVersion: BaseFeaturesFeatureVersion,
+			expectErr:            false,
+		},
+		{
+			clientFeatureVersion: "1.0.0",
+			expectErr:            false,
+		},
+		{
+			clientFeatureVersion: "2.0.0",
+			expectErr:            false,
+		},
+	}
+
+	for caseIndex, tc := range testCases {
+		vc := NewVersionChecker()
+		if tc.expectErr {
+			err := vc.SupportsBaseFeatures(tc.clientFeatureVersion)
+			s.Errorf(err, "Case #%d", caseIndex)
+			s.IsType(&serviceerror.ClientVersionNotSupported{}, err)
+		} else {
+			s.NoErrorf(vc.SupportsBaseFeatures(tc.clientFeatureVersion), "Case #%d", caseIndex)
+		}
+	}
+}
 
 func (s *VersionCheckerSuite) getHigherVersion(version string) string {
 	split := strings.Split(version, ".")
