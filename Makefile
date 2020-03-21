@@ -107,8 +107,7 @@ dir_no_slash = $(patsubst %/,%,$(dir $(1)))
 dirname = $(notdir $(call dir_no_slash,$(1)))
 
 proto-mock: $(PROTO_GEN)
-	GO111MODULE=off go get -u github.com/myitcv/gobin
-	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
+	go get github.com/golang/mock/mockgen@latest
 	@echo "Generate proto mocks..."
 	@$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),cd $(PROTO_GEN) && mockgen -package $(call dirname,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call dir_no_slash,$(PROTO_GRPC_SERVICE))mock/$(notdir $(PROTO_GRPC_SERVICE:go=mock.go)) )
 
@@ -119,7 +118,6 @@ proto: clean-proto install-proto-submodule grpc-install protoc proto-mock
 #==============================================================================
 
 grpc-install:
-	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
 	GO111MODULE=off go get -u google.golang.org/grpc
 
@@ -147,8 +145,7 @@ temporal-canary: $(ALL_SRC)
 	go build -i -o temporal-canary cmd/canary/main.go
 
 go-generate:
-	GO111MODULE=off go get -u github.com/myitcv/gobin
-	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
+	go get github.com/golang/mock/mockgen@latest
 	@echo "running go generate ./..."
 	@go generate ./...
 
