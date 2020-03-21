@@ -11,8 +11,6 @@ ifndef GOARCH
 GOARCH := $(shell go env GOARCH)
 endif
 
-THRIFT_GENDIR=.gen
-
 default: test
 
 TEST_TIMEOUT = 20m
@@ -109,8 +107,7 @@ dir_no_slash = $(patsubst %/,%,$(dir $(1)))
 dirname = $(notdir $(call dir_no_slash,$(1)))
 
 proto-mock: $(PROTO_GEN)
-	GO111MODULE=off go get -u github.com/myitcv/gobin
-	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
+	go get github.com/golang/mock/mockgen@latest
 	@echo "Generate proto mocks..."
 	@$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),cd $(PROTO_GEN) && mockgen -package $(call dirname,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call dir_no_slash,$(PROTO_GRPC_SERVICE))mock/$(notdir $(PROTO_GRPC_SERVICE:go=mock.go)) )
 
@@ -121,16 +118,8 @@ proto: clean-proto install-proto-submodule grpc-install protoc proto-mock
 #==============================================================================
 
 grpc-install:
-	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
 	GO111MODULE=off go get -u google.golang.org/grpc
-
-yarpc-install:
-	GO111MODULE=off go get -u github.com/myitcv/gobin
-	GOOS= GOARCH= gobin -mod=readonly go.uber.org/thriftrw
-
-clean_thrift:
-	rm -rf .gen/go
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
@@ -156,8 +145,7 @@ temporal-canary: $(ALL_SRC)
 	go build -i -o temporal-canary cmd/canary/main.go
 
 go-generate:
-	GO111MODULE=off go get -u github.com/myitcv/gobin
-	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
+	go get github.com/golang/mock/mockgen@latest
 	@echo "running go generate ./..."
 	@go generate ./...
 
@@ -175,16 +163,12 @@ lint:
 		exit 1; \
 	fi
 
-fmt:
-	GO111MODULE=off go get -u github.com/myitcv/gobin
-	GOOS= GOARCH= gobin -mod=readonly golang.org/x/tools/cmd/goimports
+goimports:
+	GO111MODULE=off go get golang.org/x/tools/cmd/goimports
 	@echo "running goimports"
 	@goimports -local "github.com/temporalio/temporal" -w $(ALL_SRC)
 
-#bins_nothrift: fmt lint copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
-bins_nothrift: lint copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
-
-bins: proto bins_nothrift
+bins: proto goimports lint copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
 
 test: bins
 	@rm -f test
