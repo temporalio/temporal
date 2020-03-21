@@ -207,7 +207,6 @@ func (s *Service) startParentClosePolicyProcessor() {
 		ServiceClient: s.params.PublicClient,
 		MetricsClient: s.GetMetricsClient(),
 		Logger:        s.GetLogger(),
-		TallyScope:    s.params.MetricScope,
 		ClientBean:    s.GetClientBean(),
 	}
 	processor := parentclosepolicy.New(params)
@@ -222,7 +221,6 @@ func (s *Service) startBatcher() {
 		ServiceClient: s.params.PublicClient,
 		MetricsClient: s.GetMetricsClient(),
 		Logger:        s.GetLogger(),
-		TallyScope:    s.params.MetricScope,
 		ClientBean:    s.GetClientBean(),
 	}
 	if err := batcher.New(params).Start(); err != nil {
@@ -232,8 +230,7 @@ func (s *Service) startBatcher() {
 
 func (s *Service) startScanner() {
 	params := &scanner.BootstrapParams{
-		Config:     *s.config.ScannerCfg,
-		TallyScope: s.params.MetricScope,
+		Config: *s.config.ScannerCfg,
 	}
 	if err := scanner.New(s.Resource, params).Start(); err != nil {
 		s.GetLogger().Fatal("error starting scanner", tag.Error(err))

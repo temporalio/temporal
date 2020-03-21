@@ -84,20 +84,23 @@ func (c *Config) Validate() error {
 // RuntimeContext contains all the context
 // information needed to run the canary
 type RuntimeContext struct {
-	logger  *zap.Logger
-	metrics tally.Scope
-	service workflowservice.WorkflowServiceClient
+	logger   *zap.Logger
+	metrics  tally.Scope
+	hostPort string
+	service  workflowservice.WorkflowServiceClient
 }
 
 // NewRuntimeContext builds a runtime context from the config
 func NewRuntimeContext(
 	logger *zap.Logger,
 	scope tally.Scope,
+	hostPort string,
 	service workflowservice.WorkflowServiceClient,
 ) *RuntimeContext {
 	return &RuntimeContext{
-		logger:  logger,
-		metrics: scope,
-		service: service,
+		logger:   logger,
+		metrics:  scope,
+		hostPort: hostPort,
+		service:  service,
 	}
 }

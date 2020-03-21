@@ -27,7 +27,6 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 	"go.temporal.io/temporal/mocks"
 	"go.temporal.io/temporal/testsuite"
 	"go.temporal.io/temporal/worker"
@@ -157,7 +156,6 @@ func (s *workflowTestSuite) TestLocalActivityWorkflow() {
 
 func newTestWorkerOptions(ctx *activityContext) worker.Options {
 	return worker.Options{
-		MetricsScope:              tally.NoopScope,
 		BackgroundActivityContext: context.WithValue(context.Background(), ctxKeyActivityRuntime, ctx),
 	}
 }

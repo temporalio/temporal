@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
+	sdkclient "go.temporal.io/temporal/client"
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -449,11 +450,15 @@ func (c *cadenceImpl) startHistory(
 		c.overrideHistoryDynamicConfig(integrationClient)
 		params.DynamicConfig = integrationClient
 
-		connection, err := rpc.Dial(c.FrontendGRPCAddress())
+		var err error
+		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+			HostPort:     c.FrontendGRPCAddress(),
+			DomainName:   common.SystemLocalDomainName,
+			MetricsScope: params.MetricScope,
+		})
 		if err != nil {
-			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
+			c.logger.Fatal("Failed to create client for history", tag.Error(err))
 		}
-		params.PublicClient = workflowservice.NewWorkflowServiceClient(connection)
 
 		params.ArchivalMetadata = c.archiverMetadata
 		params.ArchiverProvider = c.archiverProvider
@@ -572,11 +577,14 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))
 	}
 
-	connection, err := rpc.Dial(c.FrontendGRPCAddress())
+	params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+		HostPort:     c.FrontendGRPCAddress(),
+		DomainName:   common.SystemLocalDomainName,
+		MetricsScope: params.MetricScope,
+	})
 	if err != nil {
-		c.logger.Fatal("Failed to create connection for worker", tag.Error(err))
+		c.logger.Fatal("Failed to create client for worker", tag.Error(err))
 	}
-	params.PublicClient = workflowservice.NewWorkflowServiceClient(connection)
 
 	service, err := resource.New(
 		params,

@@ -36,8 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/temporal-proto/enums"
-	"go.temporal.io/temporal-proto/workflowservice"
-	"go.temporal.io/temporal/client"
+	sdkclient "go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/encoded"
 	"go.temporal.io/temporal/worker"
 	"go.temporal.io/temporal/workflow"
@@ -53,11 +52,10 @@ type (
 		// not merely log an error
 		*require.Assertions
 		IntegrationBase
-		wfService        workflowservice.WorkflowServiceClient
-		wfClient         client.Client
-		worker           worker.Worker
-		taskList         string
-		connectionCloser func()
+		hostPort  string
+		sdkClient sdkclient.Client
+		worker    worker.Worker
+		taskList  string
 	}
 )
 
@@ -69,15 +67,22 @@ func TestClientIntegrationSuite(t *testing.T) {
 func (s *clientIntegrationSuite) SetupSuite() {
 	s.setupSuite("testdata/clientintegrationtestcluster.yaml")
 
-	var err error
-	s.wfService, err = s.buildServiceClient()
-	if err != nil {
-		s.Logger.Fatal("Error when build service client", tag.Error(err))
+	s.hostPort = "127.0.0.1:7134"
+	if TestFlags.FrontendAddr != "" {
+		s.hostPort = TestFlags.FrontendAddr
 	}
-	s.wfClient = client.NewClient(s.wfService, s.domainName, nil)
+
+	var err error
+	s.sdkClient, err = sdkclient.NewClient(sdkclient.Options{
+		HostPort:   s.hostPort,
+		DomainName: s.domainName,
+	})
+	if err != nil {
+		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
+	}
 
 	s.taskList = "client-integration-test-tasklist"
-	s.worker = worker.New(s.wfService, s.domainName, s.taskList, worker.Options{})
+	s.worker = worker.New(s.sdkClient, s.taskList, worker.Options{})
 
 	s.worker.RegisterWorkflow(testDataConverterWorkflow)
 	s.worker.RegisterWorkflow(testParentWorkflow)
@@ -90,26 +95,8 @@ func (s *clientIntegrationSuite) SetupSuite() {
 }
 
 func (s *clientIntegrationSuite) TearDownSuite() {
-	s.connectionCloser()
+	s.sdkClient.CloseConnection()
 	s.tearDownSuite()
-}
-
-func (s *clientIntegrationSuite) buildServiceClient() (workflowservice.WorkflowServiceClient, error) {
-	hostPort := "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		hostPort = TestFlags.FrontendAddr
-	}
-
-	connection, err := rpc.Dial(hostPort)
-	if err != nil {
-		return nil, err
-	}
-
-	s.connectionCloser = func() {
-		_ = connection.Close()
-	}
-
-	return workflowservice.NewWorkflowServiceClient(connection), nil
 }
 
 func (s *clientIntegrationSuite) SetupTest() {
@@ -181,36 +168,44 @@ func testDataConverterWorkflow(ctx workflow.Context, tl string) (string, error) 
 	return result + "," + result1, nil
 }
 
-func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataConverter encoded.DataConverter) worker.Worker {
-	opts := worker.Options{}
-	if dataConverter != nil {
-		opts.DataConverter = dataConverter
+func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataConverter encoded.DataConverter) (sdkclient.Client, worker.Worker) {
+	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
+		HostPort:      s.hostPort,
+		DomainName:    s.domainName,
+		DataConverter: dataConverter,
+	})
+	if err != nil {
+		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
 	}
-	worker := worker.New(s.wfService, s.domainName, tl, opts)
+
+	worker := worker.New(sdkClient, tl, worker.Options{})
 	worker.RegisterActivity(testActivity)
 	worker.RegisterWorkflow(testChildWorkflow)
 
 	if err := worker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker with data converter", tag.Error(err))
 	}
-	return worker
+	return sdkClient, worker
 }
 
 func (s *clientIntegrationSuite) TestClientDataConverter() {
 	tl := "client-integration-data-converter-activity-tasklist"
 	dc := newTestDataConverter()
-	worker := s.startWorkerWithDataConverter(tl, dc)
-	defer worker.Stop()
+	sdkClient, worker := s.startWorkerWithDataConverter(tl, dc)
+	defer func() {
+		worker.Stop()
+		_ = sdkClient.CloseConnection()
+	}()
 
 	id := "client-integration-data-converter-workflow"
-	workflowOptions := client.StartWorkflowOptions{
+	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                           id,
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
 	defer cancel()
-	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
+	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
 		s.Logger.Fatal("Start workflow with err", tag.Error(err))
 	}
@@ -230,18 +225,21 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 
 func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	tl := "client-integration-data-converter-activity-failed-tasklist"
-	worker := s.startWorkerWithDataConverter(tl, nil) // mismatch of data converter
-	defer worker.Stop()
+	sdkClient, worker := s.startWorkerWithDataConverter(tl, nil) // mismatch of data converter
+	defer func() {
+		worker.Stop()
+		_ = sdkClient.CloseConnection()
+	}()
 
 	id := "client-integration-data-converter-failed-workflow"
-	workflowOptions := client.StartWorkflowOptions{
+	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                           id,
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
 	defer cancel()
-	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
+	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
 		s.Logger.Fatal("Start workflow with err", tag.Error(err))
 	}
@@ -253,7 +251,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	s.Error(err)
 
 	// Get history to make sure only the 2nd activity is failed because of mismatch of data converter
-	iter := s.wfClient.GetWorkflowHistory(ctx, id, we.GetRunID(), false, 0)
+	iter := s.sdkClient.GetWorkflowHistory(ctx, id, we.GetRunID(), false, 0)
 	completedAct := 0
 	failedAct := 0
 	for iter.HasNext() {
@@ -333,18 +331,21 @@ func testChildWorkflow(ctx workflow.Context, totalCount, runCount int) (string, 
 
 func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 	dc := newTestDataConverter()
-	worker := s.startWorkerWithDataConverter(childTaskList, dc)
-	defer worker.Stop()
+	sdkClient, worker := s.startWorkerWithDataConverter(childTaskList, dc)
+	defer func() {
+		worker.Stop()
+		_ = sdkClient.CloseConnection()
+	}()
 
 	id := "client-integration-data-converter-with-child-workflow"
-	workflowOptions := client.StartWorkflowOptions{
+	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                           id,
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
 	defer cancel()
-	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
+	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	if err != nil {
 		s.Logger.Fatal("Start workflow with err", tag.Error(err))
 	}

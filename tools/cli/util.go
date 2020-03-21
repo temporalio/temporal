@@ -42,14 +42,14 @@ import (
 	"github.com/valyala/fastjson"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-	"go.temporal.io/temporal/client"
+	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/rpc"
 )
 
 // GetHistory helper method to iterate over all pages and return complete list of history events
-func GetHistory(ctx context.Context, workflowClient client.Client, workflowID, runID string) (*commonproto.History, error) {
+func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID, runID string) (*commonproto.History, error) {
 	iter := workflowClient.GetWorkflowHistory(ctx, workflowID, runID, false,
 		enums.HistoryEventFilterTypeAllEvent)
 	var events []*commonproto.HistoryEvent
@@ -519,12 +519,12 @@ func ErrorAndExit(msg string, err error) {
 	osExit(1)
 }
 
-func getWorkflowClient(c *cli.Context) client.Client {
+func getWorkflowClient(c *cli.Context) sdkclient.Client {
 	domain := getRequiredGlobalOption(c, FlagDomain)
-	return client.NewClient(cFactory.FrontendClient(c), domain, &client.Options{})
+	return cFactory.SDKClient(c, domain)
 }
 
-func getWorkflowClientWithOptionalDomain(c *cli.Context) client.Client {
+func getWorkflowClientWithOptionalDomain(c *cli.Context) sdkclient.Client {
 	if !c.GlobalIsSet(FlagDomain) {
 		_ = c.GlobalSet(FlagDomain, "system-domain")
 	}

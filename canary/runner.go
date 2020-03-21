@@ -54,6 +54,7 @@ func NewCanaryRunner(cfg *Config) (Runnable, error) {
 	runtimeContext := NewRuntimeContext(
 		logger,
 		metricsScope,
+		cfg.Cadence.HostNameAndPort,
 		workflowservice.NewWorkflowServiceClient(connection),
 	)
 
@@ -72,7 +73,11 @@ func (r *canaryRunner) Run() error {
 
 	var wg sync.WaitGroup
 	for _, d := range r.config.Domains {
-		canary := newCanary(d, r.RuntimeContext)
+		canary, err := newCanary(d, r.RuntimeContext)
+		if err != nil {
+			return err
+		}
+
 		r.logger.Info("starting canary", zap.String("domain", d))
 		r.execute(canary, &wg)
 	}

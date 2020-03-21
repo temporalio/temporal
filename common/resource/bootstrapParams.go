@@ -22,7 +22,7 @@ package resource
 
 import (
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal-proto/workflowservice"
+	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
@@ -61,7 +61,7 @@ type (
 		ESConfig                     *elasticsearch.Config
 		DynamicConfig                dynamicconfig.Client
 		DCRedirectionPolicy          config.DCRedirectionPolicy
-		PublicClient                 workflowservice.WorkflowServiceClient
+		PublicClient                 sdkclient.Client
 		ArchivalMetadata             archiver.ArchivalMetadata
 		ArchiverProvider             provider.ArchiverProvider
 		Authorizer                   authorization.Authorizer
