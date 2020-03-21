@@ -11,8 +11,6 @@ ifndef GOARCH
 GOARCH := $(shell go env GOARCH)
 endif
 
-THRIFT_GENDIR=.gen
-
 default: test
 
 TEST_TIMEOUT = 20m
@@ -125,13 +123,6 @@ grpc-install:
 	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
 	GO111MODULE=off go get -u google.golang.org/grpc
 
-yarpc-install:
-	GO111MODULE=off go get -u github.com/myitcv/gobin
-	GOOS= GOARCH= gobin -mod=readonly go.uber.org/thriftrw
-
-clean_thrift:
-	rm -rf .gen/go
-
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
@@ -175,16 +166,13 @@ lint:
 		exit 1; \
 	fi
 
-fmt:
+goimports:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly golang.org/x/tools/cmd/goimports
 	@echo "running goimports"
 	@goimports -local "github.com/temporalio/temporal" -w $(ALL_SRC)
 
-#bins_nothrift: fmt lint copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
-bins_nothrift: lint copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
-
-bins: proto bins_nothrift
+bins: proto goimports lint copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
 
 test: bins
 	@rm -f test
