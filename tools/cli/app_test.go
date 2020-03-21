@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
@@ -40,7 +39,6 @@ import (
 	"go.temporal.io/temporal-proto/workflowservicemock"
 	sdkclient "go.temporal.io/temporal/client"
 	sdkmocks "go.temporal.io/temporal/mocks"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
@@ -138,13 +136,13 @@ func (s *cliAppSuite) TestDomainRegister_GlobalDomain() {
 }
 
 func (s *cliAppSuite) TestDomainRegister_DomainExist() {
-	s.frontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil, status.New(codes.AlreadyExists, "").Err())
+	s.frontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewDomainAlreadyExists(""))
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "true"})
 	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainRegister_Failed() {
-	s.frontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil, status.New(codes.InvalidArgument, "faked error").Err())
+	s.frontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "true"})
 	s.Equal(1, errorCode)
 }
@@ -185,13 +183,13 @@ func (s *cliAppSuite) TestDomainUpdate() {
 func (s *cliAppSuite) TestDomainUpdate_DomainNotExist() {
 	resp := describeDomainResponseServer
 	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, nil)
-	s.frontendClient.EXPECT().UpdateDomain(gomock.Any(), gomock.Any()).Return(nil, status.New(codes.NotFound, "").Err())
+	s.frontendClient.EXPECT().UpdateDomain(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "update"})
 	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainUpdate_ActiveClusterFlagNotSet_DomainNotExist() {
-	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(nil, status.New(codes.NotFound, "").Err())
+	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "update"})
 	s.Equal(1, errorCode)
 }
@@ -199,7 +197,7 @@ func (s *cliAppSuite) TestDomainUpdate_ActiveClusterFlagNotSet_DomainNotExist() 
 func (s *cliAppSuite) TestDomainUpdate_Failed() {
 	resp := describeDomainResponseServer
 	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, nil)
-	s.frontendClient.EXPECT().UpdateDomain(gomock.Any(), gomock.Any()).Return(nil, status.New(codes.InvalidArgument, "faked error").Err())
+	s.frontendClient.EXPECT().UpdateDomain(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "update"})
 	s.Equal(1, errorCode)
 }
@@ -213,14 +211,14 @@ func (s *cliAppSuite) TestDomainDescribe() {
 
 func (s *cliAppSuite) TestDomainDescribe_DomainNotExist() {
 	resp := describeDomainResponseServer
-	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, status.New(codes.NotFound, "").Err())
+	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewNotFound(""))
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "describe"})
 	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainDescribe_Failed() {
 	resp := describeDomainResponseServer
-	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, status.New(codes.InvalidArgument, "faked error").Err())
+	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "describe"})
 	s.Equal(1, errorCode)
 }
@@ -288,7 +286,7 @@ func (s *cliAppSuite) TestStartWorkflow() {
 
 func (s *cliAppSuite) TestStartWorkflow_Failed() {
 	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
-	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, status.New(codes.InvalidArgument, "faked error").Err())
+	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
 	// start with wid
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
 	s.Equal(1, errorCode)
@@ -313,7 +311,7 @@ func (s *cliAppSuite) TestRunWorkflow() {
 
 func (s *cliAppSuite) TestRunWorkflow_Failed() {
 	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
-	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, status.New(codes.InvalidArgument, "faked error").Err())
+	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	// start with wid
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
@@ -345,7 +343,7 @@ func (s *cliAppSuite) TestCancelWorkflow() {
 
 func (s *cliAppSuite) TestCancelWorkflow_Failed() {
 	s.sdkClient.On("CancelWorkflow", mock.Anything, mock.Anything, mock.Anything).Return(serviceerror.NewInvalidArgument("faked error")).Once()
-	//s.frontendClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, status.New(codes.InvalidArgument, "faked error").Err())
+	//s.frontendClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "cancel", "-w", "wid"})
 	s.Equal(1, errorCode)
 	s.sdkClient.AssertExpectations(s.T())
@@ -358,7 +356,7 @@ func (s *cliAppSuite) TestSignalWorkflow() {
 }
 
 func (s *cliAppSuite) TestSignalWorkflow_Failed() {
-	s.frontendClient.EXPECT().SignalWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, status.New(codes.InvalidArgument, "faked error").Err())
+	s.frontendClient.EXPECT().SignalWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "signal", "-w", "wid", "-n", "signal-name"})
 	s.Equal(1, errorCode)
 }
@@ -385,7 +383,7 @@ func (s *cliAppSuite) TestQueryWorkflow_Failed() {
 	resp := &workflowservice.QueryWorkflowResponse{
 		QueryResult: []byte("query-result"),
 	}
-	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, status.New(codes.InvalidArgument, "faked error").Err())
+	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
 	s.Equal(1, errorCode)
 }
@@ -526,7 +524,7 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow() {
 }
 
 func (s *cliAppSuite) TestAdminDescribeWorkflow_Failed() {
-	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, status.New(codes.InvalidArgument, "faked error").Err())
+	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "admin", "wf", "describe", "-w", "test-wf-id"})
 	s.Equal(1, errorCode)
 }
