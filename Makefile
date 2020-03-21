@@ -181,7 +181,8 @@ fmt:
 	@echo "running goimports"
 	@goimports -local "github.com/temporalio/temporal" -w $(ALL_SRC)
 
-bins_nothrift: fmt lint copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
+#bins_nothrift: fmt lint copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
+bins_nothrift: lint copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
 
 bins: proto bins_nothrift
 

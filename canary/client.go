@@ -71,28 +71,37 @@ func (client *cadenceClient) createDomain(name string, desc string, owner string
 }
 
 // newCadenceClient builds a cadenceClient from the runtimeContext
-func newCadenceClient(domain string, runtime *RuntimeContext) cadenceClient {
+func newCadenceClient(domain string, runtime *RuntimeContext) (cadenceClient, error) {
 	tracer := opentracing.GlobalTracer()
-	cclient := client.NewClient(
-		runtime.service,
-		domain,
-		&client.Options{
+	cclient, err := client.NewClient(
+		client.Options{
+			HostPort:     runtime.hostPort,
+			DomainName:   domain,
 			MetricsScope: runtime.metrics,
 			Tracer:       tracer,
 		},
 	)
-	domainClient := client.NewDomainClient(
-		runtime.service,
-		&client.Options{
+
+	if err != nil {
+		return cadenceClient{}, err
+	}
+
+	domainClient, err := client.NewDomainClient(
+		client.Options{
+			HostPort:     runtime.hostPort,
 			MetricsScope: runtime.metrics,
 			Tracer:       tracer,
 		},
 	)
+	if err != nil {
+		return cadenceClient{}, err
+	}
+
 	return cadenceClient{
 		Client:       cclient,
 		DomainClient: domainClient,
 		Service:      runtime.service,
-	}
+	}, nil
 }
 
 // newWorkflowOptions builds workflowOptions with defaults for everything except startToCloseTimeout
