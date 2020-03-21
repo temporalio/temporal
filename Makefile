@@ -110,7 +110,7 @@ dirname = $(notdir $(call dir_no_slash,$(1)))
 
 proto-mock: $(PROTO_GEN)
 	GO111MODULE=off go get -u github.com/myitcv/gobin
-	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen@v1.4.0
+	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
 	@echo "Generate proto mocks..."
 	@$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),cd $(PROTO_GEN) && mockgen -package $(call dirname,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call dir_no_slash,$(PROTO_GRPC_SERVICE))mock/$(notdir $(PROTO_GRPC_SERVICE:go=mock.go)) )
 

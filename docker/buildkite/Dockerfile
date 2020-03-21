@@ -1,4 +1,4 @@
-FROM golang:1.13.3
+FROM golang:1.14
 
 # Tried to set Python to ignore warnings due to the instructions at this link:
 # https://github.com/yaml/pyyaml/wiki/PyYAML-yaml.load(input)-Deprecation
