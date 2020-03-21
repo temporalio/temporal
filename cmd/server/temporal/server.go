@@ -24,7 +24,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
 	sdkclient "go.temporal.io/temporal/client"
 	"go.uber.org/zap"
 
@@ -168,7 +167,6 @@ func (s *server) startService() common.Daemon {
 			HostPort:     s.cfg.PublicClient.HostPort,
 			DomainName:   common.SystemLocalDomainName,
 			MetricsScope: params.MetricScope,
-			Tracer:       opentracing.GlobalTracer(), //???
 		})
 		if err != nil {
 			log.Fatalf("failed to create public client: %v", err)

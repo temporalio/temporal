@@ -30,12 +30,16 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal-proto/workflowservicemock"
+	sdkclient "go.temporal.io/temporal/client"
+	sdkmocks "go.temporal.io/temporal/mocks"
 	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -48,11 +52,13 @@ type cliAppSuite struct {
 	mockCtrl          *gomock.Controller
 	frontendClient    *workflowservicemock.MockWorkflowServiceClient
 	serverAdminClient *adminservicemock.MockAdminServiceClient
+	sdkClient         *sdkmocks.Client
 }
 
 type clientFactoryMock struct {
 	frontendClient    workflowservice.WorkflowServiceClient
 	serverAdminClient adminservice.AdminServiceClient
+	sdkClient         *sdkmocks.Client
 }
 
 func (m *clientFactoryMock) FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient {
@@ -61,6 +67,10 @@ func (m *clientFactoryMock) FrontendClient(c *cli.Context) workflowservice.Workf
 
 func (m *clientFactoryMock) AdminClient(c *cli.Context) adminservice.AdminServiceClient {
 	return m.serverAdminClient
+}
+
+func (m *clientFactoryMock) SDKClient(c *cli.Context, domain string) sdkclient.Client {
+	return m.sdkClient
 }
 
 var commands = []string{
@@ -85,9 +95,11 @@ func (s *cliAppSuite) SetupTest() {
 
 	s.frontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.mockCtrl)
 	s.serverAdminClient = adminservicemock.NewMockAdminServiceClient(s.mockCtrl)
+	s.sdkClient = &sdkmocks.Client{}
 	SetFactory(&clientFactoryMock{
 		frontendClient:    s.frontendClient,
 		serverAdminClient: s.serverAdminClient,
+		sdkClient:         s.sdkClient,
 	})
 }
 
@@ -236,31 +248,31 @@ var (
 )
 
 func (s *cliAppSuite) TestShowHistory() {
-	resp := getWorkflowExecutionHistoryResponse
-	s.frontendClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "show", "-w", "wid"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestShowHistoryWithID() {
-	resp := getWorkflowExecutionHistoryResponse
-	s.frontendClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "showid", "wid"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestShowHistory_PrintRawTime() {
-	resp := getWorkflowExecutionHistoryResponse
-	s.frontendClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "show", "-w", "wid", "-prt"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestShowHistory_PrintDateTime() {
-	resp := getWorkflowExecutionHistoryResponse
-	s.frontendClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "show", "-w", "wid", "-pdt"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestStartWorkflow() {
@@ -284,49 +296,59 @@ func (s *cliAppSuite) TestStartWorkflow_Failed() {
 
 func (s *cliAppSuite) TestRunWorkflow() {
 	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
-	history := getWorkflowExecutionHistoryResponse
 	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil).Times(2)
-	s.frontendClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(history, nil).Times(2)
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
+
 	// start with wid
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "wrp", "2"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
+
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	// start without wid
 	err = s.app.Run([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "wrp", "2"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestRunWorkflow_Failed() {
 	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
-	history := getWorkflowExecutionHistoryResponse
 	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, status.New(codes.InvalidArgument, "faked error").Err())
-	s.frontendClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(history, nil)
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	// start with wid
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
 	s.Equal(1, errorCode)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestTerminateWorkflow() {
-	s.frontendClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.sdkClient.On("TerminateWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "terminate", "-w", "wid"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestTerminateWorkflow_Failed() {
-	s.frontendClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, status.New(codes.InvalidArgument, "faked error").Err())
+	s.sdkClient.On("TerminateWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(serviceerror.NewInvalidArgument("faked error")).Once()
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "terminate", "-w", "wid"})
 	s.Equal(1, errorCode)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestCancelWorkflow() {
-	s.frontendClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.sdkClient.On("CancelWorkflow", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "cancel", "-w", "wid"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestCancelWorkflow_Failed() {
-	s.frontendClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, status.New(codes.InvalidArgument, "faked error").Err())
+	s.sdkClient.On("CancelWorkflow", mock.Anything, mock.Anything, mock.Anything).Return(serviceerror.NewInvalidArgument("faked error")).Once()
+	//s.frontendClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, status.New(codes.InvalidArgument, "faked error").Err())
 	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "cancel", "-w", "wid"})
 	s.Equal(1, errorCode)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestSignalWorkflow() {
@@ -408,77 +430,78 @@ var (
 )
 
 func (s *cliAppSuite) TestListWorkflow() {
-	resp := listClosedWorkflowExecutionsResponse
-	s.frontendClient.EXPECT().ListClosedWorkflowExecutions(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_WithWorkflowID() {
-	resp := &workflowservice.ListClosedWorkflowExecutionsResponse{}
-	s.frontendClient.EXPECT().ListClosedWorkflowExecutions(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-wid", "nothing"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_WithWorkflowType() {
-	resp := &workflowservice.ListClosedWorkflowExecutionsResponse{}
-	s.frontendClient.EXPECT().ListClosedWorkflowExecutions(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-wt", "no-type"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_PrintDateTime() {
-	resp := listClosedWorkflowExecutionsResponse
-	s.frontendClient.EXPECT().ListClosedWorkflowExecutions(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-pdt"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_PrintRawTime() {
-	resp := listClosedWorkflowExecutionsResponse
-	s.frontendClient.EXPECT().ListClosedWorkflowExecutions(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-prt"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_Open() {
-	resp := listOpenWorkflowExecutionsResponse
-	s.frontendClient.EXPECT().ListOpenWorkflowExecutions(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("ListOpenWorkflow", mock.Anything, mock.Anything).Return(listOpenWorkflowExecutionsResponse, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-op"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_Open_WithWorkflowID() {
-	resp := &workflowservice.ListOpenWorkflowExecutionsResponse{}
-	s.frontendClient.EXPECT().ListOpenWorkflowExecutions(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("ListOpenWorkflow", mock.Anything, mock.Anything).Return(listOpenWorkflowExecutionsResponse, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-op", "-wid", "nothing"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_Open_WithWorkflowType() {
-	resp := &workflowservice.ListOpenWorkflowExecutionsResponse{}
-	s.frontendClient.EXPECT().ListOpenWorkflowExecutions(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("ListOpenWorkflow", mock.Anything, mock.Anything).Return(listOpenWorkflowExecutionsResponse, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-op", "-wt", "no-type"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListArchivedWorkflow() {
-	resp := &workflowservice.ListArchivedWorkflowExecutionsResponse{}
-	s.frontendClient.EXPECT().ListArchivedWorkflowExecutions(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("ListArchivedWorkflow", mock.Anything, mock.Anything).Return(&workflowservice.ListArchivedWorkflowExecutionsResponse{}, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "listarchived", "-q", "some query string", "--ps", "200", "--all"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestCountWorkflow() {
-	resp := &workflowservice.CountWorkflowExecutionsResponse{}
-	s.frontendClient.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("CountWorkflow", mock.Anything, mock.Anything).Return(&workflowservice.CountWorkflowExecutionsResponse{}, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "count"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 
-	s.frontendClient.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("CountWorkflow", mock.Anything, mock.Anything).Return(&workflowservice.CountWorkflowExecutionsResponse{}, nil).Once()
 	err = s.app.Run([]string{"", "--do", domainName, "workflow", "count", "-q", "'CloseTime = missing'"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 var describeTaskListResponse = &workflowservice.DescribeTaskListResponse{
@@ -514,35 +537,41 @@ func (s *cliAppSuite) TestAdminAddSearchAttribute() {
 }
 
 func (s *cliAppSuite) TestDescribeTaskList() {
-	resp := describeTaskListResponse
-	s.frontendClient.EXPECT().DescribeTaskList(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("DescribeTaskList", mock.Anything, mock.Anything, mock.Anything).Return(describeTaskListResponse, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "tasklist", "describe", "-tl", "test-taskList"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestDescribeTaskList_Activity() {
-	resp := describeTaskListResponse
-	s.frontendClient.EXPECT().DescribeTaskList(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.sdkClient.On("DescribeTaskList", mock.Anything, mock.Anything, mock.Anything).Return(describeTaskListResponse, nil).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "tasklist", "describe", "-tl", "test-taskList", "-tlt", "activity"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestObserveWorkflow() {
-	history := getWorkflowExecutionHistoryResponse
-	s.frontendClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(history, nil).Times(2)
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "observe", "-w", "wid"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
+
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	err = s.app.Run([]string{"", "--do", domainName, "workflow", "observe", "-w", "wid", "-sd"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestObserveWorkflowWithID() {
-	history := getWorkflowExecutionHistoryResponse
-	s.frontendClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(history, nil).Times(2)
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "observeid", "wid"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
+
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	err = s.app.Run([]string{"", "--do", domainName, "workflow", "observeid", "wid", "-sd"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 // TestParseTime tests the parsing of date argument in UTC and UnixNano formats
@@ -725,12 +754,15 @@ func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_Negative() {
 }
 
 func (s *cliAppSuite) TestGetSearchAttributes() {
-	resp := &workflowservice.GetSearchAttributesResponse{}
-	s.frontendClient.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(resp, nil).Times(2)
+	s.sdkClient.On("GetSearchAttributes", mock.Anything).Return(&workflowservice.GetSearchAttributesResponse{}, nil).Once()
 	err := s.app.Run([]string{"", "cluster", "get-search-attr"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
+
+	s.sdkClient.On("GetSearchAttributes", mock.Anything).Return(&workflowservice.GetSearchAttributesResponse{}, nil).Once()
 	err = s.app.Run([]string{"", "--do", domainName, "cluster", "get-search-attr"})
 	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestParseBool() {
@@ -842,4 +874,50 @@ func (s *cliAppSuite) TestConvertArray() {
 		s.NotNil(err)
 		s.Nil(res)
 	}
+}
+
+func historyEventIterator() sdkclient.HistoryEventIterator {
+	iteratorMock := &sdkmocks.HistoryEventIterator{}
+
+	counter := 0
+	hasNextFn := func() bool {
+		if counter == 0 {
+			return true
+		} else {
+			return false
+		}
+	}
+
+	nextFn := func() *commonproto.HistoryEvent {
+		if counter == 0 {
+			event := &commonproto.HistoryEvent{
+				EventType: eventType,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+					WorkflowType:                        &commonproto.WorkflowType{Name: "TestWorkflow"},
+					TaskList:                            &commonproto.TaskList{Name: "taskList"},
+					ExecutionStartToCloseTimeoutSeconds: 60,
+					TaskStartToCloseTimeoutSeconds:      10,
+					Identity:                            "tester",
+				}},
+			}
+			counter++
+			return event
+		} else {
+			return nil
+		}
+	}
+
+	iteratorMock.On("HasNext").Return(hasNextFn).Twice()
+	iteratorMock.On("Next").Return(nextFn, nil).Once()
+
+	return iteratorMock
+}
+
+func workflowRun() sdkclient.WorkflowRun {
+	workflowRunMock := &sdkmocks.WorkflowRun{}
+
+	workflowRunMock.On("GetRunID").Return(uuid.New()).Maybe()
+	workflowRunMock.On("GetID").Return(uuid.New()).Maybe()
+
+	return workflowRunMock
 }
