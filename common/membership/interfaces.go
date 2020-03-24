@@ -53,6 +53,10 @@ type (
 		common.Daemon
 
 		WhoAmI() (*HostInfo, error)
+		// EvictSelf evicts this member from the membership ring. After this method is
+		// called, other members will discover that this node is no longer part of the
+		// ring. This primitive is useful to carry out graceful host shutdown during deployments.
+		EvictSelf() error
 		Lookup(service string, key string) (*HostInfo, error)
 		GetResolver(service string) (ServiceResolver, error)
 		// AddListener adds a listener for this service.
