@@ -172,13 +172,13 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	scheduleDecision := false
 
 	// need to clear activity heartbeat timer task mask for new activity timer task creation
-	// NOTE: LastHeartbeatTimeoutVisibility is for deduping heartbeat timer creation as it's possible
+	// NOTE: LastHeartbeatTimeoutVisibilityInSeconds is for deduping heartbeat timer creation as it's possible
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
 	isHeartBeatTask := task.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
 	activityInfo, ok := mutableState.GetActivityInfo(task.EventID)
-	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibility <= task.VisibilityTimestamp.Unix() {
+	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= task.VisibilityTimestamp.Unix() {
 		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 		if err := mutableState.UpdateActivity(activityInfo); err != nil {
 			return err

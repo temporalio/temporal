@@ -709,7 +709,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, int64(2), int64(3), nil, identity)
 	scheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
-		activityType, tl, activityInput, 100, 10, 5)
+		activityType, tl, activityInput, 100, 10, 1, 5)
 
 	ms1 := createMutableState(msBuilder)
 	gwmsResponse1 := &p.GetWorkflowExecutionResponse{State: ms1}
