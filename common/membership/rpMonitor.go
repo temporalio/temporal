@@ -115,6 +115,10 @@ func (rpo *ringpopMonitor) WhoAmI() (*HostInfo, error) {
 	return NewHostInfo(address, labels.AsMap()), nil
 }
 
+func (rpo *ringpopMonitor) EvictSelf() error {
+	return rpo.rp.SelfEvict()
+}
+
 func (rpo *ringpopMonitor) GetResolver(service string) (ServiceResolver, error) {
 	ring, found := rpo.rings[service]
 	if !found {
