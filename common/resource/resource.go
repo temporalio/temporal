@@ -23,7 +23,7 @@ package resource
 import (
 	"net"
 
-	"go.temporal.io/temporal-proto/workflowservice"
+	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
@@ -76,7 +76,7 @@ type (
 
 		// internal services clients
 
-		GetSDKClient() workflowservice.WorkflowServiceClient
+		GetSDKClient() sdkclient.Client
 		GetFrontendRawClient() frontend.Client
 		GetFrontendClient() frontend.Client
 		GetMatchingRawClient() matching.Client

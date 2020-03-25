@@ -24,8 +24,8 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
+	sdkclient "go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/worker"
 	"go.temporal.io/temporal/workflow"
 
@@ -53,7 +53,7 @@ type (
 
 	// BootstrapContainer contains everything need for bootstrapping
 	BootstrapContainer struct {
-		PublicClient     workflowservice.WorkflowServiceClient
+		PublicClient     sdkclient.Client
 		MetricsClient    metrics.Client
 		Logger           log.Logger
 		HistoryV2Manager persistence.HistoryManager
@@ -100,7 +100,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 		BackgroundActivityContext: actCtx,
 	}
 	clientWorker := &clientWorker{
-		worker:      worker.New(container.PublicClient, common.SystemLocalDomainName, decisionTaskList, wo),
+		worker:      worker.New(container.PublicClient, decisionTaskList, wo),
 		domainCache: container.DomainCache,
 	}
 

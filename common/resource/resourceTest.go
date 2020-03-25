@@ -26,8 +26,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal-proto/workflowservicemock"
+	sdkclient "go.temporal.io/temporal/client"
+	sdkmocks "go.temporal.io/temporal/mocks"
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
@@ -79,7 +80,7 @@ type (
 
 		// internal services clients
 
-		SDKClient            *workflowservicemock.MockWorkflowServiceClient
+		SDKClient            sdkclient.Client
 		FrontendClient       *workflowservicemock.MockWorkflowServiceClient
 		MatchingClient       *matchingservicemock.MockMatchingServiceClient
 		HistoryClient        *historyservicemock.MockHistoryServiceClient
@@ -189,7 +190,7 @@ func NewTest(
 
 		// internal services clients
 
-		SDKClient:            workflowservicemock.NewMockWorkflowServiceClient(controller),
+		SDKClient:            &sdkmocks.Client{},
 		FrontendClient:       frontendClient,
 		MatchingClient:       matchingClient,
 		HistoryClient:        historyClient,
@@ -313,7 +314,7 @@ func (s *Test) GetWorkerServiceResolver() membership.ServiceResolver {
 // internal services clients
 
 // GetSDKClient for testing
-func (s *Test) GetSDKClient() workflowservice.WorkflowServiceClient {
+func (s *Test) GetSDKClient() sdkclient.Client {
 	return s.SDKClient
 }
 

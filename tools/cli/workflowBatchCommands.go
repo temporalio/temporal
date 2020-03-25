@@ -30,8 +30,7 @@ import (
 	"github.com/urfave/cli"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
-
-	cclient "go.temporal.io/temporal/client"
+	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/service/worker/batcher"
@@ -41,8 +40,7 @@ import (
 func TerminateBatchJob(c *cli.Context) {
 	jobID := getRequiredOption(c, FlagJobID)
 	reason := getRequiredOption(c, FlagReason)
-	svcClient := cFactory.FrontendClient(c)
-	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
+	client := cFactory.SDKClient(c, common.SystemLocalDomainName)
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	err := client.TerminateWorkflow(tcCtx, jobID, "", reason, nil)
@@ -59,8 +57,7 @@ func TerminateBatchJob(c *cli.Context) {
 func DescribeBatchJob(c *cli.Context) {
 	jobID := getRequiredOption(c, FlagJobID)
 
-	svcClient := cFactory.FrontendClient(c)
-	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
+	client := cFactory.SDKClient(c, common.SystemLocalDomainName)
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	wf, err := client.DescribeWorkflowExecution(tcCtx, jobID, "")
@@ -94,8 +91,7 @@ func DescribeBatchJob(c *cli.Context) {
 func ListBatchJobs(c *cli.Context) {
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	pageSize := c.Int(FlagPageSize)
-	svcClient := cFactory.FrontendClient(c)
-	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
+	client := cFactory.SDKClient(c, common.SystemLocalDomainName)
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	resp, err := client.ListWorkflow(tcCtx, &workflowservice.ListWorkflowExecutionsRequest{
@@ -110,14 +106,14 @@ func ListBatchJobs(c *cli.Context) {
 	for _, wf := range resp.Executions {
 		job := map[string]string{
 			"jobID":     wf.Execution.GetWorkflowId(),
-			"startTime": convertTime(wf.GetStartTime().Value, false),
+			"startTime": convertTime(wf.GetStartTime().GetValue(), false),
 			"reason":    string(wf.Memo.Fields["Reason"]),
 			"operator":  string(wf.SearchAttributes.IndexedFields["Operator"]),
 		}
 
 		if wf.CloseStatus != enums.WorkflowExecutionCloseStatusRunning {
 			job["status"] = wf.CloseStatus.String()
-			job["closeTime"] = convertTime(wf.GetCloseTime().Value, false)
+			job["closeTime"] = convertTime(wf.GetCloseTime().GetValue(), false)
 		} else {
 			job["status"] = "RUNNING"
 		}
@@ -144,8 +140,7 @@ func StartBatchJob(c *cli.Context) {
 	}
 	rps := c.Int(FlagRPS)
 
-	svcClient := cFactory.FrontendClient(c)
-	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
+	client := cFactory.SDKClient(c, common.SystemLocalDomainName)
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	resp, err := client.CountWorkflow(tcCtx, &workflowservice.CountWorkflowExecutionsRequest{
@@ -175,7 +170,7 @@ func StartBatchJob(c *cli.Context) {
 	}
 	tcCtx, cancel = newContext(c)
 	defer cancel()
-	options := cclient.StartWorkflowOptions{
+	options := sdkclient.StartWorkflowOptions{
 		TaskList:                     batcher.BatcherTaskListName,
 		ExecutionStartToCloseTimeout: batcher.InfiniteDuration,
 		Memo: map[string]interface{}{

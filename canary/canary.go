@@ -66,17 +66,26 @@ const (
 )
 
 // new returns a new instance of Canary runnable
-func newCanary(domain string, rc *RuntimeContext) Runnable {
-	canaryClient := newCadenceClient(domain, rc)
-	archivalClient := newCadenceClient(archivalDomain, rc)
-	systemClient := newCadenceClient(systemDomain, rc)
+func newCanary(domain string, rc *RuntimeContext) (Runnable, error) {
+	canaryClient, err := newCadenceClient(domain, rc)
+	if err != nil {
+		return nil, err
+	}
+	archivalClient, err := newCadenceClient(archivalDomain, rc)
+	if err != nil {
+		return nil, err
+	}
+	systemClient, err := newCadenceClient(systemDomain, rc)
+	if err != nil {
+		return nil, err
+	}
 	return &canaryImpl{
 		canaryClient:   canaryClient,
 		canaryDomain:   domain,
 		archivalClient: archivalClient,
 		systemClient:   systemClient,
 		runtime:        rc,
-	}
+	}, nil
 }
 
 // Run runs the canary
@@ -108,13 +117,11 @@ func (c *canaryImpl) Run() error {
 func (c *canaryImpl) startWorker() error {
 	options := worker.Options{
 		Logger:                             c.runtime.logger,
-		MetricsScope:                       c.runtime.metrics,
 		BackgroundActivityContext:          c.newActivityContext(),
 		MaxConcurrentActivityExecutionSize: activityWorkerMaxExecutors,
-		Tracer:                             opentracing.GlobalTracer(),
 	}
 
-	archivalWorker := worker.New(c.archivalClient.Service, archivalDomain, archivalTaskListName, options)
+	archivalWorker := worker.New(c.archivalClient.Client, archivalTaskListName, options)
 	registerHistoryArchival(archivalWorker)
 
 	defer archivalWorker.Stop()
@@ -122,7 +129,7 @@ func (c *canaryImpl) startWorker() error {
 		return err
 	}
 
-	canaryWorker := worker.New(c.canaryClient.Service, c.canaryDomain, taskListName, options)
+	canaryWorker := worker.New(c.canaryClient.Client, taskListName, options)
 	registerBatch(canaryWorker)
 	registerCancellation(canaryWorker)
 	registerConcurrentExec(canaryWorker)

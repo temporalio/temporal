@@ -24,16 +24,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal/activity"
+	sdkclient "go.temporal.io/temporal/client"
+	"go.temporal.io/temporal/worker"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
 
-	cclient "go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/worker"
-
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -78,16 +75,14 @@ type (
 		// Config contains the configuration for scanner
 		Config Config
 		// TallyScope is an instance of tally metrics scope
-		TallyScope tally.Scope
 	}
 
 	// scannerContext is the context object that get's
 	// passed around within the scanner workflows / activities
 	scannerContext struct {
 		resource.Resource
-		cfg        Config
-		tallyScope tally.Scope
-		zapLogger  *zap.Logger
+		cfg       Config
+		zapLogger *zap.Logger
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -115,10 +110,9 @@ func New(
 	}
 	return &Scanner{
 		context: scannerContext{
-			Resource:   resource,
-			cfg:        cfg,
-			tallyScope: params.TallyScope,
-			zapLogger:  zapLogger,
+			Resource:  resource,
+			cfg:       cfg,
+			zapLogger: zapLogger,
 		},
 	}
 }
@@ -127,7 +121,6 @@ func New(
 func (s *Scanner) Start() error {
 	workerOpts := worker.Options{
 		Logger:                                 s.context.zapLogger,
-		MetricsScope:                           s.context.tallyScope,
 		MaxConcurrentActivityExecutionSize:     maxConcurrentActivityExecutionSize,
 		MaxConcurrentDecisionTaskExecutionSize: maxConcurrentDecisionTaskExecutionSize,
 		BackgroundActivityContext:              context.WithValue(context.Background(), scannerContextKey, s.context),
@@ -148,7 +141,7 @@ func (s *Scanner) Start() error {
 	}
 
 	for _, tl := range workerTaskListNames {
-		work := worker.New(s.context.GetSDKClient(), common.SystemLocalDomainName, tl, workerOpts)
+		work := worker.New(s.context.GetSDKClient(), tl, workerOpts)
 
 		work.RegisterWorkflowWithOptions(TaskListScannerWorkflow, workflow.RegisterOptions{Name: tlScannerWFTypeName})
 		work.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
@@ -166,7 +159,7 @@ func (s *Scanner) Start() error {
 }
 
 func (s *Scanner) startWorkflowWithRetry(
-	options cclient.StartWorkflowOptions,
+	options sdkclient.StartWorkflowOptions,
 	workflowType string,
 	workflowArgs ...interface{},
 ) {
@@ -174,12 +167,11 @@ func (s *Scanner) startWorkflowWithRetry(
 	// let history / matching service warm up
 	time.Sleep(scannerStartUpDelay)
 
-	sdkClient := cclient.NewClient(s.context.GetSDKClient(), common.SystemLocalDomainName, &cclient.Options{})
 	policy := backoff.NewExponentialRetryPolicy(time.Second)
 	policy.SetMaximumInterval(time.Minute)
 	policy.SetExpirationInterval(backoff.NoInterval)
 	err := backoff.Retry(func() error {
-		return s.startWorkflow(sdkClient, options, workflowType, workflowArgs)
+		return s.startWorkflow(s.context.GetSDKClient(), options, workflowType, workflowArgs)
 	}, policy, func(err error) bool {
 		return true
 	})
@@ -189,8 +181,8 @@ func (s *Scanner) startWorkflowWithRetry(
 }
 
 func (s *Scanner) startWorkflow(
-	client cclient.Client,
-	options cclient.StartWorkflowOptions,
+	client sdkclient.Client,
+	options sdkclient.StartWorkflowOptions,
 	workflowType string,
 	workflowArgs ...interface{},
 ) error {

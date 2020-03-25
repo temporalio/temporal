@@ -5,7 +5,6 @@ go 1.13
 require (
 	cloud.google.com/go v0.38.0
 	github.com/Shopify/sarama v1.23.0
-	github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239 // indirect
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
 	github.com/aws/aws-sdk-go v1.29.4
 	github.com/benbjohnson/clock v1.0.0 // indirect
@@ -20,19 +19,16 @@ require (
 	github.com/dgryski/go-farm v0.0.0-20190423205320-6a90982ecee2
 	github.com/emirpasic/gods v0.0.0-20190624094223-e689965507ab
 	github.com/fatih/color v0.0.0-20181010231311-3f9d52f7176a
-	github.com/fatih/structtag v1.2.0 // indirect
-	github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568 // indirect
 	github.com/fortytw2/leaktest v1.3.0 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31
 	github.com/gogo/protobuf v1.3.1
 	github.com/gogo/status v1.1.0
-	github.com/golang/mock v1.4.0
+	github.com/golang/mock v1.4.3
 	github.com/google/uuid v1.1.1
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/hashicorp/go-version v1.2.0
 	github.com/iancoleman/strcase v0.0.0-20190422225806-e506e3ef7365
-	github.com/jessevdk/go-flags v1.4.0 // indirect
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/jonboulle/clockwork v0.1.0
 	github.com/lib/pq v1.2.0
@@ -51,7 +47,7 @@ require (
 	github.com/onsi/ginkgo v1.10.3 // indirect
 	github.com/onsi/gomega v1.7.1 // indirect
 	github.com/opentracing/opentracing-go v1.1.0
-	github.com/pborman/uuid v0.0.0-20180906182336-adf5a7427709
+	github.com/pborman/uuid v1.2.0
 	github.com/prashantv/protectmem v0.0.0-20171002184600-e20412882b3a // indirect
 	github.com/robfig/cron v1.2.0
 	github.com/sirupsen/logrus v1.4.2
@@ -65,22 +61,21 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/temporal v0.10.12
+	go.temporal.io/temporal v0.10.15
 	go.temporal.io/temporal-proto v0.0.0-20200316214407-583dbd3e3b32
-	go.uber.org/atomic v1.5.1
-	go.uber.org/multierr v1.4.0
+	go.uber.org/atomic v1.6.0
+	go.uber.org/multierr v1.5.0
 	go.uber.org/thriftrw v1.20.2
-	go.uber.org/zap v1.14.0
-	golang.org/x/net v0.0.0-20200202094626-16171245cfb2
+	go.uber.org/zap v1.14.1
+	golang.org/x/net v0.0.0-20200301022130-244492dfa37a
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
-	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
-	golang.org/x/tools v0.0.0-20191114200427-caa0b0f7d508
+	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	google.golang.org/api v0.4.0
-	google.golang.org/grpc v1.27.1
+	google.golang.org/grpc v1.28.0
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	gopkg.in/validator.v2 v2.0.0-20180514200540-135c24b11c19
-	gopkg.in/yaml.v2 v2.2.4
+	gopkg.in/yaml.v2 v2.2.8
 )
 
 // TODO https://github.com/uber/cadence/issues/2863

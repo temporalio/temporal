@@ -59,7 +59,7 @@ const (
 	defaultDecisionTimeoutInSeconds = 10
 	defaultPageSizeForList          = 500
 	defaultPageSizeForScan          = 2000
-	defaultWorkflowIDReusePolicy    = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	defaultWorkflowIDReusePolicy    = enums.WorkflowIdReusePolicyAllowDuplicate
 
 	workflowStatusNotSet = -1
 	showErrorStackEnv    = `TEMPORAL_CLI_SHOW_STACKS`

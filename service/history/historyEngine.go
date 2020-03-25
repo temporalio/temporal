@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
+	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -141,7 +142,7 @@ type (
 		resetor                   workflowResetor
 		workflowResetter          workflowResetter
 		replicationTaskProcessors []ReplicationTaskProcessor
-		publicClient              workflowservice.WorkflowServiceClient
+		publicClient              sdkclient.Client
 		eventsReapplier           nDCEventsReapplier
 		matchingClient            matching.Client
 		rawMatchingClient         matching.Client
@@ -206,7 +207,7 @@ func NewEngineWithShardContext(
 	visibilityMgr persistence.VisibilityManager,
 	matching matching.Client,
 	historyClient history.Client,
-	publicClient workflowservice.WorkflowServiceClient,
+	publicClient sdkclient.Client,
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,
 	config *Config,
@@ -1232,7 +1233,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		return nil, err
 	}
 	backoffDuration := time.Duration(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstDecisionTaskBackoffSeconds()) * time.Second
-	result.WorkflowExecutionInfo.ExecutionTime = result.WorkflowExecutionInfo.GetStartTime().Value + backoffDuration.Nanoseconds()
+	result.WorkflowExecutionInfo.ExecutionTime = result.WorkflowExecutionInfo.GetStartTime().GetValue() + backoffDuration.Nanoseconds()
 
 	if executionInfo.ParentRunID != "" {
 		result.WorkflowExecutionInfo.ParentExecution = &commonproto.WorkflowExecution{

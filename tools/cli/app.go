@@ -50,6 +50,7 @@ func NewCliApp() *cli.App {
 		},
 		cli.StringFlag{
 			Name:   FlagDomainWithAlias,
+			Value:  "default",
 			Usage:  "temporal workflow domain",
 			EnvVar: "TEMPORAL_CLI_DOMAIN",
 		},

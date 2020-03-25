@@ -96,7 +96,7 @@ persistence:
 ```
 
 ## MySQL
-The default isolation level for MySQL is READ-COMMITTED. For MySQL 5.6 and below only, the isolation level needs to be 
+The default isolation level for MySQL is READ-COMMITTED. For MySQL 5.7.20 and below only, the isolation level needs to be
 specified explicitly in the config via connectAttributes.
  
 ```
@@ -116,7 +116,7 @@ persistence:
         maxConnLifetime: "1h"          -- max connection lifetime before it is discarded (optional)
         maxQPS: 1000                   -- max qps to sql server from one host (optional)
         connectAttributes:             -- custom dsn attributes, map of key-value pairs
-          tx_isolation: "READ-COMMITTED"   -- required only for mysql 5.6 and below, optional otherwise
+          tx_isolation: "READ-COMMITTED"   -- required only for mysql 5.7.20 and below, optional otherwise
 ```
 
 # Adding support for new database

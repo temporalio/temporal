@@ -29,11 +29,9 @@ import (
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-	"go.temporal.io/temporal-proto/workflowservice"
-	cclient "go.temporal.io/temporal/client"
+	sdkclient "go.temporal.io/temporal/client"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/log"
@@ -93,7 +91,7 @@ type (
 	client struct {
 		metricsScope     metrics.Scope
 		logger           log.Logger
-		cadenceClient    cclient.Client
+		cadenceClient    sdkclient.Client
 		numWorkflows     dynamicconfig.IntPropertyFn
 		rateLimiter      quotas.Limiter
 		archiverProvider provider.ArchiverProvider
@@ -120,7 +118,7 @@ const (
 func NewClient(
 	metricsClient metrics.Client,
 	logger log.Logger,
-	publicClient workflowservice.WorkflowServiceClient,
+	publicClient sdkclient.Client,
 	numWorkflows dynamicconfig.IntPropertyFn,
 	requestRPS dynamicconfig.IntPropertyFn,
 	archiverProvider provider.ArchiverProvider,
@@ -128,7 +126,7 @@ func NewClient(
 	return &client{
 		metricsScope:  metricsClient.Scope(metrics.ArchiverClientScope),
 		logger:        logger,
-		cadenceClient: cclient.NewClient(publicClient, common.SystemLocalDomainName, &cclient.Options{}),
+		cadenceClient: publicClient,
 		numWorkflows:  numWorkflows,
 		rateLimiter: quotas.NewDynamicRateLimiter(
 			func() float64 {
@@ -270,12 +268,12 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	}
 
 	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, rand.Intn(c.numWorkflows()))
-	workflowOptions := cclient.StartWorkflowOptions{
+	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                              workflowID,
 		TaskList:                        decisionTaskList,
 		ExecutionStartToCloseTimeout:    workflowStartToCloseTimeout,
 		DecisionTaskStartToCloseTimeout: workflowTaskStartToCloseTimeout,
-		WorkflowIDReusePolicy:           cclient.WorkflowIDReusePolicyAllowDuplicate,
+		WorkflowIDReusePolicy:           sdkclient.WorkflowIDReusePolicyAllowDuplicate,
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
