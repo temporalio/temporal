@@ -126,23 +126,23 @@ copyright: cmd/tools/copyright/licensegen.go
 
 temporal-cassandra-tool: $(TOOLS_SRC)
 	@echo "compiling temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o temporal-cassandra-tool cmd/tools/cassandra/main.go
+	go build -o temporal-cassandra-tool cmd/tools/cassandra/main.go
 
 temporal-sql-tool: $(TOOLS_SRC)
 	@echo "compiling temporal-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o temporal-sql-tool cmd/tools/sql/main.go
+	go build -o temporal-sql-tool cmd/tools/sql/main.go
 
 tctl: $(TOOLS_SRC)
 	@echo "compiling tctl with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o tctl cmd/tools/cli/main.go
+	go build -o tctl cmd/tools/cli/main.go
 
 temporal-server: $(ALL_SRC)
 	@echo "compiling temporal-server with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o temporal-server cmd/server/main.go
+	go build -ldflags '$(GO_BUILD_LDFLAGS)' -o temporal-server cmd/server/main.go
 
 temporal-canary: $(ALL_SRC)
 	@echo "compiling temporal-canary with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o temporal-canary cmd/canary/main.go
+	go build -o temporal-canary cmd/canary/main.go
 
 go-generate:
 	go get github.com/golang/mock/mockgen@latest
