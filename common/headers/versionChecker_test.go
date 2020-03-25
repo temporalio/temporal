@@ -158,7 +158,7 @@ func (s *VersionCheckerSuite) TestSupportsBaseFeatures() {
 		if tc.expectErr {
 			err := vc.SupportsBaseFeatures(tc.clientFeatureVersion)
 			s.Errorf(err, "Case #%d", caseIndex)
-			s.IsType(&serviceerror.ClientVersionNotSupported{}, err)
+			s.IsType(&serviceerror.FeatureVersionNotSupported{}, err)
 		} else {
 			s.NoErrorf(vc.SupportsBaseFeatures(tc.clientFeatureVersion), "Case #%d", caseIndex)
 		}
