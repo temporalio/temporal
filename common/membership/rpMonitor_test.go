@@ -84,3 +84,30 @@ func (s *RpoSuite) TestRingpopMonitor() {
 	rpm.Stop()
 	testService.Stop()
 }
+
+func (s *RpoSuite) TestCompareMembers() {
+	s.testCompareMembers([]string{}, []string{"a"}, true)
+	s.testCompareMembers([]string{}, []string{"a", "b"}, true)
+	s.testCompareMembers([]string{"a"}, []string{"a", "b"}, true)
+	s.testCompareMembers([]string{}, []string{"a"}, true)
+	s.testCompareMembers([]string{}, []string{"a", "b"}, true)
+	s.testCompareMembers([]string{}, []string{}, false)
+	s.testCompareMembers([]string{"a"}, []string{"a"}, false)
+	s.testCompareMembers([]string{"a", "b"}, []string{"a", "b"}, false)
+}
+
+func (s *RpoSuite) testCompareMembers(curr []string, new []string, hasDiff bool) {
+	resolver := &ringpopServiceResolver{}
+	currMembers := make(map[string]struct{}, len(curr))
+	for _, m := range curr {
+		currMembers[m] = struct{}{}
+	}
+	resolver.membersMap = currMembers
+	newMembers, changed := resolver.compareMembers(new)
+	s.Equal(hasDiff, changed)
+	s.Equal(len(new), len(newMembers))
+	for _, m := range new {
+		_, ok := newMembers[m]
+		s.True(ok)
+	}
+}
