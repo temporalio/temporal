@@ -62,12 +62,12 @@ require (
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.temporal.io/temporal v0.10.15
-	go.temporal.io/temporal-proto v0.0.0-20200316214407-583dbd3e3b32
+	go.temporal.io/temporal-proto v0.20.1
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
 	go.uber.org/thriftrw v1.20.2
 	go.uber.org/zap v1.14.1
-	golang.org/x/net v0.0.0-20200301022130-244492dfa37a
+	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	google.golang.org/api v0.4.0

@@ -131,20 +131,18 @@ func (vc *versionChecker) SupportsBaseFeatures(featureVersion string) error {
 func (vc *versionChecker) featureSupported(featureVersion string, feature string) error {
 	// If feature version is not provided, it means feature is not supported.
 	if featureVersion == "" {
-		// TODO: serviceerror.NewFeatureVersionNotSupported()
-		// TODO: "Feature %s is not supported in feature set version %s. At least %s feature set version is required"
-		return serviceerror.NewClientVersionNotSupported(feature, featureVersion, "<unknown>")
+		return serviceerror.NewFeatureVersionNotSupported(feature, featureVersion, "<unknown>")
 	}
 	supportedFeatureVersion, ok := vc.supportedFeatures[feature]
 	if !ok {
-		return serviceerror.NewClientVersionNotSupported(feature, featureVersion, "<unknown>")
+		return serviceerror.NewFeatureVersionNotSupported(feature, featureVersion, "<unknown>")
 	}
 	featureVersionObj, err := version.NewVersion(featureVersion)
 	if err != nil {
-		return serviceerror.NewClientVersionNotSupported(feature, featureVersion, "<unknown>")
+		return serviceerror.NewFeatureVersionNotSupported(feature, featureVersion, "<unknown>")
 	}
 	if !supportedFeatureVersion.Check(featureVersionObj) {
-		return serviceerror.NewClientVersionNotSupported(feature, featureVersion, supportedFeatureVersion.String())
+		return serviceerror.NewFeatureVersionNotSupported(feature, featureVersion, supportedFeatureVersion.String())
 	}
 	return nil
 }
