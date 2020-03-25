@@ -78,15 +78,18 @@ func newReplicatorQueueProcessor(
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		BatchSize:                          config.ReplicatorTaskBatchSize,
-		WorkerCount:                        config.ReplicatorTaskWorkerCount,
-		MaxPollRPS:                         config.ReplicatorProcessorMaxPollRPS,
-		MaxPollInterval:                    config.ReplicatorProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:   config.ReplicatorProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                  config.ReplicatorProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient: config.ReplicatorProcessorUpdateAckIntervalJitterCoefficient,
-		MaxRetryCount:                      config.ReplicatorTaskMaxRetryCount,
-		MetricScope:                        metrics.ReplicatorQueueProcessorScope,
+		BatchSize:                           config.ReplicatorTaskBatchSize,
+		WorkerCount:                         config.ReplicatorTaskWorkerCount,
+		MaxPollRPS:                          config.ReplicatorProcessorMaxPollRPS,
+		MaxPollInterval:                     config.ReplicatorProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient:    config.ReplicatorProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                   config.ReplicatorProcessorUpdateAckInterval,
+		UpdateAckIntervalJitterCoefficient:  config.ReplicatorProcessorUpdateAckIntervalJitterCoefficient,
+		MaxRetryCount:                       config.ReplicatorTaskMaxRetryCount,
+		RedispatchInterval:                  config.ReplicatorProcessorRedispatchInterval,
+		RedispatchIntervalJitterCoefficient: config.ReplicatorProcessorRedispatchIntervalJitterCoefficient,
+		EnablePriorityTaskProcessor:         config.ReplicatorProcessorEnablePriorityTaskProcessor,
+		MetricScope:                         metrics.ReplicatorQueueProcessorScope,
 	}
 
 	logger = logger.WithTags(tag.ComponentReplicatorQueue)
@@ -115,7 +118,16 @@ func newReplicatorQueueProcessor(
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetReplicatorAckLevel(), logger)
-	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, historyCache, logger)
+	queueProcessorBase := newQueueProcessorBase(
+		currentClusterName,
+		shard,
+		options,
+		processor,
+		nil, // replicator queue processor will soon be deprecated and won't use priority task processor
+		queueAckMgr,
+		historyCache,
+		logger,
+	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 

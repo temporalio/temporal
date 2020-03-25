@@ -59,15 +59,18 @@ func newTransferQueueStandbyProcessor(
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		BatchSize:                          config.TransferTaskBatchSize,
-		WorkerCount:                        config.TransferTaskWorkerCount,
-		MaxPollRPS:                         config.TransferProcessorMaxPollRPS,
-		MaxPollInterval:                    config.TransferProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:   config.TransferProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                  config.TransferProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		MaxRetryCount:                      config.TransferTaskMaxRetryCount,
-		MetricScope:                        metrics.TransferStandbyQueueProcessorScope,
+		BatchSize:                           config.TransferTaskBatchSize,
+		WorkerCount:                         config.TransferTaskWorkerCount,
+		MaxPollRPS:                          config.TransferProcessorMaxPollRPS,
+		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
+		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
+		MaxRetryCount:                       config.TransferTaskMaxRetryCount,
+		RedispatchInterval:                  config.TransferProcessorRedispatchInterval,
+		RedispatchIntervalJitterCoefficient: config.TransferProcessorRedispatchIntervalJitterCoefficient,
+		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
+		MetricScope:                         metrics.TransferStandbyQueueProcessorScope,
 	}
 	logger = logger.WithTags(tag.ClusterName(clusterName))
 
@@ -115,8 +118,23 @@ func newTransferQueueStandbyProcessor(
 		),
 	}
 
-	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(clusterName), logger)
-	queueProcessorBase := newQueueProcessorBase(clusterName, shard, options, processor, queueAckMgr, historyService.historyCache, logger)
+	queueAckMgr := newQueueAckMgr(
+		shard,
+		options,
+		processor,
+		shard.GetTransferClusterAckLevel(clusterName),
+		logger,
+	)
+	queueProcessorBase := newQueueProcessorBase(
+		clusterName,
+		shard,
+		options,
+		processor,
+		nil, // TODO: @yycptt wire up implementations for priority task processor
+		queueAckMgr,
+		historyService.historyCache,
+		logger,
+	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 

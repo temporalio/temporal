@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -46,26 +47,28 @@ var (
 
 type (
 	timerQueueProcessorBase struct {
-		scope            int
-		shard            ShardContext
-		historyService   *historyEngineImpl
-		cache            *historyCache
-		executionManager persistence.ExecutionManager
-		status           int32
-		shutdownWG       sync.WaitGroup
-		shutdownCh       chan struct{}
-		config           *Config
-		logger           log.Logger
-		metricsClient    metrics.Client
-		timerFiredCount  uint64
-		timerProcessor   timerProcessor
-		timerQueueAckMgr timerQueueAckMgr
-		timerGate        TimerGate
-		timeSource       clock.TimeSource
-		rateLimiter      quotas.Limiter
-		retryPolicy      backoff.RetryPolicy
-		lastPollTime     time.Time
-		taskProcessor    *taskProcessor
+		scope              int
+		shard              ShardContext
+		historyService     *historyEngineImpl
+		cache              *historyCache
+		executionManager   persistence.ExecutionManager
+		status             int32
+		shutdownWG         sync.WaitGroup
+		shutdownCh         chan struct{}
+		config             *Config
+		logger             log.Logger
+		metricsClient      metrics.Client
+		timerFiredCount    uint64
+		timerProcessor     timerProcessor
+		timerQueueAckMgr   timerQueueAckMgr
+		timerGate          TimerGate
+		timeSource         clock.TimeSource
+		rateLimiter        quotas.Limiter
+		retryPolicy        backoff.RetryPolicy
+		lastPollTime       time.Time
+		taskProcessor      *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
+		queueTaskProcessor queueTaskProcessor
+		redispatchQueue    collection.Queue
 
 		// timer notification
 		newTimerCh  chan struct{}
@@ -78,11 +81,17 @@ func newTimerQueueProcessorBase(
 	scope int,
 	shard ShardContext,
 	historyService *historyEngineImpl,
+	queueTaskProcessor queueTaskProcessor,
 	timerQueueAckMgr timerQueueAckMgr,
 	timerGate TimerGate,
 	maxPollRPS dynamicconfig.IntPropertyFn,
 	logger log.Logger,
 ) *timerQueueProcessorBase {
+
+	config := shard.GetConfig()
+	if queueTaskProcessor != nil || config.TimerProcessorEnablePriorityTaskProcessor() {
+		panic("Implementation for priority task processor has not been wired up yet.")
+	}
 
 	log := logger.WithTags(tag.ComponentTimerQueue)
 	options := taskProcessorOptions{
@@ -91,22 +100,24 @@ func newTimerQueueProcessorBase(
 	}
 	taskProcessor := newTaskProcessor(options, shard, historyService.historyCache, log)
 	base := &timerQueueProcessorBase{
-		scope:            scope,
-		shard:            shard,
-		historyService:   historyService,
-		cache:            historyService.historyCache,
-		executionManager: shard.GetExecutionManager(),
-		status:           common.DaemonStatusInitialized,
-		shutdownCh:       make(chan struct{}),
-		config:           shard.GetConfig(),
-		logger:           log,
-		metricsClient:    historyService.metricsClient,
-		timerQueueAckMgr: timerQueueAckMgr,
-		timerGate:        timerGate,
-		timeSource:       shard.GetTimeSource(),
-		newTimerCh:       make(chan struct{}, 1),
-		lastPollTime:     time.Time{},
-		taskProcessor:    taskProcessor,
+		scope:              scope,
+		shard:              shard,
+		historyService:     historyService,
+		cache:              historyService.historyCache,
+		executionManager:   shard.GetExecutionManager(),
+		status:             common.DaemonStatusInitialized,
+		shutdownCh:         make(chan struct{}),
+		config:             config,
+		logger:             log,
+		metricsClient:      historyService.metricsClient,
+		timerQueueAckMgr:   timerQueueAckMgr,
+		timerGate:          timerGate,
+		timeSource:         shard.GetTimeSource(),
+		newTimerCh:         make(chan struct{}, 1),
+		lastPollTime:       time.Time{},
+		taskProcessor:      taskProcessor,
+		queueTaskProcessor: queueTaskProcessor,
+		redispatchQueue:    collection.NewConcurrentQueue(),
 		rateLimiter: quotas.NewDynamicRateLimiter(
 			func() float64 {
 				return float64(maxPollRPS())
@@ -225,6 +236,14 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 	))
 	defer updateAckTimer.Stop()
 
+	redispatchTimer := time.NewTimer(backoff.JitDuration(
+		t.config.TimerProcessorRedispatchInterval(),
+		t.config.TimerProcessorRedispatchIntervalJitterCoefficient(),
+	))
+	defer redispatchTimer.Stop()
+
+	priorityTaskProcessorEnabled := t.config.TimerProcessorEnablePriorityTaskProcessor()
+
 	for {
 		// Wait until one of four things occurs:
 		// 1. we get notified of a new message
@@ -278,6 +297,15 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 			// New Timer has arrived.
 			t.metricsClient.IncCounter(t.scope, metrics.NewTimerNotifyCounter)
 			t.timerGate.Update(newTime)
+		case <-redispatchTimer.C:
+			redispatchTimer.Reset(backoff.JitDuration(
+				t.config.TimerProcessorRedispatchInterval(),
+				t.config.TimerProcessorRedispatchIntervalJitterCoefficient(),
+			))
+			if !priorityTaskProcessorEnabled {
+				continue
+			}
+			t.redispatchTasks()
 		}
 	}
 }
@@ -321,6 +349,15 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerT
 
 	t.notifyNewTimer(time.Time{}) // re-enqueue the event
 	return nil, nil
+}
+
+func (t *timerQueueProcessorBase) redispatchTasks() {
+	redispatchQueueTasks(
+		t.redispatchQueue,
+		t.queueTaskProcessor,
+		t.logger,
+		t.shutdownCh,
+	)
 }
 
 func (t *timerQueueProcessorBase) retryTasks() {

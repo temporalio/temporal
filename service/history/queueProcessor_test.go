@@ -19,3 +19,101 @@
 // THE SOFTWARE.
 
 package history
+
+import (
+	"math/rand"
+	"testing"
+
+	gomock "github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/uber/cadence/common/collection"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/loggerimpl"
+)
+
+type (
+	queueProcessorSuite struct {
+		suite.Suite
+		*require.Assertions
+
+		controller             *gomock.Controller
+		mockQueueTaskProcessor *MockqueueTaskProcessor
+
+		redispatchQueue collection.Queue
+		logger          log.Logger
+	}
+)
+
+func TestQueueProcessorSuite(t *testing.T) {
+	s := new(queueProcessorSuite)
+	suite.Run(t, s)
+}
+
+func (s *queueProcessorSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.mockQueueTaskProcessor = NewMockqueueTaskProcessor(s.controller)
+
+	s.redispatchQueue = collection.NewConcurrentQueue()
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+}
+
+func (s *queueProcessorSuite) TearDownTest() {
+	s.controller.Finish()
+}
+
+func (s *queueProcessorSuite) TestRedispatchTask_ProcessorShutDown() {
+	numTasks := 5
+	for i := 0; i != numTasks; i++ {
+		mockTask := NewMockqueueTask(s.controller)
+		s.redispatchQueue.Add(mockTask)
+	}
+
+	successfullyRedispatched := 3
+	var calls []*gomock.Call
+	for i := 0; i != successfullyRedispatched; i++ {
+		calls = append(calls, s.mockQueueTaskProcessor.EXPECT().TrySubmit(gomock.Any()).Return(true, nil))
+	}
+	calls = append(calls, s.mockQueueTaskProcessor.EXPECT().TrySubmit(gomock.Any()).Return(false, errTaskProcessorNotRunning))
+	gomock.InOrder(calls...)
+
+	shutDownCh := make(chan struct{})
+	redispatchQueueTasks(
+		s.redispatchQueue,
+		s.mockQueueTaskProcessor,
+		s.logger,
+		shutDownCh,
+	)
+
+	s.Equal(numTasks-successfullyRedispatched-1, s.redispatchQueue.Len())
+}
+
+func (s *queueProcessorSuite) TestRedispatchTask_Random() {
+	numTasks := 10
+	dispatched := 0
+	var calls []*gomock.Call
+
+	for i := 0; i != numTasks; i++ {
+		mockTask := NewMockqueueTask(s.controller)
+		s.redispatchQueue.Add(mockTask)
+		submitted := false
+		if rand.Intn(2) == 0 {
+			submitted = true
+			dispatched++
+		}
+		calls = append(calls, s.mockQueueTaskProcessor.EXPECT().TrySubmit(gomock.Any()).Return(submitted, nil))
+	}
+
+	shutDownCh := make(chan struct{})
+	redispatchQueueTasks(
+		s.redispatchQueue,
+		s.mockQueueTaskProcessor,
+		s.logger,
+		shutDownCh,
+	)
+
+	s.Equal(numTasks-dispatched, s.redispatchQueue.Len())
+}

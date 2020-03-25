@@ -93,6 +93,7 @@ func newTimerQueueStandbyProcessor(
 			metrics.TimerStandbyQueueProcessorScope,
 			shard,
 			historyService,
+			nil, // TODO: @yycptt wire up implementations for priority task processor
 			timerQueueAckMgr,
 			timerGate,
 			shard.GetConfig().TimerProcessorMaxPollRPS,

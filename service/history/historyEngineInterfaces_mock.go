@@ -448,3 +448,91 @@ func (mr *MockqueueTaskExecutorMockRecorder) execute(taskInfo, shouldProcessTask
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "execute", reflect.TypeOf((*MockqueueTaskExecutor)(nil).execute), taskInfo, shouldProcessTask)
 }
+
+// MockqueueTaskProcessor is a mock of queueTaskProcessor interface
+type MockqueueTaskProcessor struct {
+	ctrl     *gomock.Controller
+	recorder *MockqueueTaskProcessorMockRecorder
+}
+
+// MockqueueTaskProcessorMockRecorder is the mock recorder for MockqueueTaskProcessor
+type MockqueueTaskProcessorMockRecorder struct {
+	mock *MockqueueTaskProcessor
+}
+
+// NewMockqueueTaskProcessor creates a new mock instance
+func NewMockqueueTaskProcessor(ctrl *gomock.Controller) *MockqueueTaskProcessor {
+	mock := &MockqueueTaskProcessor{ctrl: ctrl}
+	mock.recorder = &MockqueueTaskProcessorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use
+func (m *MockqueueTaskProcessor) EXPECT() *MockqueueTaskProcessorMockRecorder {
+	return m.recorder
+}
+
+// Start mocks base method
+func (m *MockqueueTaskProcessor) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start
+func (mr *MockqueueTaskProcessorMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockqueueTaskProcessor)(nil).Start))
+}
+
+// Stop mocks base method
+func (m *MockqueueTaskProcessor) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop
+func (mr *MockqueueTaskProcessorMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockqueueTaskProcessor)(nil).Stop))
+}
+
+// StopShardProcessor mocks base method
+func (m *MockqueueTaskProcessor) StopShardProcessor(arg0 int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "StopShardProcessor", arg0)
+}
+
+// StopShardProcessor indicates an expected call of StopShardProcessor
+func (mr *MockqueueTaskProcessorMockRecorder) StopShardProcessor(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopShardProcessor", reflect.TypeOf((*MockqueueTaskProcessor)(nil).StopShardProcessor), arg0)
+}
+
+// Submit mocks base method
+func (m *MockqueueTaskProcessor) Submit(arg0 queueTask) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Submit", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Submit indicates an expected call of Submit
+func (mr *MockqueueTaskProcessorMockRecorder) Submit(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Submit", reflect.TypeOf((*MockqueueTaskProcessor)(nil).Submit), arg0)
+}
+
+// TrySubmit mocks base method
+func (m *MockqueueTaskProcessor) TrySubmit(arg0 queueTask) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TrySubmit", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TrySubmit indicates an expected call of TrySubmit
+func (mr *MockqueueTaskProcessorMockRecorder) TrySubmit(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrySubmit", reflect.TypeOf((*MockqueueTaskProcessor)(nil).TrySubmit), arg0)
+}

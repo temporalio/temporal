@@ -60,6 +60,7 @@ require (
 	go.opencensus.io v0.22.2 // indirect
 	go.uber.org/atomic v1.5.1
 	go.uber.org/cadence v0.9.1-0.20200128004345-b282629d5ba9
+	go.uber.org/fx v1.9.0
 	go.uber.org/multierr v1.3.0
 	go.uber.org/net/metrics v1.2.0 // indirect
 	go.uber.org/thriftrw v1.20.2

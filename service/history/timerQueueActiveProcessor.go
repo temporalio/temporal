@@ -92,6 +92,7 @@ func newTimerQueueActiveProcessor(
 			metrics.TimerActiveQueueProcessorScope,
 			shard,
 			historyService,
+			nil, // TODO: @yycptt wire up implementations for priority task processor
 			timerQueueAckMgr,
 			timerGate,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
@@ -182,6 +183,7 @@ func newTimerQueueFailoverProcessor(
 			metrics.TimerActiveQueueProcessorScope,
 			shard,
 			historyService,
+			nil, // TODO: @yycptt wire up implementations for priority task processor
 			timerQueueAckMgr,
 			timerGate,
 			shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
