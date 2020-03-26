@@ -367,6 +367,7 @@ func (s *dcRedirectionHandlerSuite) TestQueryWorkflow() {
 
 	req := &shared.QueryWorkflowRequest{
 		Domain: common.StringPtr(s.domainName),
+		QueryConsistencyLevel: shared.QueryConsistencyLevelStrong.Ptr(),
 	}
 	resp, err := s.handler.QueryWorkflow(context.Background(), req)
 	s.Nil(err)
