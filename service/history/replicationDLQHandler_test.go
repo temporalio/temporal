@@ -96,7 +96,6 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 			ReplicationDLQAckLevel: map[string]int64{"test": -1}},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    logger,
 		remoteClusterCurrentTime:  make(map[string]time.Time),
