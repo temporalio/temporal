@@ -131,7 +131,7 @@ proto-mock: $(PROTO_GEN)
 
 update-proto-go:
 	@printf $(COLOR) "Update go.temporal.io/temporal-proto..."
-	go get go.temporal.io/temporal-proto
+	@go get -u go.temporal.io/temporal-proto
 
 proto: clean-proto install-proto-submodule protoc proto-mock
 
@@ -349,4 +349,5 @@ go-generate:
 	@go generate ./...
 
 gomodtidy:
-	go mod tidy
+	@printf $(COLOR) "go mod tidy..."
+	@go mod tidy
