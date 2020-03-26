@@ -81,20 +81,24 @@ PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto" | grep -v tem
 PROTO_IMPORT   := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/gogo/protobuf/protobuf
 PROTO_GEN      := .gen/proto
 
-##### Auxilary #####
-update-tools:
-	@printf $(COLOR) "Install/update required tools..."
+##### Tools #####
+update-checkers:
+	@printf $(COLOR) "Install/update check tools..."
 	GO111MODULE=off go get -u golang.org/x/tools/cmd/goimports
 	GO111MODULE=off go get -u golang.org/x/lint/golint
 	GO111MODULE=off go get -u honnef.co/go/tools/cmd/staticcheck
 	GO111MODULE=off go get -u github.com/kisielk/errcheck
-	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
-	GO111MODULE=off go get -u google.golang.org/grpc
+
+update-mockgen:
+	@printf $(COLOR) "Install/update mockgen tools..."
 	GO111MODULE=off go get -u github.com/golang/mock/mockgen
 
-go-generate:
-	@printf $(COLOR) "Regenerate everything..."
-	@go generate ./...
+update-proto-plugins:
+	@printf $(COLOR) "Install/update proto plugins..."
+	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
+	GO111MODULE=off go get -u google.golang.org/grpc
+
+update-tools: update-checkers update-mockgen update-proto-plugins
 
 ##### Proto #####
 $(PROTO_GEN):
@@ -207,7 +211,7 @@ clean-build-results:
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 
-cover_profile: clean-build-results proto
+cover_profile: clean-build-results update-proto-plugins update-mockgen proto
 	@echo "mode: atomic" > $(UNIT_COVER_FILE)
 
 	@echo Running package tests:
@@ -217,7 +221,7 @@ cover_profile: clean-build-results proto
 		cat $(BUILD)/"$$dir"/coverage.out | grep -v "^mode: \w\+" >> $(UNIT_COVER_FILE); \
 	done;
 
-cover_integration_profile: clean-build-results proto
+cover_integration_profile: clean-build-results update-proto-plugins update-mockgen proto
 	@echo "mode: atomic" > $(INTEG_COVER_FILE)
 
 	@echo Running integration test with $(PERSISTENCE_TYPE)
@@ -225,7 +229,7 @@ cover_integration_profile: clean-build-results proto
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE)
 
-cover_xdc_profile: clean-build-results proto
+cover_xdc_profile: clean-build-results update-proto-plugins update-mockgen proto
 	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
 
 	@echo Running integration test for cross dc with $(PERSISTENCE_TYPE)
@@ -233,7 +237,7 @@ cover_xdc_profile: clean-build-results proto
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
 
-cover_ndc_profile: clean-build-results proto
+cover_ndc_profile: clean-build-results update-proto-plugins update-mockgen proto
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
@@ -334,3 +338,8 @@ start-cdc-other: temporal-server
 
 start-canary: temporal-canary
 	./temporal-canary start
+
+##### Auxilary #####
+go-generate:
+	@printf $(COLOR) "Regenerate everything..."
+	@go generate ./...
