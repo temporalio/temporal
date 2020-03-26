@@ -533,6 +533,55 @@ func ConvertIndexedValueTypeToThriftType(fieldType interface{}, logger log.Logge
 	}
 }
 
+// DeserializeSearchAttributeValue takes json encoded search attribute value and it's type as input, then
+// unmarshal the value into a concrete type and return the value
+func DeserializeSearchAttributeValue(value []byte, valueType workflow.IndexedValueType) (interface{}, error) {
+	switch valueType {
+	case workflow.IndexedValueTypeString, workflow.IndexedValueTypeKeyword:
+		var val string
+		if err := json.Unmarshal(value, &val); err != nil {
+			var listVal []string
+			err = json.Unmarshal(value, &listVal)
+			return listVal, err
+		}
+		return val, nil
+	case workflow.IndexedValueTypeInt:
+		var val int64
+		if err := json.Unmarshal(value, &val); err != nil {
+			var listVal []int64
+			err = json.Unmarshal(value, &listVal)
+			return listVal, err
+		}
+		return val, nil
+	case workflow.IndexedValueTypeDouble:
+		var val float64
+		if err := json.Unmarshal(value, &val); err != nil {
+			var listVal []float64
+			err = json.Unmarshal(value, &listVal)
+			return listVal, err
+		}
+		return val, nil
+	case workflow.IndexedValueTypeBool:
+		var val bool
+		if err := json.Unmarshal(value, &val); err != nil {
+			var listVal []bool
+			err = json.Unmarshal(value, &listVal)
+			return listVal, err
+		}
+		return val, nil
+	case workflow.IndexedValueTypeDatetime:
+		var val time.Time
+		if err := json.Unmarshal(value, &val); err != nil {
+			var listVal []time.Time
+			err = json.Unmarshal(value, &listVal)
+			return listVal, err
+		}
+		return val, nil
+	default:
+		return nil, fmt.Errorf("error: unknown index value type [%v]", valueType)
+	}
+}
+
 // GetDefaultAdvancedVisibilityWritingMode get default advancedVisibilityWritingMode based on
 // whether related config exists in static config file.
 func GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist bool) string {

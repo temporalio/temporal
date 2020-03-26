@@ -973,30 +973,11 @@ func convertSearchAttributesToMapOfInterface(searchAttributes *shared.SearchAttr
 	indexedFields := searchAttributes.GetIndexedFields()
 	for k, v := range indexedFields {
 		valueType := validKeys[k]
-		switch valueType {
-		case shared.IndexedValueTypeString, shared.IndexedValueTypeKeyword:
-			var val string
-			json.Unmarshal(v, &val)
-			result[k] = val
-		case shared.IndexedValueTypeInt:
-			var val int64
-			json.Unmarshal(v, &val)
-			result[k] = val
-		case shared.IndexedValueTypeDouble:
-			var val float64
-			json.Unmarshal(v, &val)
-			result[k] = val
-		case shared.IndexedValueTypeBool:
-			var val bool
-			json.Unmarshal(v, &val)
-			result[k] = val
-		case shared.IndexedValueTypeDatetime:
-			var val time.Time
-			json.Unmarshal(v, &val)
-			result[k] = val
-		default:
-			ErrorAndExit(fmt.Sprintf("Error unknown index value type [%v]", valueType), nil)
+		deserializedValue, err := common.DeserializeSearchAttributeValue(v, valueType)
+		if err != nil {
+			ErrorAndExit("Error deserializing search attribute value", err)
 		}
+		result[k] = deserializedValue
 	}
 
 	return result
