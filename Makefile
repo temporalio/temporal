@@ -54,7 +54,7 @@ TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 
-# Code coverage output files
+# Code coverage output files.
 COVER_ROOT                 := $(BUILD)/coverage
 UNIT_COVER_FILE            := $(COVER_ROOT)/unit_cover.out
 INTEG_COVER_FILE           := $(COVER_ROOT)/integ_$(PERSISTENCE_TYPE)_cover.out
@@ -67,8 +67,7 @@ INTEG_NDC_COVER_FILE       := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_TYPE)_cover.
 INTEG_NDC_CASS_COVER_FILE  := $(COVER_ROOT)/integ_ndc_cassandra_cover.out
 INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
 
-# Need the following option to have integration tests
-# count towards coverage. godoc below:
+# Need the following option to have integration tests count towards coverage. godoc below:
 # -coverpkg pkg1,pkg2,pkg3
 #   Apply coverage analysis in each test to the given list of packages.
 #   The default is for each test to analyze only the package being tested.
@@ -118,10 +117,10 @@ install-proto-submodule:
 
 protoc: $(PROTO_GEN)
 	@printf $(COLOR) "Build proto files..."
-#   Run protoc separately for each directory because of different package names
+# Run protoc separately for each directory because of different package names.
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_GEN) $(PROTO_DIR)*.proto$(NEWLINE))
 
-# All gRPC generated service files pathes relative to PROTO_ROOT
+# All gRPC generated service files pathes relative to PROTO_ROOT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_GEN)/%,%,$(shell find $(PROTO_GEN) -name "service.pb.go"))
 dir_no_slash = $(patsubst %/,%,$(dir $(1)))
 dirname = $(notdir $(call dir_no_slash,$(1)))
@@ -177,11 +176,12 @@ lint:
 
 goimports-check:
 	@printf $(COLOR) "Run goimports checks..."
-	goimports -l .
+# Use $(ALL_SRC) here to avoid checking generated files.
+	@goimports -l $(ALL_SRC)
 
 goimports:
 	@printf $(COLOR) "Run goimports..."
-	goimports -w .
+	goimports -w $(ALL_SRC)
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
@@ -205,7 +205,7 @@ integration-test: clean-test-results proto
 	@printf $(COLOR) "Run integration tests..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(INTEG_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
 
-# Need to run xdc tests with race detector off because of ringpop bug causing data race issue
+# Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
 integration-xdc-test: clean-test-results proto
 	@printf $(COLOR) "Run xdc integration tests..."
 	@go test -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) | tee -a test.log
