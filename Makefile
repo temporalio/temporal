@@ -14,44 +14,44 @@ ifndef GOARCH
 GOARCH := $(shell go env GOARCH)
 endif
 
-MODULE_ROOT = github.com/temporalio/temporal
+MODULE_ROOT := github.com/temporalio/temporal
 BUILD := ./build
-COLOR = "\e[1;36m%s\e[0m\n"
+COLOR := "\e[1;36m%s\e[0m\n"
 
 define NEWLINE
 
 
 endef
 
-TEST_TIMEOUT = 20m
+TEST_TIMEOUT := 20m
 TEST_ARG ?= -race -v -timeout $(TEST_TIMEOUT)
 
-INTEG_TEST_ROOT=./host
-INTEG_TEST_OUT_DIR=host
-INTEG_TEST_XDC_ROOT=./host/xdc
-INTEG_TEST_XDC_OUT_DIR=hostxdc
-INTEG_TEST_NDC_ROOT=./host/ndc
-INTEG_TEST_NDC_OUT_DIR=hostndc
+INTEG_TEST_ROOT        := ./host
+INTEG_TEST_OUT_DIR     := host
+INTEG_TEST_XDC_ROOT    := ./host/xdc
+INTEG_TEST_XDC_OUT_DIR := hostxdc
+INTEG_TEST_NDC_ROOT    := ./host/ndc
+INTEG_TEST_NDC_OUT_DIR := hostndc
 
 GO_BUILD_LDFLAGS_CMD      := $(abspath ./scripts/go-build-ldflags.sh)
 GO_BUILD_LDFLAGS          := $(shell $(GO_BUILD_LDFLAGS_CMD) LDFLAG)
 
 ifndef PERSISTENCE_TYPE
-override PERSISTENCE_TYPE = cassandra
+override PERSISTENCE_TYPE := cassandra
 endif
 
 ifndef TEST_RUN_COUNT
-override TEST_RUN_COUNT = 1
+override TEST_RUN_COUNT := 1
 endif
 
 ifdef TEST_TAG
 override TEST_TAG := -tags $(TEST_TAG)
 endif
 
-ALL_SRC := $(shell find . -name "*.go" | grep -v -e ".gen")
-TEST_DIRS := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
+ALL_SRC         := $(shell find . -name "*.go" | grep -v -e ".gen")
+TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
-UNIT_TEST_DIRS := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
+UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 
 # Code coverage output files
 COVER_ROOT                 := $(BUILD)/coverage
@@ -74,12 +74,12 @@ INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
 #   Packages are specified as import paths.
 GOCOVERPKG_ARG := -coverpkg="$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/tools/..."
 
-PROTO_ROOT := proto
+PROTO_ROOT     := proto
 # Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
-PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto" | grep -v temporal-proto)))
+PROTO_DIRS     = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto" | grep -v temporal-proto)))
 PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto" | grep -v temporal-proto)
-PROTO_IMPORT := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/gogo/protobuf/protobuf
-PROTO_GEN := .gen/proto
+PROTO_IMPORT   := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/gogo/protobuf/protobuf
+PROTO_GEN      := .gen/proto
 
 ##### Auxilary #####
 update-tools:
@@ -98,7 +98,7 @@ go-generate:
 
 ##### Proto #####
 $(PROTO_GEN):
-	mkdir -p $(PROTO_GEN)
+	@mkdir -p $(PROTO_GEN)
 
 clean-proto:
 	@rm -rf $(PROTO_GEN)/*
@@ -188,26 +188,26 @@ check: copyright goimports lint staticcheck errcheck
 clean-test-results:
 	@rm -f test.log
 
-unit-test: clean-test-results
+unit-test: clean-test-results proto
 	@printf $(COLOR) "Run unit tests..."
 	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
 
-integration-test: clean-test-results
+integration-test: clean-test-results proto
 	@printf $(COLOR) "Run integration tests..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(INTEG_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
 
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue
-integration-xdc-test: clean-test-results
+integration-xdc-test: clean-test-results proto
 	@printf $(COLOR) "Run xdc integration tests..."
 	@go test -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) | tee -a test.log
 
 ##### Coverage #####
-clean-build:
+clean-build-results:
 	@rm -rf $(BUILD)
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 
-cover_profile: clean-build
+cover_profile: clean-build-results proto
 	@echo "mode: atomic" > $(UNIT_COVER_FILE)
 
 	@echo Running package tests:
@@ -217,7 +217,7 @@ cover_profile: clean-build
 		cat $(BUILD)/"$$dir"/coverage.out | grep -v "^mode: \w\+" >> $(UNIT_COVER_FILE); \
 	done;
 
-cover_integration_profile: clean-build
+cover_integration_profile: clean-build-results proto
 	@echo "mode: atomic" > $(INTEG_COVER_FILE)
 
 	@echo Running integration test with $(PERSISTENCE_TYPE)
@@ -225,7 +225,7 @@ cover_integration_profile: clean-build
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE)
 
-cover_xdc_profile: clean-build
+cover_xdc_profile: clean-build-results proto
 	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
 
 	@echo Running integration test for cross dc with $(PERSISTENCE_TYPE)
@@ -233,7 +233,7 @@ cover_xdc_profile: clean-build
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
 
-cover_ndc_profile: clean-build
+cover_ndc_profile: clean-build-results proto
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
