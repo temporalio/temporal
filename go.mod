@@ -70,6 +70,7 @@ require (
 	golang.org/x/net v0.0.0-20200301022130-244492dfa37a
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
+	golang.org/x/tools v0.0.0-20200325194147-644a21fb1449 // indirect
 	google.golang.org/api v0.4.0
 	google.golang.org/grpc v1.28.0
 	gopkg.in/inf.v0 v0.9.1 // indirect
