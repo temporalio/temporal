@@ -302,7 +302,7 @@ func getFlagsForStart() []cli.Flag {
 		cli.IntFlag{
 			Name: FlagWorkflowIDReusePolicyAlias,
 			Usage: "Optional input to configure if the same workflow ID is allow to use for new workflow execution. " +
-				"Available options: 0: AllowDuplicateFailedOnly, 1: AllowDuplicate, 2: RejectDuplicate",
+				"Available options: 0: AllowDuplicate, 1: AllowDuplicateFailedOnly, 2: RejectDuplicate",
 		},
 		cli.StringFlag{
 			Name:  FlagInputWithAlias,
