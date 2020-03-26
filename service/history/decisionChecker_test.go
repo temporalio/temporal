@@ -148,7 +148,7 @@ func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes(
 	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
 	s.EqualError(err, "BadRequestError{Message: IndexedFields is empty on decision.}")
 
-	attributes.SearchAttributes.IndexedFields = map[string][]byte{"CustomKeywordField": []byte(`bytes`)}
+	attributes.SearchAttributes.IndexedFields = map[string][]byte{"CustomKeywordField": []byte(`"bytes"`)}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
 	s.Nil(err)
 }

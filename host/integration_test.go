@@ -869,7 +869,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		Fields: map[string][]byte{"memoKey": []byte("memoVal")},
 	}
 	searchAttr := &workflow.SearchAttributes{
-		IndexedFields: map[string][]byte{"CustomKeywordField": []byte("1")},
+		IndexedFields: map[string][]byte{"CustomKeywordField": []byte(`"1"`)},
 	}
 
 	request := &workflow.StartWorkflowExecutionRequest{
@@ -1070,7 +1070,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 		Fields: map[string][]byte{"memoKey": []byte("memoVal")},
 	}
 	searchAttr := &workflow.SearchAttributes{
-		IndexedFields: map[string][]byte{"CustomKeywordField": []byte("1")},
+		IndexedFields: map[string][]byte{"CustomKeywordField": []byte(`"1"`)},
 	}
 
 	request := &workflow.StartWorkflowExecutionRequest{

@@ -52,7 +52,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		Fields: map[string][]byte{"memoKey": []byte("memoVal")},
 	}
 	searchAttr := &workflow.SearchAttributes{
-		IndexedFields: map[string][]byte{"CustomKeywordField": []byte("1")},
+		IndexedFields: map[string][]byte{"CustomKeywordField": []byte(`"1"`)},
 	}
 
 	request := &workflow.StartWorkflowExecutionRequest{

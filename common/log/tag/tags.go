@@ -529,6 +529,12 @@ func ESKey(ESKey string) Tag {
 	return newStringTag("es-mapping-key", ESKey)
 }
 
+// ESValue returns tag for ESValue
+func ESValue(ESValue []byte) Tag {
+	// convert value to string type so that the value logged is human readable
+	return newStringTag("es-mapping-value", string(ESValue))
+}
+
 // ESConfig returns tag for ESConfig
 func ESConfig(c interface{}) Tag {
 	return newObjectTag("es-config", c)
