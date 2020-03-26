@@ -1,7 +1,8 @@
 ############################# Main targets #############################
-default: update-tools bins
+default: update-tools check bins
+test: check bins unit-test integration-test integration-xdc-test
 bins: clean-bins proto temporal-server tctl temporal-cassandra-tool temporal-sql-tool temporal-canary
-test: bins check unit-test integration-test integration-xdc-test
+
 update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock
 ########################################################################
 
