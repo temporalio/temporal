@@ -3,7 +3,7 @@ default: update-tools proto check bins
 test: proto check bins unit-test integration-test integration-xdc-test
 bins: clean-bins proto temporal-server tctl temporal-cassandra-tool temporal-sql-tool temporal-canary
 
-update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock
+update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock gomodtidy
 ########################################################################
 
 ##### Variables ######
@@ -132,7 +132,6 @@ proto-mock: $(PROTO_GEN)
 update-proto-go:
 	@printf $(COLOR) "Update go.temporal.io/temporal-proto..."
 	go get go.temporal.io/temporal-proto
-	go mod tidy
 
 proto: clean-proto install-proto-submodule protoc proto-mock
 
@@ -348,3 +347,6 @@ start-canary: temporal-canary
 go-generate:
 	@printf $(COLOR) "Regenerate everything..."
 	@go generate ./...
+
+gomodtidy:
+	go mod tidy
