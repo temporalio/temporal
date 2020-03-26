@@ -2,7 +2,7 @@
 default: update-tools bins
 bins: clean proto copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
 test: bins check unit-test integration-test integration-xdc-test
-update-proto: clean-proto update-proto-submodule protoc proto-mock
+update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock
 ########################################################################
 
 ifndef GOOS
@@ -118,6 +118,11 @@ proto-mock: $(PROTO_GEN)
 	@printf $(COLOR) "Generate proto mocks..."
 	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),cd $(PROTO_GEN) && mockgen -package $(call dirname,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call dir_no_slash,$(PROTO_GRPC_SERVICE))mock/$(notdir $(PROTO_GRPC_SERVICE:go=mock.go))$(NEWLINE) )
 
+update-proto-go:
+	@printf $(COLOR) "Update go.temporal.io/temporal-proto..."
+	go get go.temporal.io/temporal-proto
+	go mod tidy
+
 proto: clean-proto install-proto-submodule protoc proto-mock
 
 copyright:
@@ -150,29 +155,19 @@ go-generate:
 
 lint:
 	@printf $(COLOR) "Run linter..."
-	@lintFail=0; for file in $(ALL_SRC); do \
-		golint "$$file"; \
-		if [ $$? -eq 1 ]; then lintFail=1; fi; \
-	done; \
-	if [ $$lintFail -eq 1 ]; then exit 1; fi;
-	@OUTPUT=`gofmt -l $(ALL_SRC) 2>&1`; \
-	if [ "$$OUTPUT" ]; then \
-		echo "Run 'make fmt'. gofmt must be run on the following files:"; \
-		echo "$$OUTPUT"; \
-		exit 1; \
-	fi
+	golint ./...
 
 goimports:
 	@printf $(COLOR) "Run goimports..."
-	@goimports -w $(ALL_SRC)
+	goimports -w .
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
-	staticcheck ./...
+	staticcheck -fail none ./...
 
 errcheck:
 	@printf $(COLOR) "Run errcheck..."
-	errcheck ./...
+	errcheck ./... || true
 
 check: goimports lint staticcheck errcheck
 
@@ -187,11 +182,12 @@ integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(INTEG_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
 
-# need to run xdc tests with race detector off because of ringpop bug causing data race issue
+# Need to run xdc tests with race detector off because of ringpop bug causing data race issue
 integration-xdc-test: clean-test-results
 	@printf $(COLOR) "Run xdc integration tests..."
 	@go test -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) | tee -a test.log
 
+##### Cover #####
 cover_profile: clean bins
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
