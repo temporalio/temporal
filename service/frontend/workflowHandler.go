@@ -1853,10 +1853,12 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		getRequest.MaximumPageSize = common.Int32Ptr(common.GetHistoryMaxPageSize)
 	}
 
-	enableArchivalRead := wh.GetArchivalMetadata().GetHistoryConfig().ReadEnabled()
-	historyArchived := wh.historyArchived(ctx, getRequest, domainID)
-	if enableArchivalRead && historyArchived {
-		return wh.getArchivedHistory(ctx, getRequest, domainID, scope)
+	if !getRequest.GetSkipArchival() {
+		enableArchivalRead := wh.GetArchivalMetadata().GetHistoryConfig().ReadEnabled()
+		historyArchived := wh.historyArchived(ctx, getRequest, domainID)
+		if enableArchivalRead && historyArchived {
+			return wh.getArchivedHistory(ctx, getRequest, domainID, scope)
+		}
 	}
 
 	// this function return the following 5 things,

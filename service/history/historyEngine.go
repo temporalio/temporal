@@ -674,8 +674,9 @@ func (e *historyEngineImpl) PollMutableState(
 		CurrentBranchToken:  request.CurrentBranchToken})
 
 	if err != nil {
-		return nil, err
+		return nil, e.updateEntityNotExistsErrorOnPassiveCluster(err, request.GetDomainUUID())
 	}
+
 	return &h.PollMutableStateResponse{
 		Execution:                            response.Execution,
 		WorkflowType:                         response.WorkflowType,
@@ -694,6 +695,25 @@ func (e *historyEngineImpl) PollMutableState(
 		WorkflowState:                        response.WorkflowState,
 		WorkflowCloseState:                   response.WorkflowCloseState,
 	}, nil
+}
+
+func (e *historyEngineImpl) updateEntityNotExistsErrorOnPassiveCluster(err error, domainID string) error {
+	switch err.(type) {
+	case *workflow.EntityNotExistsError:
+		domainCache, domainCacheErr := e.shard.GetDomainCache().GetDomainByID(domainID)
+		if domainCacheErr != nil {
+			return err // if could not access domain cache simply return original error
+		}
+		domainNotActiveErr := domainCache.GetDomainNotActiveErr().(*workflow.DomainNotActiveError)
+		if domainNotActiveErr != nil {
+			return &workflow.EntityNotExistsError{
+				Message:        "Workflow execution not found in non-active cluster",
+				ActiveCluster:  common.StringPtr(domainNotActiveErr.GetActiveCluster()),
+				CurrentCluster: common.StringPtr(domainNotActiveErr.GetCurrentCluster()),
+			}
+		}
+	}
+	return err
 }
 
 func (e *historyEngineImpl) getMutableStateOrPolling(
