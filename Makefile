@@ -1,10 +1,11 @@
 ############################# Main targets #############################
 default: update-tools bins
-bins: clean proto copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
+bins: clean-bins proto temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
 test: bins check unit-test integration-test integration-xdc-test
 update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock
 ########################################################################
 
+##### Variables ######
 ifndef GOOS
 GOOS := $(shell go env GOOS)
 endif
@@ -80,6 +81,7 @@ PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto" | grep -v tem
 PROTO_IMPORT := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/gogo/protobuf/protobuf
 PROTO_GEN := .gen/proto
 
+##### Auxilary #####
 update-tools:
 	@printf $(COLOR) "Install/update required tools..."
 	GO111MODULE=off go get -u golang.org/x/tools/cmd/goimports
@@ -90,6 +92,11 @@ update-tools:
 	GO111MODULE=off go get -u google.golang.org/grpc
 	GO111MODULE=off go get -u github.com/golang/mock/mockgen
 
+go-generate:
+	@printf $(COLOR) "Regenerate everything..."
+	@go generate ./...
+
+##### Proto #####
 $(PROTO_GEN):
 	mkdir -p $(PROTO_GEN)
 
@@ -125,9 +132,14 @@ update-proto-go:
 
 proto: clean-proto install-proto-submodule protoc proto-mock
 
-copyright:
-	@printf $(COLOR) "Check license header..."
-	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
+##### Binaries #####
+clean-bins:
+	@printf $(COLOR) "Delete old binaries..."
+	@rm -f temporal
+	@rm -f temporal-server
+	@rm -f temporal-canary
+	@rm -f temporal-sql-tool
+	@rm -f temporal-cassandra-tool
 
 temporal-cassandra-tool: proto
 	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
@@ -149,9 +161,10 @@ temporal-canary: proto
 	@printf $(COLOR) "Build temporal-canary with OS: $(GOOS), ARCH: $(GOARCH)..."
 	go build -o temporal-canary cmd/canary/main.go
 
-go-generate:
-	@printf $(COLOR) "Regenerate everything..."
-	@go generate ./...
+##### Checks #####
+copyright:
+	@printf $(COLOR) "Check license header..."
+	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
 lint:
 	@printf $(COLOR) "Run linter..."
@@ -169,8 +182,9 @@ errcheck:
 	@printf $(COLOR) "Run errcheck..."
 	errcheck ./... || true
 
-check: goimports lint staticcheck errcheck
+check: copyright goimports lint staticcheck errcheck
 
+##### Tests #####
 clean-test-results:
 	@rm -f test.log
 
@@ -187,10 +201,13 @@ integration-xdc-test: clean-test-results
 	@printf $(COLOR) "Run xdc integration tests..."
 	@go test -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) | tee -a test.log
 
-##### Cover #####
-cover_profile: clean bins
+##### Coverage #####
+clean-build:
+	@rm -rf $(BUILD)
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
+
+cover_profile: clean-build
 	@echo "mode: atomic" > $(UNIT_COVER_FILE)
 
 	@echo Running package tests:
@@ -200,9 +217,7 @@ cover_profile: clean bins
 		cat $(BUILD)/"$$dir"/coverage.out | grep -v "^mode: \w\+" >> $(UNIT_COVER_FILE); \
 	done;
 
-cover_integration_profile: clean bins
-	@mkdir -p $(BUILD)
-	@mkdir -p $(COVER_ROOT)
+cover_integration_profile: clean-build
 	@echo "mode: atomic" > $(INTEG_COVER_FILE)
 
 	@echo Running integration test with $(PERSISTENCE_TYPE)
@@ -210,9 +225,7 @@ cover_integration_profile: clean bins
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE)
 
-cover_xdc_profile: clean bins
-	@mkdir -p $(BUILD)
-	@mkdir -p $(COVER_ROOT)
+cover_xdc_profile: clean-build
 	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
 
 	@echo Running integration test for cross dc with $(PERSISTENCE_TYPE)
@@ -220,7 +233,7 @@ cover_xdc_profile: clean bins
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_XDC_OUT_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
 
-cover_ndc_profile: clean bins
+cover_ndc_profile: clean-build
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
@@ -244,14 +257,7 @@ cover: $(COVER_ROOT)/cover.out
 cover_ci: $(COVER_ROOT)/cover.out
 	goveralls -coverprofile=$(COVER_ROOT)/cover.out -service=buildkite || echo Coveralls failed;
 
-clean: clean-proto
-	@rm -f temporal
-	@rm -f temporal-server
-	@rm -f temporal-canary
-	@rm -f temporal-sql-tool
-	@rm -f temporal-cassandra-tool
-	@rm -rf $(BUILD)
-
+##### Schema #####
 install-schema: temporal-cassandra-tool
 	@printf $(COLOR) "Install Cassandra schema..."
 	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal --rf 1
@@ -313,6 +319,7 @@ install-schema-cdc: temporal-cassandra-tool
 	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_other setup-schema -v 0.0
 	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_other update-schema -d ./schema/cassandra/visibility/versioned
 
+##### Start #####
 start: temporal-server
 	./temporal-server start
 
