@@ -60,6 +60,22 @@ services:
     environment:
       - discovery.type=single-node
 
+  bins:
+    build:
+      context: ../../
+      dockerfile: ./docker/buildkite/Dockerfile
+    environment:
+      - "CASSANDRA_SEEDS=cassandra"
+      - "MYSQL_SEEDS=mysql"
+      - "POSTGRES_SEEDS=postgres"
+      - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_JOB_ID
+      - BUILDKITE_BUILD_ID
+      - BUILDKITE_BUILD_NUMBER
+    volumes:
+      - ../../:/temporal
+      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+
   unit-test:
     build:
       context: ../../

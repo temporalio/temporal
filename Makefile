@@ -1,6 +1,6 @@
 ############################# Main targets #############################
 default: update-tools bins
-bins: clean-bins proto temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
+bins: clean-bins proto temporal-server tctl temporal-cassandra-tool temporal-sql-tool temporal-canary
 test: bins check unit-test integration-test integration-xdc-test
 update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock
 ########################################################################
@@ -139,11 +139,19 @@ proto: clean-proto install-proto-submodule protoc proto-mock
 ##### Binaries #####
 clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
-	@rm -f temporal
+	@rm -f tctl
 	@rm -f temporal-server
-	@rm -f temporal-canary
-	@rm -f temporal-sql-tool
 	@rm -f temporal-cassandra-tool
+	@rm -f temporal-sql-tool
+	@rm -f temporal-canary
+
+temporal-server: proto
+	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
+	go build -ldflags '$(GO_BUILD_LDFLAGS)' -o temporal-server cmd/server/main.go
+
+tctl: proto
+	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
+	go build -o tctl cmd/tools/cli/main.go
 
 temporal-cassandra-tool: proto
 	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
@@ -152,14 +160,6 @@ temporal-cassandra-tool: proto
 temporal-sql-tool: proto
 	@printf $(COLOR) "Build temporal-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
 	go build -o temporal-sql-tool cmd/tools/sql/main.go
-
-tctl: proto
-	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -o tctl cmd/tools/cli/main.go
-
-temporal-server: proto
-	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -ldflags '$(GO_BUILD_LDFLAGS)' -o temporal-server cmd/server/main.go
 
 temporal-canary: proto
 	@printf $(COLOR) "Build temporal-canary with OS: $(GOOS), ARCH: $(GOARCH)..."

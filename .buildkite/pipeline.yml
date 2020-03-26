@@ -1,4 +1,16 @@
 steps:
+  - label: ":golang: build"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make bins"
+    plugins:
+      - docker-compose#v3.1.0:
+          run: bins
+          config: docker/buildkite/docker-compose.yml
+
+  - wait
+
   - label: ":golang: unit test"
     agents:
       queue: "default"

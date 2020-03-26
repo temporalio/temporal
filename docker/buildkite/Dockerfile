@@ -16,17 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       python-setuptools \
       time \
       protobuf-compiler \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN curl https://bootstrap.pypa.io/get-pip.py | python
-RUN pip install PyYAML==3.13
-
-RUN go get -u golang.org/x/lint/golint
-RUN go get github.com/axw/gocov/gocov
-RUN go get github.com/mattn/goveralls
-RUN go get golang.org/x/tools/cmd/cover
-
-
+    && rm -rf /var/lib/apt/lists/* \
+	&& curl https://bootstrap.pypa.io/get-pip.py | python \
+    && pip install PyYAML==3.13 \
+    && go get -u github.com/axw/gocov/gocov \
+    && go get -u github.com/mattn/goveralls \
+    && go get -u golang.org/x/tools/cmd/cover \
 # https://github.com/docker-library/golang/blob/c1baf037d71331eb0b8d4c70cff4c29cf124c5e0/1.4/Dockerfile
-RUN mkdir -p /temporal
+	&& mkdir -p /temporal
 WORKDIR /temporal
