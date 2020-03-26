@@ -46,6 +46,7 @@ type (
 		membershipUpdateCh chan *membership.ChangedEvent
 		engineFactory      EngineFactory
 		status             int32
+		shuttingDown       int32
 		shutdownWG         sync.WaitGroup
 		shutdownCh         chan struct{}
 		logger             log.Logger
@@ -141,6 +142,8 @@ func (c *shardController) Stop() {
 		return
 	}
 
+	c.PrepareToStop()
+
 	if err := c.GetHistoryServiceResolver().RemoveListener(shardControllerMembershipUpdateListenerName); err != nil {
 		c.logger.Error("Error removing membership update listener", tag.Error(err), tag.OperationFailed)
 	}
@@ -151,6 +154,15 @@ func (c *shardController) Stop() {
 	}
 
 	c.logger.Info("", tag.LifeCycleStopped)
+}
+
+// PrepareToStop starts the graceful shutdown process for controller
+func (c *shardController) PrepareToStop() {
+	atomic.StoreInt32(&c.shuttingDown, 1)
+}
+
+func (c *shardController) isShuttingDown() bool {
+	return atomic.LoadInt32(&c.shuttingDown) != 0
 }
 
 func (c *shardController) GetEngine(workflowID string) (Engine, error) {
@@ -208,7 +220,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 		// if item not valid then process to create a new one
 	}
 
-	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
+	if c.isShuttingDown() || atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
 		return nil, fmt.Errorf("shardController for host '%v' shutting down", c.GetHostInfo().Identity())
 	}
 	info, err := c.GetHistoryServiceResolver().Lookup(string(shardID))
@@ -289,7 +301,6 @@ func (c *shardController) shardManagementPump() {
 }
 
 func (c *shardController) acquireShards() {
-
 	c.metricsScope.IncCounter(metrics.AcquireShardsCounter)
 	sw := c.metricsScope.StartTimer(metrics.AcquireShardsLatency)
 	defer sw.Stop()
@@ -303,6 +314,9 @@ func (c *shardController) acquireShards() {
 		go func() {
 			defer wg.Done()
 			for shardID := range shardActionCh {
+				if c.isShuttingDown() {
+					return
+				}
 				info, err := c.GetHistoryServiceResolver().Lookup(string(shardID))
 				if err != nil {
 					c.logger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
@@ -321,6 +335,9 @@ func (c *shardController) acquireShards() {
 	// Submit tasks to the channel.
 	for shardID := 0; shardID < c.config.NumberOfShards; shardID++ {
 		shardActionCh <- shardID
+		if c.isShuttingDown() {
+			return
+		}
 	}
 	close(shardActionCh)
 	// Wait until all shards are processed.

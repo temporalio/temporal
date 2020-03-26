@@ -22,6 +22,7 @@ package frontend
 
 import (
 	"sync/atomic"
+	"time"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -59,6 +60,7 @@ type Config struct {
 	EnableClientVersionCheck        dynamicconfig.BoolPropertyFn
 	MinRetentionDays                dynamicconfig.IntPropertyFn
 	DisallowQuery                   dynamicconfig.BoolPropertyFnWithDomainFilter
+	ShutdownDrainDuration           dynamicconfig.DurationPropertyFn
 
 	// Persistence settings
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
@@ -115,6 +117,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		BlobSizeLimitError:                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
 		BlobSizeLimitWarn:                   dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitWarn, 256*1024),
 		ThrottledLogRPS:                     dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
+		ShutdownDrainDuration:               dc.GetDurationProperty(dynamicconfig.FrontendShutdownDrainDuration, 0),
 		EnableDomainNotActiveAutoForwarding: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableDomainNotActiveAutoForwarding, true),
 		EnableClientVersionCheck:            dc.GetBoolProperty(dynamicconfig.EnableClientVersionCheck, false),
 		ValidSearchAttributes:               dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
@@ -256,11 +259,29 @@ func (s *Service) Stop() {
 		return
 	}
 
-	close(s.stopC)
+	// initiate graceful shutdown:
+	// 1. Fail rpc health check, this will cause client side load balancer to stop forwarding requests to this node
+	// 2. wait for failure detection time
+	// 3. stop taking new requests by returning InternalServiceError
+	// 4. Wait for a second
+	// 5. Stop everything forcefully and return
+
+	requestDrainTime := common.MinDuration(time.Second, s.config.ShutdownDrainDuration())
+	failureDetectionTime := common.MaxDuration(0, s.config.ShutdownDrainDuration()-requestDrainTime)
+
+	s.GetLogger().Info("ShutdownHandler: Updating rpc health status to ShuttingDown")
+	s.handler.UpdateHealthStatus(HealthStatusShuttingDown)
+
+	s.GetLogger().Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
+	time.Sleep(failureDetectionTime)
 
 	s.handler.Stop()
 	s.adminHandler.Stop()
-	s.Resource.Stop()
 
+	s.GetLogger().Info("ShutdownHandler: Draining traffic")
+	time.Sleep(requestDrainTime)
+
+	close(s.stopC)
+	s.Resource.Stop()
 	s.params.Logger.Info("frontend stopped")
 }

@@ -54,6 +54,7 @@ type Config struct {
 	MaxAutoResetPoints              dynamicconfig.IntPropertyFnWithDomainFilter
 	ThrottledLogRPS                 dynamicconfig.IntPropertyFn
 	EnableStickyQuery               dynamicconfig.BoolPropertyFnWithDomainFilter
+	ShutdownDrainDuration           dynamicconfig.DurationPropertyFn
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
@@ -223,6 +224,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		RPS:                                                    dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		PersistenceMaxQPS:                                      dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
+		ShutdownDrainDuration:                                  dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0),
 		EnableVisibilitySampling:                               dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
 		EnableReadFromClosedExecutionV2:                        dc.GetBoolProperty(dynamicconfig.EnableReadFromClosedExecutionV2, false),
 		VisibilityOpenMaxQPS:                                   dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryVisibilityOpenMaxQPS, 300),
@@ -450,10 +452,52 @@ func (s *Service) Stop() {
 		return
 	}
 
+	// initiate graceful shutdown :
+	// 1. remove self from the membership ring
+	// 2. wait for other members to discover we are going down
+	// 3. stop acquiring new shards (periodically or based on other membership changes)
+	// 4. wait for shard ownership to transfer (and inflight requests to drain) while still accepting new requests
+	// 5. Reject all requests arriving at rpc handler to avoid taking on more work except for RespondXXXCompleted and
+	//    RecordXXStarted APIs - for these APIs, most of the work is already one and rejecting at last stage is
+	//    probably not that desirable. If the shard is closed, these requests will fail anyways.
+	// 6. wait for grace period
+	// 7. force stop the whole world and return
+
+	const gossipPropagationDelay = 400 * time.Millisecond
+	const shardOwnershipTransferDelay = 5 * time.Second
+	const gracePeriod = 2 * time.Second
+
+	remainingTime := s.config.ShutdownDrainDuration()
+
+	s.GetLogger().Info("ShutdownHandler: Evicting self from membership ring")
+	s.GetMembershipMonitor().EvictSelf()
+
+	s.GetLogger().Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
+	remainingTime = s.sleep(gossipPropagationDelay, remainingTime)
+
+	s.GetLogger().Info("ShutdownHandler: Initiating shardController shutdown")
+	s.handler.controller.PrepareToStop()
+	s.GetLogger().Info("ShutdownHandler: Waiting for traffic to drain")
+	remainingTime = s.sleep(shardOwnershipTransferDelay, remainingTime)
+
+	s.GetLogger().Info("ShutdownHandler: No longer taking rpc requests")
+	s.handler.PrepareToStop()
+	remainingTime = s.sleep(gracePeriod, remainingTime)
+
 	close(s.stopC)
 
 	s.handler.Stop()
 	s.Resource.Stop()
 
 	s.GetLogger().Info("history stopped")
+}
+
+// sleep sleeps for the minimum of desired and available duration
+// returns the remaining available time duration
+func (s *Service) sleep(desired time.Duration, available time.Duration) time.Duration {
+	d := common.MinDuration(desired, available)
+	if d > 0 {
+		time.Sleep(d)
+	}
+	return available - d
 }

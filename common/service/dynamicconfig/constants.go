@@ -90,6 +90,7 @@ var keys = map[Key]string{
 	FrontendRPS:                           "frontend.rps",
 	FrontendDomainRPS:                     "frontend.domainrps",
 	FrontendHistoryMgrNumConns:            "frontend.historyMgrNumConns",
+	FrontendShutdownDrainDuration:         "frontend.shutdownDrainDuration",
 	DisableListVisibilityByFilter:         "frontend.disableListVisibilityByFilter",
 	FrontendThrottledLogRPS:               "frontend.throttledLogRPS",
 	EnableClientVersionCheck:              "frontend.enableClientVersionCheck",
@@ -122,6 +123,7 @@ var keys = map[Key]string{
 	MatchingForwarderMaxOutstandingTasks:    "matching.forwarderMaxOutstandingTasks",
 	MatchingForwarderMaxRatePerSecond:       "matching.forwarderMaxRatePerSecond",
 	MatchingForwarderMaxChildrenPerNode:     "matching.forwarderMaxChildrenPerNode",
+	MatchingShutdownDrainDuration:           "matching.shutdownDrainDuration",
 
 	// history settings
 	HistoryRPS:                                             "history.rps",
@@ -133,6 +135,7 @@ var keys = map[Key]string{
 	HistoryMaxAutoResetPoints:                              "history.historyMaxAutoResetPoints",
 	HistoryCacheMaxSize:                                    "history.cacheMaxSize",
 	HistoryCacheTTL:                                        "history.cacheTTL",
+	HistoryShutdownDrainDuration:                           "history.shutdownDrainDuration",
 	EventsCacheInitialSize:                                 "history.eventsCacheInitialSize",
 	EventsCacheMaxSize:                                     "history.eventsCacheMaxSize",
 	EventsCacheTTL:                                         "history.eventsCacheTTL",
@@ -348,6 +351,8 @@ const (
 	FrontendHistoryMgrNumConns
 	// FrontendThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	FrontendThrottledLogRPS
+	// FrontendShutdownDrainDuration is the duration of traffic drain during shutdown
+	FrontendShutdownDrainDuration
 	// EnableClientVersionCheck enables client version check for frontend
 	EnableClientVersionCheck
 
@@ -410,6 +415,8 @@ const (
 	MatchingForwarderMaxRatePerSecond
 	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task list partition tree
 	MatchingForwarderMaxChildrenPerNode
+	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
+	MatchingShutdownDrainDuration
 
 	// key for history
 
@@ -429,6 +436,8 @@ const (
 	HistoryCacheMaxSize
 	// HistoryCacheTTL is TTL of history cache
 	HistoryCacheTTL
+	// HistoryShutdownDrainDuration is the duration of traffic drain during shutdown
+	HistoryShutdownDrainDuration
 	// EventsCacheInitialSize is initial size of events cache
 	EventsCacheInitialSize
 	// EventsCacheMaxSize is max size of events cache

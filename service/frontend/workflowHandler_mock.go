@@ -33,6 +33,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 
+	"github.com/uber/cadence/.gen/go/health"
 	shared "github.com/uber/cadence/.gen/go/shared"
 )
 
@@ -57,6 +58,30 @@ func NewMockWorkflowHandler(ctrl *gomock.Controller) *MockWorkflowHandler {
 // EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockWorkflowHandler) EXPECT() *MockWorkflowHandlerMockRecorder {
 	return m.recorder
+}
+
+// Start mocks base method
+func (m *MockWorkflowHandler) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start
+func (mr *MockWorkflowHandlerMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockWorkflowHandler)(nil).Start))
+}
+
+// Stop mocks base method
+func (m *MockWorkflowHandler) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop
+func (mr *MockWorkflowHandlerMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockWorkflowHandler)(nil).Stop))
 }
 
 // CountWorkflowExecutions mocks base method
@@ -614,4 +639,31 @@ func (m *MockWorkflowHandler) UpdateDomain(ctx context.Context, UpdateRequest *s
 func (mr *MockWorkflowHandlerMockRecorder) UpdateDomain(ctx, UpdateRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDomain", reflect.TypeOf((*MockWorkflowHandler)(nil).UpdateDomain), ctx, UpdateRequest)
+}
+
+// Health mocks base method
+func (m *MockWorkflowHandler) Health(ctx context.Context) (*health.HealthStatus, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Health", ctx)
+	ret0, _ := ret[0].(*health.HealthStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Health indicates an expected call of Health
+func (mr *MockWorkflowHandlerMockRecorder) Health(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Health", reflect.TypeOf((*MockWorkflowHandler)(nil).Health), ctx)
+}
+
+// UpdateHealthStatus mocks base method
+func (m *MockWorkflowHandler) UpdateHealthStatus(status HealthStatus) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateHealthStatus", status)
+}
+
+// UpdateHealthStatus indicates an expected call of UpdateHealthStatus
+func (mr *MockWorkflowHandlerMockRecorder) UpdateHealthStatus(status interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHealthStatus", reflect.TypeOf((*MockWorkflowHandler)(nil).UpdateHealthStatus), status)
 }
