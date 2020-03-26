@@ -288,7 +288,11 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 				t.config.TimerProcessorUpdateAckInterval(),
 				t.config.TimerProcessorUpdateAckIntervalJitterCoefficient(),
 			))
-			t.timerQueueAckMgr.updateAckLevel()
+			if err := t.timerQueueAckMgr.updateAckLevel(); err == ErrShardClosed {
+				// shard is closed, shutdown timerQProcessor and bail out
+				go t.Stop()
+				return err
+			}
 		case <-t.newTimerCh:
 			t.newTimeLock.Lock()
 			newTime := t.newTime

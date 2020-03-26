@@ -671,12 +671,12 @@ func (h *Handler) RemoveTask(
 	return err
 }
 
-// CloseShard returns information about the internal states of a history host
+// CloseShard closes a shard hosted by this instance
 func (h *Handler) CloseShard(
 	ctx context.Context,
 	request *gen.CloseShardRequest,
 ) (retError error) {
-	h.controller.removeEngineForShard(int(request.GetShardID()))
+	h.controller.removeEngineForShard(int(request.GetShardID()), nil)
 	return nil
 }
 

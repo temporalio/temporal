@@ -286,6 +286,11 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 				err := t.completeTransfer()
 				if err != nil {
 					t.logger.Info("Failed to complete transfer task", tag.Error(err))
+					if err == ErrShardClosed {
+						// shard closed, trigger shutdown and bail out
+						t.Stop()
+						return
+					}
 					backoff := time.Duration(attempt * 100)
 					time.Sleep(backoff * time.Millisecond)
 				} else {

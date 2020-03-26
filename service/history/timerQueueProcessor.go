@@ -261,6 +261,11 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 				err := t.completeTimers()
 				if err != nil {
 					t.logger.Info("Failed to complete timers.", tag.Error(err))
+					if err == ErrShardClosed {
+						// shard is unloaded, timer processor should quit as well
+						go t.Stop()
+						return
+					}
 					backoff := time.Duration(attempt * 100)
 					time.Sleep(backoff * time.Millisecond)
 				} else {

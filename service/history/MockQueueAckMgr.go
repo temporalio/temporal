@@ -110,6 +110,14 @@ func (_m *MockQueueAckMgr) getQueueReadLevel() int64 {
 }
 
 // updateQueueAckLevel is mock implementation for updateQueueAckLevel of QueueAckMgr
-func (_m *MockQueueAckMgr) updateQueueAckLevel() {
-	_m.Called()
+func (_m *MockQueueAckMgr) updateQueueAckLevel() error {
+	ret := _m.Called()
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func() error); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
 }
