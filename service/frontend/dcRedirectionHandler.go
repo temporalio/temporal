@@ -35,7 +35,7 @@ import (
 	"github.com/uber/cadence/common/service/config"
 )
 
-var _ ServerHandler = (*DCRedirectionHandlerImpl)(nil)
+var _ Handler = (*DCRedirectionHandlerImpl)(nil)
 
 type (
 	// DCRedirectionHandlerImpl is simple wrapper over frontend service, doing redirection based on policy
@@ -46,26 +46,27 @@ type (
 		config             *Config
 		redirectionPolicy  DCRedirectionPolicy
 		tokenSerializer    common.TaskTokenSerializer
-		frontendHandler    ServerHandler
+		frontendHandler    Handler
 	}
 )
 
 // NewDCRedirectionHandler creates a thrift handler for the cadence service, frontend
 func NewDCRedirectionHandler(
-	wfHandler *WorkflowHandler,
+	wfHandler Handler,
 	policy config.DCRedirectionPolicy,
 ) *DCRedirectionHandlerImpl {
+	resource := wfHandler.GetResource()
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
-		wfHandler.GetClusterMetadata(),
-		wfHandler.config,
-		wfHandler.GetDomainCache(),
+		resource.GetClusterMetadata(),
+		wfHandler.GetConfig(),
+		resource.GetDomainCache(),
 		policy,
 	)
 
 	return &DCRedirectionHandlerImpl{
-		Resource:           wfHandler.Resource,
-		currentClusterName: wfHandler.GetClusterMetadata().GetCurrentClusterName(),
-		config:             wfHandler.config,
+		Resource:           resource,
+		currentClusterName: resource.GetClusterMetadata().GetCurrentClusterName(),
+		config:             wfHandler.GetConfig(),
 		redirectionPolicy:  dcRedirectionPolicy,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		frontendHandler:    wfHandler,
@@ -74,8 +75,9 @@ func NewDCRedirectionHandler(
 
 // RegisterHandler register this handler, must be called before Start()
 func (handler *DCRedirectionHandlerImpl) RegisterHandler() {
-	handler.GetDispatcher().Register(workflowserviceserver.New(handler))
-	handler.GetDispatcher().Register(metaserver.New(handler))
+	dispatcher := handler.GetResource().GetDispatcher()
+	dispatcher.Register(workflowserviceserver.New(handler))
+	dispatcher.Register(metaserver.New(handler))
 }
 
 // Start starts the handler
@@ -86,6 +88,16 @@ func (handler *DCRedirectionHandlerImpl) Start() {
 // Stop stops the handler
 func (handler *DCRedirectionHandlerImpl) Stop() {
 	handler.frontendHandler.Stop()
+}
+
+// GetResource return resource
+func (handler *DCRedirectionHandlerImpl) GetResource() resource.Resource {
+	return handler.Resource
+}
+
+// GetConfig return config
+func (handler *DCRedirectionHandlerImpl) GetConfig() *Config {
+	return handler.frontendHandler.GetConfig()
 }
 
 // UpdateHealthStatus sets the health status for this rpc handler.

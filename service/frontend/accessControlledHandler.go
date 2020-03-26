@@ -38,33 +38,39 @@ var errUnauthorized = &shared.BadRequestError{Message: "Request unauthorized."}
 
 // AccessControlledWorkflowHandler frontend handler wrapper for authentication and authorization
 type AccessControlledWorkflowHandler struct {
-	resource.Resource
-
-	frontendHandler ServerHandler
+	frontendHandler Handler
 	authorizer      authorization.Authorizer
 }
 
-var _ ServerHandler = (*AccessControlledWorkflowHandler)(nil)
+var _ Handler = (*AccessControlledWorkflowHandler)(nil)
 
 // NewAccessControlledHandlerImpl creates frontend handler with authentication support
-func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authorizer authorization.Authorizer) *AccessControlledWorkflowHandler {
+func NewAccessControlledHandlerImpl(wfHandler Handler, authorizer authorization.Authorizer) *AccessControlledWorkflowHandler {
 	if authorizer == nil {
 		authorizer = authorization.NewNopAuthorizer()
 	}
 
 	return &AccessControlledWorkflowHandler{
-		Resource:        wfHandler.Resource,
 		frontendHandler: wfHandler,
 		authorizer:      authorizer,
 	}
 }
 
-// TODO(vancexu): refactor frontend handler
+// GetResource return resource
+func (a *AccessControlledWorkflowHandler) GetResource() resource.Resource {
+	return a.frontendHandler.GetResource()
+}
+
+// GetConfig return config
+func (a *AccessControlledWorkflowHandler) GetConfig() *Config {
+	return a.frontendHandler.GetConfig()
+}
 
 // RegisterHandler register this handler, must be called before Start()
 func (a *AccessControlledWorkflowHandler) RegisterHandler() {
-	a.GetDispatcher().Register(workflowserviceserver.New(a))
-	a.GetDispatcher().Register(metaserver.New(a))
+	dispatcher := a.GetResource().GetDispatcher()
+	dispatcher.Register(workflowserviceserver.New(a))
+	dispatcher.Register(metaserver.New(a))
 }
 
 // UpdateHealthStatus sets the health status for this rpc handler.

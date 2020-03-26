@@ -126,7 +126,7 @@ func (s *workflowHandlerSuite) TearDownTest() {
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
-	return NewWorkflowHandler(s.mockResource, config, s.mockProducer)
+	return NewWorkflowHandler(s.mockResource, config, s.mockProducer).(*WorkflowHandler)
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {

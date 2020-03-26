@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source ../../.gen/go/cadence/workflowserviceserver/server.go -destination workflowHandler_mock.go -mock_names Interface=MockWorkflowHandler
-
 package frontend
 
 import (
@@ -67,19 +65,9 @@ const (
 	HealthStatusShuttingDown
 )
 
-var _ ServerHandler = (*WorkflowHandler)(nil)
+var _ Handler = (*WorkflowHandler)(nil)
 
 type (
-	// ServerHandler is the interface for the frontend rpc handler
-	ServerHandler interface {
-		common.Daemon
-		workflowserviceserver.Interface
-		// Health is the health check method for this rpc handler
-		Health(ctx context.Context) (*health.HealthStatus, error)
-		// UpdateHealthStatus sets the health status for this rpc handler.
-		// This health status will be used within the rpc health check handler
-		UpdateHealthStatus(status HealthStatus)
-	}
 	// WorkflowHandler - Thrift handler interface for workflow service
 	WorkflowHandler struct {
 		resource.Resource
@@ -161,7 +149,7 @@ func NewWorkflowHandler(
 	resource resource.Resource,
 	config *Config,
 	replicationMessageSink messaging.Producer,
-) *WorkflowHandler {
+) Handler {
 	return &WorkflowHandler{
 		Resource:        resource,
 		config:          config,
@@ -221,6 +209,16 @@ func (wh *WorkflowHandler) UpdateHealthStatus(status HealthStatus) {
 
 func (wh *WorkflowHandler) isShuttingDown() bool {
 	return atomic.LoadInt32(&wh.shuttingDown) != 0
+}
+
+// GetResource return resource
+func (wh *WorkflowHandler) GetResource() resource.Resource {
+	return wh.Resource
+}
+
+// GetConfig return config
+func (wh *WorkflowHandler) GetConfig() *Config {
+	return wh.config
 }
 
 // Health is for health check
