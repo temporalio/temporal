@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -59,13 +60,32 @@ const (
 	defaultLastMessageID                 = int64(-1)
 )
 
-var _ workflowserviceserver.Interface = (*WorkflowHandler)(nil)
+const (
+	// HealthStatusOK is used when this node is healthy and rpc requests are allowed
+	HealthStatusOK HealthStatus = iota + 1
+	// HealthStatusShuttingDown is used when the rpc handler is shutting down
+	HealthStatusShuttingDown
+)
+
+var _ ServerHandler = (*WorkflowHandler)(nil)
 
 type (
+	// ServerHandler is the interface for the frontend rpc handler
+	ServerHandler interface {
+		common.Daemon
+		workflowserviceserver.Interface
+		// Health is the health check method for this rpc handler
+		Health(ctx context.Context) (*health.HealthStatus, error)
+		// UpdateHealthStatus sets the health status for this rpc handler.
+		// This health status will be used within the rpc health check handler
+		UpdateHealthStatus(status HealthStatus)
+	}
 	// WorkflowHandler - Thrift handler interface for workflow service
 	WorkflowHandler struct {
 		resource.Resource
 
+		shuttingDown              int32
+		healthStatus              int32
 		tokenSerializer           common.TaskTokenSerializer
 		rateLimiter               quotas.Policy
 		config                    *Config
@@ -89,6 +109,9 @@ type (
 	domainGetter interface {
 		GetDomain() string
 	}
+
+	// HealthStatus is an enum that refers to the rpc handler health status
+	HealthStatus int32
 )
 
 var (
@@ -116,6 +139,7 @@ var (
 	errClusterNameNotSet                          = &gen.BadRequestError{Message: "Cluster name is not set."}
 	errEmptyReplicationInfo                       = &gen.BadRequestError{Message: "Replication task info is not set."}
 	errEmptyQueueType                             = &gen.BadRequestError{Message: "Queue type is not set."}
+	errShuttingDown                               = &gen.InternalServiceError{Message: "Shutting down"}
 
 	// err for archival
 	errHistoryNotFound = &gen.BadRequestError{Message: "Requested workflow history not found, may have passed retention period."}
@@ -141,6 +165,7 @@ func NewWorkflowHandler(
 	return &WorkflowHandler{
 		Resource:        resource,
 		config:          config,
+		healthStatus:    int32(HealthStatusOK),
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		rateLimiter: quotas.NewMultiStageRateLimiter(
 			func() float64 {
@@ -185,13 +210,27 @@ func (wh *WorkflowHandler) Start() {
 
 // Stop stops the handler
 func (wh *WorkflowHandler) Stop() {
+	atomic.StoreInt32(&wh.shuttingDown, 1)
+}
+
+// UpdateHealthStatus sets the health status for this rpc handler.
+// This health status will be used within the rpc health check handler
+func (wh *WorkflowHandler) UpdateHealthStatus(status HealthStatus) {
+	atomic.StoreInt32(&wh.healthStatus, int32(status))
+}
+
+func (wh *WorkflowHandler) isShuttingDown() bool {
+	return atomic.LoadInt32(&wh.shuttingDown) != 0
 }
 
 // Health is for health check
 func (wh *WorkflowHandler) Health(ctx context.Context) (*health.HealthStatus, error) {
-	wh.GetLogger().Debug("Frontend health check endpoint reached.")
-	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("frontend good")}
-	return hs, nil
+	status := HealthStatus(atomic.LoadInt32(&wh.healthStatus))
+	msg := status.String()
+	return &health.HealthStatus{
+		Ok:  status == HealthStatusOK,
+		Msg: &msg,
+	}, nil
 }
 
 // RegisterDomain creates a new domain which can be used as a container for all resources.  Domain is a top level
@@ -203,6 +242,10 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRegisterDomainScope)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
@@ -241,6 +284,10 @@ func (wh *WorkflowHandler) ListDomains(
 	scope, sw := wh.startRequestProfile(metrics.FrontendListDomainsScope)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -265,6 +312,10 @@ func (wh *WorkflowHandler) DescribeDomain(
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendDescribeDomainScope)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -294,6 +345,10 @@ func (wh *WorkflowHandler) UpdateDomain(
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendUpdateDomainScope)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -330,6 +385,10 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 	scope, sw := wh.startRequestProfile(metrics.FrontendDeprecateDomainScope)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
@@ -364,6 +423,10 @@ func (wh *WorkflowHandler) PollForActivityTask(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendPollForActivityTaskScope, pollRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -445,6 +508,10 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendPollForDecisionTaskScope, pollRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
@@ -617,6 +684,10 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
 
@@ -667,6 +738,10 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRecordActivityTaskHeartbeatByIDScope, heartbeatRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -811,6 +886,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
+
 	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
 
@@ -860,6 +939,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskCompletedByIDScope, completeRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
@@ -1003,6 +1086,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
+
 	if len(failedRequest.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return wh.error(errIdentityTooLong, scope)
 	}
@@ -1044,6 +1131,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskFailedByIDScope, failedRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
@@ -1175,6 +1266,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
+
 	if len(cancelRequest.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return wh.error(errIdentityTooLong, scope)
 	}
@@ -1228,6 +1323,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskCanceledScope, cancelRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
@@ -1370,6 +1469,10 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	histResp, err := wh.GetHistoryClient().RespondDecisionTaskCompleted(ctx, &h.RespondDecisionTaskCompletedRequest{
 		DomainUUID:      common.StringPtr(taskToken.DomainID),
 		CompleteRequest: completeRequest},
@@ -1451,6 +1554,10 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
+
 	if len(failedRequest.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return wh.error(errIdentityTooLong, scope)
 	}
@@ -1525,6 +1632,10 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
+
 	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
 
@@ -1575,6 +1686,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendStartWorkflowExecutionScope, startRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -2045,6 +2160,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendGetWorkflowExecutionHistoryScope, getRequest)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2340,6 +2459,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendSignalWithStartWorkflowExecutionScope, signalWithStartRequest)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2476,6 +2599,10 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendTerminateWorkflowExecutionScope, terminateRequest)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
@@ -2523,6 +2650,10 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendResetWorkflowExecutionScope, resetRequest)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2569,6 +2700,10 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRequestCancelWorkflowExecutionScope, cancelRequest)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
@@ -2614,6 +2749,10 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListOpenWorkflowExecutionsScope, listRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -2724,6 +2863,10 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListArchivedWorkflowExecutionsScope, listRequest)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2811,6 +2954,10 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListClosedWorkflowExecutionsScope, listRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -2940,6 +3087,10 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListWorkflowExecutionsScope, listRequest)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -3002,6 +3153,10 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendScanWorkflowExecutionsScope, listRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -3066,6 +3221,10 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendCountWorkflowExecutionsScope, countRequest)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -3115,6 +3274,10 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context) (resp *gen.G
 	scope, sw := wh.startRequestProfile(metrics.FrontendGetSearchAttributesScope)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -3135,6 +3298,10 @@ func (wh *WorkflowHandler) ResetStickyTaskList(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendResetStickyTaskListScope, resetRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -3176,6 +3343,10 @@ func (wh *WorkflowHandler) QueryWorkflow(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendQueryWorkflowScope, queryRequest)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if wh.config.DisallowQuery(queryRequest.GetDomain()) {
 		return nil, wh.error(errQueryDisallowedForDomain, scope)
@@ -3245,6 +3416,10 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendDescribeWorkflowExecutionScope, request)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -3292,6 +3467,10 @@ func (wh *WorkflowHandler) DescribeTaskList(
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendDescribeTaskListScope, request)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -3345,6 +3524,10 @@ func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListTaskListPartitionsScope, request)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if request == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -3963,4 +4146,15 @@ type domainWrapper struct {
 
 func (d domainWrapper) GetDomain() string {
 	return d.domain
+}
+
+func (hs HealthStatus) String() string {
+	switch hs {
+	case HealthStatusOK:
+		return "OK"
+	case HealthStatusShuttingDown:
+		return "ShuttingDown"
+	default:
+		return "unknown"
+	}
 }

@@ -361,6 +361,22 @@ func MaxInt(a, b int) int {
 	return b
 }
 
+// MinDuration returns the smaller of two given time duration
+func MinDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// MaxDuration returns the greater of two given time durations
+func MaxDuration(a, b time.Duration) time.Duration {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // SortInt64Slice sorts the given int64 slice.
 // Sort is not guaranteed to be stable.
 func SortInt64Slice(slice []int64) {
