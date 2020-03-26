@@ -60,7 +60,7 @@ services:
     environment:
       - discovery.type=single-node
 
-  bins:
+  build:
     build:
       context: ../../
       dockerfile: ./docker/buildkite/Dockerfile

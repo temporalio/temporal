@@ -6,7 +6,7 @@ steps:
     command: "make"
     plugins:
       - docker-compose#v3.1.0:
-          run: bins
+          run: build
           config: docker/buildkite/docker-compose.yml
 
   - wait

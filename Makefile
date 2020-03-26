@@ -1,6 +1,6 @@
 ############################# Main targets #############################
-default: update-tools check bins
-test: check bins unit-test integration-test integration-xdc-test
+default: update-tools proto check bins
+test: proto check bins unit-test integration-test integration-xdc-test
 bins: clean-bins proto temporal-server tctl temporal-cassandra-tool temporal-sql-tool temporal-canary
 
 update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock
@@ -175,6 +175,10 @@ lint:
 	@printf $(COLOR) "Run linter..."
 	golint ./...
 
+goimports-check:
+	@printf $(COLOR) "Run goimports checks..."
+	goimports -l .
+
 goimports:
 	@printf $(COLOR) "Run goimports..."
 	goimports -w .
@@ -187,7 +191,7 @@ errcheck:
 	@printf $(COLOR) "Run errcheck..."
 	errcheck ./... || true
 
-check: copyright goimports lint staticcheck errcheck
+check: copyright goimports-check lint staticcheck errcheck
 
 ##### Tests #####
 clean-test-results:
