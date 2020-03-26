@@ -235,6 +235,15 @@ func TransferTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.Transfe
 	return result, protoRWDecode(b, proto, result)
 }
 
+func VisibilityTaskInfoToBlob(info *persistenceblobs.VisibilityTaskInfo) (DataBlob, error) {
+	return protoRWEncode(info)
+}
+
+func VisibilityTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.VisibilityTaskInfo, error) {
+	result := &persistenceblobs.VisibilityTaskInfo{}
+	return result, protoRWDecode(b, proto, result)
+}
+
 func TimerTaskInfoToBlob(info *persistenceblobs.TimerTaskInfo) (DataBlob, error) {
 	return protoRWEncode(info)
 }

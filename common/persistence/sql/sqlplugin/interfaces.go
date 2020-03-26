@@ -131,6 +131,23 @@ type (
 		MaxTaskID *int64
 	}
 
+	// VisibilityTasksRow represents a row in transfer_tasks table
+	VisibilityTasksRow struct {
+		ShardID      int
+		TaskID       int64
+		Data         []byte
+		DataEncoding string
+	}
+
+	// VisibilityTasksFilter contains the column names within transfer_tasks table that
+	// can be used to filter results through a WHERE clause
+	VisibilityTasksFilter struct {
+		ShardID   int
+		TaskID    *int64
+		MinTaskID *int64
+		MaxTaskID *int64
+	}
+
 	// ExecutionsRow represents a row in executions table
 	ExecutionsRow struct {
 		ShardID                  int
@@ -624,6 +641,15 @@ type (
 		// Filter params - shardID is required. If TaskID is not nil, a single row is deleted.
 		// When MinTaskID and MaxTaskID are not-nil, a range of rows are deleted.
 		DeleteFromTransferTasks(filter *TransferTasksFilter) (sql.Result, error)
+
+		InsertIntoVisibilityTasks(rows []VisibilityTasksRow) (sql.Result, error)
+		// SelectFromVisibilityTasks returns rows that match filter criteria from transfer_tasks table.
+		// Required filter params - {shardID, minTaskID, maxTaskID}
+		SelectFromVisibilityTasks(filter *VisibilityTasksFilter) ([]VisibilityTasksRow, error)
+		// DeleteFromVisibilityTasks deletes one or more rows from transfer_tasks table.
+		// Filter params - shardID is required. If TaskID is not nil, a single row is deleted.
+		// When MinTaskID and MaxTaskID are not-nil, a range of rows are deleted.
+		DeleteFromVisibilityTasks(filter *VisibilityTasksFilter) (sql.Result, error)
 
 		InsertIntoTimerTasks(rows []TimerTasksRow) (sql.Result, error)
 		// SelectFromTimerTasks returns one or more rows from timer_tasks table

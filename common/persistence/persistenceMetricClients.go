@@ -361,6 +361,20 @@ func (p *workflowExecutionPersistenceClient) GetTransferTasks(request *GetTransf
 	return response, err
 }
 
+func (p *workflowExecutionPersistenceClient) GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetVisibilityTasksScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetVisibilityTasksScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetVisibilityTasks(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceGetVisibilityTasksScope, err)
+	}
+
+	return response, err
+}
+
 func (p *workflowExecutionPersistenceClient) GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetReplicationTasksScope, metrics.PersistenceRequests)
 
@@ -398,6 +412,34 @@ func (p *workflowExecutionPersistenceClient) RangeCompleteTransferTask(request *
 
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceRangeCompleteTransferTaskScope, err)
+	}
+
+	return err
+}
+
+func (p *workflowExecutionPersistenceClient) CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceCompleteVisibilityTaskScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteVisibilityTaskScope, metrics.PersistenceLatency)
+	err := p.persistence.CompleteVisibilityTask(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceCompleteVisibilityTaskScope, err)
+	}
+
+	return err
+}
+
+func (p *workflowExecutionPersistenceClient) RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteVisibilityTaskScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteVisibilityTaskScope, metrics.PersistenceLatency)
+	err := p.persistence.RangeCompleteVisibilityTask(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceRangeCompleteVisibilityTaskScope, err)
 	}
 
 	return err

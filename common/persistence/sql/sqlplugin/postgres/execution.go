@@ -88,6 +88,13 @@ workflow_id = :workflow_id
 	deleteTransferTaskQuery      = `DELETE FROM transfer_tasks WHERE shard_id = $1 AND task_id = $2`
 	rangeDeleteTransferTaskQuery = `DELETE FROM transfer_tasks WHERE shard_id = $1 AND task_id > $2 AND task_id <= $3`
 
+	getVisibilityTasksQuery = `TODO`
+
+	createVisibilityTasksQuery = `TODO`
+
+	deleteVisibilityTaskQuery      = `TODO`
+	rangeDeleteVisibilityTaskQuery = `TODO`
+
 	createTimerTasksQuery = `INSERT INTO timer_tasks (shard_id, visibility_timestamp, task_id, data, data_encoding)
   VALUES (:shard_id, :visibility_timestamp, :task_id, :data, :data_encoding)`
 
@@ -250,6 +257,29 @@ func (pdb *db) DeleteFromTransferTasks(filter *sqlplugin.TransferTasksFilter) (s
 		return pdb.conn.Exec(rangeDeleteTransferTaskQuery, filter.ShardID, *filter.MinTaskID, *filter.MaxTaskID)
 	}
 	return pdb.conn.Exec(deleteTransferTaskQuery, filter.ShardID, *filter.TaskID)
+}
+
+// InsertIntoVisibilityTasks inserts one or more rows into visibility_tasks table
+func (mdb *db) InsertIntoVisibilityTasks(rows []sqlplugin.VisibilityTasksRow) (sql.Result, error) {
+	return mdb.conn.NamedExec(createVisibilityTasksQuery, rows)
+}
+
+// SelectFromVisibilityTasks reads one or more rows from visibility_tasks table
+func (mdb *db) SelectFromVisibilityTasks(filter *sqlplugin.VisibilityTasksFilter) ([]sqlplugin.VisibilityTasksRow, error) {
+	var rows []sqlplugin.VisibilityTasksRow
+	err := mdb.conn.Select(&rows, getVisibilityTasksQuery, filter.ShardID, *filter.MinTaskID, *filter.MaxTaskID)
+	if err != nil {
+		return nil, err
+	}
+	return rows, err
+}
+
+// DeleteFromVisibilityTasks deletes one or more rows from visibility_tasks table
+func (mdb *db) DeleteFromVisibilityTasks(filter *sqlplugin.VisibilityTasksFilter) (sql.Result, error) {
+	if filter.MinTaskID != nil {
+		return mdb.conn.Exec(rangeDeleteVisibilityTaskQuery, filter.ShardID, *filter.MinTaskID, *filter.MaxTaskID)
+	}
+	return mdb.conn.Exec(deleteVisibilityTaskQuery, filter.ShardID, *filter.TaskID)
 }
 
 // InsertIntoTimerTasks inserts one or more rows into timer_tasks table

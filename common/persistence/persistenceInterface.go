@@ -102,6 +102,11 @@ type (
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
+		// Visibility task related methods
+		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
+		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
+		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
+
 		// Replication task related methods
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error

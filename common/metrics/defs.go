@@ -158,6 +158,12 @@ const (
 	PersistenceCompleteTransferTaskScope
 	// PersistenceRangeCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
 	PersistenceRangeCompleteTransferTaskScope
+	// PersistenceGetVisibilityTasksScope tracks GetVisibilityTasks calls made by service to persistence layer
+	PersistenceGetVisibilityTasksScope
+	// PersistenceCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
+	PersistenceCompleteVisibilityTaskScope
+	// PersistenceRangeCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
+	PersistenceRangeCompleteVisibilityTaskScope
 	// PersistenceGetReplicationTasksScope tracks GetReplicationTasks calls made by service to persistence layer
 	PersistenceGetReplicationTasksScope
 	// PersistenceCompleteReplicationTaskScope tracks CompleteReplicationTasks calls made by service to persistence layer

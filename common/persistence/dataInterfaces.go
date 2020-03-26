@@ -855,6 +855,20 @@ type (
 		NextPageToken []byte
 	}
 
+	// GetVisibilityTasksRequest is used to read tasks from the visibility task queue
+	GetVisibilityTasksRequest struct {
+		ReadLevel     int64
+		MaxReadLevel  int64
+		BatchSize     int
+		NextPageToken []byte
+	}
+
+	// GetVisibilityTasksResponse is the response to GetVisibilityTasksRequest
+	GetVisibilityTasksResponse struct {
+		Tasks         []*pblobs.VisibilityTaskInfo
+		NextPageToken []byte
+	}
+
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
 	GetReplicationTasksRequest struct {
 		ReadLevel     int64
@@ -876,6 +890,17 @@ type (
 
 	// RangeCompleteTransferTaskRequest is used to complete a range of tasks in the transfer task queue
 	RangeCompleteTransferTaskRequest struct {
+		ExclusiveBeginTaskID int64
+		InclusiveEndTaskID   int64
+	}
+
+	// CompleteVisibilityTaskRequest is used to complete a task in the visibility task queue
+	CompleteVisibilityTaskRequest struct {
+		TaskID int64
+	}
+
+	// RangeCompleteVisibilityTaskRequest is used to complete a range of tasks in the visibility task queue
+	RangeCompleteVisibilityTaskRequest struct {
 		ExclusiveBeginTaskID int64
 		InclusiveEndTaskID   int64
 	}
@@ -1444,6 +1469,11 @@ type (
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
+
+		// Visibility task related methods
+		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
+		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
+		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
 
 		// Replication task related methods
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)

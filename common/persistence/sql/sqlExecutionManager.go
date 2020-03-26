@@ -768,6 +768,55 @@ func (m *sqlExecutionManager) RangeCompleteTransferTask(
 	return nil
 }
 
+func (m *sqlExecutionManager) GetVisibilityTasks(
+	request *p.GetVisibilityTasksRequest,
+) (*p.GetVisibilityTasksResponse, error) {
+
+	rows, err := m.db.SelectFromVisibilityTasks(&sqlplugin.VisibilityTasksFilter{
+		ShardID: m.shardID, MinTaskID: &request.ReadLevel, MaxTaskID: &request.MaxReadLevel})
+	if err != nil {
+		if err != sql.ErrNoRows {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetVisibilityTasks operation failed. Select failed. Error: %v", err))
+		}
+	}
+	resp := &p.GetVisibilityTasksResponse{Tasks: make([]*persistenceblobs.VisibilityTaskInfo, len(rows))}
+	for i, row := range rows {
+		info, err := serialization.VisibilityTaskInfoFromBlob(row.Data, row.DataEncoding)
+		if err != nil {
+			return nil, err
+		}
+		resp.Tasks[i] = info
+	}
+
+	return resp, nil
+}
+
+func (m *sqlExecutionManager) CompleteVisibilityTask(
+	request *p.CompleteVisibilityTaskRequest,
+) error {
+
+	if _, err := m.db.DeleteFromVisibilityTasks(&sqlplugin.VisibilityTasksFilter{
+		ShardID: m.shardID,
+		TaskID:  &request.TaskID,
+	}); err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("CompleteVisibilityTask operation failed. Error: %v", err))
+	}
+	return nil
+}
+
+func (m *sqlExecutionManager) RangeCompleteVisibilityTask(
+	request *p.RangeCompleteVisibilityTaskRequest,
+) error {
+
+	if _, err := m.db.DeleteFromVisibilityTasks(&sqlplugin.VisibilityTasksFilter{
+		ShardID:   m.shardID,
+		MinTaskID: &request.ExclusiveBeginTaskID,
+		MaxTaskID: &request.InclusiveEndTaskID}); err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteVisibilityTask operation failed. Error: %v", err))
+	}
+	return nil
+}
+
 func (m *sqlExecutionManager) GetReplicationTasks(
 	request *p.GetReplicationTasksRequest,
 ) (*p.GetReplicationTasksResponse, error) {

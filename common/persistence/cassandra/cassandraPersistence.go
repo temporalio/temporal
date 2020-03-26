@@ -2083,6 +2083,10 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 	return response, nil
 }
 
+func (d *cassandraPersistence) GetVisibilityTasks(request *p.GetVisibilityTasksRequest) (*p.GetVisibilityTasksResponse, error) {
+	return nil, nil
+}
+
 func (d *cassandraPersistence) GetReplicationTasks(
 	request *p.GetReplicationTasksRequest,
 ) (*p.GetReplicationTasksResponse, error) {
@@ -2175,6 +2179,16 @@ func (d *cassandraPersistence) RangeCompleteTransferTask(request *p.RangeComplet
 		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
 	}
 
+	return nil
+}
+
+func (d *cassandraPersistence) CompleteVisibilityTask(request *p.CompleteVisibilityTaskRequest) error {
+	// TODO
+	return nil
+}
+
+func (d *cassandraPersistence) RangeCompleteVisibilityTask(request *p.RangeCompleteVisibilityTaskRequest) error {
+	// TODO
 	return nil
 }
 

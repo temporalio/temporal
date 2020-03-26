@@ -289,6 +289,15 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetTransferTasks(request
 	return response, err
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.GetVisibilityTasks(request)
+	return response, err
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
@@ -313,6 +322,24 @@ func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteTransferTas
 	}
 
 	err := p.persistence.RangeCompleteTransferTask(request)
+	return err
+}
+
+func (p *workflowExecutionRateLimitedPersistenceClient) CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.CompleteVisibilityTask(request)
+	return err
+}
+
+func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RangeCompleteVisibilityTask(request)
 	return err
 }
 
