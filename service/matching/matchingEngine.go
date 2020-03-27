@@ -357,8 +357,7 @@ pollLoop:
 			}
 
 			isStickyEnabled := false
-			supportsSticky := e.versionChecker.SupportsStickyQuery(mutableStateResp.GetClientImpl(), mutableStateResp.GetClientFeatureVersion()) == nil
-			if len(mutableStateResp.StickyTaskList.GetName()) != 0 && supportsSticky {
+			if len(mutableStateResp.StickyTaskList.GetName()) != 0 {
 				isStickyEnabled = true
 			}
 			resp := &historyservice.RecordDecisionTaskStartedResponse{
@@ -497,16 +496,6 @@ func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *ma
 		}
 
 		workerResponse := result.workerResponse
-		// if query was intended as consistent query check to see if worker supports consistent query
-		if queryRequest.GetQueryRequest().GetQueryConsistencyLevel() == enums.QueryConsistencyLevelStrong {
-			if err := e.versionChecker.SupportsConsistentQuery(
-				workerResponse.GetCompletedRequest().GetWorkerVersionInfo().GetImpl(),
-				workerResponse.GetCompletedRequest().GetWorkerVersionInfo().GetFeatureVersion()); err != nil {
-				// TODO: this error is swallowed and client gets "deadline exceeded" instead.
-				return nil, err
-			}
-		}
-
 		switch workerResponse.GetCompletedRequest().GetCompletedType() {
 		case enums.QueryTaskCompletedTypeCompleted:
 			return &matchingservice.QueryWorkflowResponse{QueryResult: workerResponse.GetCompletedRequest().GetQueryResult()}, nil
