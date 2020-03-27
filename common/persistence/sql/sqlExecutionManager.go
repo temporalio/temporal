@@ -209,42 +209,43 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.Execution.RunId)
 	wfID := request.Execution.WorkflowId
-	execution, err := m.db.SelectFromExecutions(&sqlplugin.ExecutionsFilter{
+	executionsRow, err := m.db.SelectFromExecutions(&sqlplugin.ExecutionsFilter{
 		ShardID: m.shardID, NamespaceID: namespaceID, WorkflowID: wfID, RunID: runID})
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow executionsRow not found.  WorkflowId: %v, RunId: %v",
 				request.Execution.GetWorkflowId(),
 				request.Execution.GetRunId()))
 		}
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed. Error: %v", err))
 	}
 
-	info, err := serialization.WorkflowExecutionInfoFromBlob(execution.Data, execution.DataEncoding)
+	info, err := serialization.WorkflowExecutionInfoFromBlob(executionsRow.Data, executionsRow.DataEncoding)
 	if err != nil {
 		return nil, err
 	}
 
-	executionState, err := serialization.WorkflowExecutionStateFromBlob(execution.State, execution.StateEncoding)
+	executionState, err := serialization.WorkflowExecutionStateFromBlob(executionsRow.State, executionsRow.StateEncoding)
 	if err != nil {
 		return nil, err
 	}
 
 	// Build partial from proto
-	executionInfo := p.ProtoWorkflowExecutionToPartialInternalExecution(info, executionState, execution.NextEventID)
+	executionInfo := p.ProtoWorkflowExecutionToPartialInternalExecution(info, executionState, executionsRow.NextEventID)
 
 	state := &p.InternalWorkflowMutableState{ExecutionInfo: executionInfo}
 
-	if info.LastWriteEventID != nil {
+	if info.ReplicationData != nil {
 		state.ReplicationState = &p.ReplicationState{}
-		state.ReplicationState.StartVersion = info.GetStartVersion()
-		state.ReplicationState.CurrentVersion = info.GetCurrentVersion()
-		state.ReplicationState.LastWriteVersion = execution.LastWriteVersion
-		state.ReplicationState.LastWriteEventID = info.GetLastWriteEventID().Value
-		state.ReplicationState.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(info.LastReplicationInfo))
-		for k, v := range info.LastReplicationInfo {
-			state.ReplicationState.LastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.LastEventId}
+		state.ReplicationState.StartVersion = info.StartVersion
+		state.ReplicationState.CurrentVersion = info.CurrentVersion
+		state.ReplicationState.LastWriteVersion = executionsRow.LastWriteVersion
+		state.ReplicationState.LastWriteEventID = info.ReplicationData.LastWriteEventID
+		state.ReplicationState.LastReplicationInfo = info.ReplicationData.LastReplicationInfo
+
+		if state.ReplicationState.LastReplicationInfo == nil {
+			state.ReplicationState.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, 0)
 		}
 	}
 
@@ -288,7 +289,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			wfID,
 			runID)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get child execution info. Error: %v", err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get child executionsRow info. Error: %v", err))
 		}
 	}
 
