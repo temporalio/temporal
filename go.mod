@@ -1,6 +1,6 @@
 module github.com/temporalio/temporal
 
-go 1.13
+go 1.14
 
 require (
 	cloud.google.com/go v0.38.0
@@ -67,7 +67,6 @@ require (
 	go.uber.org/multierr v1.5.0
 	go.uber.org/thriftrw v1.20.2
 	go.uber.org/zap v1.14.1
-	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	golang.org/x/tools v0.0.0-20200325194147-644a21fb1449 // indirect
