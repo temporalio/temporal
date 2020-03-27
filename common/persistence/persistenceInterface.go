@@ -814,13 +814,13 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 	info.CurrentVersion = currentVersion
 	if replicationState == nil && versionHistories == nil {
 		// this is allowed
-	} else if replicationState != nil {
+	} else if replicationState != nil && versionHistories == nil {
 		info.LastWriteEventID = &types.Int64Value{Value: replicationState.LastWriteEventID}
 		info.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(replicationState.LastReplicationInfo))
 		for k, v := range replicationState.LastReplicationInfo {
 			info.LastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
 		}
-	} else if versionHistories != nil {
+	} else if versionHistories != nil && replicationState == nil {
 		info.VersionHistories = versionHistories.Data
 		info.VersionHistoriesEncoding = string(versionHistories.GetEncoding())
 	} else {
