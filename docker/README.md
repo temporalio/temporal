@@ -42,9 +42,9 @@ Replace **YOUR_TAG** and **YOUR_CHECKOUT_BRANCH** in the below command to build:
 ```
 cd $GOPATH/src/github.com/temporalio/temporal
 git checkout YOUR_CHECKOUT_BRANCH
-docker build . -t temporalio/temporal:YOUR_TAG --build-arg TARGET=auto-setup
+docker build . -t temporalio/auto-setup:YOUR_TAG --build-arg TARGET=auto-setup
 ```
-Replace the tag of **image: temporalio/temporal** to **YOUR_TAG** in docker-compose.yml .
+Replace the tag of **image: temporalio/auto-setup** to **YOUR_TAG** in docker-compose.yml .
 Then stop service and remove all containers using the below commands.
 ```
 docker-compose down
@@ -90,6 +90,6 @@ docker run -e CASSANDRA_SEEDS=10.x.x.x                  -- csv of cassandra serv
     -e SERVICES=history,matching \                      -- Spinup only the provided services
     -e LOG_LEVEL=debug,info \                           -- Logging level
     -e DYNAMIC_CONFIG_FILE_PATH=config/foo.yaml         -- Dynamic config file to be watched
-    temporalio/temporal:<tag>
+    temporalio/server:<tag>
 ```
 
