@@ -105,7 +105,7 @@ func (p *indexProcessor) Start() error {
 		return err
 	}
 
-	esProcessor, err := NewESProcessorAndStart(p.config, p.esClient, p.esProcessorName, p.logger, p.metricsClient)
+	esProcessor, err := NewESProcessorAndStart(p.config, p.esClient, p.esProcessorName, p.logger, p.metricsClient, p.msgEncoder)
 	if err != nil {
 		p.logger.Info("", tag.LifeCycleStartFailed, tag.Error(err))
 		return err
