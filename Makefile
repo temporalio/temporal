@@ -1,8 +1,17 @@
 ############################# Main targets #############################
-default: update-tools proto check bins
-test: proto check bins unit-test integration-test integration-xdc-test
+# Install all tools and builds binaries.
+install: update-tools proto bins
+
+# Run all possible checks and tests.
+all: proto check bins test
+
+# Rebuild binaries.
 bins: clean-bins proto temporal-server tctl temporal-cassandra-tool temporal-sql-tool temporal-canary
 
+# Delete all build artefacts.
+clean: clean-bins clean-proto clean-test-results
+
+# Update proto submodule from remote and rebuild proto files.
 update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock gomodtidy
 ########################################################################
 
@@ -90,7 +99,7 @@ update-checkers:
 	GO111MODULE=off go get -u github.com/kisielk/errcheck
 
 update-mockgen:
-	@printf $(COLOR) "Install/update mockgen tools..."
+	@printf $(COLOR) "Install/update mockgen tool..."
 	GO111MODULE=off go get -u github.com/golang/mock/mockgen
 
 update-proto-plugins:
@@ -203,11 +212,10 @@ unit-test: clean-test-results proto
 integration-test: clean-test-results proto
 	@printf $(COLOR) "Run integration tests..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(INTEG_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
-
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-integration-xdc-test: clean-test-results proto
-	@printf $(COLOR) "Run xdc integration tests..."
 	@go test -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) | tee -a test.log
+
+test: unit-test integration-test
 
 ##### Coverage #####
 clean-build-results:
