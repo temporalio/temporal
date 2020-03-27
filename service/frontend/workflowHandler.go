@@ -3412,12 +3412,7 @@ func (wh *WorkflowHandler) startRequestProfile(scope int) (metrics.Scope, metric
 
 // startRequestProfileWithDomain initiates recording of request metrics and returns a domain tagged scope
 func (wh *WorkflowHandler) startRequestProfileWithDomain(scope int, d domainGetter) (metrics.Scope, metrics.Stopwatch) {
-	var metricsScope metrics.Scope
-	if d != nil {
-		metricsScope = wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainTag(d.GetDomain()))
-	} else {
-		metricsScope = wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
-	}
+	metricsScope := getMetricsScopeWithDomain(scope, d, wh.GetMetricsClient())
 	sw := metricsScope.StartTimer(metrics.CadenceLatency)
 	metricsScope.IncCounter(metrics.CadenceRequests)
 	return metricsScope, sw

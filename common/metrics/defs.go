@@ -1521,6 +1521,8 @@ const (
 	CadenceErrClientVersionNotSupportedCounter
 	CadenceErrIncompleteHistoryCounter
 	CadenceErrNonDeterministicCounter
+	CadenceErrUnauthorizedCounter
+	CadenceErrAuthorizeFailedCounter
 	PersistenceRequests
 	PersistenceFailures
 	PersistenceLatency
@@ -1543,6 +1545,8 @@ const (
 	CadenceDcRedirectionClientRequests
 	CadenceDcRedirectionClientFailures
 	CadenceDcRedirectionClientLatency
+
+	CadenceAuthorizationLatency
 
 	DomainCachePrepareCallbacksLatency
 	DomainCacheCallbacksLatency
@@ -1890,6 +1894,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceErrClientVersionNotSupportedCounter:          {metricName: "cadence_errors_client_version_not_supported", metricType: Counter},
 		CadenceErrIncompleteHistoryCounter:                  {metricName: "cadence_errors_incomplete_history", metricType: Counter},
 		CadenceErrNonDeterministicCounter:                   {metricName: "cadence_errors_nondeterministic", metricType: Counter},
+		CadenceErrUnauthorizedCounter:                       {metricName: "cadence_errors_unauthorized", metricType: Counter},
+		CadenceErrAuthorizeFailedCounter:                    {metricName: "cadence_errors_authorize_failed", metricType: Counter},
 		PersistenceRequests:                                 {metricName: "persistence_requests", metricType: Counter},
 		PersistenceFailures:                                 {metricName: "persistence_errors", metricType: Counter},
 		PersistenceLatency:                                  {metricName: "persistence_latency", metricType: Timer},
@@ -1910,6 +1916,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceDcRedirectionClientRequests:                  {metricName: "cadence_client_requests_redirection", metricType: Counter},
 		CadenceDcRedirectionClientFailures:                  {metricName: "cadence_client_errors_redirection", metricType: Counter},
 		CadenceDcRedirectionClientLatency:                   {metricName: "cadence_client_latency_redirection", metricType: Timer},
+		CadenceAuthorizationLatency:                         {metricName: "cadence_authorization_latency", metricType: Timer},
 		DomainCachePrepareCallbacksLatency:                  {metricName: "domain_cache_prepare_callbacks_latency", metricType: Timer},
 		DomainCacheCallbacksLatency:                         {metricName: "domain_cache_callbacks_latency", metricType: Timer},
 		HistorySize:                                         {metricName: "history_size", metricType: Timer},

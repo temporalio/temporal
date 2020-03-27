@@ -23,16 +23,14 @@ package frontend
 import (
 	"context"
 
-	"github.com/uber/cadence/common/authorization"
-
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaserver"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/authorization"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/resource"
 )
-
-// TODO(vancexu): add metrics
 
 var errUnauthorized = &shared.BadRequestError{Message: "Request unauthorized."}
 
@@ -100,11 +98,13 @@ func (a *AccessControlledWorkflowHandler) CountWorkflowExecutions(
 	request *shared.CountWorkflowExecutionsRequest,
 ) (*shared.CountWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendCountWorkflowExecutionsScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "CountWorkflowExecutions",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -121,11 +121,13 @@ func (a *AccessControlledWorkflowHandler) DeprecateDomain(
 	request *shared.DeprecateDomainRequest,
 ) error {
 
+	scope := a.getMetricsScopeWithDomainName(metrics.FrontendDeprecateDomainScope, request.GetName())
+
 	attr := &authorization.Attributes{
 		APIName:    "DeprecateDomain",
 		DomainName: request.GetName(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return err
 	}
@@ -142,11 +144,13 @@ func (a *AccessControlledWorkflowHandler) DescribeDomain(
 	request *shared.DescribeDomainRequest,
 ) (*shared.DescribeDomainResponse, error) {
 
+	scope := a.getMetricsScopeWithDomainName(metrics.FrontendDescribeDomainScope, request.GetName())
+
 	attr := &authorization.Attributes{
 		APIName:    "DescribeDomain",
 		DomainName: request.GetName(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -163,11 +167,13 @@ func (a *AccessControlledWorkflowHandler) DescribeTaskList(
 	request *shared.DescribeTaskListRequest,
 ) (*shared.DescribeTaskListResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendDescribeTaskListScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "DescribeTaskList",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -184,11 +190,13 @@ func (a *AccessControlledWorkflowHandler) DescribeWorkflowExecution(
 	request *shared.DescribeWorkflowExecutionRequest,
 ) (*shared.DescribeWorkflowExecutionResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendDescribeWorkflowExecutionScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "DescribeWorkflowExecution",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -212,11 +220,13 @@ func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionHistory(
 	request *shared.GetWorkflowExecutionHistoryRequest,
 ) (*shared.GetWorkflowExecutionHistoryResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendGetWorkflowExecutionHistoryScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "GetWorkflowExecutionHistory",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -233,11 +243,13 @@ func (a *AccessControlledWorkflowHandler) ListArchivedWorkflowExecutions(
 	request *shared.ListArchivedWorkflowExecutionsRequest,
 ) (*shared.ListArchivedWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendListArchivedWorkflowExecutionsScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "ListArchivedWorkflowExecutions",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -254,11 +266,13 @@ func (a *AccessControlledWorkflowHandler) ListClosedWorkflowExecutions(
 	request *shared.ListClosedWorkflowExecutionsRequest,
 ) (*shared.ListClosedWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendListClosedWorkflowExecutionsScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "ListClosedWorkflowExecutions",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -275,10 +289,12 @@ func (a *AccessControlledWorkflowHandler) ListDomains(
 	request *shared.ListDomainsRequest,
 ) (*shared.ListDomainsResponse, error) {
 
+	scope := a.GetResource().GetMetricsClient().Scope(metrics.FrontendListDomainsScope)
+
 	attr := &authorization.Attributes{
 		APIName: "ListDomains",
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -295,11 +311,13 @@ func (a *AccessControlledWorkflowHandler) ListOpenWorkflowExecutions(
 	request *shared.ListOpenWorkflowExecutionsRequest,
 ) (*shared.ListOpenWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendListOpenWorkflowExecutionsScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "ListOpenWorkflowExecutions",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -316,11 +334,13 @@ func (a *AccessControlledWorkflowHandler) ListWorkflowExecutions(
 	request *shared.ListWorkflowExecutionsRequest,
 ) (*shared.ListWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendListWorkflowExecutionsScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "ListWorkflowExecutions",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -337,11 +357,13 @@ func (a *AccessControlledWorkflowHandler) PollForActivityTask(
 	request *shared.PollForActivityTaskRequest,
 ) (*shared.PollForActivityTaskResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendPollForActivityTaskScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "PollForActivityTask",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -358,11 +380,13 @@ func (a *AccessControlledWorkflowHandler) PollForDecisionTask(
 	request *shared.PollForDecisionTaskRequest,
 ) (*shared.PollForDecisionTaskResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendPollForDecisionTaskScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "PollForDecisionTask",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -379,11 +403,13 @@ func (a *AccessControlledWorkflowHandler) QueryWorkflow(
 	request *shared.QueryWorkflowRequest,
 ) (*shared.QueryWorkflowResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendQueryWorkflowScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "QueryWorkflow",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -424,11 +450,13 @@ func (a *AccessControlledWorkflowHandler) RegisterDomain(
 	request *shared.RegisterDomainRequest,
 ) error {
 
+	scope := a.getMetricsScopeWithDomainName(metrics.FrontendRegisterDomainScope, request.GetName())
+
 	attr := &authorization.Attributes{
 		APIName:    "RegisterDomain",
 		DomainName: request.GetName(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return err
 	}
@@ -445,11 +473,13 @@ func (a *AccessControlledWorkflowHandler) RequestCancelWorkflowExecution(
 	request *shared.RequestCancelWorkflowExecutionRequest,
 ) error {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendRequestCancelWorkflowExecutionScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "RequestCancelWorkflowExecution",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return err
 	}
@@ -466,11 +496,13 @@ func (a *AccessControlledWorkflowHandler) ResetStickyTaskList(
 	request *shared.ResetStickyTaskListRequest,
 ) (*shared.ResetStickyTaskListResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendResetStickyTaskListScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "ResetStickyTaskList",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -487,11 +519,13 @@ func (a *AccessControlledWorkflowHandler) ResetWorkflowExecution(
 	request *shared.ResetWorkflowExecutionRequest,
 ) (*shared.ResetWorkflowExecutionResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendResetWorkflowExecutionScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "ResetWorkflowExecution",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -580,11 +614,13 @@ func (a *AccessControlledWorkflowHandler) ScanWorkflowExecutions(
 	request *shared.ListWorkflowExecutionsRequest,
 ) (*shared.ListWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendScanWorkflowExecutionsScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "ScanWorkflowExecutions",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -601,11 +637,13 @@ func (a *AccessControlledWorkflowHandler) SignalWithStartWorkflowExecution(
 	request *shared.SignalWithStartWorkflowExecutionRequest,
 ) (*shared.StartWorkflowExecutionResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendSignalWithStartWorkflowExecutionScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "SignalWithStartWorkflowExecution",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -622,11 +660,13 @@ func (a *AccessControlledWorkflowHandler) SignalWorkflowExecution(
 	request *shared.SignalWorkflowExecutionRequest,
 ) error {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendSignalWorkflowExecutionScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "SignalWorkflowExecution",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return err
 	}
@@ -643,11 +683,13 @@ func (a *AccessControlledWorkflowHandler) StartWorkflowExecution(
 	request *shared.StartWorkflowExecutionRequest,
 ) (*shared.StartWorkflowExecutionResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendStartWorkflowExecutionScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "StartWorkflowExecution",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -664,11 +706,13 @@ func (a *AccessControlledWorkflowHandler) TerminateWorkflowExecution(
 	request *shared.TerminateWorkflowExecutionRequest,
 ) error {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendTerminateWorkflowExecutionScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "TerminateWorkflowExecution",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return err
 	}
@@ -685,11 +729,13 @@ func (a *AccessControlledWorkflowHandler) ListTaskListPartitions(
 	request *shared.ListTaskListPartitionsRequest,
 ) (*shared.ListTaskListPartitionsResponse, error) {
 
+	scope := a.getMetricsScopeWithDomain(metrics.FrontendListTaskListPartitionsScope, request)
+
 	attr := &authorization.Attributes{
 		APIName:    "ListTaskListPartitions",
 		DomainName: request.GetDomain(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -706,11 +752,13 @@ func (a *AccessControlledWorkflowHandler) UpdateDomain(
 	request *shared.UpdateDomainRequest,
 ) (*shared.UpdateDomainResponse, error) {
 
+	scope := a.getMetricsScopeWithDomainName(metrics.FrontendUpdateDomainScope, request.GetName())
+
 	attr := &authorization.Attributes{
 		APIName:    "UpdateDomain",
 		DomainName: request.GetName(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -724,10 +772,49 @@ func (a *AccessControlledWorkflowHandler) UpdateDomain(
 func (a *AccessControlledWorkflowHandler) isAuthorized(
 	ctx context.Context,
 	attr *authorization.Attributes,
+	scope metrics.Scope,
 ) (bool, error) {
+	sw := scope.StartTimer(metrics.CadenceAuthorizationLatency)
+	defer sw.Stop()
+
 	result, err := a.authorizer.Authorize(ctx, attr)
 	if err != nil {
+		scope.IncCounter(metrics.CadenceErrAuthorizeFailedCounter)
 		return false, err
 	}
-	return result.Decision == authorization.DecisionAllow, nil
+	isAuth := result.Decision == authorization.DecisionAllow
+	if !isAuth {
+		scope.IncCounter(metrics.CadenceErrUnauthorizedCounter)
+	}
+	return isAuth, nil
+}
+
+// getMetricsScopeWithDomain return metrics scope with domain tag
+func (a *AccessControlledWorkflowHandler) getMetricsScopeWithDomain(
+	scope int,
+	d domainGetter,
+) metrics.Scope {
+	return getMetricsScopeWithDomain(scope, d, a.GetResource().GetMetricsClient())
+}
+
+func getMetricsScopeWithDomain(
+	scope int,
+	d domainGetter,
+	metricsClient metrics.Client,
+) metrics.Scope {
+	var metricsScope metrics.Scope
+	if d != nil {
+		metricsScope = metricsClient.Scope(scope).Tagged(metrics.DomainTag(d.GetDomain()))
+	} else {
+		metricsScope = metricsClient.Scope(scope).Tagged(metrics.DomainUnknownTag())
+	}
+	return metricsScope
+}
+
+// getMetricsScopeWithDomainName is for XXXDomain APIs, whose request is not domainGetter
+func (a *AccessControlledWorkflowHandler) getMetricsScopeWithDomainName(
+	scope int,
+	domainName string,
+) metrics.Scope {
+	return a.GetResource().GetMetricsClient().Scope(scope).Tagged(metrics.DomainTag(domainName))
 }
