@@ -21,8 +21,7 @@ RUN go mod download
 
 COPY . .
 
-
-RUN CGO_ENABLED=0 make proto copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server
+RUN CGO_ENABLED=0 make
 
 # Download dockerize
 FROM alpine:3.11 AS dockerize
