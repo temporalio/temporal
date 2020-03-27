@@ -4,7 +4,7 @@ ARG TARGET=server
 ARG GOPROXY
 
 # Build Temporal binaries
-FROM golang:1.13.6-alpine AS builder
+FROM golang:1.14-alpine AS builder
 
 RUN apk add --update --no-cache ca-certificates make curl git mercurial bzr protobuf
 
@@ -21,8 +21,7 @@ RUN go mod download
 
 COPY . .
 
-
-RUN CGO_ENABLED=0 make proto copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server
+RUN CGO_ENABLED=0 make
 
 # Download dockerize
 FROM alpine:3.11 AS dockerize
