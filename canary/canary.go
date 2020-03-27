@@ -45,11 +45,11 @@ type (
 	}
 
 	canaryImpl struct {
-		canaryClient   cadenceClient
-		canaryDomain   string
-		archivalClient cadenceClient
-		systemClient   cadenceClient
-		runtime        *RuntimeContext
+		canaryClient    cadenceClient
+		canaryNamespace string
+		archivalClient  cadenceClient
+		systemClient    cadenceClient
+		runtime         *RuntimeContext
 	}
 
 	activityContext struct {
@@ -66,25 +66,25 @@ const (
 )
 
 // new returns a new instance of Canary runnable
-func newCanary(domain string, rc *RuntimeContext) (Runnable, error) {
-	canaryClient, err := newCadenceClient(domain, rc)
+func newCanary(namespace string, rc *RuntimeContext) (Runnable, error) {
+	canaryClient, err := newCadenceClient(namespace, rc)
 	if err != nil {
 		return nil, err
 	}
-	archivalClient, err := newCadenceClient(archivalDomain, rc)
+	archivalClient, err := newCadenceClient(archivalNamespace, rc)
 	if err != nil {
 		return nil, err
 	}
-	systemClient, err := newCadenceClient(systemDomain, rc)
+	systemClient, err := newCadenceClient(systemNamespace, rc)
 	if err != nil {
 		return nil, err
 	}
 	return &canaryImpl{
-		canaryClient:   canaryClient,
-		canaryDomain:   domain,
-		archivalClient: archivalClient,
-		systemClient:   systemClient,
-		runtime:        rc,
+		canaryClient:    canaryClient,
+		canaryNamespace: namespace,
+		archivalClient:  archivalClient,
+		systemClient:    systemClient,
+		runtime:         rc,
 	}, nil
 }
 
@@ -93,13 +93,13 @@ func (c *canaryImpl) Run() error {
 	var err error
 	log := c.runtime.logger
 
-	if err = c.createDomain(); err != nil {
-		log.Error("createDomain failed", zap.Error(err))
+	if err = c.createNamespace(); err != nil {
+		log.Error("createNamespace failed", zap.Error(err))
 		return err
 	}
 
-	if err = c.createArchivalDomain(); err != nil {
-		log.Error("createArchivalDomain failed", zap.Error(err))
+	if err = c.createArchivalNamespace(); err != nil {
+		log.Error("createArchivalNamespace failed", zap.Error(err))
 		return err
 	}
 
@@ -156,7 +156,7 @@ func (c *canaryImpl) startCronWorkflow() {
 	span := opentracing.StartSpan("start-cron-workflow-span")
 	defer span.Finish()
 	ctx = opentracing.ContextWithSpan(ctx, span)
-	_, err := c.canaryClient.ExecuteWorkflow(ctx, opts, cronWorkflow, c.canaryDomain, wfTypeSanity)
+	_, err := c.canaryClient.ExecuteWorkflow(ctx, opts, cronWorkflow, c.canaryNamespace, wfTypeSanity)
 	if err != nil {
 		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); !ok {
 			c.runtime.logger.Error("error starting cron workflow", zap.Error(err))
@@ -173,19 +173,19 @@ func (c *canaryImpl) newActivityContext() context.Context {
 	return overrideWorkerOptions(ctx)
 }
 
-func (c *canaryImpl) createDomain() error {
-	name := c.canaryDomain
-	desc := "Domain for running cadence canary workflows"
+func (c *canaryImpl) createNamespace() error {
+	name := c.canaryNamespace
+	desc := "Namespace for running cadence canary workflows"
 	owner := "canary"
-	return c.canaryClient.createDomain(name, desc, owner, enums.ArchivalStatusDisabled)
+	return c.canaryClient.createNamespace(name, desc, owner, enums.ArchivalStatusDisabled)
 }
 
-func (c *canaryImpl) createArchivalDomain() error {
-	name := archivalDomain
-	desc := "Domain used by cadence canary workflows to verify archival"
+func (c *canaryImpl) createArchivalNamespace() error {
+	name := archivalNamespace
+	desc := "Namespace used by cadence canary workflows to verify archival"
 	owner := "canary"
 	archivalStatus := enums.ArchivalStatusEnabled
-	return c.archivalClient.createDomain(name, desc, owner, archivalStatus)
+	return c.archivalClient.createNamespace(name, desc, owner, archivalStatus)
 }
 
 // Override worker options to create large number of pollers to improve the chances of activities getting sync matched

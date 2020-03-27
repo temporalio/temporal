@@ -49,9 +49,9 @@ func NewCliApp() *cli.App {
 			EnvVar: "TEMPORAL_CLI_ADDRESS",
 		},
 		cli.StringFlag{
-			Name:   FlagDomainWithAlias,
+			Name:   FlagNamespaceWithAlias,
 			Value:  "default",
-			Usage:  "temporal workflow domain",
+			Usage:  "temporal workflow namespace",
 			EnvVar: "TEMPORAL_CLI_DOMAIN",
 		},
 		cli.IntFlag{
@@ -63,10 +63,10 @@ func NewCliApp() *cli.App {
 	}
 	app.Commands = []cli.Command{
 		{
-			Name:        "domain",
+			Name:        "namespace",
 			Aliases:     []string{"d"},
-			Usage:       "Operate temporal domain",
-			Subcommands: newDomainCommands(),
+			Usage:       "Operate temporal namespace",
+			Subcommands: newNamespaceCommands(),
 		},
 		{
 			Name:        "workflow",
@@ -110,10 +110,10 @@ func NewCliApp() *cli.App {
 					Subcommands: newAdminKafkaCommands(),
 				},
 				{
-					Name:        "domain",
+					Name:        "namespace",
 					Aliases:     []string{"d"},
-					Usage:       "Run admin operation on domain",
-					Subcommands: newAdminDomainCommands(),
+					Usage:       "Run admin operation on namespace",
+					Subcommands: newAdminNamespaceCommands(),
 				},
 				{
 					Name:        "elasticsearch",

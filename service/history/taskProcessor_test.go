@@ -122,7 +122,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 	)
 }
 
-func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr() {
+func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoErr() {
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	var taskFilterErr taskFilter = func(task queueTaskInfo) (bool, error) {
 		return false, errors.New("some random error")
@@ -134,14 +134,14 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr()
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(1)
+	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespace, nil).Times(1)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
 	)
 }
 
-func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
+func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr() {
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	task.shouldProcessTask = false
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
@@ -150,14 +150,14 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(1)
+	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespace, nil).Times(1)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
 	)
 }
 
-func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
+func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() {
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
@@ -165,14 +165,14 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(1)
+	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespace, nil).Times(1)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
 	)
 }
 
-func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessErrNoErr() {
+func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr() {
 	err := errors.New("some random err")
 	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
@@ -182,7 +182,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessErrNoErr() 
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, err).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(2)
+	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespace, nil).Times(2)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
@@ -219,11 +219,11 @@ func (s *taskProcessorSuite) TestHandleTaskError_ErrTaskDiscarded() {
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }
 
-func (s *taskProcessorSuite) TestHandleTaskError_DomainNotActiveError() {
-	err := serviceerror.NewDomainNotActive("", "", "")
+func (s *taskProcessorSuite) TestHandleTaskError_NamespaceNotActiveError() {
+	err := serviceerror.NewNamespaceNotActive("", "", "")
 
 	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
-	taskInfo.startTime = time.Now().Add(-cache.DomainCacheRefreshInterval * time.Duration(2))
+	taskInfo.startTime = time.Now().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(2))
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 
 	taskInfo.startTime = time.Now()

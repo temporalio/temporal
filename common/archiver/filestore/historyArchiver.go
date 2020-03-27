@@ -21,7 +21,7 @@
 // Filestore History Archiver will archive workflow histories to local disk.
 
 // Each Archive() request results in a file named in the format of
-// hash(domainID, workflowID, runID)_version.history being created in the specified
+// hash(namespaceID, workflowID, runID)_version.history being created in the specified
 // directory. Workflow histories stored in that file are encoded in JSON format.
 
 // The Get() method retrieves the archived histories from the directory specified in the
@@ -178,7 +178,7 @@ func (h *historyArchiver) Archive(
 		return err
 	}
 
-	filename := constructHistoryFilename(request.DomainID, request.WorkflowID, request.RunID, request.CloseFailoverVersion)
+	filename := constructHistoryFilename(request.NamespaceID, request.WorkflowID, request.RunID, request.CloseFailoverVersion)
 	if err := writeFile(path.Join(dirPath, filename), encodedHistoryBatches, h.fileMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return err
@@ -231,7 +231,7 @@ func (h *historyArchiver) Get(
 		}
 	}
 
-	filename := constructHistoryFilename(request.DomainID, request.WorkflowID, request.RunID, token.CloseFailoverVersion)
+	filename := constructHistoryFilename(request.NamespaceID, request.WorkflowID, request.RunID, token.CloseFailoverVersion)
 	filepath := path.Join(dirPath, filename)
 	exists, err = fileExists(filepath)
 	if err != nil {
@@ -304,7 +304,7 @@ func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIte
 }
 
 func getHighestVersion(dirPath string, request *archiver.GetHistoryRequest) (*int64, error) {
-	filenames, err := listFilesByPrefix(dirPath, constructHistoryFilenamePrefix(request.DomainID, request.WorkflowID, request.RunID))
+	filenames, err := listFilesByPrefix(dirPath, constructHistoryFilenamePrefix(request.NamespaceID, request.WorkflowID, request.RunID))
 	if err != nil {
 		return nil, err
 	}

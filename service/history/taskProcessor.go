@@ -196,7 +196,7 @@ FilterLoop:
 			if err == nil {
 				break FilterLoop
 			}
-			time.Sleep(loadDomainEntryForTimerTaskRetryDelay)
+			time.Sleep(loadNamespaceEntryForTimerTaskRetryDelay)
 		}
 	}
 
@@ -249,7 +249,7 @@ func (t *taskProcessor) processTaskOnce(
 
 	startTime := t.timeSource.Now()
 	scopeIdx, err := task.processor.process(task)
-	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getDomainTagByID(primitives.UUIDString(task.task.GetDomainID())))
+	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(primitives.UUIDString(task.task.GetNamespaceID())))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
 		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
@@ -288,8 +288,8 @@ func (t *taskProcessor) handleTaskError(
 	// this is a transient error
 	// TODO remove this error check special case
 	//  since the new task life cycle will not give up until task processed / verified
-	if _, ok := err.(*serviceerror.DomainNotActive); ok {
-		if t.timeSource.Now().Sub(task.startTime) > 2*cache.DomainCacheRefreshInterval {
+	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
+		if t.timeSource.Now().Sub(task.startTime) > 2*cache.NamespaceCacheRefreshInterval {
 			scope.IncCounter(metrics.TaskNotActiveCounter)
 			return nil
 		}
@@ -322,11 +322,11 @@ func (t *taskProcessor) ackTaskOnce(
 	}
 }
 
-func (t *taskProcessor) getDomainTagByID(domainID string) metrics.Tag {
-	domainName, err := t.shard.GetDomainCache().GetDomainName(domainID)
+func (t *taskProcessor) getNamespaceTagByID(namespaceID string) metrics.Tag {
+	namespace, err := t.shard.GetNamespaceCache().GetNamespace(namespaceID)
 	if err != nil {
-		t.logger.Error("Unable to get domainName", tag.Error(err))
-		return metrics.DomainUnknownTag()
+		t.logger.Error("Unable to get namespace", tag.Error(err))
+		return metrics.NamespaceUnknownTag()
 	}
-	return metrics.DomainTag(domainName)
+	return metrics.NamespaceTag(namespace)
 }

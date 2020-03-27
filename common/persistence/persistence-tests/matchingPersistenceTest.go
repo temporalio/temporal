@@ -71,14 +71,14 @@ func (s *MatchingPersistenceSuite) SetupTest() {
 
 // TestCreateTask test
 func (s *MatchingPersistenceSuite) TestCreateTask() {
-	domainID := primitives.MustParseUUID("11adbd1b-f164-4ea7-b2f3-2e857a5048f1")
+	namespaceID := primitives.MustParseUUID("11adbd1b-f164-4ea7-b2f3-2e857a5048f1")
 	workflowExecution := commonproto.WorkflowExecution{WorkflowId: "create-task-test",
 		RunId: "c949447a-691a-4132-8b2a-a5b38106793c"}
-	task0, err0 := s.CreateDecisionTask(domainID, workflowExecution, "a5b38106793c", 5)
+	task0, err0 := s.CreateDecisionTask(namespaceID, workflowExecution, "a5b38106793c", 5)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
-	tasks1, err1 := s.CreateActivityTasks(domainID, workflowExecution, map[int64]string{
+	tasks1, err1 := s.CreateActivityTasks(namespaceID, workflowExecution, map[int64]string{
 		10: "a5b38106793c"})
 	s.NoError(err1)
 	s.NotNil(tasks1, "Expected valid task identifiers.")
@@ -94,15 +94,15 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		50: uuid.New(),
 		60: uuid.New(),
 	}
-	tasks2, err2 := s.CreateActivityTasks(domainID, workflowExecution, tasks)
+	tasks2, err2 := s.CreateActivityTasks(namespaceID, workflowExecution, tasks)
 	s.NoError(err2)
 	s.Equal(5, len(tasks2), "expected single valid task identifier.")
 
 	for sid, tlName := range tasks {
-		resp, err := s.GetTasks(domainID, tlName, p.TaskListTypeActivity, 100)
+		resp, err := s.GetTasks(namespaceID, tlName, p.TaskListTypeActivity, 100)
 		s.NoError(err)
 		s.Equal(1, len(resp.Tasks))
-		s.EqualValues(domainID, resp.Tasks[0].Data.DomainID)
+		s.EqualValues(namespaceID, resp.Tasks[0].Data.NamespaceID)
 		s.Equal(workflowExecution.WorkflowId, resp.Tasks[0].Data.WorkflowID)
 		s.EqualValues(primitives.MustParseUUID(workflowExecution.RunId), resp.Tasks[0].Data.RunID)
 		s.Equal(sid, resp.Tasks[0].Data.ScheduleID)
@@ -121,15 +121,15 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 
 // TestGetDecisionTasks test
 func (s *MatchingPersistenceSuite) TestGetDecisionTasks() {
-	domainID := primitives.MustParseUUID("aeac8287-527b-4b35-80a9-667cb47e7c6d")
+	namespaceID := primitives.MustParseUUID("aeac8287-527b-4b35-80a9-667cb47e7c6d")
 	workflowExecution := commonproto.WorkflowExecution{WorkflowId: "get-decision-task-test",
 		RunId: "db20f7e2-1a1e-40d9-9278-d8b886738e05"}
 	taskList := "d8b886738e05"
-	task0, err0 := s.CreateDecisionTask(domainID, workflowExecution, taskList, 5)
+	task0, err0 := s.CreateDecisionTask(namespaceID, workflowExecution, taskList, 5)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
-	tasks1Response, err1 := s.GetTasks(domainID, taskList, p.TaskListTypeDecision, 1)
+	tasks1Response, err1 := s.GetTasks(namespaceID, taskList, p.TaskListTypeDecision, 1)
 	s.NoError(err1)
 	s.NotNil(tasks1Response.Tasks, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 decision task.")
@@ -141,11 +141,11 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 	if s.TaskMgr.GetName() == "cassandra" {
 		s.T().Skip("this test is not applicable for cassandra persistence")
 	}
-	domainID := primitives.MustParseUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
+	namespaceID := primitives.MustParseUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
 	workflowExecution := commonproto.WorkflowExecution{WorkflowId: "complete-decision-task-test",
 		RunId: "2aa0a74e-16ee-4f27-983d-48b07ec1915d"}
 	taskList := "48b07ec1915d"
-	_, err0 := s.CreateActivityTasks(domainID, workflowExecution, map[int64]string{
+	_, err0 := s.CreateActivityTasks(namespaceID, workflowExecution, map[int64]string{
 		10: taskList,
 		20: taskList,
 		30: taskList,
@@ -170,11 +170,11 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 	for _, tc := range testCases {
 		s.Run(fmt.Sprintf("tc_%v_%v", tc.batchSz, tc.readLevel), func() {
 			response, err := s.TaskMgr.GetTasks(&p.GetTasksRequest{
-				DomainID:  domainID,
-				TaskList:  taskList,
-				TaskType:  p.TaskListTypeActivity,
-				BatchSize: tc.batchSz,
-				ReadLevel: tc.readLevel,
+				NamespaceID: namespaceID,
+				TaskList:    taskList,
+				TaskType:    p.TaskListTypeActivity,
+				BatchSize:   tc.batchSz,
+				ReadLevel:   tc.readLevel,
 			})
 			s.NoError(err)
 			s.Equal(len(tc.taskIDs), len(response.Tasks), "wrong number of tasks")
@@ -187,11 +187,11 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 
 // TestCompleteDecisionTask test
 func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
-	domainID := primitives.MustParseUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
+	namespaceID := primitives.MustParseUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
 	workflowExecution := commonproto.WorkflowExecution{WorkflowId: "complete-decision-task-test",
 		RunId: "2aa0a74e-16ee-4f27-983d-48b07ec1915d"}
 	taskList := "48b07ec1915d"
-	tasks0, err0 := s.CreateActivityTasks(domainID, workflowExecution, map[int64]string{
+	tasks0, err0 := s.CreateActivityTasks(namespaceID, workflowExecution, map[int64]string{
 		10: taskList,
 		20: taskList,
 		30: taskList,
@@ -205,7 +205,7 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 		s.NotEmpty(t, "Expected non empty task identifier.")
 	}
 
-	tasksWithID1Response, err1 := s.GetTasks(domainID, taskList, p.TaskListTypeActivity, 5)
+	tasksWithID1Response, err1 := s.GetTasks(namespaceID, taskList, p.TaskListTypeActivity, 5)
 
 	s.NoError(err1)
 	tasksWithID1 := tasksWithID1Response.Tasks
@@ -213,25 +213,25 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 
 	s.Equal(5, len(tasksWithID1), "Expected 5 activity tasks.")
 	for _, t := range tasksWithID1 {
-		s.EqualValues(domainID, t.Data.DomainID)
+		s.EqualValues(namespaceID, t.Data.NamespaceID)
 		s.Equal(workflowExecution.WorkflowId, t.Data.WorkflowID)
 		s.EqualValues(primitives.MustParseUUID(workflowExecution.RunId), t.Data.RunID)
 		s.True(t.TaskID > 0)
 
-		err2 := s.CompleteTask(domainID, taskList, p.TaskListTypeActivity, t.TaskID)
+		err2 := s.CompleteTask(namespaceID, taskList, p.TaskListTypeActivity, t.TaskID)
 		s.NoError(err2)
 	}
 }
 
 // TestCompleteTasksLessThan test
 func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	taskList := "range-complete-task-tl0"
 	wfExec := commonproto.WorkflowExecution{
 		WorkflowId: "range-complete-task-test",
 		RunId:      uuid.New(),
 	}
-	_, err := s.CreateActivityTasks(domainID, wfExec, map[int64]string{
+	_, err := s.CreateActivityTasks(namespaceID, wfExec, map[int64]string{
 		10: taskList,
 		20: taskList,
 		30: taskList,
@@ -241,7 +241,7 @@ func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 	})
 	s.NoError(err)
 
-	resp, err := s.GetTasks(domainID, taskList, p.TaskListTypeActivity, 10)
+	resp, err := s.GetTasks(namespaceID, taskList, p.TaskListTypeActivity, 10)
 	s.NoError(err)
 	s.NotNil(resp.Tasks)
 	s.Equal(6, len(resp.Tasks), "getTasks returned wrong number of tasks")
@@ -271,14 +271,14 @@ func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 	}
 
 	remaining := len(resp.Tasks)
-	req := &p.CompleteTasksLessThanRequest{DomainID: domainID, TaskListName: taskList, TaskType: p.TaskListTypeActivity, Limit: 1}
+	req := &p.CompleteTasksLessThanRequest{NamespaceID: namespaceID, TaskListName: taskList, TaskType: p.TaskListTypeActivity, Limit: 1}
 
 	for _, tc := range testCases {
 		req.TaskID = tc.taskID
 		req.Limit = tc.limit
 		nRows, err := s.TaskMgr.CompleteTasksLessThan(req)
 		s.NoError(err)
-		resp, err := s.GetTasks(domainID, taskList, p.TaskListTypeActivity, 10)
+		resp, err := s.GetTasks(namespaceID, taskList, p.TaskListTypeActivity, 10)
 		s.NoError(err)
 		if nRows == p.UnknownNumRowsAffected {
 			s.Equal(0, len(resp.Tasks), "expected all tasks to be deleted")
@@ -295,13 +295,13 @@ func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 
 // TestLeaseAndUpdateTaskList test
 func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
-	domainID := primitives.MustParseUUID("00136543-72ad-4615-b7e9-44bca9775b45")
+	namespaceID := primitives.MustParseUUID("00136543-72ad-4615-b7e9-44bca9775b45")
 	taskList := "aaaaaaa"
 	leaseTime := time.Now()
 	response, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-		DomainID: domainID,
-		TaskList: taskList,
-		TaskType: p.TaskListTypeActivity,
+		NamespaceID: namespaceID,
+		TaskList:    taskList,
+		TaskType:    p.TaskListTypeActivity,
 	})
 	s.NoError(err)
 	tli := response.TaskListInfo
@@ -313,9 +313,9 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 
 	leaseTime = time.Now()
 	response, err = s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-		DomainID: domainID,
-		TaskList: taskList,
-		TaskType: p.TaskListTypeActivity,
+		NamespaceID: namespaceID,
+		TaskList:    taskList,
+		TaskType:    p.TaskListTypeActivity,
 	})
 	s.NoError(err)
 	tli = response.TaskListInfo
@@ -327,21 +327,21 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	s.True(lu2.After(leaseTime) || lu2.Equal(leaseTime))
 
 	response, err = s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-		DomainID: domainID,
-		TaskList: taskList,
-		TaskType: p.TaskListTypeActivity,
-		RangeID:  1,
+		NamespaceID: namespaceID,
+		TaskList:    taskList,
+		TaskType:    p.TaskListTypeActivity,
+		RangeID:     1,
 	})
 	s.Error(err)
 	_, ok := err.(*p.ConditionFailedError)
 	s.True(ok)
 
 	taskListInfo := &persistenceblobs.TaskListInfo{
-		DomainID: domainID,
-		Name:     taskList,
-		TaskType: p.TaskListTypeActivity,
-		AckLevel: 0,
-		Kind:     p.TaskListKindNormal,
+		NamespaceID: namespaceID,
+		Name:        taskList,
+		TaskType:    p.TaskListTypeActivity,
+		AckLevel:    0,
+		Kind:        p.TaskListKindNormal,
 	}
 
 	_, err = s.TaskMgr.UpdateTaskList(&p.UpdateTaskListRequest{
@@ -359,10 +359,10 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 
 // TestLeaseAndUpdateTaskListSticky test
 func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskListSticky() {
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	taskList := "aaaaaaa"
 	response, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-		DomainID:     domainID,
+		NamespaceID:  namespaceID,
 		TaskList:     taskList,
 		TaskType:     p.TaskListTypeDecision,
 		TaskListKind: p.TaskListKindSticky,
@@ -374,11 +374,11 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskListSticky() {
 	s.EqualValues(p.TaskListKindSticky, tli.Data.Kind)
 
 	taskListInfo := &persistenceblobs.TaskListInfo{
-		DomainID: domainID,
-		Name:     taskList,
-		TaskType: p.TaskListTypeDecision,
-		AckLevel: 0,
-		Kind:     p.TaskListKindSticky,
+		NamespaceID: namespaceID,
+		Name:        taskList,
+		TaskType:    p.TaskListTypeDecision,
+		AckLevel:    0,
+		Kind:        p.TaskListKindSticky,
 	}
 	_, err = s.TaskMgr.UpdateTaskList(&p.UpdateTaskListRequest{
 		TaskListInfo: taskListInfo,
@@ -396,9 +396,9 @@ func (s *MatchingPersistenceSuite) deleteAllTaskList() {
 			it := i.Data
 			err = s.TaskMgr.DeleteTaskList(&p.DeleteTaskListRequest{
 				TaskList: &p.TaskListKey{
-					DomainID: it.DomainID,
-					Name:     it.Name,
-					TaskType: it.TaskType,
+					NamespaceID: it.NamespaceID,
+					Name:        it.Name,
+					TaskType:    it.TaskType,
 				},
 				RangeID: i.RangeID,
 			})
@@ -424,12 +424,12 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 
 	rangeID := int64(0)
 	ackLevel := int64(0)
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	for i := 0; i < 10; i++ {
 		rangeID++
 		updatedTime := time.Now().UTC()
 		_, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-			DomainID:     domainID,
+			NamespaceID:  namespaceID,
 			TaskList:     "list-task-list-test-tl0",
 			TaskType:     p.TaskListTypeActivity,
 			TaskListKind: p.TaskListKindSticky,
@@ -440,7 +440,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 		s.NoError(err)
 
 		s.Equal(1, len(resp.Items))
-		s.EqualValues(domainID, resp.Items[0].Data.DomainID)
+		s.EqualValues(namespaceID, resp.Items[0].Data.NamespaceID)
 		s.Equal("list-task-list-test-tl0", resp.Items[0].Data.Name)
 		s.Equal(p.TaskListTypeActivity, resp.Items[0].Data.TaskType)
 		s.EqualValues(p.TaskListKindSticky, resp.Items[0].Data.Kind)
@@ -477,12 +477,12 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskList() {
 		s.T().Skip("ListTaskList API is currently not supported in cassandra")
 	}
 	s.deleteAllTaskList()
-	domainID := uuid.New()
+	namespaceID := uuid.New()
 	tlNames := make(map[string]struct{})
 	for i := 0; i < 10; i++ {
 		name := fmt.Sprintf("test-list-with-multiple-%v", i)
 		_, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-			DomainID:     primitives.MustParseUUID(domainID),
+			NamespaceID:  primitives.MustParseUUID(namespaceID),
 			TaskList:     name,
 			TaskType:     p.TaskListTypeActivity,
 			TaskListKind: p.TaskListKindNormal,
@@ -496,7 +496,7 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskList() {
 			s.NoError(err)
 			for _, i := range resp.Items {
 				it := i.Data
-				s.EqualValues(primitives.MustParseUUID(domainID), it.DomainID)
+				s.EqualValues(primitives.MustParseUUID(namespaceID), it.NamespaceID)
 				s.Equal(p.TaskListTypeActivity, it.TaskType)
 				s.Equal(p.TaskListKindNormal, it.Kind)
 				_, ok := listedNames[it.Name]

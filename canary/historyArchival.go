@@ -90,7 +90,7 @@ func historyArchivalActivity(ctx context.Context, scheduledTimeNanos int64) erro
 		return err
 	}
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain:    archivalDomain,
+		Namespace: archivalNamespace,
 		Execution: execution,
 	}
 
@@ -118,7 +118,7 @@ func historyArchivalActivity(ctx context.Context, scheduledTimeNanos int64) erro
 	}
 	activity.GetLogger(ctx).Error("failed to get archived history within time limit",
 		zap.String("failure_reason", failureReason),
-		zap.String("domain", archivalDomain),
+		zap.String("namespace", archivalNamespace),
 		zap.String("workflow_id", execution.GetWorkflowId()),
 		zap.String("run_id", execution.GetRunId()),
 		zap.Int("attempts", attempts))

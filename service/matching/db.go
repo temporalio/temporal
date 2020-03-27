@@ -34,7 +34,7 @@ import (
 type (
 	taskListDB struct {
 		sync.Mutex
-		domainID     primitives.UUID
+		namespaceID  primitives.UUID
 		taskListName string
 		taskListKind int32
 		taskType     int32
@@ -59,9 +59,9 @@ type (
 // - To provide the guarantee that there is only writer who updates taskList in persistence at any given point in time
 //   This guarantee makes some of the other code simpler and there is no impact to perf because updates to tasklist are
 //   spread out and happen in background routines
-func newTaskListDB(store persistence.TaskManager, domainID primitives.UUID, name string, taskType int32, kind int32, logger log.Logger) *taskListDB {
+func newTaskListDB(store persistence.TaskManager, namespaceID primitives.UUID, name string, taskType int32, kind int32, logger log.Logger) *taskListDB {
 	return &taskListDB{
-		domainID:     domainID,
+		namespaceID:  namespaceID,
 		taskListName: name,
 		taskListKind: kind,
 		taskType:     taskType,
@@ -83,7 +83,7 @@ func (db *taskListDB) RenewLease() (taskListState, error) {
 	db.Lock()
 	defer db.Unlock()
 	resp, err := db.store.LeaseTaskList(&persistence.LeaseTaskListRequest{
-		DomainID:     db.domainID,
+		NamespaceID:  db.namespaceID,
 		TaskList:     db.taskListName,
 		TaskType:     db.taskType,
 		TaskListKind: db.taskListKind,
@@ -103,11 +103,11 @@ func (db *taskListDB) UpdateState(ackLevel int64) error {
 	defer db.Unlock()
 	_, err := db.store.UpdateTaskList(&persistence.UpdateTaskListRequest{
 		TaskListInfo: &persistenceblobs.TaskListInfo{
-			DomainID: db.domainID,
-			Name:     db.taskListName,
-			TaskType: db.taskType,
-			AckLevel: ackLevel,
-			Kind:     db.taskListKind,
+			NamespaceID: db.namespaceID,
+			Name:        db.taskListName,
+			TaskType:    db.taskType,
+			AckLevel:    ackLevel,
+			Kind:        db.taskListKind,
 		},
 		RangeID: db.rangeID,
 	})
@@ -125,11 +125,11 @@ func (db *taskListDB) CreateTasks(tasks []*persistenceblobs.AllocatedTaskInfo) (
 		&persistence.CreateTasksRequest{
 			TaskListInfo: &persistence.PersistedTaskListInfo{
 				Data: &persistenceblobs.TaskListInfo{
-					DomainID: db.domainID,
-					Name:     db.taskListName,
-					TaskType: db.taskType,
-					AckLevel: db.ackLevel,
-					Kind:     db.taskListKind,
+					NamespaceID: db.namespaceID,
+					Name:        db.taskListName,
+					TaskType:    db.taskType,
+					AckLevel:    db.ackLevel,
+					Kind:        db.taskListKind,
 				},
 				RangeID: db.rangeID,
 			},
@@ -140,7 +140,7 @@ func (db *taskListDB) CreateTasks(tasks []*persistenceblobs.AllocatedTaskInfo) (
 // GetTasks returns a batch of tasks between the given range
 func (db *taskListDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) (*persistence.GetTasksResponse, error) {
 	return db.store.GetTasks(&persistence.GetTasksRequest{
-		DomainID:     db.domainID,
+		NamespaceID:  db.namespaceID,
 		TaskList:     db.taskListName,
 		TaskType:     db.taskType,
 		BatchSize:    batchSize,
@@ -153,9 +153,9 @@ func (db *taskListDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) 
 func (db *taskListDB) CompleteTask(taskID int64) error {
 	err := db.store.CompleteTask(&persistence.CompleteTaskRequest{
 		TaskList: &persistence.TaskListKey{
-			DomainID: db.domainID,
-			Name:     db.taskListName,
-			TaskType: db.taskType,
+			NamespaceID: db.namespaceID,
+			Name:        db.taskListName,
+			TaskType:    db.taskType,
 		},
 		TaskID: taskID,
 	})
@@ -175,7 +175,7 @@ func (db *taskListDB) CompleteTask(taskID int64) error {
 // or may not be honored
 func (db *taskListDB) CompleteTasksLessThan(taskID int64, limit int) (int, error) {
 	n, err := db.store.CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
-		DomainID:     db.domainID,
+		NamespaceID:  db.namespaceID,
 		TaskListName: db.taskListName,
 		TaskType:     db.taskType,
 		TaskID:       taskID,

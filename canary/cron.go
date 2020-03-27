@@ -52,14 +52,14 @@ func registerCron(r registrar) {
 // - every instance of job completes within 10 mins
 func cronWorkflow(
 	ctx workflow.Context,
-	domain string,
+	namespace string,
 	jobName string) error {
 
 	profile, err := beginWorkflow(ctx, wfTypeCron, workflow.Now(ctx).UnixNano())
 	aCtx := workflow.WithActivityOptions(ctx, newActivityOptions())
 
 	startTime := workflow.Now(ctx).UnixNano()
-	workflow.ExecuteActivity(aCtx, cronActivity, startTime, domain, jobName)
+	workflow.ExecuteActivity(aCtx, cronActivity, startTime, namespace, jobName)
 
 	workflow.Sleep(ctx, cronSleepTime)
 	elapsed := time.Duration(workflow.Now(ctx).UnixNano() - startTime)
@@ -73,7 +73,7 @@ func cronWorkflow(
 func cronActivity(
 	ctx context.Context,
 	scheduledTimeNanos int64,
-	domain string,
+	namespace string,
 	jobName string) error {
 
 	scope := activity.GetMetricsScope(ctx)
@@ -86,10 +86,10 @@ func cronActivity(
 	parentID := activity.GetInfo(ctx).WorkflowExecution.ID
 
 	jobID := fmt.Sprintf("%s-%s-%v", parentID, jobName, time.Now().Format(time.RFC3339))
-	wf, err := startJob(&cadenceClient, scope, jobID, jobName, domain)
+	wf, err := startJob(&cadenceClient, scope, jobID, jobName, namespace)
 	if err != nil {
 		logger.Error("cronActivity: failed to start job", zap.Error(err))
-		if _, ok := err.(*serviceerror.DomainNotActive); ok {
+		if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 			return err
 		}
 	} else {
@@ -105,7 +105,7 @@ func startJob(
 	scope tally.Scope,
 	jobID string,
 	jobName string,
-	domain string) (client.WorkflowRun, error) {
+	namespace string) (client.WorkflowRun, error) {
 
 	scope.Counter(startWorkflowCount).Inc(1)
 	sw := scope.Timer(startWorkflowLatency).Start()
@@ -118,14 +118,14 @@ func startJob(
 	ctx = opentracing.ContextWithSpan(ctx, span)
 
 	opts := newWorkflowOptions(jobID, cronJobTimeout)
-	wf, err := cadenceClient.ExecuteWorkflow(ctx, opts, jobName, time.Now().UnixNano(), domain)
+	wf, err := cadenceClient.ExecuteWorkflow(ctx, opts, jobName, time.Now().UnixNano(), namespace)
 	if err != nil {
 		scope.Counter(startWorkflowFailureCount).Inc(1)
 		switch err.(type) {
 		case *serviceerror.WorkflowExecutionAlreadyStarted:
 			scope.Counter(startWorkflowAlreadyStartedCount).Inc(1)
-		case *serviceerror.DomainNotActive:
-			scope.Counter(startWorkflowDomainNotActiveCount).Inc(1)
+		case *serviceerror.NamespaceNotActive:
+			scope.Counter(startWorkflowNamespaceNotActiveCount).Inc(1)
 		}
 
 		return nil, err

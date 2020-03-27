@@ -54,7 +54,7 @@ type (
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
 
 		logger       log.Logger
-		domainID     string
+		namespaceID  string
 		workflowID   string
 		baseRunID    string
 		currentRunID string
@@ -103,7 +103,7 @@ func (s *workflowResetterSuite) SetupTest() {
 		return s.mockStateRebuilder
 	}
 
-	s.domainID = testDomainID
+	s.namespaceID = testNamespaceID
 	s.workflowID = "some random workflow ID"
 	s.baseRunID = uuid.New()
 	s.currentRunID = uuid.New()
@@ -175,7 +175,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 
 	resetSnapshot := &persistence.WorkflowSnapshot{}
 	resetEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    s.domainID,
+		NamespaceID: s.namespaceID,
 		WorkflowID:  s.workflowID,
 		RunID:       s.resetRunID,
 		BranchToken: []byte("some random reset branch token"),
@@ -221,7 +221,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseNodeID,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.domainID, s.workflowID, s.resetRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.resetRunID),
 		ShardID:         &shardId,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil).Times(1)
 
@@ -229,7 +229,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		ctx,
 		gomock.Any(),
 		definition.NewWorkflowIdentifier(
-			s.domainID,
+			s.namespaceID,
 			s.workflowID,
 			s.baseRunID,
 		),
@@ -237,7 +237,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		definition.NewWorkflowIdentifier(
-			s.domainID,
+			s.namespaceID,
 			s.workflowID,
 			s.resetRunID,
 		),
@@ -247,7 +247,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 
 	resetWorkflow, err := s.workflowResetter.replayResetWorkflow(
 		ctx,
-		s.domainID,
+		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
 		baseBranchToken,
@@ -307,12 +307,12 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseNodeID,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.domainID, s.workflowID, s.resetRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.resetRunID),
 		ShardID:         &shardId,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil).Times(1)
 
 	newBranchToken, err := s.workflowResetter.generateBranchToken(
-		s.domainID, s.workflowID, baseBranchToken, baseNodeID, s.resetRunID,
+		s.namespaceID, s.workflowID, baseBranchToken, baseNodeID, s.resetRunID,
 	)
 	s.NoError(err)
 	s.Equal(resetBranchToken, newBranchToken)
@@ -449,7 +449,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	resetContext.EXPECT().loadWorkflowExecution().Return(resetMutableState, nil).Times(1)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
-	resetContextCacheKey := definition.NewWorkflowIdentifier(s.domainID, s.workflowID, newRunID)
+	resetContextCacheKey := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, newRunID)
 	_, _ = s.workflowResetter.historyCache.PutIfNotExist(resetContextCacheKey, resetContext)
 
 	mutableState := NewMockmutableState(s.controller)
@@ -457,7 +457,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
-		s.domainID,
+		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
 		baseBranchToken,

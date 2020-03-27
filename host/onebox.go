@@ -44,13 +44,13 @@ import (
 	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/persistence"
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/resource"
@@ -82,35 +82,35 @@ type (
 		matchingService common.Daemon
 		historyServices []common.Daemon
 
-		adminClient                   adminservice.AdminServiceClient
-		frontendClient                workflowservice.WorkflowServiceClient
-		historyClient                 historyservice.HistoryServiceClient
-		logger                        log.Logger
-		clusterMetadata               cluster.Metadata
-		persistenceConfig             config.Persistence
-		messagingClient               messaging.Client
-		metadataMgr                   persistence.MetadataManager
-		shardMgr                      persistence.ShardManager
-		historyV2Mgr                  persistence.HistoryManager
-		taskMgr                       persistence.TaskManager
-		visibilityMgr                 persistence.VisibilityManager
-		executionMgrFactory           persistence.ExecutionManagerFactory
-		domainReplicationQueue        persistence.DomainReplicationQueue
-		shutdownCh                    chan struct{}
-		shutdownWG                    sync.WaitGroup
-		clusterNo                     int // cluster number
-		replicator                    *replicator.Replicator
-		clientWorker                  archiver.ClientWorker
-		indexer                       *indexer.Indexer
-		enableNDC                     bool
-		archiverMetadata              carchiver.ArchivalMetadata
-		archiverProvider              provider.ArchiverProvider
-		historyConfig                 *HistoryConfig
-		esConfig                      *elasticsearch.Config
-		esClient                      elasticsearch.Client
-		workerConfig                  *WorkerConfig
-		mockAdminClient               map[string]adminClient.Client
-		domainReplicationTaskExecutor domain.ReplicationTaskExecutor
+		adminClient                      adminservice.AdminServiceClient
+		frontendClient                   workflowservice.WorkflowServiceClient
+		historyClient                    historyservice.HistoryServiceClient
+		logger                           log.Logger
+		clusterMetadata                  cluster.Metadata
+		persistenceConfig                config.Persistence
+		messagingClient                  messaging.Client
+		metadataMgr                      persistence.MetadataManager
+		shardMgr                         persistence.ShardManager
+		historyV2Mgr                     persistence.HistoryManager
+		taskMgr                          persistence.TaskManager
+		visibilityMgr                    persistence.VisibilityManager
+		executionMgrFactory              persistence.ExecutionManagerFactory
+		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
+		shutdownCh                       chan struct{}
+		shutdownWG                       sync.WaitGroup
+		clusterNo                        int // cluster number
+		replicator                       *replicator.Replicator
+		clientWorker                     archiver.ClientWorker
+		indexer                          *indexer.Indexer
+		enableNDC                        bool
+		archiverMetadata                 carchiver.ArchivalMetadata
+		archiverProvider                 provider.ArchiverProvider
+		historyConfig                    *HistoryConfig
+		esConfig                         *elasticsearch.Config
+		esClient                         elasticsearch.Client
+		workerConfig                     *WorkerConfig
+		mockAdminClient                  map[string]adminClient.Client
+		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 	}
 
 	// HistoryConfig contains configs for history service
@@ -123,28 +123,28 @@ type (
 
 	// CadenceParams contains everything needed to bootstrap Cadence
 	CadenceParams struct {
-		ClusterMetadata               cluster.Metadata
-		PersistenceConfig             config.Persistence
-		MessagingClient               messaging.Client
-		MetadataMgr                   persistence.MetadataManager
-		ShardMgr                      persistence.ShardManager
-		HistoryV2Mgr                  persistence.HistoryManager
-		ExecutionMgrFactory           persistence.ExecutionManagerFactory
-		TaskMgr                       persistence.TaskManager
-		VisibilityMgr                 persistence.VisibilityManager
-		DomainReplicationQueue        persistence.DomainReplicationQueue
-		Logger                        log.Logger
-		ClusterNo                     int
-		EnableNDC                     bool
-		ArchiverMetadata              carchiver.ArchivalMetadata
-		ArchiverProvider              provider.ArchiverProvider
-		EnableReadHistoryFromArchival bool
-		HistoryConfig                 *HistoryConfig
-		ESConfig                      *elasticsearch.Config
-		ESClient                      elasticsearch.Client
-		WorkerConfig                  *WorkerConfig
-		MockAdminClient               map[string]adminClient.Client
-		DomainReplicationTaskExecutor domain.ReplicationTaskExecutor
+		ClusterMetadata                  cluster.Metadata
+		PersistenceConfig                config.Persistence
+		MessagingClient                  messaging.Client
+		MetadataMgr                      persistence.MetadataManager
+		ShardMgr                         persistence.ShardManager
+		HistoryV2Mgr                     persistence.HistoryManager
+		ExecutionMgrFactory              persistence.ExecutionManagerFactory
+		TaskMgr                          persistence.TaskManager
+		VisibilityMgr                    persistence.VisibilityManager
+		NamespaceReplicationQueue        persistence.NamespaceReplicationQueue
+		Logger                           log.Logger
+		ClusterNo                        int
+		EnableNDC                        bool
+		ArchiverMetadata                 carchiver.ArchivalMetadata
+		ArchiverProvider                 provider.ArchiverProvider
+		EnableReadHistoryFromArchival    bool
+		HistoryConfig                    *HistoryConfig
+		ESConfig                         *elasticsearch.Config
+		ESClient                         elasticsearch.Client
+		WorkerConfig                     *WorkerConfig
+		MockAdminClient                  map[string]adminClient.Client
+		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 	}
 
 	membershipFactoryImpl struct {
@@ -156,28 +156,28 @@ type (
 // NewCadence returns an instance that hosts full cadence in one process
 func NewCadence(params *CadenceParams) Cadence {
 	return &cadenceImpl{
-		logger:                        params.Logger,
-		clusterMetadata:               params.ClusterMetadata,
-		persistenceConfig:             params.PersistenceConfig,
-		messagingClient:               params.MessagingClient,
-		metadataMgr:                   params.MetadataMgr,
-		visibilityMgr:                 params.VisibilityMgr,
-		shardMgr:                      params.ShardMgr,
-		historyV2Mgr:                  params.HistoryV2Mgr,
-		taskMgr:                       params.TaskMgr,
-		executionMgrFactory:           params.ExecutionMgrFactory,
-		domainReplicationQueue:        params.DomainReplicationQueue,
-		shutdownCh:                    make(chan struct{}),
-		clusterNo:                     params.ClusterNo,
-		enableNDC:                     params.EnableNDC,
-		esConfig:                      params.ESConfig,
-		esClient:                      params.ESClient,
-		archiverMetadata:              params.ArchiverMetadata,
-		archiverProvider:              params.ArchiverProvider,
-		historyConfig:                 params.HistoryConfig,
-		workerConfig:                  params.WorkerConfig,
-		mockAdminClient:               params.MockAdminClient,
-		domainReplicationTaskExecutor: params.DomainReplicationTaskExecutor,
+		logger:                           params.Logger,
+		clusterMetadata:                  params.ClusterMetadata,
+		persistenceConfig:                params.PersistenceConfig,
+		messagingClient:                  params.MessagingClient,
+		metadataMgr:                      params.MetadataMgr,
+		visibilityMgr:                    params.VisibilityMgr,
+		shardMgr:                         params.ShardMgr,
+		historyV2Mgr:                     params.HistoryV2Mgr,
+		taskMgr:                          params.TaskMgr,
+		executionMgrFactory:              params.ExecutionMgrFactory,
+		namespaceReplicationQueue:        params.NamespaceReplicationQueue,
+		shutdownCh:                       make(chan struct{}),
+		clusterNo:                        params.ClusterNo,
+		enableNDC:                        params.EnableNDC,
+		esConfig:                         params.ESConfig,
+		esClient:                         params.ESClient,
+		archiverMetadata:                 params.ArchiverMetadata,
+		archiverProvider:                 params.ArchiverProvider,
+		historyConfig:                    params.HistoryConfig,
+		workerConfig:                     params.WorkerConfig,
+		mockAdminClient:                  params.MockAdminClient,
+		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
 	}
 }
 
@@ -194,9 +194,9 @@ func (c *cadenceImpl) Start() error {
 		hosts[common.WorkerServiceName] = []string{c.WorkerGRPCServiceAddress()}
 	}
 
-	// create cadence-system domain, this must be created before starting
+	// create cadence-system namespace, this must be created before starting
 	// the services - so directly use the metadataManager to create this
-	if err := c.createSystemDomain(); err != nil {
+	if err := c.createSystemNamespace(); err != nil {
 		return err
 	}
 
@@ -453,7 +453,7 @@ func (c *cadenceImpl) startHistory(
 		var err error
 		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
 			HostPort:     c.FrontendGRPCAddress(),
-			DomainName:   common.SystemLocalDomainName,
+			Namespace:    common.SystemLocalNamespace,
 			MetricsScope: params.MetricScope,
 		})
 		if err != nil {
@@ -579,7 +579,7 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 
 	params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     c.FrontendGRPCAddress(),
-		DomainName:   common.SystemLocalDomainName,
+		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: params.MetricScope,
 	})
 	if err != nil {
@@ -604,20 +604,20 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 
 	service.Start()
 
-	var replicatorDomainCache cache.DomainCache
+	var replicatorNamespaceCache cache.NamespaceCache
 	if c.workerConfig.EnableReplicator {
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		replicatorDomainCache = cache.NewDomainCache(metadataManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
-		replicatorDomainCache.Start()
-		c.startWorkerReplicator(params, service, replicatorDomainCache)
+		replicatorNamespaceCache = cache.NewNamespaceCache(metadataManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		replicatorNamespaceCache.Start()
+		c.startWorkerReplicator(params, service, replicatorNamespaceCache)
 	}
 
-	var clientWorkerDomainCache cache.DomainCache
+	var clientWorkerNamespaceCache cache.NamespaceCache
 	if c.workerConfig.EnableArchiver {
 		metadataProxyManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		clientWorkerDomainCache = cache.NewDomainCache(metadataProxyManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
-		clientWorkerDomainCache.Start()
-		c.startWorkerClientWorker(params, service, clientWorkerDomainCache)
+		clientWorkerNamespaceCache = cache.NewNamespaceCache(metadataProxyManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		clientWorkerNamespaceCache.Start()
+		c.startWorkerClientWorker(params, service, clientWorkerNamespaceCache)
 	}
 
 	if c.workerConfig.EnableIndexer {
@@ -627,15 +627,15 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	startWG.Done()
 	<-c.shutdownCh
 	if c.workerConfig.EnableReplicator {
-		replicatorDomainCache.Stop()
+		replicatorNamespaceCache.Stop()
 	}
 	if c.workerConfig.EnableArchiver {
-		clientWorkerDomainCache.Stop()
+		clientWorkerNamespaceCache.Stop()
 	}
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, domainCache cache.DomainCache) {
+func (c *cadenceImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {
 	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ReplicationCfg.ReplicatorMessageConcurrency = dynamicconfig.GetIntPropertyFn(10)
@@ -646,7 +646,7 @@ func (c *cadenceImpl) startWorkerReplicator(params *resource.BootstrapParams, se
 	c.replicator = replicator.NewReplicator(
 		c.clusterMetadata,
 		metadataManager,
-		domainCache,
+		namespaceCache,
 		service.GetClientBean(),
 		workerConfig.ReplicationCfg,
 		c.messagingClient,
@@ -654,8 +654,8 @@ func (c *cadenceImpl) startWorkerReplicator(params *resource.BootstrapParams, se
 		service.GetMetricsClient(),
 		service.GetHostInfo(),
 		serviceResolver,
-		c.domainReplicationQueue,
-		c.domainReplicationTaskExecutor,
+		c.namespaceReplicationQueue,
+		c.namespaceReplicationTaskExecutor,
 	)
 	if err := c.replicator.Start(); err != nil {
 		c.replicator.Stop()
@@ -663,7 +663,7 @@ func (c *cadenceImpl) startWorkerReplicator(params *resource.BootstrapParams, se
 	}
 }
 
-func (c *cadenceImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, domainCache cache.DomainCache) {
+func (c *cadenceImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 
@@ -672,7 +672,7 @@ func (c *cadenceImpl) startWorkerClientWorker(params *resource.BootstrapParams, 
 		MetricsClient:    service.GetMetricsClient(),
 		Logger:           c.logger,
 		HistoryV2Manager: c.historyV2Mgr,
-		DomainCache:      domainCache,
+		NamespaceCache:   namespaceCache,
 		Config:           workerConfig.ArchiverConfig,
 		ArchiverProvider: c.archiverProvider,
 	}
@@ -699,28 +699,28 @@ func (c *cadenceImpl) startWorkerIndexer(params *resource.BootstrapParams, servi
 	}
 }
 
-func (c *cadenceImpl) createSystemDomain() error {
+func (c *cadenceImpl) createSystemNamespace() error {
 
-	_, err := c.metadataMgr.CreateDomain(&persistence.CreateDomainRequest{
-		Info: &persistence.DomainInfo{
+	_, err := c.metadataMgr.CreateNamespace(&persistence.CreateNamespaceRequest{
+		Info: &persistence.NamespaceInfo{
 			ID:          uuid.New(),
 			Name:        "cadence-system",
-			Status:      persistence.DomainStatusRegistered,
-			Description: "Cadence system domain",
+			Status:      persistence.NamespaceStatusRegistered,
+			Description: "Cadence system namespace",
 		},
-		Config: &persistence.DomainConfig{
+		Config: &persistence.NamespaceConfig{
 			Retention:                1,
 			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
 			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 		},
-		ReplicationConfig: &persistence.DomainReplicationConfig{},
+		ReplicationConfig: &persistence.NamespaceReplicationConfig{},
 		FailoverVersion:   common.EmptyVersion,
 	})
 	if err != nil {
-		if _, ok := err.(*serviceerror.DomainAlreadyExists); ok {
+		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); ok {
 			return nil
 		}
-		return fmt.Errorf("failed to create cadence-system domain: %v", err)
+		return fmt.Errorf("failed to create cadence-system namespace: %v", err)
 	}
 	return nil
 }

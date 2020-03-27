@@ -82,7 +82,7 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -101,7 +101,7 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 
 	newRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -126,7 +126,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -181,7 +181,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -197,7 +197,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	terminateReason := "terminate reason"
 	terminateDetails := []byte("terminate details")
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -212,7 +212,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -243,7 +243,7 @@ StartNewExecutionLoop:
 	for i := 0; i < 10; i++ {
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:                           uuid.New(),
-			Domain:                              s.domainName,
+			Namespace:                           s.namespace,
 			WorkflowId:                          id,
 			WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 			TaskList:                            &commonproto.TaskList{Name: tl},
@@ -278,7 +278,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -345,7 +345,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -381,7 +381,7 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -420,7 +420,7 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		StickyTaskList:  &commonproto.TaskList{Name: tl},
 		Identity:        identity,
@@ -460,7 +460,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -522,7 +522,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -542,7 +542,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		}
 		if err != nil {
 			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Domain: s.domainName,
+				Namespace: s.namespace,
 				Execution: &commonproto.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we.RunId,
@@ -579,7 +579,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 	maximumAttempts := 5
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -631,7 +631,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -641,7 +641,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 
 	describeWorkflowExecution := func(execution *commonproto.WorkflowExecution) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Domain:    s.domainName,
+			Namespace: s.namespace,
 			Execution: execution,
 		})
 	}
@@ -649,7 +649,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 	for i := 0; i != maximumAttempts; i++ {
 		_, err := poller.PollAndProcessDecisionTask(false, false)
 		s.True(err == nil, err)
-		events := s.getHistory(s.domainName, executions[i])
+		events := s.getHistory(s.namespace, executions[i])
 		if i == maximumAttempts-1 {
 			s.Equal(enums.EventTypeWorkflowExecutionCompleted, events[len(events)-1].GetEventType())
 		} else {
@@ -711,7 +711,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	// Fail using attempt
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -738,7 +738,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	dtHandler := workflowImpl(5, "retryable-error", &executions)
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -748,26 +748,26 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
-	events := s.getHistory(s.domainName, executions[0])
+	events := s.getHistory(s.namespace, executions[0])
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
-	events = s.getHistory(s.domainName, executions[1])
+	events = s.getHistory(s.namespace, executions[1])
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
-	events = s.getHistory(s.domainName, executions[2])
+	events = s.getHistory(s.namespace, executions[2])
 	s.Equal(enums.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// Fail error reason
 	request = &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -794,7 +794,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	dtHandler = workflowImpl(5, "bad-bug", &executions)
 	poller = &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -804,7 +804,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
-	events = s.getHistory(s.domainName, executions[0])
+	events = s.getHistory(s.namespace, executions[0])
 	s.Equal(enums.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
 	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
@@ -830,7 +830,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -878,7 +878,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -894,7 +894,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	// This will not cost extra time as the polling for first decision task will be blocked for 3 seconds.
 	time.Sleep(2 * time.Second)
 	resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		MaximumPageSize: 100,
 		StartTimeFilter: startFilter,
 		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &commonproto.WorkflowExecutionFilter{
@@ -924,13 +924,13 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(3, attemptCount)
 
 	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},
 	})
 	s.NoError(terminateErr)
-	events := s.getHistory(s.domainName, executions[0])
+	events := s.getHistory(s.namespace, executions[0])
 	lastEvent := events[len(events)-1]
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
@@ -940,7 +940,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(memo, attributes.Memo)
 	s.Equal(searchAttr, attributes.SearchAttributes)
 
-	events = s.getHistory(s.domainName, executions[1])
+	events = s.getHistory(s.namespace, executions[1])
 	lastEvent = events[len(events)-1]
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
@@ -950,7 +950,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(memo, attributes.Memo)
 	s.Equal(searchAttr, attributes.SearchAttributes)
 
-	events = s.getHistory(s.domainName, executions[2])
+	events = s.getHistory(s.namespace, executions[2])
 	lastEvent = events[len(events)-1]
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
@@ -964,7 +964,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	var closedExecutions []*commonproto.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
 		resp, err := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Domain:          s.domainName,
+			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &commonproto.WorkflowExecutionFilter{
@@ -980,7 +980,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	}
 	s.NotNil(closedExecutions)
 	dweResponse, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -1029,7 +1029,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -1065,7 +1065,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1079,7 +1079,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	time.Sleep(1 * time.Second) // wait for workflow timeout
 
 	// check when workflow timeout, continueAsNew event contains expected fields
-	events := s.getHistory(s.domainName, executions[0])
+	events := s.getHistory(s.namespace, executions[0])
 	lastEvent := events[len(events)-1]
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
@@ -1092,7 +1092,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	s.True(err == nil, err)
 
 	// check new run contains expected fields
-	events = s.getHistory(s.domainName, executions[1])
+	events = s.getHistory(s.namespace, executions[1])
 	firstEvent := events[0]
 	s.Equal(enums.EventTypeWorkflowExecutionStarted, firstEvent.GetEventType())
 	startAttributes := firstEvent.GetWorkflowExecutionStartedEventAttributes()
@@ -1101,7 +1101,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 
 	// terminate cron
 	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -1117,7 +1117,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -1161,7 +1161,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1191,7 +1191,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -1230,12 +1230,12 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 			for i := 0; i < 100; i++ {
 				buf := new(bytes.Buffer)
 				binary.Write(buf, binary.LittleEndian, i)
-				s.Nil(s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity))
+				s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", buf.Bytes(), identity))
 			}
 
 			buf := new(bytes.Buffer)
 			binary.Write(buf, binary.LittleEndian, 101)
-			signalErr := s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity)
+			signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", buf.Bytes(), identity)
 			s.Nil(signalErr)
 
 			// this decision will be ignored as he decision task is already failed
@@ -1253,7 +1253,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1288,7 +1288,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -1315,7 +1315,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 			// this will create new event when there is in-flight decision task, and the new event will be buffered
 			_, err := s.engine.SignalWorkflowExecution(NewContext(),
 				&workflowservice.SignalWorkflowExecutionRequest{
-					Domain: s.domainName,
+					Namespace: s.namespace,
 					WorkflowExecution: &commonproto.WorkflowExecution{
 						WorkflowId: id,
 					},
@@ -1356,7 +1356,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1372,7 +1372,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 
 	// check history, the signal event should be after the complete decision task
 	histResp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -1404,7 +1404,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -1421,7 +1421,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -1474,7 +1474,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1528,7 +1528,7 @@ func (s *integrationSuite) TestVisibility() {
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id1,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -1554,7 +1554,7 @@ func (s *integrationSuite) TestVisibility() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1571,7 +1571,7 @@ func (s *integrationSuite) TestVisibility() {
 	historyEventFilterType := enums.HistoryEventFilterTypeCloseEvent
 	for {
 		historyResponse, historyErr := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain: startRequest.Domain,
+			Namespace: startRequest.Namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: startRequest.WorkflowId,
 				RunId:      startResponse.RunId,
@@ -1590,7 +1590,7 @@ func (s *integrationSuite) TestVisibility() {
 
 	startRequest = &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id2,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -1613,7 +1613,7 @@ func (s *integrationSuite) TestVisibility() {
 	var historyLength int64
 	for i := 0; i < 10; i++ {
 		resp, err3 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Domain:          s.domainName,
+			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 		})
@@ -1631,7 +1631,7 @@ func (s *integrationSuite) TestVisibility() {
 
 	for i := 0; i < 10; i++ {
 		resp, err4 := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Domain:          s.domainName,
+			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 		})
@@ -1672,7 +1672,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          parentID,
 		WorkflowType:                        parentWorkflowType,
 		TaskList:                            taskListParent,
@@ -1774,7 +1774,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 
 	pollerParent := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskListParent,
 		Identity:        identity,
 		DecisionHandler: dtHandlerParent,
@@ -1784,7 +1784,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 
 	pollerChild := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskListChild,
 		Identity:        identity,
 		DecisionHandler: dtHandlerChild,
@@ -1810,7 +1810,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.True(childComplete)
 	s.NotNil(childStartedEvent)
 	s.Equal(enums.EventTypeWorkflowExecutionStarted, childStartedEvent.GetEventType())
-	s.Equal(s.domainName, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetParentWorkflowDomain())
+	s.Equal(s.namespace, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetParentWorkflowNamespace())
 	s.Equal(parentID, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().ParentWorkflowExecution.GetWorkflowId())
 	s.Equal(we.GetRunId(), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().ParentWorkflowExecution.GetRunId())
 	s.Equal(startedEvent.GetChildWorkflowExecutionStartedEventAttributes().GetInitiatedEventId(),
@@ -1826,7 +1826,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.NoError(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()
-	s.Empty(completedAttributes.Domain)
+	s.Empty(completedAttributes.Namespace)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
 	s.Equal([]byte("Child Done"), completedAttributes.Result)
@@ -1853,7 +1853,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          parentID,
 		WorkflowType:                        parentWorkflowType,
 		TaskList:                            taskListParent,
@@ -1921,7 +1921,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 
 	pollerParent := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskListParent,
 		Identity:        identity,
 		DecisionHandler: dtHandlerParent,
@@ -1931,7 +1931,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 
 	pollerChild := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskListChild,
 		Identity:        identity,
 		DecisionHandler: dtHandlerChild,
@@ -1958,7 +1958,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		time.Sleep(2 * time.Second)
 		startFilter.LatestTime = time.Now().UnixNano()
 		resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Domain:          s.domainName,
+			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &commonproto.WorkflowExecutionFilter{
@@ -1979,7 +1979,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 
 	// terminate the childworkflow
 	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: childID,
 		},
@@ -1992,7 +1992,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	s.NoError(err)
 	s.NotNil(terminatedEvent)
 	terminatedAttributes := terminatedEvent.GetChildWorkflowExecutionTerminatedEventAttributes()
-	s.Empty(terminatedAttributes.Domain)
+	s.Empty(terminatedAttributes.Namespace)
 	s.Equal(childID, terminatedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, terminatedAttributes.WorkflowType.Name)
 
@@ -2001,7 +2001,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	var closedExecutions []*commonproto.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
 		resp, err := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Domain:          s.domainName,
+			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 		})
@@ -2043,7 +2043,7 @@ func (s *integrationSuite) TestWorkflowTimeout() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -2063,7 +2063,7 @@ func (s *integrationSuite) TestWorkflowTimeout() {
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -2095,7 +2095,7 @@ GetHistoryLoop:
 ListClosedLoop:
 	for i := 0; i < 10; i++ {
 		resp, err3 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Domain:          s.domainName,
+			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 		})
@@ -2121,7 +2121,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -2164,9 +2164,9 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 
 		// Send signals during decision
 		if sendSignal {
-			s.sendSignal(s.domainName, workflowExecution, "signalC", nil, identity)
-			s.sendSignal(s.domainName, workflowExecution, "signalD", nil, identity)
-			s.sendSignal(s.domainName, workflowExecution, "signalE", nil, identity)
+			s.sendSignal(s.namespace, workflowExecution, "signalC", nil, identity)
+			s.sendSignal(s.namespace, workflowExecution, "signalD", nil, identity)
+			s.sendSignal(s.namespace, workflowExecution, "signalE", nil, identity)
 			sendSignal = false
 		}
 
@@ -2218,7 +2218,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -2243,7 +2243,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		s.NoError(err)
 	}
 
-	err = s.sendSignal(s.domainName, workflowExecution, "signalA", nil, identity)
+	err = s.sendSignal(s.namespace, workflowExecution, "signalA", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// process signal
@@ -2253,7 +2253,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	s.Equal(1, signalCount)
 
 	// send another signal to trigger decision
-	err = s.sendSignal(s.domainName, workflowExecution, "signalB", nil, identity)
+	err = s.sendSignal(s.namespace, workflowExecution, "signalB", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// fail decision 2 more times
@@ -2283,7 +2283,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	s.True(workflowComplete)
 	s.Equal(16, signalCount)
 
-	events := s.getHistory(s.domainName, workflowExecution)
+	events := s.getHistory(s.namespace, workflowExecution)
 	var lastEvent *commonproto.HistoryEvent
 	var lastDecisionStartedEvent *commonproto.HistoryEvent
 	lastIdx := 0
@@ -2319,7 +2319,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          workflowID,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -2376,7 +2376,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -2386,9 +2386,9 @@ func (s *integrationSuite) TestDescribeTaskList() {
 	}
 
 	// this function poll events from history side
-	testDescribeTaskList := func(domain string, tasklist *commonproto.TaskList, tasklistType enums.TaskListType) []*commonproto.PollerInfo {
+	testDescribeTaskList := func(namespace string, tasklist *commonproto.TaskList, tasklistType enums.TaskListType) []*commonproto.PollerInfo {
 		responseInner, errInner := s.engine.DescribeTaskList(NewContext(), &workflowservice.DescribeTaskListRequest{
-			Domain:       domain,
+			Namespace:    namespace,
 			TaskList:     tasklist,
 			TaskListType: tasklistType,
 		})
@@ -2400,16 +2400,16 @@ func (s *integrationSuite) TestDescribeTaskList() {
 	before := time.Now()
 
 	// when no one polling on the tasklist (activity or decision), there shall be no poller information
-	pollerInfos := testDescribeTaskList(s.domainName, &commonproto.TaskList{Name: tl}, enums.TaskListTypeActivity)
+	pollerInfos := testDescribeTaskList(s.namespace, &commonproto.TaskList{Name: tl}, enums.TaskListTypeActivity)
 	s.Empty(pollerInfos)
-	pollerInfos = testDescribeTaskList(s.domainName, &commonproto.TaskList{Name: tl}, enums.TaskListTypeDecision)
+	pollerInfos = testDescribeTaskList(s.namespace, &commonproto.TaskList{Name: tl}, enums.TaskListTypeDecision)
 	s.Empty(pollerInfos)
 
 	_, errDecision := poller.PollAndProcessDecisionTask(false, false)
 	s.NoError(errDecision)
-	pollerInfos = testDescribeTaskList(s.domainName, &commonproto.TaskList{Name: tl}, enums.TaskListTypeActivity)
+	pollerInfos = testDescribeTaskList(s.namespace, &commonproto.TaskList{Name: tl}, enums.TaskListTypeActivity)
 	s.Empty(pollerInfos)
-	pollerInfos = testDescribeTaskList(s.domainName, &commonproto.TaskList{Name: tl}, enums.TaskListTypeDecision)
+	pollerInfos = testDescribeTaskList(s.namespace, &commonproto.TaskList{Name: tl}, enums.TaskListTypeDecision)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
@@ -2417,12 +2417,12 @@ func (s *integrationSuite) TestDescribeTaskList() {
 
 	errActivity := poller.PollAndProcessActivityTask(false)
 	s.NoError(errActivity)
-	pollerInfos = testDescribeTaskList(s.domainName, &commonproto.TaskList{Name: tl}, enums.TaskListTypeActivity)
+	pollerInfos = testDescribeTaskList(s.namespace, &commonproto.TaskList{Name: tl}, enums.TaskListTypeActivity)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
-	pollerInfos = testDescribeTaskList(s.domainName, &commonproto.TaskList{Name: tl}, enums.TaskListTypeDecision)
+	pollerInfos = testDescribeTaskList(s.namespace, &commonproto.TaskList{Name: tl}, enums.TaskListTypeDecision)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
@@ -2438,7 +2438,7 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -2487,7 +2487,7 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -2502,7 +2502,7 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 	s.NoError(err)
 
 	// Now send a signal when transient decision is scheduled
-	err = s.sendSignal(s.domainName, workflowExecution, "signalA", nil, identity)
+	err = s.sendSignal(s.namespace, workflowExecution, "signalA", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// Drop decision task to cause a Decision Timeout
@@ -2528,7 +2528,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -2554,7 +2554,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 			// this will create new event when there is in-flight decision task, and the new event will be buffered
 			_, err := s.engine.SignalWorkflowExecution(NewContext(),
 				&workflowservice.SignalWorkflowExecutionRequest{
-					Domain: s.domainName,
+					Namespace: s.namespace,
 					WorkflowExecution: &commonproto.WorkflowExecution{
 						WorkflowId: id,
 					},
@@ -2587,7 +2587,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -2619,7 +2619,7 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -2658,7 +2658,7 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -2685,7 +2685,7 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 	time.Sleep(time.Second * 2) // wait 2s for relay decision to timeout
 	decisionTaskTimeout := false
 	for i := 0; i < 3; i++ {
-		events := s.getHistory(s.domainName, workflowExecution)
+		events := s.getHistory(s.namespace, workflowExecution)
 		if len(events) >= 8 {
 			s.Equal(enums.EventTypeDecisionTaskTimedOut, events[7].GetEventType())
 			s.Equal(enums.TimeoutTypeStartToClose, events[7].GetDecisionTaskTimedOutEventAttributes().GetTimeoutType())
@@ -2714,7 +2714,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -2770,7 +2770,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -2787,7 +2787,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	// Send one signal to create a new decision
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, 0)
-	s.Nil(s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", buf.Bytes(), identity))
 
 	// Drop decision to cause all events to be buffered from now on
 	_, err = poller.PollAndProcessDecisionTask(false, true)
@@ -2798,13 +2798,13 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	for i := 1; i < 101; i++ {
 		buf := new(bytes.Buffer)
 		binary.Write(buf, binary.LittleEndian, i)
-		s.Nil(s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity))
+		s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", buf.Bytes(), identity))
 	}
 
 	// 101 signal, which will fail the decision
 	buf = new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, 101)
-	signalErr := s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity)
+	signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", buf.Bytes(), identity)
 	s.Nil(signalErr)
 
 	// Process signal in decider
@@ -2830,7 +2830,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -2871,7 +2871,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 			// send a signal on third failure to be buffered, forcing a non-transient decision when buffer is flushed
 			/*if failureCount == 3 {
 				err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-					Domain:            s.domainName,
+					Namespace:            s.namespace,
 					WorkflowExecution: workflowExecution,
 					SignalName:        "signalB",
 					Input:             []byte("signal input"),
@@ -2894,7 +2894,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 
 	poller := &TaskPoller{
 		Engine:                              s.engine,
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		TaskList:                            &commonproto.TaskList{Name: tl},
 		Identity:                            identity,
 		DecisionHandler:                     dtHandler,
@@ -2909,7 +2909,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 	s.NoError(err)
 
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain:            s.domainName,
+		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
 		Input:             []byte("signal input"),
@@ -2921,7 +2921,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 	stickyTimeout := false
 WaitForStickyTimeoutLoop:
 	for i := 0; i < 10; i++ {
-		events := s.getHistory(s.domainName, workflowExecution)
+		events := s.getHistory(s.namespace, workflowExecution)
 		for _, event := range events {
 			if event.GetEventType() == enums.EventTypeDecisionTaskTimedOut {
 				s.Equal(enums.TimeoutTypeScheduleToStart, event.GetDecisionTaskTimedOutEventAttributes().GetTimeoutType())
@@ -2940,7 +2940,7 @@ WaitForStickyTimeoutLoop:
 	}
 
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain:            s.domainName,
+		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",
 		Input:             []byte("signal input"),
@@ -2956,7 +2956,7 @@ WaitForStickyTimeoutLoop:
 	}
 
 	decisionTaskFailed := false
-	events := s.getHistory(s.domainName, workflowExecution)
+	events := s.getHistory(s.namespace, workflowExecution)
 	for _, event := range events {
 		if event.GetEventType() == enums.EventTypeDecisionTaskFailed {
 			decisionTaskFailed = true
@@ -2971,7 +2971,7 @@ WaitForStickyTimeoutLoop:
 	// Assert for single decision task failed and workflow completion
 	failedDecisions := 0
 	workflowComplete := false
-	events = s.getHistory(s.domainName, workflowExecution)
+	events = s.getHistory(s.namespace, workflowExecution)
 	for _, event := range events {
 		switch event.GetEventType() {
 		case enums.EventTypeDecisionTaskFailed:
@@ -2998,7 +2998,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -3050,7 +3050,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 
 	poller := &TaskPoller{
 		Engine:                              s.engine,
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		TaskList:                            &commonproto.TaskList{Name: tl},
 		Identity:                            identity,
 		DecisionHandler:                     dtHandler,
@@ -3065,7 +3065,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 	s.NoError(err)
 
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain:            s.domainName,
+		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
 		Input:             []byte("signal input"),
@@ -3075,7 +3075,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 
 	//Reset sticky tasklist before sticky decision task starts
 	s.engine.ResetStickyTaskList(NewContext(), &workflowservice.ResetStickyTaskListRequest{
-		Domain:    s.domainName,
+		Namespace: s.namespace,
 		Execution: workflowExecution,
 	})
 
@@ -3083,7 +3083,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 	stickyTimeout := false
 WaitForStickyTimeoutLoop:
 	for i := 0; i < 10; i++ {
-		events := s.getHistory(s.domainName, workflowExecution)
+		events := s.getHistory(s.namespace, workflowExecution)
 		for _, event := range events {
 			if event.GetEventType() == enums.EventTypeDecisionTaskTimedOut {
 				s.Equal(enums.TimeoutTypeScheduleToStart, event.GetDecisionTaskTimedOutEventAttributes().GetTimeoutType())
@@ -3102,7 +3102,7 @@ WaitForStickyTimeoutLoop:
 	}
 
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain:            s.domainName,
+		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",
 		Input:             []byte("signal input"),
@@ -3118,7 +3118,7 @@ WaitForStickyTimeoutLoop:
 	}
 
 	decisionTaskFailed := false
-	events := s.getHistory(s.domainName, workflowExecution)
+	events := s.getHistory(s.namespace, workflowExecution)
 	for _, event := range events {
 		if event.GetEventType() == enums.EventTypeDecisionTaskFailed {
 			decisionTaskFailed = true
@@ -3133,7 +3133,7 @@ WaitForStickyTimeoutLoop:
 	// Assert for single decision task failed and workflow completion
 	failedDecisions := 0
 	workflowComplete := false
-	events = s.getHistory(s.domainName, workflowExecution)
+	events = s.getHistory(s.namespace, workflowExecution)
 	for _, event := range events {
 		switch event.GetEventType() {
 		case enums.EventTypeDecisionTaskFailed:
@@ -3155,7 +3155,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -3196,7 +3196,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "Activity-1",
 					ActivityType:                  &commonproto.ActivityType{Name: "ActivityType"},
-					Domain:                        s.domainName,
+					Namespace:                     s.namespace,
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         []byte("some random activity input"),
 					ScheduleToCloseTimeoutSeconds: 100,
@@ -3234,7 +3234,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -3277,7 +3277,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	s.NoError(err)
 	s.Nil(task.DecisionTask)
 
-	events := s.getHistory(s.domainName, workflowExecution)
+	events := s.getHistory(s.namespace, workflowExecution)
 	var scheduleEvent, startedEvent, completedEvent *commonproto.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
@@ -3320,7 +3320,7 @@ func (s *integrationSuite) TestStartWithMemo() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -3354,7 +3354,7 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 	signalInput := []byte("my signal input")
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -3381,7 +3381,7 @@ func (s *integrationSuite) TestCancelTimer() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -3419,7 +3419,7 @@ func (s *integrationSuite) TestCancelTimer() {
 		}
 
 		resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain:          s.domainName,
+			Namespace:       s.namespace,
 			Execution:       workflowExecution,
 			MaximumPageSize: 200,
 		})
@@ -3457,7 +3457,7 @@ func (s *integrationSuite) TestCancelTimer() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -3471,14 +3471,14 @@ func (s *integrationSuite) TestCancelTimer() {
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.domainName, workflowExecution, "random signal name", []byte("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", []byte("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.domainName, workflowExecution, "random signal name", []byte("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", []byte("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
@@ -3487,7 +3487,7 @@ func (s *integrationSuite) TestCancelTimer() {
 	s.True(workflowComplete)
 
 	resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		Execution:       workflowExecution,
 		MaximumPageSize: 200,
 	})
@@ -3512,7 +3512,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
 		TaskList:                            &commonproto.TaskList{Name: tl},
@@ -3550,7 +3550,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		}
 
 		resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain:          s.domainName,
+			Namespace:       s.namespace,
 			Execution:       workflowExecution,
 			MaximumPageSize: 200,
 		})
@@ -3589,7 +3589,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        &commonproto.TaskList{Name: tl},
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -3603,14 +3603,14 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.domainName, workflowExecution, "random signal name", []byte("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", []byte("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.domainName, workflowExecution, "random signal name", []byte("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", []byte("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
@@ -3619,7 +3619,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	s.True(workflowComplete)
 
 	resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		Execution:       workflowExecution,
 		MaximumPageSize: 200,
 	})
@@ -3657,7 +3657,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -3669,7 +3669,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	var openExecutionInfo *commonproto.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
 		resp, err1 := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Domain:          s.domainName,
+			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: &commonproto.StartTimeFilter{
 				EarliestTime: 0,
@@ -3701,7 +3701,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 		RunId:      we.GetRunId(),
 	}
 	historyResponse, historyErr := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain:    s.domainName,
+		Namespace: s.namespace,
 		Execution: execution,
 	})
 	s.Nil(historyErr)
@@ -3713,7 +3713,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 
 	// verify DescribeWorkflowExecution result
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-		Domain:    s.domainName,
+		Namespace: s.namespace,
 		Execution: execution,
 	}
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
@@ -3724,7 +3724,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	var closdExecutionInfo *commonproto.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
 		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Domain:          s.domainName,
+			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: &commonproto.StartTimeFilter{
 				EarliestTime: 0,
@@ -3746,10 +3746,10 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	s.Equal(memo, closdExecutionInfo.Memo)
 }
 
-func (s *integrationSuite) sendSignal(domainName string, execution *commonproto.WorkflowExecution, signalName string,
+func (s *integrationSuite) sendSignal(namespace string, execution *commonproto.WorkflowExecution, signalName string,
 	input []byte, identity string) error {
 	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain:            domainName,
+		Namespace:         namespace,
 		WorkflowExecution: execution,
 		SignalName:        signalName,
 		Input:             input,

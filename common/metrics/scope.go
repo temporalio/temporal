@@ -27,13 +27,13 @@ import (
 )
 
 type metricsScope struct {
-	scope          tally.Scope
-	defs           map[int]metricDefinition
-	isDomainTagged bool
+	scope             tally.Scope
+	defs              map[int]metricDefinition
+	isNamespaceTagged bool
 }
 
-func newMetricsScope(scope tally.Scope, defs map[int]metricDefinition, isDomain bool) Scope {
-	return &metricsScope{scope, defs, isDomain}
+func newMetricsScope(scope tally.Scope, defs map[int]metricDefinition, isNamespace bool) Scope {
+	return &metricsScope{scope, defs, isNamespace}
 }
 
 // NoopScope returns a noop scope of metrics
@@ -59,8 +59,8 @@ func (m *metricsScope) UpdateGauge(id int, value float64) {
 func (m *metricsScope) StartTimer(id int) Stopwatch {
 	name := string(m.defs[id].metricName)
 	timer := m.scope.Timer(name)
-	if m.isDomainTagged {
-		timerAll := m.scope.Tagged(map[string]string{domain: domainAllValue}).Timer(name)
+	if m.isNamespaceTagged {
+		timerAll := m.scope.Tagged(map[string]string{namespace: namespaceAllValue}).Timer(name)
 		return NewStopwatch(timer, timerAll)
 	}
 	return NewStopwatch(timer)
@@ -69,8 +69,8 @@ func (m *metricsScope) StartTimer(id int) Stopwatch {
 func (m *metricsScope) RecordTimer(id int, d time.Duration) {
 	name := string(m.defs[id].metricName)
 	m.scope.Timer(name).Record(d)
-	if m.isDomainTagged {
-		m.scope.Tagged(map[string]string{domain: domainAllValue}).Timer(name).Record(d)
+	if m.isNamespaceTagged {
+		m.scope.Tagged(map[string]string{namespace: namespaceAllValue}).Timer(name).Record(d)
 	}
 }
 
@@ -85,15 +85,15 @@ func (m *metricsScope) RecordHistogramValue(id int, value float64) {
 }
 
 func (m *metricsScope) Tagged(tags ...Tag) Scope {
-	domainTagged := false
+	namespaceTagged := false
 	tagMap := make(map[string]string, len(tags))
 	for _, tag := range tags {
-		if isDomainTagged(tag) {
-			domainTagged = true
+		if isNamespaceTagged(tag) {
+			namespaceTagged = true
 		}
 		tagMap[tag.Key()] = tag.Value()
 	}
-	return newMetricsScope(m.scope.Tagged(tagMap), m.defs, domainTagged)
+	return newMetricsScope(m.scope.Tagged(tagMap), m.defs, namespaceTagged)
 }
 
 func (m *metricsScope) getBuckets(id int) tally.Buckets {
@@ -103,6 +103,6 @@ func (m *metricsScope) getBuckets(id int) tally.Buckets {
 	return tally.DefaultBuckets
 }
 
-func isDomainTagged(tag Tag) bool {
-	return tag.Key() == domain && tag.Value() != domainAllValue
+func isNamespaceTagged(tag Tag) bool {
+	return tag.Key() == namespace && tag.Value() != namespaceAllValue
 }

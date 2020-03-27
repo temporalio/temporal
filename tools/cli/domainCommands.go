@@ -36,45 +36,45 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/common/domain"
+	"github.com/temporalio/temporal/common/namespace"
 )
 
 type (
-	domainCLIImpl struct {
+	namespaceCLIImpl struct {
 		// used when making RPC call to frontend service``
 		frontendClient workflowservice.WorkflowServiceClient
 
-		// act as admin to modify domain in DB directly
-		domainHandler domain.Handler
+		// act as admin to modify namespace in DB directly
+		namespaceHandler namespace.Handler
 	}
 )
 
-// newDomainCLI creates a domain CLI
-func newDomainCLI(
+// newNamespaceCLI creates a namespace CLI
+func newNamespaceCLI(
 	c *cli.Context,
 	isAdminMode bool,
-) *domainCLIImpl {
+) *namespaceCLIImpl {
 
 	var frontendClient workflowservice.WorkflowServiceClient
-	var domainHandler domain.Handler
+	var namespaceHandler namespace.Handler
 	if !isAdminMode {
 		frontendClient = initializeFrontendClient(c)
 	} else {
-		domainHandler = initializeAdminDomainHandler(c)
+		namespaceHandler = initializeAdminNamespaceHandler(c)
 	}
-	return &domainCLIImpl{
-		frontendClient: frontendClient,
-		domainHandler:  domainHandler,
+	return &namespaceCLIImpl{
+		frontendClient:   frontendClient,
+		namespaceHandler: namespaceHandler,
 	}
 }
 
-// RegisterDomain register a domain
-func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
-	domainName := getRequiredGlobalOption(c, FlagDomain)
+// RegisterNamespace register a namespace
+func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
 
 	description := c.String(FlagDescription)
 	ownerEmail := c.String(FlagOwnerEmail)
-	retentionDays := defaultDomainRetentionDays
+	retentionDays := defaultNamespaceRetentionDays
 
 	if c.IsSet(FlagRetentionDays) {
 		retentionDays = c.Int(FlagRetentionDays)
@@ -82,26 +82,26 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 	securityToken := c.String(FlagSecurityToken)
 	var err error
 
-	var isGlobalDomain bool
-	if c.IsSet(FlagIsGlobalDomain) {
-		isGlobalDomain, err = strconv.ParseBool(c.String(FlagIsGlobalDomain))
+	var isGlobalNamespace bool
+	if c.IsSet(FlagIsGlobalNamespace) {
+		isGlobalNamespace, err = strconv.ParseBool(c.String(FlagIsGlobalNamespace))
 		if err != nil {
-			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagIsGlobalDomain), err)
+			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagIsGlobalNamespace), err)
 		}
 	}
 
-	domainData := map[string]string{}
-	if c.IsSet(FlagDomainData) {
-		domainDataStr := getRequiredOption(c, FlagDomainData)
-		domainData, err = parseDomainDataKVs(domainDataStr)
+	namespaceData := map[string]string{}
+	if c.IsSet(FlagNamespaceData) {
+		namespaceDataStr := getRequiredOption(c, FlagNamespaceData)
+		namespaceData, err = parseNamespaceDataKVs(namespaceDataStr)
 		if err != nil {
-			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagDomainData), err)
+			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagNamespaceData), err)
 		}
 	}
-	if len(requiredDomainDataKeys) > 0 {
-		err = checkRequiredDomainDataKVs(domainData)
+	if len(requiredNamespaceDataKeys) > 0 {
+		err = checkRequiredNamespaceDataKVs(namespaceData)
 		if err != nil {
-			ErrorAndExit("Domain data missed required data.", err)
+			ErrorAndExit("Namespace data missed required data.", err)
 		}
 	}
 
@@ -123,11 +123,11 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		}
 	}
 
-	request := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
+	request := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
 		Description:                            description,
 		OwnerEmail:                             ownerEmail,
-		Data:                                   domainData,
+		Data:                                   namespaceData,
 		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
 		Clusters:                               clusters,
 		ActiveClusterName:                      activeClusterName,
@@ -136,56 +136,56 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		HistoryArchivalURI:                     c.String(FlagHistoryArchivalURI),
 		VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
 		VisibilityArchivalURI:                  c.String(FlagVisibilityArchivalURI),
-		IsGlobalDomain:                         isGlobalDomain,
+		IsGlobalNamespace:                      isGlobalNamespace,
 	}
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	err = d.registerDomain(ctx, request)
+	err = d.registerNamespace(ctx, request)
 	if err != nil {
-		if _, ok := err.(*serviceerror.DomainAlreadyExists); !ok {
-			ErrorAndExit("Register Domain operation failed.", err)
+		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); !ok {
+			ErrorAndExit("Register Namespace operation failed.", err)
 		} else {
-			ErrorAndExit(fmt.Sprintf("Domain %s already registered.", domainName), err)
+			ErrorAndExit(fmt.Sprintf("Namespace %s already registered.", namespace), err)
 		}
 	} else {
-		fmt.Printf("Domain %s successfully registered.\n", domainName)
+		fmt.Printf("Namespace %s successfully registered.\n", namespace)
 	}
 }
 
-// UpdateDomain updates a domain
-func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
-	domainName := getRequiredGlobalOption(c, FlagDomain)
+// UpdateNamespace updates a namespace
+func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
 
-	var updateRequest *workflowservice.UpdateDomainRequest
+	var updateRequest *workflowservice.UpdateNamespaceRequest
 	ctx, cancel := newContext(c)
 	defer cancel()
 
 	if c.IsSet(FlagActiveClusterName) {
 		activeCluster := c.String(FlagActiveClusterName)
 		fmt.Printf("Will set active cluster name to: %s, other flag will be omitted.\n", activeCluster)
-		replicationConfig := &commonproto.DomainReplicationConfiguration{
+		replicationConfig := &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: activeCluster,
 		}
-		updateRequest = &workflowservice.UpdateDomainRequest{
-			Name:                     domainName,
+		updateRequest = &workflowservice.UpdateNamespaceRequest{
+			Name:                     namespace,
 			ReplicationConfiguration: replicationConfig,
 		}
 	} else {
-		resp, err := d.describeDomain(ctx, &workflowservice.DescribeDomainRequest{
-			Name: domainName,
+		resp, err := d.describeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Name: namespace,
 		})
 		if err != nil {
 			if _, ok := err.(*serviceerror.NotFound); !ok {
-				ErrorAndExit("Operation UpdateDomain failed.", err)
+				ErrorAndExit("Operation UpdateNamespace failed.", err)
 			} else {
-				ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
+				ErrorAndExit(fmt.Sprintf("Namespace %s does not exist.", namespace), err)
 			}
 			return
 		}
 
-		description := resp.DomainInfo.GetDescription()
-		ownerEmail := resp.DomainInfo.GetOwnerEmail()
+		description := resp.NamespaceInfo.GetDescription()
+		ownerEmail := resp.NamespaceInfo.GetOwnerEmail()
 		retentionDays := resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays()
 		emitMetric := resp.Configuration.GetEmitMetric().GetValue()
 		var clusters []*commonproto.ClusterReplicationConfiguration
@@ -196,12 +196,12 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 		if c.IsSet(FlagOwnerEmail) {
 			ownerEmail = c.String(FlagOwnerEmail)
 		}
-		domainData := map[string]string{}
-		if c.IsSet(FlagDomainData) {
-			domainDataStr := c.String(FlagDomainData)
-			domainData, err = parseDomainDataKVs(domainDataStr)
+		namespaceData := map[string]string{}
+		if c.IsSet(FlagNamespaceData) {
+			namespaceDataStr := c.String(FlagNamespaceData)
+			namespaceData, err = parseNamespaceDataKVs(namespaceDataStr)
 			if err != nil {
-				ErrorAndExit("Domain data format is invalid.", err)
+				ErrorAndExit("Namespace data format is invalid.", err)
 			}
 		}
 		if c.IsSet(FlagRetentionDays) {
@@ -242,12 +242,12 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 			badBinaryToDelete = c.String(FlagRemoveBadBinary)
 		}
 
-		updateInfo := &commonproto.UpdateDomainInfo{
+		updateInfo := &commonproto.UpdateNamespaceInfo{
 			Description: description,
 			OwnerEmail:  ownerEmail,
-			Data:        domainData,
+			Data:        namespaceData,
 		}
-		updateConfig := &commonproto.DomainConfiguration{
+		updateConfig := &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retentionDays,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
@@ -256,11 +256,11 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 			VisibilityArchivalURI:                  c.String(FlagVisibilityArchivalURI),
 			BadBinaries:                            binBinaries,
 		}
-		replicationConfig := &commonproto.DomainReplicationConfiguration{
+		replicationConfig := &commonproto.NamespaceReplicationConfiguration{
 			Clusters: clusters,
 		}
-		updateRequest = &workflowservice.UpdateDomainRequest{
-			Name:                     domainName,
+		updateRequest = &workflowservice.UpdateNamespaceRequest{
+			Name:                     namespace,
 			UpdatedInfo:              updateInfo,
 			Configuration:            updateConfig,
 			ReplicationConfiguration: replicationConfig,
@@ -270,48 +270,48 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 
 	securityToken := c.String(FlagSecurityToken)
 	updateRequest.SecurityToken = securityToken
-	err := d.updateDomain(ctx, updateRequest)
+	err := d.updateNamespace(ctx, updateRequest)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
-			ErrorAndExit("Operation UpdateDomain failed.", err)
+			ErrorAndExit("Operation UpdateNamespace failed.", err)
 		} else {
-			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
+			ErrorAndExit(fmt.Sprintf("Namespace %s does not exist.", namespace), err)
 		}
 	} else {
-		fmt.Printf("Domain %s successfully updated.\n", domainName)
+		fmt.Printf("Namespace %s successfully updated.\n", namespace)
 	}
 }
 
-// DescribeDomain updates a domain
-func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
-	domainName := c.GlobalString(FlagDomain)
-	domainID := c.String(FlagDomainID)
+// DescribeNamespace updates a namespace
+func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
+	namespace := c.GlobalString(FlagNamespace)
+	namespaceID := c.String(FlagNamespaceID)
 
-	if domainID == "" && domainName == "" {
-		ErrorAndExit("At least domainID or domainName must be provided.", nil)
+	if namespaceID == "" && namespace == "" {
+		ErrorAndExit("At least namespaceID or namespace must be provided.", nil)
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
-	resp, err := d.describeDomain(ctx, &workflowservice.DescribeDomainRequest{
-		Name: domainName,
-		Uuid: domainID,
+	resp, err := d.describeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
+		Uuid: namespaceID,
 	})
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
-			ErrorAndExit("Operation DescribeDomain failed.", err)
+			ErrorAndExit("Operation DescribeNamespace failed.", err)
 		}
-		ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
+		ErrorAndExit(fmt.Sprintf("Namespace %s does not exist.", namespace), err)
 	}
 
-	var formatStr = "Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %#v\nStatus: %v\nRetentionInDays: %v\n" +
+	var formatStr = "Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nStatus: %v\nRetentionInDays: %v\n" +
 		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nHistoryArchivalStatus: %v\n"
 	descValues := []interface{}{
-		resp.DomainInfo.GetName(),
-		resp.DomainInfo.GetUuid(),
-		resp.DomainInfo.GetDescription(),
-		resp.DomainInfo.GetOwnerEmail(),
-		resp.DomainInfo.Data,
-		resp.DomainInfo.GetStatus(),
+		resp.NamespaceInfo.GetName(),
+		resp.NamespaceInfo.GetUuid(),
+		resp.NamespaceInfo.GetDescription(),
+		resp.NamespaceInfo.GetOwnerEmail(),
+		resp.NamespaceInfo.Data,
+		resp.NamespaceInfo.GetStatus(),
 		resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays(),
 		resp.Configuration.GetEmitMetric().GetValue(),
 		resp.ReplicationConfiguration.GetActiveClusterName(),
@@ -349,42 +349,42 @@ func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 	}
 }
 
-func (d *domainCLIImpl) registerDomain(
+func (d *namespaceCLIImpl) registerNamespace(
 	ctx context.Context,
-	request *workflowservice.RegisterDomainRequest,
+	request *workflowservice.RegisterNamespaceRequest,
 ) error {
 	if d.frontendClient != nil {
-		_, err := d.frontendClient.RegisterDomain(ctx, request)
+		_, err := d.frontendClient.RegisterNamespace(ctx, request)
 		return err
 	}
 
-	_, err := d.domainHandler.RegisterDomain(ctx, request)
+	_, err := d.namespaceHandler.RegisterNamespace(ctx, request)
 	return err
 }
 
-func (d *domainCLIImpl) updateDomain(
+func (d *namespaceCLIImpl) updateNamespace(
 	ctx context.Context,
-	request *workflowservice.UpdateDomainRequest,
+	request *workflowservice.UpdateNamespaceRequest,
 ) error {
 	if d.frontendClient != nil {
-		_, err := d.frontendClient.UpdateDomain(ctx, request)
+		_, err := d.frontendClient.UpdateNamespace(ctx, request)
 		return err
 	}
 
-	_, err := d.domainHandler.UpdateDomain(ctx, request)
+	_, err := d.namespaceHandler.UpdateNamespace(ctx, request)
 	return err
 }
 
-func (d *domainCLIImpl) describeDomain(
+func (d *namespaceCLIImpl) describeNamespace(
 	ctx context.Context,
-	request *workflowservice.DescribeDomainRequest,
-) (*workflowservice.DescribeDomainResponse, error) {
+	request *workflowservice.DescribeNamespaceRequest,
+) (*workflowservice.DescribeNamespaceResponse, error) {
 
 	if d.frontendClient != nil {
-		return d.frontendClient.DescribeDomain(ctx, request)
+		return d.frontendClient.DescribeNamespace(ctx, request)
 	}
 
-	resp, err := d.domainHandler.DescribeDomain(ctx, request)
+	resp, err := d.namespaceHandler.DescribeNamespace(ctx, request)
 	return resp, err
 }
 

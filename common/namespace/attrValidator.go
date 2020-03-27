@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package domain
+package namespace
 
 import (
 	"fmt"
@@ -31,14 +31,14 @@ import (
 )
 
 type (
-	// AttrValidatorImpl is domain attr validator
+	// AttrValidatorImpl is namespace attr validator
 	AttrValidatorImpl struct {
 		clusterMetadata  cluster.Metadata
 		minRetentionDays int32
 	}
 )
 
-// newAttrValidator create a new domain attr validator
+// newAttrValidator create a new namespace attr validator
 func newAttrValidator(
 	clusterMetadata cluster.Metadata,
 	minRetentionDays int32,
@@ -50,7 +50,7 @@ func newAttrValidator(
 	}
 }
 
-func (d *AttrValidatorImpl) validateDomainConfig(config *persistence.DomainConfig) error {
+func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistence.NamespaceConfig) error {
 	if config.Retention < int32(d.minRetentionDays) {
 		return errInvalidRetentionPeriod
 	}
@@ -63,8 +63,8 @@ func (d *AttrValidatorImpl) validateDomainConfig(config *persistence.DomainConfi
 	return nil
 }
 
-func (d *AttrValidatorImpl) validateDomainReplicationConfigForLocalDomain(
-	replicationConfig *persistence.DomainReplicationConfig,
+func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForLocalNamespace(
+	replicationConfig *persistence.NamespaceReplicationConfig,
 ) error {
 
 	activeCluster := replicationConfig.ActiveClusterName
@@ -80,18 +80,18 @@ func (d *AttrValidatorImpl) validateDomainReplicationConfigForLocalDomain(
 	}
 
 	if activeCluster != d.clusterMetadata.GetCurrentClusterName() {
-		return serviceerror.NewInvalidArgument("Invalid local domain active cluster")
+		return serviceerror.NewInvalidArgument("Invalid local namespace active cluster")
 	}
 
 	if len(clusters) != 1 || clusters[0].ClusterName != activeCluster {
-		return serviceerror.NewInvalidArgument("Invalid local domain clusters")
+		return serviceerror.NewInvalidArgument("Invalid local namespace clusters")
 	}
 
 	return nil
 }
 
-func (d *AttrValidatorImpl) validateDomainReplicationConfigForGlobalDomain(
-	replicationConfig *persistence.DomainReplicationConfig,
+func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForGlobalNamespace(
+	replicationConfig *persistence.NamespaceReplicationConfig,
 ) error {
 
 	activeCluster := replicationConfig.ActiveClusterName
@@ -120,7 +120,7 @@ func (d *AttrValidatorImpl) validateDomainReplicationConfigForGlobalDomain(
 	return nil
 }
 
-func (d *AttrValidatorImpl) validateDomainReplicationConfigClustersDoesNotRemove(
+func (d *AttrValidatorImpl) validateNamespaceReplicationConfigClustersDoesNotRemove(
 	clustersOld []*persistence.ClusterReplicationConfig,
 	clustersNew []*persistence.ClusterReplicationConfig,
 ) error {
@@ -135,12 +135,12 @@ func (d *AttrValidatorImpl) validateDomainReplicationConfigClustersDoesNotRemove
 	}
 
 	if len(clusterNamesNew) < len(clusterNamesOld) {
-		return errCannotRemoveClustersFromDomain
+		return errCannotRemoveClustersFromNamespace
 	}
 
 	for clusterName := range clusterNamesOld {
 		if _, ok := clusterNamesNew[clusterName]; !ok {
-			return errCannotRemoveClustersFromDomain
+			return errCannotRemoveClustersFromNamespace
 		}
 	}
 	return nil

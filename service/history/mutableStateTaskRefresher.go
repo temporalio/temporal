@@ -42,25 +42,25 @@ type (
 	}
 
 	mutableStateTaskRefresherImpl struct {
-		config      *Config
-		domainCache cache.DomainCache
-		eventsCache eventsCache
-		logger      log.Logger
+		config         *Config
+		namespaceCache cache.NamespaceCache
+		eventsCache    eventsCache
+		logger         log.Logger
 	}
 )
 
 func newMutableStateTaskRefresher(
 	config *Config,
-	domainCache cache.DomainCache,
+	namespaceCache cache.NamespaceCache,
 	eventsCache eventsCache,
 	logger log.Logger,
 ) *mutableStateTaskRefresherImpl {
 
 	return &mutableStateTaskRefresherImpl{
-		config:      config,
-		domainCache: domainCache,
-		eventsCache: eventsCache,
-		logger:      logger,
+		config:         config,
+		namespaceCache: namespaceCache,
+		eventsCache:    eventsCache,
+		logger:         logger,
 	}
 }
 
@@ -70,7 +70,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasks(
 ) error {
 
 	taskGenerator := newMutableStateTaskGenerator(
-		r.domainCache,
+		r.namespaceCache,
 		r.logger,
 		mutableState,
 	)
@@ -293,7 +293,7 @@ Loop:
 		}
 
 		scheduleEvent, err := r.eventsCache.getEvent(
-			executionInfo.DomainID,
+			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
 			activityInfo.ScheduledEventBatchID,
@@ -373,7 +373,7 @@ Loop:
 		}
 
 		scheduleEvent, err := r.eventsCache.getEvent(
-			executionInfo.DomainID,
+			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
 			childWorkflowInfo.InitiatedEventBatchID,
@@ -411,7 +411,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWork
 
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
 		initiateEvent, err := r.eventsCache.getEvent(
-			executionInfo.DomainID,
+			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
 			requestCancelInfo.InitiatedEventBatchID,
@@ -449,7 +449,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 
 	for _, signalInfo := range pendingSignalInfos {
 		initiateEvent, err := r.eventsCache.getEvent(
-			executionInfo.DomainID,
+			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
 			signalInfo.InitiatedEventBatchID,

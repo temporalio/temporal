@@ -29,8 +29,8 @@ import (
 )
 
 var (
-	errEmptyDomainID         = errors.New("DomainID is empty")
-	errEmptyDomainName       = errors.New("Domain name is empty")
+	errEmptyNamespaceID      = errors.New("NamespaceID is empty")
+	errEmptyNamespace        = errors.New("Namespace is empty")
 	errEmptyWorkflowID       = errors.New("WorkflowID is empty")
 	errEmptyRunID            = errors.New("RunID is empty")
 	errInvalidPageSize       = errors.New("PageSize should be greater than 0")
@@ -44,8 +44,8 @@ var (
 func TagLoggerWithArchiveHistoryRequestAndURI(logger log.Logger, request *ArchiveHistoryRequest, URI string) log.Logger {
 	return logger.WithTags(
 		tag.ShardID(request.ShardID),
-		tag.ArchivalRequestDomainID(request.DomainID),
-		tag.ArchivalRequestDomainName(request.DomainName),
+		tag.ArchivalRequestNamespaceID(request.NamespaceID),
+		tag.ArchivalRequestNamespace(request.Namespace),
 		tag.ArchivalRequestWorkflowID(request.WorkflowID),
 		tag.ArchivalRequestRunID(request.RunID),
 		tag.ArchivalRequestBranchToken(request.BranchToken),
@@ -58,8 +58,8 @@ func TagLoggerWithArchiveHistoryRequestAndURI(logger log.Logger, request *Archiv
 // TagLoggerWithArchiveVisibilityRequestAndURI tags logger with fields in the archive visibility request and the URI
 func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archiver.ArchiveVisibilityRequest, URI string) log.Logger {
 	return logger.WithTags(
-		tag.ArchivalRequestDomainID(request.DomainID),
-		tag.ArchivalRequestDomainName(request.DomainName),
+		tag.ArchivalRequestNamespaceID(request.NamespaceID),
+		tag.ArchivalRequestNamespace(request.Namespace),
 		tag.ArchivalRequestWorkflowID(request.WorkflowID),
 		tag.ArchivalRequestRunID(request.RunID),
 		tag.ArchvialRequestWorkflowType(request.WorkflowTypeName),
@@ -71,8 +71,8 @@ func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *arc
 
 // ValidateHistoryArchiveRequest validates the archive history request
 func ValidateHistoryArchiveRequest(request *ArchiveHistoryRequest) error {
-	if request.DomainID == "" {
-		return errEmptyDomainID
+	if request.NamespaceID == "" {
+		return errEmptyNamespaceID
 	}
 	if request.WorkflowID == "" {
 		return errEmptyWorkflowID
@@ -80,16 +80,16 @@ func ValidateHistoryArchiveRequest(request *ArchiveHistoryRequest) error {
 	if request.RunID == "" {
 		return errEmptyRunID
 	}
-	if request.DomainName == "" {
-		return errEmptyDomainName
+	if request.Namespace == "" {
+		return errEmptyNamespace
 	}
 	return nil
 }
 
 // ValidateGetRequest validates the get archived history request
 func ValidateGetRequest(request *GetHistoryRequest) error {
-	if request.DomainID == "" {
-		return errEmptyDomainID
+	if request.NamespaceID == "" {
+		return errEmptyNamespaceID
 	}
 	if request.WorkflowID == "" {
 		return errEmptyWorkflowID
@@ -105,11 +105,11 @@ func ValidateGetRequest(request *GetHistoryRequest) error {
 
 // ValidateVisibilityArchivalRequest validates the archive visibility request
 func ValidateVisibilityArchivalRequest(request *archiver.ArchiveVisibilityRequest) error {
-	if request.DomainID == "" {
-		return errEmptyDomainID
+	if request.NamespaceID == "" {
+		return errEmptyNamespaceID
 	}
-	if request.DomainName == "" {
-		return errEmptyDomainName
+	if request.Namespace == "" {
+		return errEmptyNamespace
 	}
 	if request.WorkflowID == "" {
 		return errEmptyWorkflowID
@@ -131,8 +131,8 @@ func ValidateVisibilityArchivalRequest(request *archiver.ArchiveVisibilityReques
 
 // ValidateQueryRequest validates the query visibility request
 func ValidateQueryRequest(request *QueryVisibilityRequest) error {
-	if request.DomainID == "" {
-		return errEmptyDomainID
+	if request.NamespaceID == "" {
+		return errEmptyNamespaceID
 	}
 	if request.PageSize == 0 {
 		return errInvalidPageSize

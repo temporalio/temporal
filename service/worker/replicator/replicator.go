@@ -31,12 +31,12 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -47,21 +47,21 @@ import (
 type (
 	// Replicator is the processor for replication tasks
 	Replicator struct {
-		domainCache                   cache.DomainCache
-		clusterMetadata               cluster.Metadata
-		domainReplicationTaskExecutor domain.ReplicationTaskExecutor
-		clientBean                    client.Bean
-		historyClient                 history.Client
-		config                        *Config
-		client                        messaging.Client
-		processors                    []*replicationTaskProcessor
-		domainProcessors              []*domainReplicationMessageProcessor
-		logger                        log.Logger
-		metricsClient                 metrics.Client
-		historySerializer             persistence.PayloadSerializer
-		hostInfo                      *membership.HostInfo
-		serviceResolver               membership.ServiceResolver
-		domainReplicationQueue        persistence.DomainReplicationQueue
+		namespaceCache                   cache.NamespaceCache
+		clusterMetadata                  cluster.Metadata
+		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		clientBean                       client.Bean
+		historyClient                    history.Client
+		config                           *Config
+		client                           messaging.Client
+		processors                       []*replicationTaskProcessor
+		namespaceProcessors              []*namespaceReplicationMessageProcessor
+		logger                           log.Logger
+		metricsClient                    metrics.Client
+		historySerializer                persistence.PayloadSerializer
+		hostInfo                         *membership.HostInfo
+		serviceResolver                  membership.ServiceResolver
+		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 	}
 
 	// Config contains all the replication config for worker
@@ -82,7 +82,7 @@ type (
 func NewReplicator(
 	clusterMetadata cluster.Metadata,
 	metadataManagerV2 persistence.MetadataManager,
-	domainCache cache.DomainCache,
+	namespaceCache cache.NamespaceCache,
 	clientBean client.Bean,
 	config *Config,
 	client messaging.Client,
@@ -90,25 +90,25 @@ func NewReplicator(
 	metricsClient metrics.Client,
 	hostInfo *membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
-	domainReplicationQueue persistence.DomainReplicationQueue,
-	domainReplicationTaskExecutor domain.ReplicationTaskExecutor,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
+	namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor,
 ) *Replicator {
 
 	logger = logger.WithTags(tag.ComponentReplicator)
 	return &Replicator{
-		hostInfo:                      hostInfo,
-		serviceResolver:               serviceResolver,
-		domainCache:                   domainCache,
-		clusterMetadata:               clusterMetadata,
-		domainReplicationTaskExecutor: domainReplicationTaskExecutor,
-		clientBean:                    clientBean,
-		historyClient:                 clientBean.GetHistoryClient(),
-		config:                        config,
-		client:                        client,
-		logger:                        logger,
-		metricsClient:                 metricsClient,
-		historySerializer:             persistence.NewPayloadSerializer(),
-		domainReplicationQueue:        domainReplicationQueue,
+		hostInfo:                         hostInfo,
+		serviceResolver:                  serviceResolver,
+		namespaceCache:                   namespaceCache,
+		clusterMetadata:                  clusterMetadata,
+		namespaceReplicationTaskExecutor: namespaceReplicationTaskExecutor,
+		clientBean:                       clientBean,
+		historyClient:                    clientBean.GetHistoryClient(),
+		config:                           config,
+		client:                           client,
+		logger:                           logger,
+		metricsClient:                    metricsClient,
+		historySerializer:                persistence.NewPayloadSerializer(),
+		namespaceReplicationQueue:        namespaceReplicationQueue,
 	}
 }
 
@@ -123,17 +123,17 @@ func (r *Replicator) Start() error {
 
 		if clusterName != currentClusterName {
 			if replicationConsumerConfig.Type == config.ReplicationConsumerTypeRPC {
-				processor := newDomainReplicationMessageProcessor(
+				processor := newNamespaceReplicationMessageProcessor(
 					clusterName,
 					r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
 					r.clientBean.GetRemoteAdminClient(clusterName),
 					r.metricsClient,
-					r.domainReplicationTaskExecutor,
+					r.namespaceReplicationTaskExecutor,
 					r.hostInfo,
 					r.serviceResolver,
-					r.domainReplicationQueue,
+					r.namespaceReplicationQueue,
 				)
-				r.domainProcessors = append(r.domainProcessors, processor)
+				r.namespaceProcessors = append(r.namespaceProcessors, processor)
 			} else {
 				r.createKafkaProcessors(currentClusterName, clusterName)
 			}
@@ -146,8 +146,8 @@ func (r *Replicator) Start() error {
 		}
 	}
 
-	for _, domainProcessor := range r.domainProcessors {
-		domainProcessor.Start()
+	for _, namespaceProcessor := range r.namespaceProcessors {
+		namespaceProcessor.Start()
 	}
 
 	return nil
@@ -168,7 +168,7 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 	logger := r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName), tag.KafkaConsumerName(consumerName))
 	historyRereplicator := xdc.NewHistoryRereplicator(
 		currentClusterName,
-		r.domainCache,
+		r.namespaceCache,
 		adminClient,
 		func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
 			_, err := historyClient.ReplicateRawEvents(ctx, request)
@@ -179,7 +179,7 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		r.logger,
 	)
 	nDCHistoryReplicator := xdc.NewNDCHistoryResender(
-		r.domainCache,
+		r.namespaceCache,
 		adminClient,
 		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 			_, err := historyClient.ReplicateEventsV2(ctx, request)
@@ -196,11 +196,11 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		r.config,
 		logger,
 		r.metricsClient,
-		r.domainReplicationTaskExecutor,
+		r.namespaceReplicationTaskExecutor,
 		historyRereplicator,
 		nDCHistoryReplicator,
 		r.historyClient,
-		r.domainCache,
+		r.namespaceCache,
 		task.NewSequentialTaskProcessor(
 			r.config.ReplicatorTaskConcurrency(),
 			replicationSequentialTaskQueueHashFn,
@@ -217,11 +217,11 @@ func (r *Replicator) Stop() {
 		processor.Stop()
 	}
 
-	for _, domainProcessor := range r.domainProcessors {
-		domainProcessor.Stop()
+	for _, namespaceProcessor := range r.namespaceProcessors {
+		namespaceProcessor.Stop()
 	}
 
-	r.domainCache.Stop()
+	r.namespaceCache.Stop()
 }
 
 func getConsumerName(currentCluster, remoteCluster string) string {

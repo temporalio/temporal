@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package domain
+package namespace
 
 import (
 	"testing"
@@ -38,46 +38,46 @@ import (
 )
 
 type (
-	domainReplicationTaskExecutorSuite struct {
+	namespaceReplicationTaskExecutorSuite struct {
 		suite.Suite
 		persistencetests.TestBase
-		domainReplicator *domainReplicationTaskExecutorImpl
+		namespaceReplicator *namespaceReplicationTaskExecutorImpl
 	}
 )
 
-func TestDomainReplicationTaskExecutorSuite(t *testing.T) {
-	s := new(domainReplicationTaskExecutorSuite)
+func TestNamespaceReplicationTaskExecutorSuite(t *testing.T) {
+	s := new(namespaceReplicationTaskExecutorSuite)
 	suite.Run(t, s)
 }
 
-func (s *domainReplicationTaskExecutorSuite) SetupSuite() {
+func (s *namespaceReplicationTaskExecutorSuite) SetupSuite() {
 }
 
-func (s *domainReplicationTaskExecutorSuite) TearDownSuite() {
+func (s *namespaceReplicationTaskExecutorSuite) TearDownSuite() {
 
 }
 
-func (s *domainReplicationTaskExecutorSuite) SetupTest() {
+func (s *namespaceReplicationTaskExecutorSuite) SetupTest() {
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup()
 	zapLogger, err := zap.NewDevelopment()
 	s.Require().NoError(err)
 	logger := loggerimpl.NewLogger(zapLogger)
-	s.domainReplicator = NewReplicationTaskExecutor(
+	s.namespaceReplicator = NewReplicationTaskExecutor(
 		s.MetadataManager,
 		logger,
-	).(*domainReplicationTaskExecutorImpl)
+	).(*namespaceReplicationTaskExecutorImpl)
 }
 
-func (s *domainReplicationTaskExecutorSuite) TearDownTest() {
+func (s *namespaceReplicationTaskExecutorSuite) TearDownTest() {
 	s.TearDownWorkflowStore()
 }
 
-func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask_NameUUIDCollision() {
-	operation := enums.DomainOperationCreate
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_NameUUIDCollision() {
+	operation := enums.NamespaceOperationCreate
 	id := uuid.New()
-	name := "some random domain test name"
-	status := enums.DomainStatusRegistered
+	name := "some random namespace test name"
+	status := enums.NamespaceStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -100,17 +100,17 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask_Name
 		},
 	}
 
-	task := &replication.DomainTaskAttributes{
-		DomainOperation: operation,
-		Id:              id,
-		Info: &commonproto.DomainInfo{
+	task := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: operation,
+		Id:                 id,
+		Info: &commonproto.NamespaceInfo{
 			Name:        name,
 			Status:      status,
 			Description: description,
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
@@ -118,7 +118,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask_Name
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
 			VisibilityArchivalURI:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -126,27 +126,27 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask_Name
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.domainReplicator.Execute(task)
+	err := s.namespaceReplicator.Execute(task)
 	s.Nil(err)
 
 	task.Id = uuid.New()
 	task.Info.Name = name
-	err = s.domainReplicator.Execute(task)
+	err = s.namespaceReplicator.Execute(task)
 	s.NotNil(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	task.Id = id
-	task.Info.Name = "other random domain test name"
-	err = s.domainReplicator.Execute(task)
+	task.Info.Name = "other random namespace test name"
+	err = s.namespaceReplicator.Execute(task)
 	s.NotNil(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask() {
-	operation := enums.DomainOperationCreate
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask() {
+	operation := enums.NamespaceOperationCreate
 	id := uuid.New()
-	name := "some random domain test name"
-	status := enums.DomainStatusRegistered
+	name := "some random namespace test name"
+	status := enums.NamespaceStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -169,17 +169,17 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask() {
 		},
 	}
 
-	task := &replication.DomainTaskAttributes{
-		DomainOperation: operation,
-		Id:              id,
-		Info: &commonproto.DomainInfo{
+	task := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: operation,
+		Id:                 id,
+		Info: &commonproto.NamespaceInfo{
 			Name:        name,
 			Status:      status,
 			Description: description,
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
@@ -187,7 +187,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask() {
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
 			VisibilityArchivalURI:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -198,15 +198,15 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask() {
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.Execute(task)
+	err = s.namespaceReplicator.Execute(task)
 	s.Nil(err)
 
-	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{ID: id})
+	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{ID: id})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)
 	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.DomainStatusRegistered, resp.Info.Status)
+	s.Equal(persistence.NamespaceStatusRegistered, resp.Info.Status)
 	s.Equal(description, resp.Info.Description)
 	s.Equal(ownerEmail, resp.Info.OwnerEmail)
 	s.Equal(data, resp.Info.Data)
@@ -217,22 +217,22 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask() {
 	s.Equal(visibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
 	s.Equal(visibilityArchivalURI, resp.Config.VisibilityArchivalURI)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)
 	s.Equal(failoverVersion, resp.FailoverVersion)
 	s.Equal(int64(0), resp.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 
 	// handle duplicated task
-	err = s.domainReplicator.Execute(task)
+	err = s.namespaceReplicator.Execute(task)
 	s.Nil(err)
 }
 
-func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_DomainNotExist() {
-	operation := enums.DomainOperationUpdate
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NamespaceNotExist() {
+	operation := enums.NamespaceOperationUpdate
 	id := uuid.New()
-	name := "some random domain test name"
-	status := enums.DomainStatusRegistered
+	name := "some random namespace test name"
+	status := enums.NamespaceStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	retention := int32(10)
@@ -245,7 +245,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Domain
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(12)
 	failoverVersion := int64(59)
-	domainData := map[string]string{"k1": "v1", "k2": "v2"}
+	namespaceData := map[string]string{"k1": "v1", "k2": "v2"}
 	clusters := []*commonproto.ClusterReplicationConfiguration{
 		&commonproto.ClusterReplicationConfiguration{
 			ClusterName: clusterActive,
@@ -255,17 +255,17 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Domain
 		},
 	}
 
-	updateTask := &replication.DomainTaskAttributes{
-		DomainOperation: operation,
-		Id:              id,
-		Info: &commonproto.DomainInfo{
+	updateTask := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: operation,
+		Id:                 id,
+		Info: &commonproto.NamespaceInfo{
 			Name:        name,
 			Status:      status,
 			Description: description,
 			OwnerEmail:  ownerEmail,
-			Data:        domainData,
+			Data:        namespaceData,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
@@ -273,7 +273,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Domain
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
 			VisibilityArchivalURI:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -284,18 +284,18 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Domain
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.Execute(updateTask)
+	err = s.namespaceReplicator.Execute(updateTask)
 	s.Nil(err)
 
-	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
+	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)
 	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.DomainStatusRegistered, resp.Info.Status)
+	s.Equal(persistence.NamespaceStatusRegistered, resp.Info.Status)
 	s.Equal(description, resp.Info.Description)
 	s.Equal(ownerEmail, resp.Info.OwnerEmail)
-	s.Equal(domainData, resp.Info.Data)
+	s.Equal(namespaceData, resp.Info.Data)
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
 	s.Equal(historyArchivalStatus, resp.Config.HistoryArchivalStatus)
@@ -303,18 +303,18 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Domain
 	s.Equal(visibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
 	s.Equal(visibilityArchivalURI, resp.Config.VisibilityArchivalURI)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)
 	s.Equal(failoverVersion, resp.FailoverVersion)
 	s.Equal(int64(0), resp.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
-func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_UpdateConfig_UpdateActiveCluster() {
-	operation := enums.DomainOperationCreate
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_UpdateActiveCluster() {
+	operation := enums.NamespaceOperationCreate
 	id := uuid.New()
-	name := "some random domain test name"
-	status := enums.DomainStatusRegistered
+	name := "some random namespace test name"
+	status := enums.NamespaceStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -337,17 +337,17 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 		},
 	}
 
-	createTask := &replication.DomainTaskAttributes{
-		DomainOperation: operation,
-		Id:              id,
-		Info: &commonproto.DomainInfo{
+	createTask := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: operation,
+		Id:                 id,
+		Info: &commonproto.NamespaceInfo{
 			Name:        name,
 			Status:      status,
 			Description: description,
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
@@ -355,7 +355,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
 			VisibilityArchivalURI:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -363,14 +363,14 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.domainReplicator.Execute(createTask)
+	err := s.namespaceReplicator.Execute(createTask)
 	s.Nil(err)
 
 	// success update case
-	updateOperation := enums.DomainOperationUpdate
-	updateStatus := enums.DomainStatusDeprecated
-	updateDescription := "other random domain test description"
-	updateOwnerEmail := "other random domain test owner"
+	updateOperation := enums.NamespaceOperationUpdate
+	updateStatus := enums.NamespaceStatusDeprecated
+	updateDescription := "other random namespace test description"
+	updateOwnerEmail := "other random namespace test owner"
 	updatedData := map[string]string{"k": "v1"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
@@ -390,17 +390,17 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &replication.DomainTaskAttributes{
-		DomainOperation: updateOperation,
-		Id:              id,
-		Info: &commonproto.DomainInfo{
+	updateTask := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: updateOperation,
+		Id:                 id,
+		Info: &commonproto.NamespaceInfo{
 			Name:        name,
 			Status:      updateStatus,
 			Description: updateDescription,
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updatedData,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
 			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  updateHistoryArchivalStatus,
@@ -408,7 +408,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 			VisibilityArchivalStatus:               updateVisibilityArchivalStatus,
 			VisibilityArchivalURI:                  updateVisibilityArchivalURI,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
 		},
@@ -418,14 +418,14 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.Execute(updateTask)
+	err = s.namespaceReplicator.Execute(updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
+	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)
 	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.DomainStatusDeprecated, resp.Info.Status)
+	s.Equal(persistence.NamespaceStatusDeprecated, resp.Info.Status)
 	s.Equal(updateDescription, resp.Info.Description)
 	s.Equal(updateOwnerEmail, resp.Info.OwnerEmail)
 	s.Equal(updatedData, resp.Info.Data)
@@ -436,18 +436,18 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 	s.Equal(updateVisibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
 	s.Equal(updateVisibilityArchivalURI, resp.Config.VisibilityArchivalURI)
 	s.Equal(updateClusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromProto(updateClusters), resp.ReplicationConfig.Clusters)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(updateClusters), resp.ReplicationConfig.Clusters)
 	s.Equal(updateConfigVersion, resp.ConfigVersion)
 	s.Equal(updateFailoverVersion, resp.FailoverVersion)
 	s.Equal(notificationVersion, resp.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
-func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_UpdateConfig_NoUpdateActiveCluster() {
-	operation := enums.DomainOperationCreate
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_NoUpdateActiveCluster() {
+	operation := enums.NamespaceOperationCreate
 	id := uuid.New()
-	name := "some random domain test name"
-	status := enums.DomainStatusRegistered
+	name := "some random namespace test name"
+	status := enums.NamespaceStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -470,17 +470,17 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 		},
 	}
 
-	createTask := &replication.DomainTaskAttributes{
-		DomainOperation: operation,
-		Id:              id,
-		Info: &commonproto.DomainInfo{
+	createTask := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: operation,
+		Id:                 id,
+		Info: &commonproto.NamespaceInfo{
 			Name:        name,
 			Status:      status,
 			Description: description,
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
@@ -488,7 +488,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
 			VisibilityArchivalURI:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -496,14 +496,14 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.domainReplicator.Execute(createTask)
+	err := s.namespaceReplicator.Execute(createTask)
 	s.Nil(err)
 
 	// success update case
-	updateOperation := enums.DomainOperationUpdate
-	updateStatus := enums.DomainStatusDeprecated
-	updateDescription := "other random domain test description"
-	updateOwnerEmail := "other random domain test owner"
+	updateOperation := enums.NamespaceOperationUpdate
+	updateStatus := enums.NamespaceStatusDeprecated
+	updateDescription := "other random namespace test description"
+	updateOwnerEmail := "other random namespace test owner"
 	updateData := map[string]string{"k": "v2"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
@@ -523,17 +523,17 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &replication.DomainTaskAttributes{
-		DomainOperation: updateOperation,
-		Id:              id,
-		Info: &commonproto.DomainInfo{
+	updateTask := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: updateOperation,
+		Id:                 id,
+		Info: &commonproto.NamespaceInfo{
 			Name:        name,
 			Status:      updateStatus,
 			Description: updateDescription,
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updateData,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
 			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  updateHistoryArchivalStatus,
@@ -541,7 +541,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 			VisibilityArchivalStatus:               updateVisibilityArchivalStatus,
 			VisibilityArchivalURI:                  updateVisibilityArchivalURI,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
 		},
@@ -551,14 +551,14 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.Execute(updateTask)
+	err = s.namespaceReplicator.Execute(updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
+	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)
 	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.DomainStatusDeprecated, resp.Info.Status)
+	s.Equal(persistence.NamespaceStatusDeprecated, resp.Info.Status)
 	s.Equal(updateDescription, resp.Info.Description)
 	s.Equal(updateOwnerEmail, resp.Info.OwnerEmail)
 	s.Equal(updateData, resp.Info.Data)
@@ -569,18 +569,18 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 	s.Equal(updateVisibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
 	s.Equal(updateVisibilityArchivalURI, resp.Config.VisibilityArchivalURI)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromProto(updateClusters), resp.ReplicationConfig.Clusters)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(updateClusters), resp.ReplicationConfig.Clusters)
 	s.Equal(updateConfigVersion, resp.ConfigVersion)
 	s.Equal(failoverVersion, resp.FailoverVersion)
 	s.Equal(int64(0), resp.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
-func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpdateConfig_UpdateActiveCluster() {
-	operation := enums.DomainOperationCreate
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NoUpdateConfig_UpdateActiveCluster() {
+	operation := enums.NamespaceOperationCreate
 	id := uuid.New()
-	name := "some random domain test name"
-	status := enums.DomainStatusRegistered
+	name := "some random namespace test name"
+	status := enums.NamespaceStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -603,17 +603,17 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 		},
 	}
 
-	createTask := &replication.DomainTaskAttributes{
-		DomainOperation: operation,
-		Id:              id,
-		Info: &commonproto.DomainInfo{
+	createTask := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: operation,
+		Id:                 id,
+		Info: &commonproto.NamespaceInfo{
 			Name:        name,
 			Status:      status,
 			Description: description,
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
@@ -621,7 +621,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
 			VisibilityArchivalURI:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -629,14 +629,14 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.domainReplicator.Execute(createTask)
+	err := s.namespaceReplicator.Execute(createTask)
 	s.Nil(err)
 
 	// success update case
-	updateOperation := enums.DomainOperationUpdate
-	updateStatus := enums.DomainStatusDeprecated
-	updateDescription := "other random domain test description"
-	updateOwnerEmail := "other random domain test owner"
+	updateOperation := enums.NamespaceOperationUpdate
+	updateStatus := enums.NamespaceStatusDeprecated
+	updateDescription := "other random namespace test description"
+	updateOwnerEmail := "other random namespace test owner"
 	updatedData := map[string]string{"k": "v2"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
@@ -652,17 +652,17 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &replication.DomainTaskAttributes{
-		DomainOperation: updateOperation,
-		Id:              id,
-		Info: &commonproto.DomainInfo{
+	updateTask := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: updateOperation,
+		Id:                 id,
+		Info: &commonproto.NamespaceInfo{
 			Name:        name,
 			Status:      updateStatus,
 			Description: updateDescription,
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updatedData,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
 			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
@@ -670,7 +670,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
 			VisibilityArchivalURI:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
 		},
@@ -680,14 +680,14 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.Execute(updateTask)
+	err = s.namespaceReplicator.Execute(updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
+	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)
 	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.DomainStatusRegistered, resp.Info.Status)
+	s.Equal(persistence.NamespaceStatusRegistered, resp.Info.Status)
 	s.Equal(description, resp.Info.Description)
 	s.Equal(ownerEmail, resp.Info.OwnerEmail)
 	s.Equal(data, resp.Info.Data)
@@ -698,18 +698,18 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 	s.Equal(visibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
 	s.Equal(visibilityArchivalURI, resp.Config.VisibilityArchivalURI)
 	s.Equal(updateClusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)
 	s.Equal(updateFailoverVersion, resp.FailoverVersion)
 	s.Equal(notificationVersion, resp.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
-func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpdateConfig_NoUpdateActiveCluster() {
-	operation := enums.DomainOperationCreate
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NoUpdateConfig_NoUpdateActiveCluster() {
+	operation := enums.NamespaceOperationCreate
 	id := uuid.New()
-	name := "some random domain test name"
-	status := enums.DomainStatusRegistered
+	name := "some random namespace test name"
+	status := enums.NamespaceStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -732,17 +732,17 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 		},
 	}
 
-	createTask := &replication.DomainTaskAttributes{
-		DomainOperation: operation,
-		Id:              id,
-		Info: &commonproto.DomainInfo{
+	createTask := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: operation,
+		Id:                 id,
+		Info: &commonproto.NamespaceInfo{
 			Name:        name,
 			Status:      status,
 			Description: description,
 			OwnerEmail:  ownerEmail,
 			Data:        data,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
@@ -750,7 +750,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
 			VisibilityArchivalURI:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
@@ -760,14 +760,14 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.Execute(createTask)
+	err = s.namespaceReplicator.Execute(createTask)
 	s.Nil(err)
 
 	// success update case
-	updateOperation := enums.DomainOperationUpdate
-	updateStatus := enums.DomainStatusDeprecated
-	updateDescription := "other random domain test description"
-	updateOwnerEmail := "other random domain test owner"
+	updateOperation := enums.NamespaceOperationUpdate
+	updateStatus := enums.NamespaceStatusDeprecated
+	updateDescription := "other random namespace test description"
+	updateOwnerEmail := "other random namespace test owner"
 	updatedData := map[string]string{"k": "v2"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
@@ -783,17 +783,17 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &replication.DomainTaskAttributes{
-		DomainOperation: updateOperation,
-		Id:              id,
-		Info: &commonproto.DomainInfo{
+	updateTask := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: updateOperation,
+		Id:                 id,
+		Info: &commonproto.NamespaceInfo{
 			Name:        name,
 			Status:      updateStatus,
 			Description: updateDescription,
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updatedData,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
 			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
@@ -801,21 +801,21 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
 			VisibilityArchivalURI:                  visibilityArchivalURI,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
 		},
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
 	}
-	err = s.domainReplicator.Execute(updateTask)
+	err = s.namespaceReplicator.Execute(updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
+	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Equal(id, resp.Info.ID)
 	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.DomainStatusRegistered, resp.Info.Status)
+	s.Equal(persistence.NamespaceStatusRegistered, resp.Info.Status)
 	s.Equal(description, resp.Info.Description)
 	s.Equal(ownerEmail, resp.Info.OwnerEmail)
 	s.Equal(data, resp.Info.Data)
@@ -826,7 +826,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 	s.Equal(visibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
 	s.Equal(visibilityArchivalURI, resp.Config.VisibilityArchivalURI)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)
 	s.Equal(failoverVersion, resp.FailoverVersion)
 	s.Equal(int64(0), resp.FailoverNotificationVersion)

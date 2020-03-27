@@ -40,7 +40,7 @@ import (
 
 type (
 	decisionAttrValidator struct {
-		domainCache               cache.DomainCache
+		namespaceCache            cache.NamespaceCache
 		maxIDLengthLimit          int
 		searchAttributesValidator *validator.SearchAttributesValidator
 	}
@@ -68,12 +68,12 @@ const (
 )
 
 func newDecisionAttrValidator(
-	domainCache cache.DomainCache,
+	namespaceCache cache.NamespaceCache,
 	config *Config,
 	logger log.Logger,
 ) *decisionAttrValidator {
 	return &decisionAttrValidator{
-		domainCache:      domainCache,
+		namespaceCache:   namespaceCache,
 		maxIDLengthLimit: config.MaxIDLengthLimit(),
 		searchAttributesValidator: validator.NewSearchAttributesValidator(
 			logger,
@@ -123,7 +123,7 @@ func (c *workflowSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 		len(blob),
 		c.blobSizeLimitWarn,
 		c.blobSizeLimitError,
-		executionInfo.DomainID,
+		executionInfo.NamespaceID,
 		executionInfo.WorkflowID,
 		executionInfo.RunID,
 		c.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope),
@@ -152,7 +152,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 	if historySize > c.historySizeLimitError || historyCount > c.historyCountLimitError {
 		executionInfo := c.mutableState.GetExecutionInfo()
 		c.logger.Error("history size exceeds error limit.",
-			tag.WorkflowDomainID(executionInfo.DomainID),
+			tag.WorkflowNamespaceID(executionInfo.NamespaceID),
 			tag.WorkflowID(executionInfo.WorkflowID),
 			tag.WorkflowRunID(executionInfo.RunID),
 			tag.WorkflowHistorySize(historySize),
@@ -172,7 +172,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 	if historySize > c.historySizeLimitWarn || historyCount > c.historyCountLimitWarn {
 		executionInfo := c.mutableState.GetExecutionInfo()
 		c.logger.Warn("history size exceeds warn limit.",
-			tag.WorkflowDomainID(executionInfo.DomainID),
+			tag.WorkflowNamespaceID(executionInfo.NamespaceID),
 			tag.WorkflowID(executionInfo.WorkflowID),
 			tag.WorkflowRunID(executionInfo.RunID),
 			tag.WorkflowHistorySize(historySize),
@@ -184,15 +184,15 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 }
 
 func (v *decisionAttrValidator) validateActivityScheduleAttributes(
-	domainID string,
-	targetDomainID string,
+	namespaceID string,
+	targetNamespaceID string,
 	attributes *commonproto.ScheduleActivityTaskDecisionAttributes,
 	wfTimeout int32,
 ) error {
 
-	if err := v.validateCrossDomainCall(
-		domainID,
-		targetDomainID,
+	if err := v.validateCrossNamespaceCall(
+		namespaceID,
+		targetNamespaceID,
 	); err != nil {
 		return err
 	}
@@ -226,8 +226,8 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 		return serviceerror.NewInvalidArgument("ActivityType exceeds length limit.")
 	}
 
-	if len(attributes.GetDomain()) > v.maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("Domain exceeds length limit.")
+	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
 	}
 
 	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
@@ -389,14 +389,14 @@ func (v *decisionAttrValidator) validateCancelWorkflowExecutionAttributes(
 }
 
 func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttributes(
-	domainID string,
-	targetDomainID string,
+	namespaceID string,
+	targetNamespaceID string,
 	attributes *commonproto.RequestCancelExternalWorkflowExecutionDecisionAttributes,
 ) error {
 
-	if err := v.validateCrossDomainCall(
-		domainID,
-		targetDomainID,
+	if err := v.validateCrossNamespaceCall(
+		namespaceID,
+		targetNamespaceID,
 	); err != nil {
 		return err
 	}
@@ -407,8 +407,8 @@ func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttribute
 	if attributes.GetWorkflowId() == "" {
 		return serviceerror.NewInvalidArgument("WorkflowId is not set on decision.")
 	}
-	if len(attributes.GetDomain()) > v.maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("Domain exceeds length limit.")
+	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
 	}
 	if len(attributes.GetWorkflowId()) > v.maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
@@ -422,14 +422,14 @@ func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttribute
 }
 
 func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttributes(
-	domainID string,
-	targetDomainID string,
+	namespaceID string,
+	targetNamespaceID string,
 	attributes *commonproto.SignalExternalWorkflowExecutionDecisionAttributes,
 ) error {
 
-	if err := v.validateCrossDomainCall(
-		domainID,
-		targetDomainID,
+	if err := v.validateCrossNamespaceCall(
+		namespaceID,
+		targetNamespaceID,
 	); err != nil {
 		return err
 	}
@@ -443,8 +443,8 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 	if attributes.Execution.GetWorkflowId() == "" {
 		return serviceerror.NewInvalidArgument("WorkflowId is not set on decision.")
 	}
-	if len(attributes.GetDomain()) > v.maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("Domain exceeds length limit.")
+	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
 	}
 	if len(attributes.Execution.GetWorkflowId()) > v.maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
@@ -462,7 +462,7 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 }
 
 func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(
-	domainName string,
+	namespace string,
 	attributes *commonproto.UpsertWorkflowSearchAttributesDecisionAttributes,
 ) error {
 
@@ -478,7 +478,7 @@ func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(
 		return serviceerror.NewInvalidArgument("IndexedFields is empty on decision.")
 	}
 
-	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), domainName)
+	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), namespace)
 }
 
 func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
@@ -521,23 +521,23 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 		return serviceerror.NewInvalidArgument("BackoffStartInterval is less than 0.")
 	}
 
-	domainEntry, err := v.domainCache.GetDomainByID(executionInfo.DomainID)
+	namespaceEntry, err := v.namespaceCache.GetNamespaceByID(executionInfo.NamespaceID)
 	if err != nil {
 		return err
 	}
-	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), domainEntry.GetInfo().Name)
+	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), namespaceEntry.GetInfo().Name)
 }
 
 func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
-	domainID string,
-	targetDomainID string,
+	namespaceID string,
+	targetNamespaceID string,
 	attributes *commonproto.StartChildWorkflowExecutionDecisionAttributes,
 	parentInfo *persistence.WorkflowExecutionInfo,
 ) error {
 
-	if err := v.validateCrossDomainCall(
-		domainID,
-		targetDomainID,
+	if err := v.validateCrossNamespaceCall(
+		namespaceID,
+		targetNamespaceID,
 	); err != nil {
 		return err
 	}
@@ -554,8 +554,8 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 		return serviceerror.NewInvalidArgument("Required field WorkflowType is not set on decision.")
 	}
 
-	if len(attributes.GetDomain()) > v.maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("Domain exceeds length limit.")
+	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
 	}
 
 	if len(attributes.GetWorkflowId()) > v.maxIDLengthLimit {
@@ -623,48 +623,48 @@ func (v *decisionAttrValidator) validatedTaskList(
 	return taskList, nil
 }
 
-func (v *decisionAttrValidator) validateCrossDomainCall(
-	domainID string,
-	targetDomainID string,
+func (v *decisionAttrValidator) validateCrossNamespaceCall(
+	namespaceID string,
+	targetNamespaceID string,
 ) error {
 
 	// same name, no check needed
-	if domainID == targetDomainID {
+	if namespaceID == targetNamespaceID {
 		return nil
 	}
 
-	domainEntry, err := v.domainCache.GetDomainByID(domainID)
+	namespaceEntry, err := v.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
 
-	targetDomainEntry, err := v.domainCache.GetDomainByID(targetDomainID)
+	targetNamespaceEntry, err := v.namespaceCache.GetNamespaceByID(targetNamespaceID)
 	if err != nil {
 		return err
 	}
 
-	// both local domain
-	if !domainEntry.IsGlobalDomain() && !targetDomainEntry.IsGlobalDomain() {
+	// both local namespace
+	if !namespaceEntry.IsGlobalNamespace() && !targetNamespaceEntry.IsGlobalNamespace() {
 		return nil
 	}
 
-	domainClusters := domainEntry.GetReplicationConfig().Clusters
-	targetDomainClusters := targetDomainEntry.GetReplicationConfig().Clusters
+	namespaceClusters := namespaceEntry.GetReplicationConfig().Clusters
+	targetNamespaceClusters := targetNamespaceEntry.GetReplicationConfig().Clusters
 
-	// one is local domain, another one is global domain or both global domain
-	// treat global domain with one replication cluster as local domain
-	if len(domainClusters) == 1 && len(targetDomainClusters) == 1 {
-		if *domainClusters[0] == *targetDomainClusters[0] {
+	// one is local namespace, another one is global namespace or both global namespace
+	// treat global namespace with one replication cluster as local namespace
+	if len(namespaceClusters) == 1 && len(targetNamespaceClusters) == 1 {
+		if *namespaceClusters[0] == *targetNamespaceClusters[0] {
 			return nil
 		}
-		return v.createCrossDomainCallError(domainEntry, targetDomainEntry)
+		return v.createCrossNamespaceCallError(namespaceEntry, targetNamespaceEntry)
 	}
-	return v.createCrossDomainCallError(domainEntry, targetDomainEntry)
+	return v.createCrossNamespaceCallError(namespaceEntry, targetNamespaceEntry)
 }
 
-func (v *decisionAttrValidator) createCrossDomainCallError(
-	domainEntry *cache.DomainCacheEntry,
-	targetDomainEntry *cache.DomainCacheEntry,
+func (v *decisionAttrValidator) createCrossNamespaceCallError(
+	namespaceEntry *cache.NamespaceCacheEntry,
+	targetNamespaceEntry *cache.NamespaceCacheEntry,
 ) error {
-	return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot make cross domain call between %v and %v", domainEntry.GetInfo().Name, targetDomainEntry.GetInfo().Name))
+	return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot make cross namespace call between %v and %v", namespaceEntry.GetInfo().Name, targetNamespaceEntry.GetInfo().Name))
 }

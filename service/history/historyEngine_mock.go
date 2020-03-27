@@ -522,17 +522,17 @@ func (mr *MockEngineMockRecorder) QueryWorkflow(ctx, request interface{}) *gomoc
 }
 
 // ReapplyEvents mocks base method
-func (m *MockEngine) ReapplyEvents(ctx context.Context, domainUUID, workflowID, runID string, events []*common.HistoryEvent) error {
+func (m *MockEngine) ReapplyEvents(ctx context.Context, namespaceUUID, workflowID, runID string, events []*common.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, domainUUID, workflowID, runID, events)
+	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, namespaceUUID, workflowID, runID, events)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReapplyEvents indicates an expected call of ReapplyEvents
-func (mr *MockEngineMockRecorder) ReapplyEvents(ctx, domainUUID, workflowID, runID, events interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) ReapplyEvents(ctx, namespaceUUID, workflowID, runID, events interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockEngine)(nil).ReapplyEvents), ctx, domainUUID, workflowID, runID, events)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockEngine)(nil).ReapplyEvents), ctx, namespaceUUID, workflowID, runID, events)
 }
 
 // ReadDLQMessages mocks base method
@@ -580,17 +580,17 @@ func (mr *MockEngineMockRecorder) MergeDLQMessages(ctx, messagesRequest interfac
 }
 
 // RefreshWorkflowTasks mocks base method
-func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, domainUUID string, execution common.WorkflowExecution) error {
+func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID string, execution common.WorkflowExecution) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, domainUUID, execution)
+	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, namespaceUUID, execution)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RefreshWorkflowTasks indicates an expected call of RefreshWorkflowTasks
-func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, domainUUID, execution interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, namespaceUUID, execution interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockEngine)(nil).RefreshWorkflowTasks), ctx, domainUUID, execution)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockEngine)(nil).RefreshWorkflowTasks), ctx, namespaceUUID, execution)
 }
 
 // NotifyNewHistoryEvent mocks base method

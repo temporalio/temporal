@@ -165,27 +165,27 @@ func QueryID(queryID string) Tag {
 	return newStringTag("query-id", queryID)
 }
 
-// domain related
+// namespace related
 
-// WorkflowDomainID returns tag for WorkflowDomainID
-func WorkflowDomainID(domainID string) Tag {
-	return newStringTag("wf-domain-id", domainID)
+// WorkflowNamespaceID returns tag for WorkflowNamespaceID
+func WorkflowNamespaceID(namespaceID string) Tag {
+	return newStringTag("wf-namespace-id", namespaceID)
 }
 
 // WorkflowRunID returns tag for WorkflowRunID
-func WorkflowDomainIDBytes(domainID []byte) Tag {
+func WorkflowNamespaceIDBytes(namespaceID []byte) Tag {
 	// Todo, we want these to print as hex-encoded (uuid format), binary tag gives us b64
-	return newBinaryTag("wf-domain-id", domainID)
+	return newBinaryTag("wf-namespace-id", namespaceID)
 }
 
-// WorkflowDomainName returns tag for WorkflowDomainName
-func WorkflowDomainName(domainName string) Tag {
-	return newStringTag("wf-domain-name", domainName)
+// WorkflowNamespace returns tag for WorkflowNamespace
+func WorkflowNamespace(namespace string) Tag {
+	return newStringTag("wf-namespace", namespace)
 }
 
-// WorkflowDomainIDs returns tag for WorkflowDomainIDs
-func WorkflowDomainIDs(domainIDs interface{}) Tag {
-	return newObjectTag("wf-domain-ids", domainIDs)
+// WorkflowNamespaceIDs returns tag for WorkflowNamespaceIDs
+func WorkflowNamespaceIDs(namespaceIDs interface{}) Tag {
+	return newObjectTag("wf-namespace-ids", namespaceIDs)
 }
 
 // history event ID related
@@ -714,14 +714,14 @@ func ArchivalArchiveAttemptedInline(archiveInline bool) Tag {
 	return newBoolTag("archival-archive-attempted-inline", archiveInline)
 }
 
-// ArchivalRequestDomainID returns tag for RequestDomainID
-func ArchivalRequestDomainID(requestDomainID string) Tag {
-	return newStringTag("archival-request-domain-id", requestDomainID)
+// ArchivalRequestNamespaceID returns tag for RequestNamespaceID
+func ArchivalRequestNamespaceID(requestNamespaceID string) Tag {
+	return newStringTag("archival-request-namespace-id", requestNamespaceID)
 }
 
-// ArchivalRequestDomainName returns tag for RequestDomainName
-func ArchivalRequestDomainName(requestDomainName string) Tag {
-	return newStringTag("archival-request-domain-name", requestDomainName)
+// ArchivalRequestNamespace returns tag for RequestNamespace
+func ArchivalRequestNamespace(requestNamespace string) Tag {
+	return newStringTag("archival-request-namespace", requestNamespace)
 }
 
 // ArchivalRequestWorkflowID returns tag for RequestWorkflowID

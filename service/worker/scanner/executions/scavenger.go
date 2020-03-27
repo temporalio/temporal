@@ -42,7 +42,7 @@ type (
 	// Scavenger is the type that holds the state for executions scavenger daemon
 	Scavenger struct {
 		params ScannerWorkflowParams
-		// TODO: currently frontend client does not support scan visibility records without domain filter (need to chat with Bowei to understand if querying without domain filter is an issue)? Maybe we go directly to elasticSearch?
+		// TODO: currently frontend client does not support scan visibility records without namespace filter (need to chat with Bowei to understand if querying without namespace filter is an issue)? Maybe we go directly to elasticSearch?
 		frontendClient frontend.Client // used to query visibility
 		historyDB      p.HistoryManager
 		executor       executor.Executor
@@ -62,9 +62,9 @@ type (
 	}
 
 	executionKey struct {
-		domainID   string
-		workflowID string
-		runID      string
+		namespaceID string
+		workflowID  string
+		runID       string
 	}
 
 	stats struct {
@@ -176,12 +176,12 @@ func (s *Scavenger) emitStats() {
 }
 
 // newTask returns a new instance of an executable task which will process a single execution
-func (s *Scavenger) newTask(domainID, workflowID, runID string) executor.Task {
+func (s *Scavenger) newTask(namespaceID, workflowID, runID string) executor.Task {
 	return &executorTask{
 		executionKey: executionKey{
-			domainID:   domainID,
-			workflowID: workflowID,
-			runID:      runID,
+			namespaceID: namespaceID,
+			workflowID:  workflowID,
+			runID:       runID,
 		},
 		scvg: s,
 	}

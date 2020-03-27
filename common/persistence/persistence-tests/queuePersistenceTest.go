@@ -61,20 +61,20 @@ func (s *QueuePersistenceSuite) TearDownSuite() {
 	s.TearDownWorkflowStore()
 }
 
-// TestDomainReplicationQueue tests domain replication queue operations
-func (s *QueuePersistenceSuite) TestDomainReplicationQueue() {
+// TestNamespaceReplicationQueue tests namespace replication queue operations
+func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 	numMessages := 100
 	concurrentSenders := 10
 
 	messageChan := make(chan interface{})
 
-	taskType := enums.ReplicationTaskTypeDomain
+	taskType := enums.ReplicationTaskTypeNamespace
 	go func() {
 		for i := 0; i < numMessages; i++ {
 			messageChan <- &replication.ReplicationTask{
 				TaskType: taskType,
-				Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-					DomainTaskAttributes: &replication.DomainTaskAttributes{
+				Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+					NamespaceTaskAttributes: &replication.NamespaceTaskAttributes{
 						Id: fmt.Sprintf("message-%v", i),
 					},
 				},
@@ -136,20 +136,20 @@ func (s *QueuePersistenceSuite) TestQueueMetadataOperations() {
 	s.Assert().Equal(25, clusterAckLevels["test2"])
 }
 
-// TestDomainReplicationDLQ tests domain DLQ operations
-func (s *QueuePersistenceSuite) TestDomainReplicationDLQ() {
+// TestNamespaceReplicationDLQ tests namespace DLQ operations
+func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 	numMessages := 100
 	concurrentSenders := 10
 
 	messageChan := make(chan interface{})
 
-	taskType := enums.ReplicationTaskTypeDomain
+	taskType := enums.ReplicationTaskTypeNamespace
 	go func() {
 		for i := 0; i < numMessages; i++ {
 			messageChan <- &replication.ReplicationTask{
 				TaskType: taskType,
-				Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-					DomainTaskAttributes: &replication.DomainTaskAttributes{
+				Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+					NamespaceTaskAttributes: &replication.NamespaceTaskAttributes{
 						Id: fmt.Sprintf("message-%v", i),
 					},
 				},
@@ -165,7 +165,7 @@ func (s *QueuePersistenceSuite) TestDomainReplicationDLQ() {
 		go func() {
 			defer wg.Done()
 			for message := range messageChan {
-				err := s.PublishToDomainDLQ(message)
+				err := s.PublishToNamespaceDLQ(message)
 				s.Nil(err, "Enqueue message failed.")
 			}
 		}()
@@ -173,47 +173,47 @@ func (s *QueuePersistenceSuite) TestDomainReplicationDLQ() {
 
 	wg.Wait()
 
-	result1, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages/2, nil)
+	result1, token, err := s.GetMessagesFromNamespaceDLQ(-1, numMessages, numMessages/2, nil)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.NotNil(token)
-	result2, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages, token)
+	result2, token, err := s.GetMessagesFromNamespaceDLQ(-1, numMessages, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result1)+len(result2), numMessages)
 
 	lastMessageID := result2[len(result2)-1].SourceTaskId
-	err = s.DeleteMessageFromDomainDLQ(int(lastMessageID))
+	err = s.DeleteMessageFromNamespaceDLQ(int(lastMessageID))
 	s.NoError(err)
-	result3, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages, token)
+	result3, token, err := s.GetMessagesFromNamespaceDLQ(-1, numMessages, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result3), numMessages-1)
 
-	err = s.RangeDeleteMessagesFromDomainDLQ(-1, int(lastMessageID))
+	err = s.RangeDeleteMessagesFromNamespaceDLQ(-1, int(lastMessageID))
 	s.NoError(err)
-	result4, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages, token)
+	result4, token, err := s.GetMessagesFromNamespaceDLQ(-1, numMessages, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result4), 0)
 }
 
-// TestDomainDLQMetadataOperations tests queue metadata operations
-func (s *QueuePersistenceSuite) TestDomainDLQMetadataOperations() {
-	ackLevel, err := s.GetDomainDLQAckLevel()
+// TestNamespaceDLQMetadataOperations tests queue metadata operations
+func (s *QueuePersistenceSuite) TestNamespaceDLQMetadataOperations() {
+	ackLevel, err := s.GetNamespaceDLQAckLevel()
 	s.Require().NoError(err)
 	s.Equal(-1, ackLevel)
 
-	err = s.UpdateDomainDLQAckLevel(10)
+	err = s.UpdateNamespaceDLQAckLevel(10)
 	s.NoError(err)
 
-	ackLevel, err = s.GetDomainDLQAckLevel()
+	ackLevel, err = s.GetNamespaceDLQAckLevel()
 	s.Require().NoError(err)
 	s.Equal(10, ackLevel)
 
-	err = s.UpdateDomainDLQAckLevel(1)
+	err = s.UpdateNamespaceDLQAckLevel(1)
 	s.NoError(err)
 
-	ackLevel, err = s.GetDomainDLQAckLevel()
+	ackLevel, err = s.GetNamespaceDLQAckLevel()
 	s.Require().NoError(err)
 	s.Equal(10, ackLevel)
 }

@@ -114,7 +114,7 @@ func (p *kafkaProducer) getKeyForReplicationTask(task *replication.ReplicationTa
 		attributes := task.GetSyncActivityTaskAttributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
 	case enums.ReplicationTaskTypeHistoryMetadata,
-		enums.ReplicationTaskTypeDomain,
+		enums.ReplicationTaskTypeNamespace,
 		enums.ReplicationTaskTypeSyncShardStatus:
 		return nil
 	default:

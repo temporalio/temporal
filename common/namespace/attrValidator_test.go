@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package domain
+package namespace
 
 import (
 	"testing"
@@ -80,8 +80,8 @@ func (s *attrValidatorSuite) TestValidateConfigRetentionPeriod() {
 		},
 	}
 	for _, tc := range testCases {
-		actualErr := s.validator.validateDomainConfig(
-			&persistence.DomainConfig{Retention: tc.retentionPeriod},
+		actualErr := s.validator.validateNamespaceConfig(
+			&persistence.NamespaceConfig{Retention: tc.retentionPeriod},
 		)
 		s.Equal(tc.expectedErr, actualErr)
 	}
@@ -102,7 +102,7 @@ func (s *attrValidatorSuite) TestClusterName() {
 	s.NoError(err)
 }
 
-func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain() {
+func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNamespace() {
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(
 		cluster.TestCurrentClusterName,
 	)
@@ -110,8 +110,8 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 		cluster.TestAllClusterInfo,
 	)
 
-	err := s.validator.validateDomainReplicationConfigForLocalDomain(
-		&persistence.DomainReplicationConfig{
+	err := s.validator.validateNamespaceReplicationConfigForLocalNamespace(
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestAlternativeClusterName},
@@ -120,8 +120,8 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	err = s.validator.validateDomainReplicationConfigForLocalDomain(
-		&persistence.DomainReplicationConfig{
+	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -131,8 +131,8 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	err = s.validator.validateDomainReplicationConfigForLocalDomain(
-		&persistence.DomainReplicationConfig{
+	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -142,8 +142,8 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	err = s.validator.validateDomainReplicationConfigForLocalDomain(
-		&persistence.DomainReplicationConfig{
+	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -153,7 +153,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 	s.NoError(err)
 }
 
-func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForGlobalDomain() {
+func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalNamespace() {
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(
 		cluster.TestCurrentClusterName,
 	)
@@ -161,8 +161,8 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForGlobalDomain(
 		cluster.TestAllClusterInfo,
 	)
 
-	err := s.validator.validateDomainReplicationConfigForGlobalDomain(
-		&persistence.DomainReplicationConfig{
+	err := s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -171,8 +171,8 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForGlobalDomain(
 	)
 	s.NoError(err)
 
-	err = s.validator.validateDomainReplicationConfigForGlobalDomain(
-		&persistence.DomainReplicationConfig{
+	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestAlternativeClusterName},
@@ -181,8 +181,8 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForGlobalDomain(
 	)
 	s.NoError(err)
 
-	err = s.validator.validateDomainReplicationConfigForGlobalDomain(
-		&persistence.DomainReplicationConfig{
+	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -192,8 +192,8 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForGlobalDomain(
 	)
 	s.NoError(err)
 
-	err = s.validator.validateDomainReplicationConfigForGlobalDomain(
-		&persistence.DomainReplicationConfig{
+	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -204,8 +204,8 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForGlobalDomain(
 	s.NoError(err)
 }
 
-func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotRemove() {
-	err := s.validator.validateDomainReplicationConfigClustersDoesNotRemove(
+func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigClustersDoesNotRemove() {
+	err := s.validator.validateNamespaceReplicationConfigClustersDoesNotRemove(
 		[]*persistence.ClusterReplicationConfig{
 			{ClusterName: cluster.TestCurrentClusterName},
 			{ClusterName: cluster.TestAlternativeClusterName},
@@ -217,7 +217,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotR
 	)
 	s.NoError(err)
 
-	err = s.validator.validateDomainReplicationConfigClustersDoesNotRemove(
+	err = s.validator.validateNamespaceReplicationConfigClustersDoesNotRemove(
 		[]*persistence.ClusterReplicationConfig{
 			{ClusterName: cluster.TestCurrentClusterName},
 		},
@@ -228,7 +228,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotR
 	)
 	s.NoError(err)
 
-	err = s.validator.validateDomainReplicationConfigClustersDoesNotRemove(
+	err = s.validator.validateNamespaceReplicationConfigClustersDoesNotRemove(
 		[]*persistence.ClusterReplicationConfig{
 			{ClusterName: cluster.TestCurrentClusterName},
 			{ClusterName: cluster.TestAlternativeClusterName},
@@ -239,7 +239,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotR
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	err = s.validator.validateDomainReplicationConfigClustersDoesNotRemove(
+	err = s.validator.validateNamespaceReplicationConfigClustersDoesNotRemove(
 		[]*persistence.ClusterReplicationConfig{
 			{ClusterName: cluster.TestCurrentClusterName},
 		},

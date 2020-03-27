@@ -39,7 +39,7 @@ type (
 	Bean interface {
 		GetHistoryClient() history.Client
 		SetHistoryClient(client history.Client)
-		GetMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error)
+		GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error)
 		SetMatchingClient(client matching.Client)
 		GetFrontendClient() frontend.Client
 		SetFrontendClient(client frontend.Client)
@@ -116,11 +116,11 @@ func (h *clientBeanImpl) SetHistoryClient(
 	h.historyClient = client
 }
 
-func (h *clientBeanImpl) GetMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error) {
+func (h *clientBeanImpl) GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error) {
 	if client := h.matchingClient.Load(); client != nil {
 		return client.(matching.Client), nil
 	}
-	return h.lazyInitMatchingClient(domainIDToName)
+	return h.lazyInitMatchingClient(namespaceIDToName)
 }
 
 func (h *clientBeanImpl) SetMatchingClient(
@@ -177,13 +177,13 @@ func (h *clientBeanImpl) SetRemoteFrontendClient(
 	h.remoteFrontendClients[cluster] = client
 }
 
-func (h *clientBeanImpl) lazyInitMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error) {
+func (h *clientBeanImpl) lazyInitMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error) {
 	h.Lock()
 	defer h.Unlock()
 	if cached := h.matchingClient.Load(); cached != nil {
 		return cached.(matching.Client), nil
 	}
-	client, err := h.factory.NewMatchingClient(domainIDToName)
+	client, err := h.factory.NewMatchingClient(namespaceIDToName)
 	if err != nil {
 		return nil, err
 	}

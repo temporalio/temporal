@@ -106,7 +106,7 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+		t.getNamespaceIDAndWorkflowExecution(task),
 	)
 	if err != nil {
 		return err
@@ -158,7 +158,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+		t.getNamespaceIDAndWorkflowExecution(task),
 	)
 	if err != nil {
 		return err
@@ -228,8 +228,8 @@ Loop:
 			}
 		}
 
-		t.emitTimeoutMetricScopeWithDomainTag(
-			mutableState.GetExecutionInfo().DomainID,
+		t.emitTimeoutMetricScopeWithNamespaceTag(
+			mutableState.GetExecutionInfo().NamespaceID,
 			metrics.TimerActiveTaskActivityTimeoutScope,
 			timerSequenceID.timerType,
 		)
@@ -256,7 +256,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+		t.getNamespaceIDAndWorkflowExecution(task),
 	)
 	if err != nil {
 		return err
@@ -277,7 +277,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TaskTypeDecisionTimeout))
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, decision.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.NamespaceID, decision.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -289,8 +289,8 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	scheduleDecision := false
 	switch timerTypeFromProto(enums.TimeoutType(task.TimeoutType)) {
 	case timerTypeStartToClose:
-		t.emitTimeoutMetricScopeWithDomainTag(
-			mutableState.GetExecutionInfo().DomainID,
+		t.emitTimeoutMetricScopeWithNamespaceTag(
+			mutableState.GetExecutionInfo().NamespaceID,
 			metrics.TimerActiveTaskDecisionTimeoutScope,
 			timerTypeStartToClose,
 		)
@@ -308,8 +308,8 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 			return nil
 		}
 
-		t.emitTimeoutMetricScopeWithDomainTag(
-			mutableState.GetExecutionInfo().DomainID,
+		t.emitTimeoutMetricScopeWithNamespaceTag(
+			mutableState.GetExecutionInfo().NamespaceID,
 			metrics.TimerActiveTaskDecisionTimeoutScope,
 			timerTypeScheduleToStart,
 		)
@@ -328,7 +328,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+		t.getNamespaceIDAndWorkflowExecution(task),
 	)
 	if err != nil {
 		return err
@@ -363,7 +363,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+		t.getNamespaceIDAndWorkflowExecution(task),
 	)
 	if err != nil {
 		return err
@@ -386,7 +386,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 			t.logger.Info("Duplicate activity retry timer task",
 				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowID),
 				tag.WorkflowRunID(mutableState.GetExecutionInfo().RunID),
-				tag.WorkflowDomainID(mutableState.GetExecutionInfo().DomainID),
+				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceID),
 				tag.WorkflowScheduleID(activityInfo.ScheduleID),
 				tag.Attempt(activityInfo.Attempt),
 				tag.FailoverVersion(activityInfo.Version),
@@ -395,30 +395,30 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		}
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, activityInfo.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.NamespaceID, activityInfo.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	domainID := primitives.UUIDString(task.DomainID)
-	targetDomainID := domainID
-	if activityInfo.DomainID != "" {
-		targetDomainID = activityInfo.DomainID
+	namespaceID := primitives.UUIDString(task.NamespaceID)
+	targetNamespaceID := namespaceID
+	if activityInfo.NamespaceID != "" {
+		targetNamespaceID = activityInfo.NamespaceID
 	} else {
 		// TODO remove this block after Mar, 1th, 2020
-		//  previously, DomainID in activity info is not used, so need to get
+		//  previously, NamespaceID in activity info is not used, so need to get
 		//  schedule event from DB checking whether activity to be scheduled
-		//  belongs to this domain
+		//  belongs to this namespace
 		scheduledEvent, err := mutableState.GetActivityScheduledEvent(scheduledID)
 		if err != nil {
 			return err
 		}
-		if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetDomain() != "" {
-			domainEntry, err := t.shard.GetDomainCache().GetDomain(scheduledEvent.GetActivityTaskScheduledEventAttributes().GetDomain())
+		if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetNamespace() != "" {
+			namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespace(scheduledEvent.GetActivityTaskScheduledEventAttributes().GetNamespace())
 			if err != nil {
-				return serviceerror.NewInternal("unable to re-schedule activity across domain.")
+				return serviceerror.NewInternal("unable to re-schedule activity across namespace.")
 			}
-			targetDomainID = domainEntry.GetInfo().ID
+			targetNamespaceID = namespaceEntry.GetInfo().ID
 		}
 	}
 
@@ -433,8 +433,8 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	release(nil) // release earlier as we don't need the lock anymore
 
 	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
-		DomainUUID:                    targetDomainID,
-		SourceDomainUUID:              domainID,
+		NamespaceUUID:                 targetNamespaceID,
+		SourceNamespaceUUID:           namespaceID,
 		Execution:                     execution,
 		TaskList:                      taskList,
 		ScheduleId:                    scheduledID,
@@ -449,7 +449,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
+		t.getNamespaceIDAndWorkflowExecution(task),
 	)
 	if err != nil {
 		return err
@@ -468,7 +468,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, startVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, startVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -521,7 +521,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	newMutableState, err := retryWorkflow(
 		mutableState,
 		eventBatchFirstEventID,
-		startAttributes.GetParentWorkflowDomain(),
+		startAttributes.GetParentWorkflowNamespace(),
 		continueAsnewAttributes,
 	)
 	if err != nil {
@@ -532,7 +532,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	return weContext.updateWorkflowExecutionWithNewAsActive(
 		t.shard.GetTimeSource().Now(),
 		newWorkflowExecutionContext(
-			newExecutionInfo.DomainID,
+			newExecutionInfo.NamespaceID,
 			commonproto.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowID,
 				RunId:      newExecutionInfo.RunID,
@@ -582,17 +582,17 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	return nil
 }
 
-func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithDomainTag(
-	domainID string,
+func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
+	namespaceID string,
 	scope int,
 	timerType timerType,
 ) {
 
-	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
+	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return
 	}
-	metricsScope := t.metricsClient.Scope(scope).Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+	metricsScope := t.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespaceEntry.GetInfo().Name))
 	switch timerType {
 	case timerTypeScheduleToStart:
 		metricsScope.IncCounter(metrics.ScheduleToStartTimeoutCounter)

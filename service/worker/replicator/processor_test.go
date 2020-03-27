@@ -37,11 +37,11 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	messageMocks "github.com/temporalio/temporal/common/messaging/mocks"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/common/task"
@@ -56,7 +56,7 @@ type (
 		controller                  *gomock.Controller
 		mockSequentialTaskProcessor *task.MockProcessor
 		mockHistoryClient           *historyservicemock.MockHistoryServiceClient
-		mockDomainCache             *cache.MockDomainCache
+		mockNamespaceCache          *cache.MockNamespaceCache
 		mockNDCResender             *xdc.MockNDCHistoryResender
 
 		currentCluster string
@@ -65,8 +65,8 @@ type (
 		logger         log.Logger
 		metricsClient  metrics.Client
 
-		mockMsg                           *messageMocks.Message
-		mockDomainReplicationTaskExecutor *domain.MockReplicationTaskExecutor
+		mockMsg                              *messageMocks.Message
+		mockNamespaceReplicationTaskExecutor *namespace.MockReplicationTaskExecutor
 
 		mockRereplicator *xdc.MockHistoryRereplicator
 
@@ -93,13 +93,13 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockSequentialTaskProcessor = task.NewMockProcessor(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
 	s.mockNDCResender = xdc.NewMockNDCHistoryResender(s.controller)
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{},
-			&persistence.DomainConfig{},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{},
+			&persistence.NamespaceConfig{},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -122,7 +122,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockMsg = &messageMocks.Message{}
 	s.mockMsg.On("Partition").Return(int32(0))
 	s.mockMsg.On("Offset").Return(int64(0))
-	s.mockDomainReplicationTaskExecutor = domain.NewMockReplicationTaskExecutor(s.controller)
+	s.mockNamespaceReplicationTaskExecutor = namespace.NewMockReplicationTaskExecutor(s.controller)
 	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
 
 	s.currentCluster = cluster.TestAlternativeClusterName
@@ -136,11 +136,11 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 		s.config,
 		s.logger,
 		s.metricsClient,
-		s.mockDomainReplicationTaskExecutor,
+		s.mockNamespaceReplicationTaskExecutor,
 		s.mockRereplicator,
 		s.mockNDCResender,
 		s.mockHistoryClient,
-		s.mockDomainCache,
+		s.mockNamespaceCache,
 		s.mockSequentialTaskProcessor,
 	)
 }
@@ -158,38 +158,38 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_BadEncoding() {
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
 }
 
-func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_Success() {
-	replicationAttr := &replication.DomainTaskAttributes{
-		DomainOperation: enums.DomainOperationUpdate,
-		Id:              "some random domain ID",
+func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Namespace_Success() {
+	replicationAttr := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: enums.NamespaceOperationUpdate,
+		Id:                 "some random namespace ID",
 	}
 	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeDomain,
-		Attributes: &replication.ReplicationTask_DomainTaskAttributes{DomainTaskAttributes: replicationAttr},
+		TaskType:   enums.ReplicationTaskTypeNamespace,
+		Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{NamespaceTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockDomainReplicationTaskExecutor.EXPECT().Execute(replicationAttr).Return(nil).Times(1)
+	s.mockNamespaceReplicationTaskExecutor.EXPECT().Execute(replicationAttr).Return(nil).Times(1)
 	s.mockMsg.On("Ack").Return(nil).Once()
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
 }
 
-func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_FailedThenSuccess() {
-	replicationAttr := &replication.DomainTaskAttributes{
-		DomainOperation: enums.DomainOperationUpdate,
-		Id:              "some random domain ID",
+func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Namespace_FailedThenSuccess() {
+	replicationAttr := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: enums.NamespaceOperationUpdate,
+		Id:                 "some random namespace ID",
 	}
 	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeDomain,
-		Attributes: &replication.ReplicationTask_DomainTaskAttributes{DomainTaskAttributes: replicationAttr},
+		TaskType:   enums.ReplicationTaskTypeNamespace,
+		Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{NamespaceTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockDomainReplicationTaskExecutor.EXPECT().Execute(replicationAttr).Return(errors.New("some random error")).Times(1)
-	s.mockDomainReplicationTaskExecutor.EXPECT().Execute(replicationAttr).Return(nil).Times(1)
+	s.mockNamespaceReplicationTaskExecutor.EXPECT().Execute(replicationAttr).Return(errors.New("some random error")).Times(1)
+	s.mockNamespaceReplicationTaskExecutor.EXPECT().Execute(replicationAttr).Return(nil).Times(1)
 	s.mockMsg.On("Ack").Return(nil).Once()
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
@@ -268,7 +268,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedT
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Success() {
 	replicationAttr := &replication.SyncActivityTaskAttributes{
-		DomainId:          "some random domain ID",
+		NamespaceId:       "some random namespace ID",
 		WorkflowId:        "some random workflow ID",
 		RunId:             "some random run ID",
 		Version:           1234,
@@ -294,7 +294,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Succ
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_FailedThenSuccess() {
 	replicationAttr := &replication.SyncActivityTaskAttributes{
-		DomainId:          "some random domain ID",
+		NamespaceId:       "some random namespace ID",
 		WorkflowId:        "some random workflow ID",
 		RunId:             "some random run ID",
 		Version:           1234,
@@ -322,7 +322,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Fail
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success() {
 	replicationAttr := &replication.HistoryTaskAttributes{
 		TargetClusters:  []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:        "some random domain ID",
+		NamespaceId:     "some random namespace ID",
 		WorkflowId:      "some random workflow ID",
 		RunId:           "some random run ID",
 		Version:         1394,
@@ -350,7 +350,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success()
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThenSuccess() {
 	replicationAttr := &replication.HistoryTaskAttributes{
 		TargetClusters:  []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:        "some random domain ID",
+		NamespaceId:     "some random namespace ID",
 		WorkflowId:      "some random workflow ID",
 		RunId:           "some random run ID",
 		Version:         1394,
@@ -379,7 +379,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThe
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_Success() {
 	replicationAttr := &replication.HistoryMetadataTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:       "some random domain ID",
+		NamespaceId:    "some random namespace ID",
 		WorkflowId:     "some random workflow ID",
 		RunId:          "some random run ID",
 		FirstEventId:   728,
@@ -400,7 +400,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_S
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_FailedThenSuccess() {
 	replicationAttr := &replication.HistoryMetadataTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:       "some random domain ID",
+		NamespaceId:    "some random namespace ID",
 		WorkflowId:     "some random workflow ID",
 		RunId:          "some random run ID",
 		FirstEventId:   728,

@@ -59,9 +59,9 @@ type (
 
 	// Request defines the request for parent close policy
 	Request struct {
-		Executions []RequestDetail
-		DomainName string
-		DomainUUID string
+		Executions    []RequestDetail
+		Namespace     string
+		NamespaceUUID string
 	}
 )
 
@@ -108,9 +108,9 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			continue
 		case enums.ParentClosePolicyTerminate:
 			_, err = client.TerminateWorkflowExecution(nil, &historyservice.TerminateWorkflowExecutionRequest{
-				DomainUUID: request.DomainUUID,
+				NamespaceUUID: request.NamespaceUUID,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
-					Domain: request.DomainName,
+					Namespace: request.Namespace,
 					WorkflowExecution: &commonproto.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 						RunId:      execution.RunID,
@@ -121,9 +121,9 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			})
 		case enums.ParentClosePolicyRequestCancel:
 			_, err = client.RequestCancelWorkflowExecution(nil, &historyservice.RequestCancelWorkflowExecutionRequest{
-				DomainUUID: request.DomainUUID,
+				NamespaceUUID: request.NamespaceUUID,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-					Domain: request.DomainName,
+					Namespace: request.Namespace,
 					WorkflowExecution: &commonproto.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 						RunId:      execution.RunID,
@@ -155,6 +155,6 @@ func getActivityLogger(ctx context.Context) log.Logger {
 	return processor.logger.WithTags(
 		tag.WorkflowID(wfInfo.WorkflowExecution.ID),
 		tag.WorkflowRunID(wfInfo.WorkflowExecution.RunID),
-		tag.WorkflowDomainName(wfInfo.WorkflowDomain),
+		tag.WorkflowNamespace(wfInfo.WorkflowNamespace),
 	)
 }

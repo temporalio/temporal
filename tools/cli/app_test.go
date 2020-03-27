@@ -67,17 +67,17 @@ func (m *clientFactoryMock) AdminClient(c *cli.Context) adminservice.AdminServic
 	return m.serverAdminClient
 }
 
-func (m *clientFactoryMock) SDKClient(c *cli.Context, domain string) sdkclient.Client {
+func (m *clientFactoryMock) SDKClient(c *cli.Context, namespace string) sdkclient.Client {
 	return m.sdkClient
 }
 
 var commands = []string{
-	"domain", "d",
+	"namespace", "d",
 	"workflow", "wf",
 	"tasklist", "tl",
 }
 
-var domainName = "cli-test-domain"
+var namespace = "cli-test-namespace"
 
 func TestCLIAppSuite(t *testing.T) {
 	s := new(cliAppSuite)
@@ -123,41 +123,41 @@ func (s *cliAppSuite) TestAppCommands() {
 	}
 }
 
-func (s *cliAppSuite) TestDomainRegister_LocalDomain() {
-	s.frontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil, nil)
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "false"})
+func (s *cliAppSuite) TestNamespaceRegister_LocalNamespace() {
+	s.frontendClient.EXPECT().RegisterNamespace(gomock.Any(), gomock.Any()).Return(nil, nil)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "namespace", "register", "--global_namespace", "false"})
 	s.Equal(0, errorCode)
 }
 
-func (s *cliAppSuite) TestDomainRegister_GlobalDomain() {
-	s.frontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil, nil)
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "true"})
+func (s *cliAppSuite) TestNamespaceRegister_GlobalNamespace() {
+	s.frontendClient.EXPECT().RegisterNamespace(gomock.Any(), gomock.Any()).Return(nil, nil)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "namespace", "register", "--global_namespace", "true"})
 	s.Equal(0, errorCode)
 }
 
-func (s *cliAppSuite) TestDomainRegister_DomainExist() {
-	s.frontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewDomainAlreadyExists(""))
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "true"})
+func (s *cliAppSuite) TestNamespaceRegister_NamespaceExist() {
+	s.frontendClient.EXPECT().RegisterNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceAlreadyExists(""))
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "namespace", "register", "--global_namespace", "true"})
 	s.Equal(1, errorCode)
 }
 
-func (s *cliAppSuite) TestDomainRegister_Failed() {
-	s.frontendClient.EXPECT().RegisterDomain(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register", "--global_domain", "true"})
+func (s *cliAppSuite) TestNamespaceRegister_Failed() {
+	s.frontendClient.EXPECT().RegisterNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "namespace", "register", "--global_namespace", "true"})
 	s.Equal(1, errorCode)
 }
 
-var describeDomainResponseServer = &workflowservice.DescribeDomainResponse{
-	DomainInfo: &commonproto.DomainInfo{
-		Name:        "test-domain",
-		Description: "a test domain",
+var describeNamespaceResponseServer = &workflowservice.DescribeNamespaceResponse{
+	NamespaceInfo: &commonproto.NamespaceInfo{
+		Name:        "test-namespace",
+		Description: "a test namespace",
 		OwnerEmail:  "test@uber.com",
 	},
-	Configuration: &commonproto.DomainConfiguration{
+	Configuration: &commonproto.NamespaceConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: 3,
 		EmitMetric:                             &types.BoolValue{Value: true},
 	},
-	ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 		ActiveClusterName: "active",
 		Clusters: []*commonproto.ClusterReplicationConfiguration{
 			{
@@ -170,56 +170,56 @@ var describeDomainResponseServer = &workflowservice.DescribeDomainResponse{
 	},
 }
 
-func (s *cliAppSuite) TestDomainUpdate() {
-	resp := describeDomainResponseServer
-	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, nil).Times(2)
-	s.frontendClient.EXPECT().UpdateDomain(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
-	err := s.app.Run([]string{"", "--do", domainName, "domain", "update"})
+func (s *cliAppSuite) TestNamespaceUpdate() {
+	resp := describeNamespaceResponseServer
+	s.frontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Return(resp, nil).Times(2)
+	s.frontendClient.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
+	err := s.app.Run([]string{"", "--do", namespace, "namespace", "update"})
 	s.Nil(err)
-	err = s.app.Run([]string{"", "--do", domainName, "domain", "update", "--desc", "another desc", "--oe", "another@uber.com", "--rd", "1"})
-	s.Nil(err)
-}
-
-func (s *cliAppSuite) TestDomainUpdate_DomainNotExist() {
-	resp := describeDomainResponseServer
-	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, nil)
-	s.frontendClient.EXPECT().UpdateDomain(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "update"})
-	s.Equal(1, errorCode)
-}
-
-func (s *cliAppSuite) TestDomainUpdate_ActiveClusterFlagNotSet_DomainNotExist() {
-	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "update"})
-	s.Equal(1, errorCode)
-}
-
-func (s *cliAppSuite) TestDomainUpdate_Failed() {
-	resp := describeDomainResponseServer
-	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, nil)
-	s.frontendClient.EXPECT().UpdateDomain(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "update"})
-	s.Equal(1, errorCode)
-}
-
-func (s *cliAppSuite) TestDomainDescribe() {
-	resp := describeDomainResponseServer
-	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, nil)
-	err := s.app.Run([]string{"", "--do", domainName, "domain", "describe"})
+	err = s.app.Run([]string{"", "--do", namespace, "namespace", "update", "--desc", "another desc", "--oe", "another@uber.com", "--rd", "1"})
 	s.Nil(err)
 }
 
-func (s *cliAppSuite) TestDomainDescribe_DomainNotExist() {
-	resp := describeDomainResponseServer
-	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewNotFound(""))
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "describe"})
+func (s *cliAppSuite) TestNamespaceUpdate_NamespaceNotExist() {
+	resp := describeNamespaceResponseServer
+	s.frontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.frontendClient.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "namespace", "update"})
 	s.Equal(1, errorCode)
 }
 
-func (s *cliAppSuite) TestDomainDescribe_Failed() {
-	resp := describeDomainResponseServer
-	s.frontendClient.EXPECT().DescribeDomain(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "describe"})
+func (s *cliAppSuite) TestNamespaceUpdate_ActiveClusterFlagNotSet_NamespaceNotExist() {
+	s.frontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "namespace", "update"})
+	s.Equal(1, errorCode)
+}
+
+func (s *cliAppSuite) TestNamespaceUpdate_Failed() {
+	resp := describeNamespaceResponseServer
+	s.frontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.frontendClient.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "namespace", "update"})
+	s.Equal(1, errorCode)
+}
+
+func (s *cliAppSuite) TestNamespaceDescribe() {
+	resp := describeNamespaceResponseServer
+	s.frontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Return(resp, nil)
+	err := s.app.Run([]string{"", "--do", namespace, "namespace", "describe"})
+	s.Nil(err)
+}
+
+func (s *cliAppSuite) TestNamespaceDescribe_NamespaceNotExist() {
+	resp := describeNamespaceResponseServer
+	s.frontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewNotFound(""))
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "namespace", "describe"})
+	s.Equal(1, errorCode)
+}
+
+func (s *cliAppSuite) TestNamespaceDescribe_Failed() {
+	resp := describeNamespaceResponseServer
+	s.frontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "namespace", "describe"})
 	s.Equal(1, errorCode)
 }
 
@@ -247,28 +247,28 @@ var (
 
 func (s *cliAppSuite) TestShowHistory() {
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "show", "-w", "wid"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "show", "-w", "wid"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestShowHistoryWithID() {
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "showid", "wid"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "showid", "wid"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestShowHistory_PrintRawTime() {
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "show", "-w", "wid", "-prt"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "show", "-w", "wid", "-prt"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestShowHistory_PrintDateTime() {
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "show", "-w", "wid", "-pdt"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "show", "-w", "wid", "-pdt"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
@@ -277,10 +277,10 @@ func (s *cliAppSuite) TestStartWorkflow() {
 	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
 	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil).Times(2)
 	// start with wid
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "wrp", "2"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "wrp", "2"})
 	s.Nil(err)
 	// start without wid
-	err = s.app.Run([]string{"", "--do", domainName, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "wrp", "2"})
+	err = s.app.Run([]string{"", "--do", namespace, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "wrp", "2"})
 	s.Nil(err)
 }
 
@@ -288,7 +288,7 @@ func (s *cliAppSuite) TestStartWorkflow_Failed() {
 	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
 	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
 	// start with wid
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
 	s.Equal(1, errorCode)
 }
 
@@ -298,13 +298,13 @@ func (s *cliAppSuite) TestRunWorkflow() {
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 
 	// start with wid
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "wrp", "2"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "wrp", "2"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	// start without wid
-	err = s.app.Run([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "wrp", "2"})
+	err = s.app.Run([]string{"", "--do", namespace, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "wrp", "2"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
@@ -314,7 +314,7 @@ func (s *cliAppSuite) TestRunWorkflow_Failed() {
 	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	// start with wid
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
 	s.Equal(1, errorCode)
 	s.sdkClient.AssertExpectations(s.T())
 }
@@ -322,21 +322,21 @@ func (s *cliAppSuite) TestRunWorkflow_Failed() {
 func (s *cliAppSuite) TestTerminateWorkflow() {
 	s.sdkClient.On("TerminateWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "terminate", "-w", "wid"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "terminate", "-w", "wid"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestTerminateWorkflow_Failed() {
 	s.sdkClient.On("TerminateWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(serviceerror.NewInvalidArgument("faked error")).Once()
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "terminate", "-w", "wid"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "workflow", "terminate", "-w", "wid"})
 	s.Equal(1, errorCode)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestCancelWorkflow() {
 	s.sdkClient.On("CancelWorkflow", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "cancel", "-w", "wid"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "cancel", "-w", "wid"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
@@ -344,20 +344,20 @@ func (s *cliAppSuite) TestCancelWorkflow() {
 func (s *cliAppSuite) TestCancelWorkflow_Failed() {
 	s.sdkClient.On("CancelWorkflow", mock.Anything, mock.Anything, mock.Anything).Return(serviceerror.NewInvalidArgument("faked error")).Once()
 	//s.frontendClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "cancel", "-w", "wid"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "workflow", "cancel", "-w", "wid"})
 	s.Equal(1, errorCode)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestSignalWorkflow() {
 	s.frontendClient.EXPECT().SignalWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil)
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "signal", "-w", "wid", "-n", "signal-name"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "signal", "-w", "wid", "-n", "signal-name"})
 	s.Nil(err)
 }
 
 func (s *cliAppSuite) TestSignalWorkflow_Failed() {
 	s.frontendClient.EXPECT().SignalWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "signal", "-w", "wid", "-n", "signal-name"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "workflow", "signal", "-w", "wid", "-n", "signal-name"})
 	s.Equal(1, errorCode)
 }
 
@@ -366,7 +366,7 @@ func (s *cliAppSuite) TestQueryWorkflow() {
 		QueryResult: []byte("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil)
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
 	s.Nil(err)
 }
 
@@ -375,7 +375,7 @@ func (s *cliAppSuite) TestQueryWorkflowUsingStackTrace() {
 		QueryResult: []byte("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil)
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "stack", "-w", "wid"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "stack", "-w", "wid"})
 	s.Nil(err)
 }
 
@@ -384,7 +384,7 @@ func (s *cliAppSuite) TestQueryWorkflow_Failed() {
 		QueryResult: []byte("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
 	s.Equal(1, errorCode)
 }
 
@@ -429,75 +429,75 @@ var (
 
 func (s *cliAppSuite) TestListWorkflow() {
 	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "list"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_WithWorkflowID() {
 	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-wid", "nothing"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "list", "-wid", "nothing"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_WithWorkflowType() {
 	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-wt", "no-type"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "list", "-wt", "no-type"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_PrintDateTime() {
 	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-pdt"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "list", "-pdt"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_PrintRawTime() {
 	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-prt"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "list", "-prt"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_Open() {
 	s.sdkClient.On("ListOpenWorkflow", mock.Anything, mock.Anything).Return(listOpenWorkflowExecutionsResponse, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-op"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "list", "-op"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_Open_WithWorkflowID() {
 	s.sdkClient.On("ListOpenWorkflow", mock.Anything, mock.Anything).Return(listOpenWorkflowExecutionsResponse, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-op", "-wid", "nothing"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "list", "-op", "-wid", "nothing"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListWorkflow_Open_WithWorkflowType() {
 	s.sdkClient.On("ListOpenWorkflow", mock.Anything, mock.Anything).Return(listOpenWorkflowExecutionsResponse, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "list", "-op", "-wt", "no-type"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "list", "-op", "-wt", "no-type"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestListArchivedWorkflow() {
 	s.sdkClient.On("ListArchivedWorkflow", mock.Anything, mock.Anything).Return(&workflowservice.ListArchivedWorkflowExecutionsResponse{}, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "listarchived", "-q", "some query string", "--ps", "200", "--all"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "listarchived", "-q", "some query string", "--ps", "200", "--all"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestCountWorkflow() {
 	s.sdkClient.On("CountWorkflow", mock.Anything, mock.Anything).Return(&workflowservice.CountWorkflowExecutionsResponse{}, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "count"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "count"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 
 	s.sdkClient.On("CountWorkflow", mock.Anything, mock.Anything).Return(&workflowservice.CountWorkflowExecutionsResponse{}, nil).Once()
-	err = s.app.Run([]string{"", "--do", domainName, "workflow", "count", "-q", "'CloseTime = missing'"})
+	err = s.app.Run([]string{"", "--do", namespace, "workflow", "count", "-q", "'CloseTime = missing'"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
@@ -519,55 +519,55 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow() {
 	}
 
 	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil)
-	err := s.app.Run([]string{"", "--do", domainName, "admin", "wf", "describe", "-w", "test-wf-id"})
+	err := s.app.Run([]string{"", "--do", namespace, "admin", "wf", "describe", "-w", "test-wf-id"})
 	s.Nil(err)
 }
 
 func (s *cliAppSuite) TestAdminDescribeWorkflow_Failed() {
 	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewInvalidArgument("faked error"))
-	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "admin", "wf", "describe", "-w", "test-wf-id"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", namespace, "admin", "wf", "describe", "-w", "test-wf-id"})
 	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestAdminAddSearchAttribute() {
-	err := s.app.Run([]string{"", "--do", domainName, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "1"})
+	err := s.app.Run([]string{"", "--do", namespace, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "1"})
 	s.Nil(err)
 }
 
 func (s *cliAppSuite) TestDescribeTaskList() {
 	s.sdkClient.On("DescribeTaskList", mock.Anything, mock.Anything, mock.Anything).Return(describeTaskListResponse, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "tasklist", "describe", "-tl", "test-taskList"})
+	err := s.app.Run([]string{"", "--do", namespace, "tasklist", "describe", "-tl", "test-taskList"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestDescribeTaskList_Activity() {
 	s.sdkClient.On("DescribeTaskList", mock.Anything, mock.Anything, mock.Anything).Return(describeTaskListResponse, nil).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "tasklist", "describe", "-tl", "test-taskList", "-tlt", "activity"})
+	err := s.app.Run([]string{"", "--do", namespace, "tasklist", "describe", "-tl", "test-taskList", "-tlt", "activity"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestObserveWorkflow() {
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "observe", "-w", "wid"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "observe", "-w", "wid"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
-	err = s.app.Run([]string{"", "--do", domainName, "workflow", "observe", "-w", "wid", "-sd"})
+	err = s.app.Run([]string{"", "--do", namespace, "workflow", "observe", "-w", "wid", "-sd"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
 
 func (s *cliAppSuite) TestObserveWorkflowWithID() {
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "observeid", "wid"})
+	err := s.app.Run([]string{"", "--do", namespace, "workflow", "observeid", "wid"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", "", mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
-	err = s.app.Run([]string{"", "--do", domainName, "workflow", "observeid", "wid", "-sd"})
+	err = s.app.Run([]string{"", "--do", namespace, "workflow", "observeid", "wid", "-sd"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
@@ -758,7 +758,7 @@ func (s *cliAppSuite) TestGetSearchAttributes() {
 	s.sdkClient.AssertExpectations(s.T())
 
 	s.sdkClient.On("GetSearchAttributes", mock.Anything).Return(&workflowservice.GetSearchAttributesResponse{}, nil).Once()
-	err = s.app.Run([]string{"", "--do", domainName, "cluster", "get-search-attr"})
+	err = s.app.Run([]string{"", "--do", namespace, "cluster", "get-search-attr"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }

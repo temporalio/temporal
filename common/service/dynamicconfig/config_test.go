@@ -152,32 +152,32 @@ func (s *configSuite) TestGetIntProperty() {
 	s.Equal(50, value())
 }
 
-func (s *configSuite) TestGetIntPropertyFilteredByDomain() {
-	key := testGetIntPropertyFilteredByDomainKey
-	domain := "testDomain"
-	value := s.cln.GetIntPropertyFilteredByDomain(key, 10)
-	s.Equal(10, value(domain))
+func (s *configSuite) TestGetIntPropertyFilteredByNamespace() {
+	key := testGetIntPropertyFilteredByNamespaceKey
+	namespace := "testNamespace"
+	value := s.cln.GetIntPropertyFilteredByNamespace(key, 10)
+	s.Equal(10, value(namespace))
 	s.client.SetValue(key, 50)
-	s.Equal(50, value(domain))
+	s.Equal(50, value(namespace))
 }
 
-func (s *configSuite) TestGetStringPropertyFnWithDomainFilter() {
+func (s *configSuite) TestGetStringPropertyFnWithNamespaceFilter() {
 	key := DefaultEventEncoding
-	domain := "testDomain"
-	value := s.cln.GetStringPropertyFnWithDomainFilter(key, "abc")
-	s.Equal("abc", value(domain))
+	namespace := "testNamespace"
+	value := s.cln.GetStringPropertyFnWithNamespaceFilter(key, "abc")
+	s.Equal("abc", value(namespace))
 	s.client.SetValue(key, "efg")
-	s.Equal("efg", value(domain))
+	s.Equal("efg", value(namespace))
 }
 
 func (s *configSuite) TestGetIntPropertyFilteredByTaskListInfo() {
 	key := testGetIntPropertyFilteredByTaskListInfoKey
-	domain := "testDomain"
+	namespace := "testNamespace"
 	taskList := "testTaskList"
 	value := s.cln.GetIntPropertyFilteredByTaskListInfo(key, 10)
-	s.Equal(10, value(domain, taskList, 0))
+	s.Equal(10, value(namespace, taskList, 0))
 	s.client.SetValue(key, 50)
-	s.Equal(50, value(domain, taskList, 0))
+	s.Equal(50, value(namespace, taskList, 0))
 }
 
 func (s *configSuite) TestGetFloat64Property() {
@@ -198,12 +198,12 @@ func (s *configSuite) TestGetBoolProperty() {
 
 func (s *configSuite) TestGetBoolPropertyFilteredByTaskListInfo() {
 	key := testGetBoolPropertyFilteredByTaskListInfoKey
-	domain := "testDomain"
+	namespace := "testNamespace"
 	taskList := "testTaskList"
 	value := s.cln.GetBoolPropertyFilteredByTaskListInfo(key, false)
-	s.Equal(false, value(domain, taskList, 0))
+	s.Equal(false, value(namespace, taskList, 0))
 	s.client.SetValue(key, true)
-	s.Equal(true, value(domain, taskList, 0))
+	s.Equal(true, value(namespace, taskList, 0))
 }
 
 func (s *configSuite) TestGetDurationProperty() {
@@ -214,23 +214,23 @@ func (s *configSuite) TestGetDurationProperty() {
 	s.Equal(time.Minute, value())
 }
 
-func (s *configSuite) TestGetDurationPropertyFilteredByDomain() {
-	key := testGetDurationPropertyFilteredByDomainKey
-	domain := "testDomain"
-	value := s.cln.GetDurationPropertyFilteredByDomain(key, time.Second)
-	s.Equal(time.Second, value(domain))
+func (s *configSuite) TestGetDurationPropertyFilteredByNamespace() {
+	key := testGetDurationPropertyFilteredByNamespaceKey
+	namespace := "testNamespace"
+	value := s.cln.GetDurationPropertyFilteredByNamespace(key, time.Second)
+	s.Equal(time.Second, value(namespace))
 	s.client.SetValue(key, time.Minute)
-	s.Equal(time.Minute, value(domain))
+	s.Equal(time.Minute, value(namespace))
 }
 
 func (s *configSuite) TestGetDurationPropertyFilteredByTaskListInfo() {
 	key := testGetDurationPropertyFilteredByTaskListInfoKey
-	domain := "testDomain"
+	namespace := "testNamespace"
 	taskList := "testTaskList"
 	value := s.cln.GetDurationPropertyFilteredByTaskListInfo(key, time.Second)
-	s.Equal(time.Second, value(domain, taskList, 0))
+	s.Equal(time.Second, value(namespace, taskList, 0))
 	s.client.SetValue(key, time.Minute)
-	s.Equal(time.Minute, value(domain, taskList, 0))
+	s.Equal(time.Minute, value(namespace, taskList, 0))
 }
 
 func (s *configSuite) TestGetMapProperty() {

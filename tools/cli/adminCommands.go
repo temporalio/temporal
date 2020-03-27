@@ -156,7 +156,7 @@ func AdminDescribeWorkflow(c *cli.Context) {
 func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutionResponse {
 	adminClient := cFactory.AdminClient(c)
 
-	domain := getRequiredGlobalOption(c, FlagDomain)
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	wid := getRequiredOption(c, FlagWorkflowID)
 	rid := c.String(FlagRunID)
 
@@ -164,7 +164,7 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutio
 	defer cancel()
 
 	resp, err := adminClient.DescribeWorkflowExecution(ctx, &adminservice.DescribeWorkflowExecutionRequest{
-		Domain: domain,
+		Namespace: namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
@@ -188,7 +188,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("json.Unmarshal err", err)
 	}
-	domainID := ms.ExecutionInfo.DomainID
+	namespaceID := ms.ExecutionInfo.NamespaceID
 	skipError := c.Bool(FlagSkipErrorMode)
 	session := connectToCassandra(c)
 	shardID := resp.GetShardId()
@@ -229,9 +229,9 @@ func AdminDeleteWorkflow(c *cli.Context) {
 
 	exeStore, _ := cassp.NewWorkflowExecutionPersistence(shardIDInt, session, loggerimpl.NewNopLogger())
 	req := &persistence.DeleteWorkflowExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: wid,
-		RunID:      rid,
+		NamespaceID: namespaceID,
+		WorkflowID:  wid,
+		RunID:       rid,
 	}
 
 	err = exeStore.DeleteWorkflowExecution(req)
@@ -245,9 +245,9 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	fmt.Println("delete mutableState row successfully")
 
 	deleteCurrentReq := &persistence.DeleteCurrentWorkflowExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: wid,
-		RunID:      rid,
+		NamespaceID: namespaceID,
+		WorkflowID:  wid,
+		RunID:       rid,
 	}
 
 	err = exeStore.DeleteCurrentWorkflowExecution(deleteCurrentReq)
@@ -303,47 +303,47 @@ func connectToCassandra(c *cli.Context) *gocql.Session {
 	return session
 }
 
-// AdminGetDomainIDOrName map domain
-func AdminGetDomainIDOrName(c *cli.Context) {
-	domainID := c.String(FlagDomainID)
-	domainName := c.String(FlagDomain)
-	if len(domainID) == 0 && len(domainName) == 0 {
-		ErrorAndExit("Need either domainName or domainID", nil)
+// AdminGetNamespaceIDOrName map namespace
+func AdminGetNamespaceIDOrName(c *cli.Context) {
+	namespaceID := c.String(FlagNamespaceID)
+	namespace := c.String(FlagNamespace)
+	if len(namespaceID) == 0 && len(namespace) == 0 {
+		ErrorAndExit("Need either namespace or namespaceID", nil)
 	}
 
 	session := connectToCassandra(c)
 
-	if len(domainID) > 0 {
-		tmpl := "select domain from domains where id = ? "
-		query := session.Query(tmpl, domainID)
+	if len(namespaceID) > 0 {
+		tmpl := "select namespace from namespaces where id = ? "
+		query := session.Query(tmpl, namespaceID)
 		res, err := readOneRow(query)
 		if err != nil {
 			ErrorAndExit("readOneRow", err)
 		}
-		domain := res["domain"].(map[string]interface{})
-		domainName := domain["name"].(string)
-		fmt.Printf("domainName for domainID %v is %v \n", domainID, domainName)
+		namespace := res["namespace"].(map[string]interface{})
+		namespace := namespace["name"].(string)
+		fmt.Printf("namespace for namespaceID %v is %v \n", namespaceID, namespace)
 	} else {
-		tmpl := "select domain from domains_by_name where name = ?"
-		tmplV2 := "select domain from domains_by_name_v2 where domains_partition=0 and name = ?"
+		tmpl := "select namespace from namespaces_by_name where name = ?"
+		tmplV2 := "select namespace from namespaces_by_name_v2 where namespaces_partition=0 and name = ?"
 
-		query := session.Query(tmpl, domainName)
+		query := session.Query(tmpl, namespace)
 		res, err := readOneRow(query)
 		if err != nil {
 			fmt.Printf("v1 return error: %v , trying v2...\n", err)
 
-			query := session.Query(tmplV2, domainName)
+			query := session.Query(tmplV2, namespace)
 			res, err := readOneRow(query)
 			if err != nil {
 				ErrorAndExit("readOneRow for v2", err)
 			}
-			domain := res["domain"].(map[string]interface{})
-			domainID := domain["id"].(gocql.UUID).String()
-			fmt.Printf("domainID for domainName %v is %v \n", domainName, domainID)
+			namespace := res["namespace"].(map[string]interface{})
+			namespaceID := namespace["id"].(gocql.UUID).String()
+			fmt.Printf("namespaceID for namespace %v is %v \n", namespace, namespaceID)
 		} else {
-			domain := res["domain"].(map[string]interface{})
-			domainID := domain["id"].(gocql.UUID).String()
-			fmt.Printf("domainID for domainName %v is %v \n", domainName, domainID)
+			namespace := res["namespace"].(map[string]interface{})
+			namespaceID := namespace["id"].(gocql.UUID).String()
+			fmt.Printf("namespaceID for namespace %v is %v \n", namespace, namespaceID)
 		}
 	}
 }
@@ -444,7 +444,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 func AdminRefreshWorkflowTasks(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
 
-	domain := getRequiredGlobalOption(c, FlagDomain)
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	wid := getRequiredOption(c, FlagWorkflowID)
 	rid := c.String(FlagRunID)
 
@@ -452,7 +452,7 @@ func AdminRefreshWorkflowTasks(c *cli.Context) {
 	defer cancel()
 
 	_, err := adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
-		Domain: domain,
+		Namespace: namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,

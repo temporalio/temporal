@@ -30,9 +30,9 @@ import (
 )
 
 const (
-	defaultRps    = 2000
-	defaultDomain = "test"
-	_minBurst     = 10000
+	defaultRps       = 2000
+	defaultNamespace = "test"
+	_minBurst        = 10000
 )
 
 func TestNewRateLimiter(t *testing.T) {
@@ -42,16 +42,16 @@ func TestNewRateLimiter(t *testing.T) {
 	assert.Equal(t, _minBurst, limiter.Burst())
 }
 
-func TestMultiStageRateLimiterBlockedByDomainRps(t *testing.T) {
+func TestMultiStageRateLimiterBlockedByNamespaceRps(t *testing.T) {
 	policy := newFixedRpsMultiStageRateLimiter(2, 1)
 	var result []bool
 	for n := 0; n < 5; n++ {
-		result = append(result, policy.Allow(Info{Domain: defaultDomain}))
+		result = append(result, policy.Allow(Info{Namespace: defaultNamespace}))
 	}
 
 	time.Sleep(time.Second)
 	for n := 0; n < 5; n++ {
-		result = append(result, policy.Allow(Info{Domain: defaultDomain}))
+		result = append(result, policy.Allow(Info{Namespace: defaultNamespace}))
 	}
 
 	var numAllowed int
@@ -68,12 +68,12 @@ func TestMultiStageRateLimiterBlockedByGlobalRps(t *testing.T) {
 	policy := newFixedRpsMultiStageRateLimiter(1, 2)
 	var result []bool
 	for n := 0; n < 5; n++ {
-		result = append(result, policy.Allow(Info{Domain: defaultDomain}))
+		result = append(result, policy.Allow(Info{Namespace: defaultNamespace}))
 	}
 
 	time.Sleep(time.Second)
 	for n := 0; n < 5; n++ {
-		result = append(result, policy.Allow(Info{Domain: defaultDomain}))
+		result = append(result, policy.Allow(Info{Namespace: defaultNamespace}))
 	}
 
 	var numAllowed int
@@ -97,51 +97,51 @@ func BenchmarkRateLimiter(b *testing.B) {
 func BenchmarkMultiStageRateLimiter(b *testing.B) {
 	policy := newFixedRpsMultiStageRateLimiter(defaultRps, defaultRps)
 	for n := 0; n < b.N; n++ {
-		policy.Allow(Info{Domain: defaultDomain})
+		policy.Allow(Info{Namespace: defaultNamespace})
 	}
 }
 
-func BenchmarkMultiStageRateLimiter20Domains(b *testing.B) {
-	numDomains := 20
+func BenchmarkMultiStageRateLimiter20Namespaces(b *testing.B) {
+	numNamespaces := 20
 	policy := newFixedRpsMultiStageRateLimiter(defaultRps, defaultRps)
-	domains := getDomains(numDomains)
+	namespaces := getNamespaces(numNamespaces)
 	for n := 0; n < b.N; n++ {
-		policy.Allow(Info{Domain: domains[n%numDomains]})
+		policy.Allow(Info{Namespace: namespaces[n%numNamespaces]})
 	}
 }
 
-func BenchmarkMultiStageRateLimiter100Domains(b *testing.B) {
-	numDomains := 100
+func BenchmarkMultiStageRateLimiter100Namespaces(b *testing.B) {
+	numNamespaces := 100
 	policy := newFixedRpsMultiStageRateLimiter(defaultRps, defaultRps)
-	domains := getDomains(numDomains)
+	namespaces := getNamespaces(numNamespaces)
 	for n := 0; n < b.N; n++ {
-		policy.Allow(Info{Domain: domains[n%numDomains]})
+		policy.Allow(Info{Namespace: namespaces[n%numNamespaces]})
 	}
 }
 
-func BenchmarkMultiStageRateLimiter1000Domains(b *testing.B) {
-	numDomains := 1000
+func BenchmarkMultiStageRateLimiter1000Namespaces(b *testing.B) {
+	numNamespaces := 1000
 	policy := newFixedRpsMultiStageRateLimiter(defaultRps, defaultRps)
-	domains := getDomains(numDomains)
+	namespaces := getNamespaces(numNamespaces)
 	for n := 0; n < b.N; n++ {
-		policy.Allow(Info{Domain: domains[n%numDomains]})
+		policy.Allow(Info{Namespace: namespaces[n%numNamespaces]})
 	}
 }
 
-func newFixedRpsMultiStageRateLimiter(globalRps, domainRps float64) Policy {
+func newFixedRpsMultiStageRateLimiter(globalRps, namespaceRps float64) Policy {
 	return NewMultiStageRateLimiter(
 		func() float64 {
 			return globalRps
 		},
-		func(domain string) float64 {
-			return domainRps
+		func(namespace string) float64 {
+			return namespaceRps
 		},
 	)
 }
-func getDomains(n int) []string {
-	domains := make([]string, n)
+func getNamespaces(n int) []string {
+	namespaces := make([]string, n)
 	for i := 0; i < n; i++ {
-		domains = append(domains, fmt.Sprintf("domains%v", i))
+		namespaces = append(namespaces, fmt.Sprintf("namespaces%v", i))
 	}
-	return domains
+	return namespaces
 }

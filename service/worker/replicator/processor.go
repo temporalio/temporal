@@ -35,36 +35,36 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/task"
 	"github.com/temporalio/temporal/common/xdc"
 )
 
 type (
 	replicationTaskProcessor struct {
-		currentCluster                string
-		sourceCluster                 string
-		consumerName                  string
-		client                        messaging.Client
-		consumer                      messaging.Consumer
-		isStarted                     int32
-		isStopped                     int32
-		shutdownWG                    sync.WaitGroup
-		shutdownCh                    chan struct{}
-		config                        *Config
-		logger                        log.Logger
-		metricsClient                 metrics.Client
-		domainreplicationTaskExecutor domain.ReplicationTaskExecutor
-		historyRereplicator           xdc.HistoryRereplicator
-		nDCHistoryResender            xdc.NDCHistoryResender
-		historyClient                 history.Client
-		domainCache                   cache.DomainCache
-		timeSource                    clock.TimeSource
-		sequentialTaskProcessor       task.Processor
+		currentCluster                   string
+		sourceCluster                    string
+		consumerName                     string
+		client                           messaging.Client
+		consumer                         messaging.Consumer
+		isStarted                        int32
+		isStopped                        int32
+		shutdownWG                       sync.WaitGroup
+		shutdownCh                       chan struct{}
+		config                           *Config
+		logger                           log.Logger
+		metricsClient                    metrics.Client
+		namespacereplicationTaskExecutor namespace.ReplicationTaskExecutor
+		historyRereplicator              xdc.HistoryRereplicator
+		nDCHistoryResender               xdc.NDCHistoryResender
+		historyClient                    history.Client
+		namespaceCache                   cache.NamespaceCache
+		timeSource                       clock.TimeSource
+		sequentialTaskProcessor          task.Processor
 	}
 )
 
@@ -89,11 +89,11 @@ func newReplicationTaskProcessor(
 	config *Config,
 	logger log.Logger,
 	metricsClient metrics.Client,
-	domainreplicationTaskExecutor domain.ReplicationTaskExecutor,
+	namespacereplicationTaskExecutor namespace.ReplicationTaskExecutor,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyClient history.Client,
-	domainCache cache.DomainCache,
+	namespaceCache cache.NamespaceCache,
 	sequentialTaskProcessor task.Processor,
 ) *replicationTaskProcessor {
 
@@ -101,21 +101,21 @@ func newReplicationTaskProcessor(
 		common.IsWhitelistServiceTransientError)
 
 	return &replicationTaskProcessor{
-		currentCluster:                currentCluster,
-		sourceCluster:                 sourceCluster,
-		consumerName:                  consumer,
-		client:                        client,
-		shutdownCh:                    make(chan struct{}),
-		config:                        config,
-		logger:                        logger,
-		metricsClient:                 metricsClient,
-		domainreplicationTaskExecutor: domainreplicationTaskExecutor,
-		historyRereplicator:           historyRereplicator,
-		nDCHistoryResender:            nDCHistoryResender,
-		historyClient:                 retryableHistoryClient,
-		timeSource:                    clock.NewRealTimeSource(),
-		domainCache:                   domainCache,
-		sequentialTaskProcessor:       sequentialTaskProcessor,
+		currentCluster:                   currentCluster,
+		sourceCluster:                    sourceCluster,
+		consumerName:                     consumer,
+		client:                           client,
+		shutdownCh:                       make(chan struct{}),
+		config:                           config,
+		logger:                           logger,
+		metricsClient:                    metricsClient,
+		namespacereplicationTaskExecutor: namespacereplicationTaskExecutor,
+		historyRereplicator:              historyRereplicator,
+		nDCHistoryResender:               nDCHistoryResender,
+		historyClient:                    retryableHistoryClient,
+		timeSource:                       clock.NewRealTimeSource(),
+		namespaceCache:                   namespaceCache,
+		sequentialTaskProcessor:          sequentialTaskProcessor,
 	}
 }
 
@@ -211,10 +211,10 @@ SubmitLoop:
 	for {
 		var scope int
 		switch replicationTask.GetTaskType() {
-		case enums.ReplicationTaskTypeDomain:
-			logger = logger.WithTags(tag.WorkflowDomainID(replicationTask.GetDomainTaskAttributes().GetId()))
-			scope = metrics.DomainReplicationTaskScope
-			err = p.handleDomainReplicationTask(replicationTask, msg, logger)
+		case enums.ReplicationTaskTypeNamespace:
+			logger = logger.WithTags(tag.WorkflowNamespaceID(replicationTask.GetNamespaceTaskAttributes().GetId()))
+			scope = metrics.NamespaceReplicationTaskScope
+			err = p.handleNamespaceReplicationTask(replicationTask, msg, logger)
 		case enums.ReplicationTaskTypeSyncShardStatus:
 			scope = metrics.SyncShardTaskScope
 			err = p.handleSyncShardTask(replicationTask, msg, logger)
@@ -286,9 +286,9 @@ func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, l
 	return &replicationTask, nil
 }
 
-func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replication.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
-	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
-	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
+func (p *replicationTaskProcessor) handleNamespaceReplicationTask(task *replication.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
+	p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorMessages)
+	sw := p.metricsClient.StartTimer(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
 	defer func() {
@@ -297,7 +297,7 @@ func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replication
 		}
 	}()
 
-	err := p.domainreplicationTaskExecutor.Execute(task.GetDomainTaskAttributes())
+	err := p.namespacereplicationTaskExecutor.Execute(task.GetNamespaceTaskAttributes())
 	if err != nil {
 		return err
 	}
@@ -337,7 +337,7 @@ func (p *replicationTaskProcessor) handleActivityTask(
 	logger log.Logger,
 ) error {
 
-	doContinue, err := p.filterTask(task.GetSyncActivityTaskAttributes().GetDomainId())
+	doContinue, err := p.filterTask(task.GetSyncActivityTaskAttributes().GetNamespaceId())
 	if err != nil || !doContinue {
 		return err
 	}
@@ -362,7 +362,7 @@ func (p *replicationTaskProcessor) handleHistoryReplicationTask(
 	logger log.Logger,
 ) error {
 
-	doContinue, err := p.filterTask(task.GetHistoryTaskAttributes().GetDomainId())
+	doContinue, err := p.filterTask(task.GetHistoryTaskAttributes().GetNamespaceId())
 	if err != nil || !doContinue {
 		return err
 	}
@@ -387,7 +387,7 @@ func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
 	logger log.Logger,
 ) error {
 
-	doContinue, err := p.filterTask(task.GetHistoryMetadataTaskAttributes().GetDomainId())
+	doContinue, err := p.filterTask(task.GetHistoryMetadataTaskAttributes().GetNamespaceId())
 	if err != nil || !doContinue {
 		return err
 	}
@@ -412,7 +412,7 @@ func (p *replicationTaskProcessor) handleHistoryReplicationV2Task(
 	logger log.Logger,
 ) error {
 
-	doContinue, err := p.filterTask(task.GetHistoryTaskV2Attributes().GetDomainId())
+	doContinue, err := p.filterTask(task.GetHistoryTaskV2Attributes().GetNamespaceId())
 	if err != nil || !doContinue {
 		return err
 	}
@@ -431,10 +431,10 @@ func (p *replicationTaskProcessor) handleHistoryReplicationV2Task(
 }
 
 func (p *replicationTaskProcessor) filterTask(
-	domainID string,
+	namespaceID string,
 ) (bool, error) {
 
-	domainEntry, err := p.domainCache.GetDomainByID(domainID)
+	namespaceEntry, err := p.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return false, err
 	}
@@ -442,7 +442,7 @@ func (p *replicationTaskProcessor) filterTask(
 	shouldProcessTask := false
 
 FilterLoop:
-	for _, targetCluster := range domainEntry.GetReplicationConfig().Clusters {
+	for _, targetCluster := range namespaceEntry.GetReplicationConfig().Clusters {
 		if p.currentCluster == targetCluster.ClusterName {
 			shouldProcessTask = true
 			break FilterLoop
@@ -461,8 +461,8 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
 	case *serviceerror.InvalidArgument:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
-	case *serviceerror.DomainNotActive:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrDomainNotActiveCounter)
+	case *serviceerror.NamespaceNotActive:
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrNamespaceNotActiveCounter)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
 	case *serviceerror.NotFound:

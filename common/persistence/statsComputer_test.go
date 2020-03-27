@@ -60,7 +60,7 @@ func (s *statsComputerSuite) createRequest() *InternalUpdateWorkflowExecutionReq
 
 func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 	ms := s.createRequest()
-	domainID := "A"
+	namespaceID := "A"
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: "test-workflow-id",
 		RunId:      "run_id",
@@ -72,7 +72,7 @@ func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 		Name: "test-tasklist",
 	}
 
-	ms.UpdateWorkflowMutation.ExecutionInfo.DomainID = domainID
+	ms.UpdateWorkflowMutation.ExecutionInfo.NamespaceID = namespaceID
 	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowID = execution.GetWorkflowId()
 	ms.UpdateWorkflowMutation.ExecutionInfo.RunID = execution.GetRunId()
 	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowTypeName = workflowType.GetName()

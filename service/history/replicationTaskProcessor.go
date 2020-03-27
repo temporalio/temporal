@@ -389,7 +389,7 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 		return nil
 	}
 	p.logger.Info("Put history replication to DLQ",
-		tag.WorkflowDomainIDBytes(request.TaskInfo.GetDomainID()),
+		tag.WorkflowNamespaceIDBytes(request.TaskInfo.GetNamespaceID()),
 		tag.WorkflowID(request.TaskInfo.GetWorkflowID()),
 		tag.WorkflowRunIDBytes(request.TaskInfo.GetRunID()),
 		tag.TaskID(request.TaskInfo.GetTaskID()),
@@ -423,7 +423,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				DomainID:    primitives.MustParseUUID(taskAttributes.GetDomainId()),
+				NamespaceID: primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
 				WorkflowID:  taskAttributes.GetWorkflowId(),
 				RunID:       primitives.MustParseUUID(taskAttributes.GetRunId()),
 				TaskID:      replicationTask.GetSourceTaskId(),
@@ -437,7 +437,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				DomainID:            primitives.MustParseUUID(taskAttributes.GetDomainId()),
+				NamespaceID:         primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
 				WorkflowID:          taskAttributes.GetWorkflowId(),
 				RunID:               primitives.MustParseUUID(taskAttributes.GetRunId()),
 				TaskID:              replicationTask.GetSourceTaskId(),
@@ -466,7 +466,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				DomainID:     primitives.MustParseUUID(taskAttributes.GetDomainId()),
+				NamespaceID:  primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
 				WorkflowID:   taskAttributes.GetWorkflowId(),
 				RunID:        primitives.MustParseUUID(taskAttributes.GetRunId()),
 				TaskID:       replicationTask.GetSourceTaskId(),
@@ -514,8 +514,8 @@ func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error)
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
 	case *serviceerror.InvalidArgument:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
-	case *serviceerror.DomainNotActive:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrDomainNotActiveCounter)
+	case *serviceerror.NamespaceNotActive:
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrNamespaceNotActiveCounter)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
 	case *serviceerror.NotFound:

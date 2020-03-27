@@ -161,8 +161,8 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	switch fwdr.taskListID.taskType {
 	case persistence.TaskListTypeDecision:
 		_, err = fwdr.client.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
-			DomainUUID: primitives.UUIDString(task.event.Data.DomainID),
-			Execution:  task.workflowExecution(),
+			NamespaceUUID: primitives.UUIDString(task.event.Data.NamespaceID),
+			Execution:     task.workflowExecution(),
 			TaskList: &commonproto.TaskList{
 				Name: name,
 				Kind: enums.TaskListKind(fwdr.taskListKind),
@@ -174,9 +174,9 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		})
 	case persistence.TaskListTypeActivity:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-			DomainUUID:       fwdr.taskListID.domainID,
-			SourceDomainUUID: primitives.UUIDString(task.event.Data.DomainID),
-			Execution:        task.workflowExecution(),
+			NamespaceUUID:       fwdr.taskListID.namespaceID,
+			SourceNamespaceUUID: primitives.UUIDString(task.event.Data.NamespaceID),
+			Execution:           task.workflowExecution(),
 			TaskList: &commonproto.TaskList{
 				Name: name,
 				Kind: enums.TaskListKind(fwdr.taskListKind),
@@ -209,7 +209,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 	}
 
 	resp, err := fwdr.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
-		DomainUUID: task.query.request.GetDomainUUID(),
+		NamespaceUUID: task.query.request.GetNamespaceUUID(),
 		TaskList: &commonproto.TaskList{
 			Name: name,
 			Kind: fwdr.taskListKind,
@@ -238,8 +238,8 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 	switch fwdr.taskListID.taskType {
 	case persistence.TaskListTypeDecision:
 		resp, err := fwdr.client.PollForDecisionTask(ctx, &matchingservice.PollForDecisionTaskRequest{
-			DomainUUID: fwdr.taskListID.domainID,
-			PollerID:   pollerID,
+			NamespaceUUID: fwdr.taskListID.namespaceID,
+			PollerID:      pollerID,
 			PollRequest: &workflowservice.PollForDecisionTaskRequest{
 				TaskList: &commonproto.TaskList{
 					Name: name,
@@ -255,8 +255,8 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 		return newInternalStartedTask(&startedTaskInfo{decisionTaskInfo: resp}), nil
 	case persistence.TaskListTypeActivity:
 		resp, err := fwdr.client.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
-			DomainUUID: fwdr.taskListID.domainID,
-			PollerID:   pollerID,
+			NamespaceUUID: fwdr.taskListID.namespaceID,
+			PollerID:      pollerID,
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
 				TaskList: &commonproto.TaskList{
 					Name: name,

@@ -50,8 +50,8 @@ const (
 
 type (
 	workflowExecutionContext interface {
-		getDomainName() string
-		getDomainID() string
+		getNamespace() string
+		getNamespaceID() string
 		getExecution() *commonproto.WorkflowExecution
 
 		loadWorkflowExecution() (mutableState, error)
@@ -138,7 +138,7 @@ type (
 
 type (
 	workflowExecutionContextImpl struct {
-		domainID          string
+		namespaceID       string
 		workflowExecution commonproto.WorkflowExecution
 		shard             ShardContext
 		engine            Engine
@@ -161,14 +161,14 @@ var (
 )
 
 func newWorkflowExecutionContext(
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 	shard ShardContext,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) *workflowExecutionContextImpl {
 	return &workflowExecutionContextImpl{
-		domainID:          domainID,
+		namespaceID:       namespaceID,
 		workflowExecution: execution,
 		shard:             shard,
 		engine:            shard.GetEngine(),
@@ -199,20 +199,20 @@ func (c *workflowExecutionContextImpl) clear() {
 	}
 }
 
-func (c *workflowExecutionContextImpl) getDomainID() string {
-	return c.domainID
+func (c *workflowExecutionContextImpl) getNamespaceID() string {
+	return c.namespaceID
 }
 
 func (c *workflowExecutionContextImpl) getExecution() *commonproto.WorkflowExecution {
 	return &c.workflowExecution
 }
 
-func (c *workflowExecutionContextImpl) getDomainName() string {
-	domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
+func (c *workflowExecutionContextImpl) getNamespace() string {
+	namespaceEntry, err := c.shard.GetNamespaceCache().GetNamespaceByID(c.namespaceID)
 	if err != nil {
 		return ""
 	}
-	return domainEntry.GetInfo().Name
+	return namespaceEntry.GetInfo().Name
 }
 
 func (c *workflowExecutionContextImpl) getHistorySize() int64 {
@@ -233,15 +233,15 @@ func (c *workflowExecutionContextImpl) loadExecutionStats() (*persistence.Execut
 
 func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, error) {
 
-	domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
+	namespaceEntry, err := c.shard.GetNamespaceCache().GetNamespaceByID(c.namespaceID)
 	if err != nil {
 		return nil, err
 	}
 
 	if c.mutableState == nil {
 		response, err := c.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{
-			DomainID:  c.domainID,
-			Execution: c.workflowExecution,
+			NamespaceID: c.namespaceID,
+			Execution:   c.workflowExecution,
 		})
 		if err != nil {
 			return nil, err
@@ -251,7 +251,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,
-			domainEntry,
+			namespaceEntry,
 		)
 
 		c.mutableState.Load(response.State)
@@ -262,13 +262,13 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		// finally emit execution and session stats
 		emitWorkflowExecutionStats(
 			c.metricsClient,
-			c.getDomainName(),
+			c.getNamespace(),
 			response.MutableStateStats,
 			c.stats.HistorySize,
 		)
 	}
 
-	flushBeforeReady, err := c.mutableState.StartTransaction(domainEntry)
+	flushBeforeReady, err := c.mutableState.StartTransaction(namespaceEntry)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +282,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		return nil, err
 	}
 
-	flushBeforeReady, err = c.mutableState.StartTransaction(domainEntry)
+	flushBeforeReady, err = c.mutableState.StartTransaction(namespaceEntry)
 	if err != nil {
 		return nil, err
 	}
@@ -468,7 +468,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 	workflowState, workflowCloseState := resetMutableState.GetWorkflowStateCloseStatus()
 	// Current branch changed and notify the watchers
 	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
-		c.domainID,
+		c.namespaceID,
 		&c.workflowExecution,
 		resetMutableState.GetLastFirstEventID(),
 		resetMutableState.GetNextEventID(),
@@ -665,7 +665,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	}
 	workflowState, workflowCloseState := c.mutableState.GetWorkflowStateCloseStatus()
 	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
-		c.domainID,
+		c.namespaceID,
 		&c.workflowExecution,
 		c.mutableState.GetLastFirstEventID(),
 		c.mutableState.GetNextEventID(),
@@ -692,23 +692,23 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	}
 
 	// finally emit session stats
-	domainName := c.getDomainName()
+	namespace := c.getNamespace()
 	emitWorkflowHistoryStats(
 		c.metricsClient,
-		domainName,
+		namespace,
 		int(c.stats.HistorySize),
 		int(c.mutableState.GetNextEventID()-1),
 	)
 	emitSessionUpdateStats(
 		c.metricsClient,
-		domainName,
+		namespace,
 		resp.MutableStateUpdateSessionStats,
 	)
 	// emit workflow completion stats if any
 	if currentWorkflow.ExecutionInfo.State == persistence.WorkflowStateCompleted {
 		if event, err := c.mutableState.GetCompletionEvent(); err == nil {
 			taskList := currentWorkflow.ExecutionInfo.TaskList
-			emitWorkflowCompletionStats(c.metricsClient, domainName, taskList, event)
+			emitWorkflowCompletionStats(c.metricsClient, namespace, taskList, event)
 		}
 	}
 
@@ -777,7 +777,7 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 		return 0, serviceerror.NewInternal("cannot persist first workflow events with empty events")
 	}
 
-	domainID := workflowEvents.DomainID
+	namespaceID := workflowEvents.NamespaceID
 	workflowID := workflowEvents.WorkflowID
 	runID := workflowEvents.RunID
 	execution := commonproto.WorkflowExecution{
@@ -788,11 +788,11 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 	events := workflowEvents.Events
 
 	size, err := c.appendHistoryV2EventsWithRetry(
-		domainID,
+		namespaceID,
 		execution,
 		&persistence.AppendHistoryNodesRequest{
 			IsNewBranch: true,
-			Info:        persistence.BuildHistoryGarbageCleanupInfo(domainID, workflowID, runID),
+			Info:        persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, runID),
 			BranchToken: branchToken,
 			Events:      events,
 			// TransactionID is set by shard context
@@ -809,7 +809,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 		return 0, nil // allow update workflow without events
 	}
 
-	domainID := workflowEvents.DomainID
+	namespaceID := workflowEvents.NamespaceID
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
@@ -818,7 +818,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 	events := workflowEvents.Events
 
 	size, err := c.appendHistoryV2EventsWithRetry(
-		domainID,
+		namespaceID,
 		execution,
 		&persistence.AppendHistoryNodesRequest{
 			IsNewBranch: false,
@@ -831,7 +831,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 }
 
 func (c *workflowExecutionContextImpl) appendHistoryV2EventsWithRetry(
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
 ) (int64, error) {
@@ -839,7 +839,7 @@ func (c *workflowExecutionContextImpl) appendHistoryV2EventsWithRetry(
 	resp := 0
 	op := func() error {
 		var err error
-		resp, err = c.shard.AppendHistoryV2Events(request, domainID, execution)
+		resp, err = c.shard.AppendHistoryV2Events(request, namespaceID, execution)
 		return err
 	}
 
@@ -879,7 +879,7 @@ func (c *workflowExecutionContextImpl) createWorkflowExecutionWithRetry(
 			"Persistent store operation failure",
 			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
 			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
-			tag.WorkflowDomainID(c.domainID),
+			tag.WorkflowNamespaceID(c.namespaceID),
 			tag.StoreOperationCreateWorkflowExecution,
 			tag.Error(err),
 		)
@@ -915,7 +915,7 @@ func (c *workflowExecutionContextImpl) getWorkflowExecutionWithRetry(
 			"Persistent fetch operation failure",
 			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
 			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
-			tag.WorkflowDomainID(c.domainID),
+			tag.WorkflowNamespaceID(c.namespaceID),
 			tag.StoreOperationGetWorkflowExecution,
 			tag.Error(err),
 		)
@@ -949,7 +949,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithRetry(
 			"Persistent store operation failure",
 			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
 			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
-			tag.WorkflowDomainID(c.domainID),
+			tag.WorkflowNamespaceID(c.namespaceID),
 			tag.StoreOperationUpdateWorkflowExecution,
 			tag.Error(err),
 			tag.Number(c.updateCondition),
@@ -1018,7 +1018,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			return err
 		}
 		size, retError = c.persistNonFirstWorkflowEvents(&persistence.WorkflowEvents{
-			DomainID:    currentExecutionInfo.DomainID,
+			NamespaceID: currentExecutionInfo.NamespaceID,
 			WorkflowID:  currentExecutionInfo.WorkflowID,
 			RunID:       currentExecutionInfo.RunID,
 			BranchToken: currentBranchToken,
@@ -1174,14 +1174,14 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 		return nil
 	}
 
-	domainID := eventBatches[0].DomainID
+	namespaceID := eventBatches[0].NamespaceID
 	workflowID := eventBatches[0].WorkflowID
 	runID := eventBatches[0].RunID
 	var reapplyEvents []*commonproto.HistoryEvent
 	for _, events := range eventBatches {
-		if events.DomainID != domainID ||
+		if events.NamespaceID != namespaceID ||
 			events.WorkflowID != workflowID {
-			return serviceerror.NewInternal("workflowExecutionContext encounter mismatch domainID / workflowID in events reapplication.")
+			return serviceerror.NewInternal("workflowExecutionContext encounter mismatch namespaceID / workflowID in events reapplication.")
 		}
 
 		for _, e := range events.Events {
@@ -1202,10 +1202,10 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	domainCache := c.shard.GetDomainCache()
+	namespaceCache := c.shard.GetNamespaceCache()
 	clientBean := c.shard.GetService().GetClientBean()
 	serializer := c.shard.GetService().GetPayloadSerializer()
-	domainEntry, err := domainCache.GetDomainByID(domainID)
+	namespaceEntry, err := namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
@@ -1213,18 +1213,18 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRemoteCallTimeout)
 	defer cancel()
 
-	activeCluster := domainEntry.GetReplicationConfig().ActiveClusterName
+	activeCluster := namespaceEntry.GetReplicationConfig().ActiveClusterName
 	if activeCluster == c.shard.GetClusterMetadata().GetCurrentClusterName() {
 		return c.shard.GetEngine().ReapplyEvents(
 			ctx,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			reapplyEvents,
 		)
 	}
 
-	// The active cluster of the domain is the same as current cluster.
+	// The active cluster of the namespace is the same as current cluster.
 	// Use the history from the same cluster to reapply events
 	reapplyEventsDataBlob, err := serializer.SerializeBatchEvents(
 		reapplyEvents,
@@ -1233,7 +1233,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	if err != nil {
 		return err
 	}
-	// The active cluster of the domain is differ from the current cluster
+	// The active cluster of the namespace is differ from the current cluster
 	// Use frontend client to route this request to the active cluster
 	// Reapplication only happens in active cluster
 	sourceCluster := clientBean.GetRemoteAdminClient(activeCluster)
@@ -1245,7 +1245,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,
 		&adminservice.ReapplyEventsRequest{
-			DomainName:        domainEntry.GetInfo().Name,
+			Namespace:         namespaceEntry.GetInfo().Name,
 			WorkflowExecution: execution,
 			Events:            reapplyEventsDataBlob.ToProto(),
 		},

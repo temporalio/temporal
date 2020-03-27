@@ -174,30 +174,30 @@ func (mr *MockBeanMockRecorder) SetVisibilityManager(arg0 interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVisibilityManager", reflect.TypeOf((*MockBean)(nil).SetVisibilityManager), arg0)
 }
 
-// GetDomainReplicationQueue mocks base method
-func (m *MockBean) GetDomainReplicationQueue() persistence.DomainReplicationQueue {
+// GetNamespaceReplicationQueue mocks base method
+func (m *MockBean) GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDomainReplicationQueue")
-	ret0, _ := ret[0].(persistence.DomainReplicationQueue)
+	ret := m.ctrl.Call(m, "GetNamespaceReplicationQueue")
+	ret0, _ := ret[0].(persistence.NamespaceReplicationQueue)
 	return ret0
 }
 
-// GetDomainReplicationQueue indicates an expected call of GetDomainReplicationQueue
-func (mr *MockBeanMockRecorder) GetDomainReplicationQueue() *gomock.Call {
+// GetNamespaceReplicationQueue indicates an expected call of GetNamespaceReplicationQueue
+func (mr *MockBeanMockRecorder) GetNamespaceReplicationQueue() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDomainReplicationQueue", reflect.TypeOf((*MockBean)(nil).GetDomainReplicationQueue))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceReplicationQueue", reflect.TypeOf((*MockBean)(nil).GetNamespaceReplicationQueue))
 }
 
-// SetDomainReplicationQueue mocks base method
-func (m *MockBean) SetDomainReplicationQueue(arg0 persistence.DomainReplicationQueue) {
+// SetNamespaceReplicationQueue mocks base method
+func (m *MockBean) SetNamespaceReplicationQueue(arg0 persistence.NamespaceReplicationQueue) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetDomainReplicationQueue", arg0)
+	m.ctrl.Call(m, "SetNamespaceReplicationQueue", arg0)
 }
 
-// SetDomainReplicationQueue indicates an expected call of SetDomainReplicationQueue
-func (mr *MockBeanMockRecorder) SetDomainReplicationQueue(arg0 interface{}) *gomock.Call {
+// SetNamespaceReplicationQueue indicates an expected call of SetNamespaceReplicationQueue
+func (mr *MockBeanMockRecorder) SetNamespaceReplicationQueue(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDomainReplicationQueue", reflect.TypeOf((*MockBean)(nil).SetDomainReplicationQueue), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetNamespaceReplicationQueue", reflect.TypeOf((*MockBean)(nil).SetNamespaceReplicationQueue), arg0)
 }
 
 // GetShardManager mocks base method

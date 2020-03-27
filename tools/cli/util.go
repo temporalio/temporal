@@ -520,13 +520,13 @@ func ErrorAndExit(msg string, err error) {
 }
 
 func getWorkflowClient(c *cli.Context) sdkclient.Client {
-	domain := getRequiredGlobalOption(c, FlagDomain)
-	return cFactory.SDKClient(c, domain)
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
+	return cFactory.SDKClient(c, namespace)
 }
 
-func getWorkflowClientWithOptionalDomain(c *cli.Context) sdkclient.Client {
-	if !c.GlobalIsSet(FlagDomain) {
-		_ = c.GlobalSet(FlagDomain, "system-domain")
+func getWorkflowClientWithOptionalNamespace(c *cli.Context) sdkclient.Client {
+	if !c.GlobalIsSet(FlagNamespace) {
+		_ = c.GlobalSet(FlagNamespace, "system-namespace")
 	}
 	return getWorkflowClient(c)
 }

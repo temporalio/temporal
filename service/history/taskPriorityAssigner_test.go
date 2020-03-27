@@ -43,8 +43,8 @@ type (
 		*require.Assertions
 		suite.Suite
 
-		controller      *gomock.Controller
-		mockDomainCache *cache.MockDomainCache
+		controller         *gomock.Controller
+		mockNamespaceCache *cache.MockNamespaceCache
 
 		priorityAssigner   *taskPriorityAssignerImpl
 		testTaskProcessRPS int
@@ -60,16 +60,16 @@ func (s *taskPriorityAssignerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
 
 	s.testTaskProcessRPS = 10
 	dc := dynamicconfig.NewNopCollection()
 	config := NewDynamicConfigForTest()
-	config.TaskProcessRPS = dc.GetIntPropertyFilteredByDomain(dynamicconfig.TaskProcessRPS, s.testTaskProcessRPS)
+	config.TaskProcessRPS = dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskProcessRPS, s.testTaskProcessRPS)
 
 	s.priorityAssigner = newTaskPriorityAssigner(
 		cluster.TestCurrentClusterName,
-		s.mockDomainCache,
+		s.mockNamespaceCache,
 		log.NewNoop(),
 		metrics.NewClient(tally.NoopScope, metrics.History),
 		config,
@@ -80,58 +80,58 @@ func (s *taskPriorityAssignerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *taskPriorityAssignerSuite) TestGetDomainInfo_Success_Active() {
-	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(testGlobalDomainEntry, nil)
+func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Success_Active() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil)
 
-	domainName, isActive, err := s.priorityAssigner.getDomainInfo(testDomainID)
+	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(testNamespaceID)
 	s.NoError(err)
-	s.Equal(testDomainName, domainName)
+	s.Equal(testNamespace, namespace)
 	s.True(isActive)
 }
 
-func (s *taskPriorityAssignerSuite) TestGetDomainInfo_Success_Passive() {
-	testGlobalDomainEntry.GetReplicationConfig().ActiveClusterName = cluster.TestAlternativeClusterName
+func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Success_Passive() {
+	testGlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestAlternativeClusterName
 	defer func() {
-		testGlobalDomainEntry.GetReplicationConfig().ActiveClusterName = cluster.TestCurrentClusterName
+		testGlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestCurrentClusterName
 	}()
-	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(testGlobalDomainEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil)
 
-	domainName, isActive, err := s.priorityAssigner.getDomainInfo(testDomainID)
+	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(testNamespaceID)
 	s.NoError(err)
-	s.Equal(testDomainName, domainName)
+	s.Equal(testNamespace, namespace)
 	s.False(isActive)
 }
 
-func (s *taskPriorityAssignerSuite) TestGetDomainInfo_Success_Local() {
-	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(testLocalDomainEntry, nil)
+func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Success_Local() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testLocalNamespaceEntry, nil)
 
-	domainName, isActive, err := s.priorityAssigner.getDomainInfo(testDomainID)
+	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(testNamespaceID)
 	s.NoError(err)
-	s.Equal(testDomainName, domainName)
+	s.Equal(testNamespace, namespace)
 	s.True(isActive)
 }
 
-func (s *taskPriorityAssignerSuite) TestGetDomainInfo_Fail_DomainNotExist() {
-	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(
+func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Fail_NamespaceNotExist() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(
 		nil,
-		serviceerror.NewNotFound("domain not exist"),
+		serviceerror.NewNotFound("namespace not exist"),
 	)
 
-	domainName, isActive, err := s.priorityAssigner.getDomainInfo(testDomainID)
+	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(testNamespaceID)
 	s.NoError(err)
-	s.Empty(domainName)
+	s.Empty(namespace)
 	s.True(isActive)
 }
 
-func (s *taskPriorityAssignerSuite) TestGetDomainInfo_Fail_UnknownError() {
-	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(
+func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Fail_UnknownError() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(
 		nil,
 		errors.New("some random error"),
 	)
 
-	domainName, isActive, err := s.priorityAssigner.getDomainInfo(testDomainID)
+	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(testNamespaceID)
 	s.Error(err)
-	s.Empty(domainName)
+	s.Empty(namespace)
 	s.False(isActive)
 }
 
@@ -145,15 +145,15 @@ func (s *taskPriorityAssignerSuite) TestAssign_ReplicationTask() {
 }
 
 func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask() {
-	testGlobalDomainEntry.GetReplicationConfig().ActiveClusterName = cluster.TestAlternativeClusterName
+	testGlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestAlternativeClusterName
 	defer func() {
-		testGlobalDomainEntry.GetReplicationConfig().ActiveClusterName = cluster.TestCurrentClusterName
+		testGlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestCurrentClusterName
 	}()
-	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(testGlobalDomainEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil)
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(transferQueueType).Times(1)
-	mockTask.EXPECT().GetDomainID().Return(primitives.MustParseUUID(testDomainID)).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
 	mockTask.EXPECT().SetPriority(getTaskPriority(taskLowPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -161,11 +161,11 @@ func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask() {
 }
 
 func (s *taskPriorityAssignerSuite) TestAssign_TransferTask() {
-	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(testGlobalDomainEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil)
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(transferQueueType).AnyTimes()
-	mockTask.EXPECT().GetDomainID().Return(primitives.MustParseUUID(testDomainID)).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
 	mockTask.EXPECT().SetPriority(getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -173,11 +173,11 @@ func (s *taskPriorityAssignerSuite) TestAssign_TransferTask() {
 }
 
 func (s *taskPriorityAssignerSuite) TestAssign_TimerTask() {
-	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(testGlobalDomainEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil)
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(timerQueueType).AnyTimes()
-	mockTask.EXPECT().GetDomainID().Return(primitives.MustParseUUID(testDomainID)).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
 	mockTask.EXPECT().SetPriority(getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -185,12 +185,12 @@ func (s *taskPriorityAssignerSuite) TestAssign_TimerTask() {
 }
 
 func (s *taskPriorityAssignerSuite) TestAssign_ThrottledTask() {
-	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(testGlobalDomainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 
 	for i := 0; i != s.testTaskProcessRPS*2; i++ {
 		mockTask := NewMockqueueTask(s.controller)
 		mockTask.EXPECT().GetQueueType().Return(timerQueueType).AnyTimes()
-		mockTask.EXPECT().GetDomainID().Return(primitives.MustParseUUID(testDomainID)).Times(1)
+		mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
 		if i < s.testTaskProcessRPS {
 			mockTask.EXPECT().SetPriority(getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 		} else {

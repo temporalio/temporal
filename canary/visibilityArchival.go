@@ -85,14 +85,14 @@ func visibilityArchivalActivity(ctx context.Context, scheduledTimeNanos int64) e
 	defer recordActivityEnd(scope, sw, err)
 
 	client := getActivityArchivalContext(ctx).cadence
-	resp, err := client.Describe(ctx, archivalDomain)
+	resp, err := client.Describe(ctx, archivalNamespace)
 	if err != nil {
 		return err
 	}
 
 	if resp.Configuration != nil &&
 		resp.Configuration.GetVisibilityArchivalStatus() == enums.ArchivalStatusDisabled {
-		return errors.New("domain not configured for visibility archival")
+		return errors.New("namespace not configured for visibility archival")
 	}
 
 	visArchivalURI := ""
@@ -139,9 +139,9 @@ func visibilityArchivalActivity(ctx context.Context, scheduledTimeNanos int64) e
 			scope,
 			client,
 			&workflowservice.ListArchivedWorkflowExecutionsRequest{
-				Domain:   archivalDomain,
-				PageSize: queryPageSize,
-				Query:    query,
+				Namespace: archivalNamespace,
+				PageSize:  queryPageSize,
+				Query:     query,
 			},
 		)
 		if err != nil && isInvalidArgumentError(err) {

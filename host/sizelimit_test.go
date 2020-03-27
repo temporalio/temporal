@@ -79,7 +79,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -134,7 +134,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -160,7 +160,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 
 	// verify last event is terminated event
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
@@ -177,7 +177,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	isCloseCorrect := false
 	for i := 0; i < 10; i++ {
 		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Domain:          s.domainName,
+			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: &commonproto.StartTimeFilter{
 				EarliestTime: 0,

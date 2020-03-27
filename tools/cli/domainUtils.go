@@ -32,11 +32,11 @@ import (
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/service/config"
@@ -48,10 +48,10 @@ const (
 )
 
 var (
-	registerDomainFlags = []cli.Flag{
+	registerNamespaceFlags = []cli.Flag{
 		cli.StringFlag{
 			Name:  FlagDescriptionWithAlias,
-			Usage: "Domain description",
+			Usage: "Namespace description",
 		},
 		cli.StringFlag{
 			Name:  FlagOwnerEmailWithAlias,
@@ -73,12 +73,12 @@ var (
 			Usage: "Clusters",
 		},
 		cli.StringFlag{
-			Name:  FlagIsGlobalDomainWithAlias,
-			Usage: "Flag to indicate whether domain is a global domain",
+			Name:  FlagIsGlobalNamespaceWithAlias,
+			Usage: "Flag to indicate whether namespace is a global namespace",
 		},
 		cli.StringFlag{
-			Name:  FlagDomainDataWithAlias,
-			Usage: "Domain data of key value pairs, in format of k1:v1,k2:v2,k3:v3",
+			Name:  FlagNamespaceDataWithAlias,
+			Usage: "Namespace data of key value pairs, in format of k1:v1,k2:v2,k3:v3",
 		},
 		cli.StringFlag{
 			Name:  FlagSecurityTokenWithAlias,
@@ -102,10 +102,10 @@ var (
 		},
 	}
 
-	updateDomainFlags = []cli.Flag{
+	updateNamespaceFlags = []cli.Flag{
 		cli.StringFlag{
 			Name:  FlagDescriptionWithAlias,
-			Usage: "Domain description",
+			Usage: "Namespace description",
 		},
 		cli.StringFlag{
 			Name:  FlagOwnerEmailWithAlias,
@@ -127,8 +127,8 @@ var (
 			Usage: "Clusters",
 		},
 		cli.StringFlag{
-			Name:  FlagDomainDataWithAlias,
-			Usage: "Domain data of key value pairs, in format of k1:v1,k2:v2,k3:v3 ",
+			Name:  FlagNamespaceDataWithAlias,
+			Usage: "Namespace data of key value pairs, in format of k1:v1,k2:v2,k3:v3 ",
 		},
 		cli.StringFlag{
 			Name:  FlagSecurityTokenWithAlias,
@@ -164,14 +164,14 @@ var (
 		},
 	}
 
-	describeDomainFlags = []cli.Flag{
+	describeNamespaceFlags = []cli.Flag{
 		cli.StringFlag{
-			Name:  FlagDomainID,
-			Usage: "Domain UUID (required if not specify domainName)",
+			Name:  FlagNamespaceID,
+			Usage: "Namespace UUID (required if not specify namespace)",
 		},
 	}
 
-	adminDomainCommonFlags = []cli.Flag{
+	adminNamespaceCommonFlags = []cli.Flag{
 		cli.StringFlag{
 			Name:  FlagServiceConfigDirWithAlias,
 			Usage: "Required service configuration dir",
@@ -186,19 +186,19 @@ var (
 		},
 	}
 
-	adminRegisterDomainFlags = append(
-		registerDomainFlags,
-		adminDomainCommonFlags...,
+	adminRegisterNamespaceFlags = append(
+		registerNamespaceFlags,
+		adminNamespaceCommonFlags...,
 	)
 
-	adminUpdateDomainFlags = append(
-		updateDomainFlags,
-		adminDomainCommonFlags...,
+	adminUpdateNamespaceFlags = append(
+		updateNamespaceFlags,
+		adminNamespaceCommonFlags...,
 	)
 
-	adminDescribeDomainFlags = append(
-		updateDomainFlags,
-		adminDomainCommonFlags...,
+	adminDescribeNamespaceFlags = append(
+		updateNamespaceFlags,
+		adminNamespaceCommonFlags...,
 	)
 )
 
@@ -208,9 +208,9 @@ func initializeFrontendClient(
 	return cFactory.FrontendClient(context)
 }
 
-func initializeAdminDomainHandler(
+func initializeAdminNamespaceHandler(
 	context *cli.Context,
-) domain.Handler {
+) namespace.Handler {
 
 	configuration := loadConfig(context)
 	metricsClient := initializeMetricsClient()
@@ -226,7 +226,7 @@ func initializeAdminDomainHandler(
 		logger,
 	)
 	dynamicConfig := initializeDynamicConfig(configuration, logger)
-	return initializeDomainHandler(
+	return initializeNamespaceHandler(
 		logger,
 		metadataMgr,
 		clusterMetadata,
@@ -249,20 +249,20 @@ func loadConfig(
 	return &cfg
 }
 
-func initializeDomainHandler(
+func initializeNamespaceHandler(
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
-) domain.Handler {
-	return domain.NewHandler(
-		domain.MinRetentionDays,
-		dynamicconfig.GetIntPropertyFilteredByDomain(domain.MaxBadBinaries),
+) namespace.Handler {
+	return namespace.NewHandler(
+		namespace.MinRetentionDays,
+		dynamicconfig.GetIntPropertyFilteredByNamespace(namespace.MaxBadBinaries),
 		logger,
 		metadataMgr,
 		clusterMetadata,
-		initializeDomainReplicator(logger),
+		initializeNamespaceReplicator(logger),
 		archivalMetadata,
 		archiverProvider,
 	)
@@ -283,9 +283,9 @@ func initializeMetadataMgr(
 
 	pConfig := serviceConfig.Persistence
 	pConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS:            dynamicconfig.GetIntPropertyFilteredByDomain(dependencyMaxQPS),
-		EnableSampling:                  dynamicconfig.GetBoolPropertyFn(false), // not used by domain operation
-		EnableReadFromClosedExecutionV2: dynamicconfig.GetBoolPropertyFn(false), // not used by domain operation
+		VisibilityListMaxQPS:            dynamicconfig.GetIntPropertyFilteredByNamespace(dependencyMaxQPS),
+		EnableSampling:                  dynamicconfig.GetBoolPropertyFn(false), // not used by namespace operation
+		EnableReadFromClosedExecutionV2: dynamicconfig.GetBoolPropertyFn(false), // not used by namespace operation
 	}
 	pFactory := client.NewFactory(
 		&pConfig,
@@ -310,7 +310,7 @@ func initializeClusterMetadata(
 	clusterMetadata := serviceConfig.ClusterMetadata
 	return cluster.NewMetadata(
 		logger,
-		dynamicconfig.GetBoolPropertyFn(clusterMetadata.EnableGlobalDomain),
+		dynamicconfig.GetBoolPropertyFn(clusterMetadata.EnableGlobalNamespace),
 		clusterMetadata.FailoverVersionIncrement,
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,
@@ -330,7 +330,7 @@ func initializeArchivalMetadata(
 		serviceConfig.Archival.History.EnableRead,
 		serviceConfig.Archival.Visibility.Status,
 		serviceConfig.Archival.Visibility.EnableRead,
-		&serviceConfig.DomainDefaults.Archival,
+		&serviceConfig.NamespaceDefaults.Archival,
 	)
 }
 
@@ -351,13 +351,13 @@ func initializeArchivalProvider(
 		Logger:           logger,
 		MetricsClient:    metricsClient,
 		ClusterMetadata:  clusterMetadata,
-		DomainCache:      nil, // not used
+		NamespaceCache:   nil, // not used
 	}
 	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
 		Logger:          logger,
 		MetricsClient:   metricsClient,
 		ClusterMetadata: clusterMetadata,
-		DomainCache:     nil, // not used
+		NamespaceCache:  nil, // not used
 	}
 
 	err := archiverProvider.RegisterBootstrapContainer(
@@ -371,13 +371,13 @@ func initializeArchivalProvider(
 	return archiverProvider
 }
 
-func initializeDomainReplicator(
+func initializeNamespaceReplicator(
 	logger log.Logger,
-) domain.Replicator {
+) namespace.Replicator {
 
 	replicationMessageSink := &mocks.KafkaProducer{}
 	replicationMessageSink.On("Publish", mock.Anything).Return(nil)
-	return domain.NewDomainReplicator(replicationMessageSink, logger)
+	return namespace.NewNamespaceReplicator(replicationMessageSink, logger)
 }
 
 func initializeDynamicConfig(

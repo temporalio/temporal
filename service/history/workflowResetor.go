@@ -55,7 +55,7 @@ type (
 		ApplyResetEvent(
 			ctx context.Context,
 			request *historyservice.ReplicateEventsRequest,
-			domainID, workflowID, currentRunID string,
+			namespaceID, workflowID, currentRunID string,
 		) (retError error)
 	}
 
@@ -85,7 +85,7 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 	currMutableState mutableState,
 ) (*historyservice.ResetWorkflowExecutionResponse, error) {
 
-	domainEntry, retError := w.eng.shard.GetDomainCache().GetDomain(request.GetDomain())
+	namespaceEntry, retError := w.eng.shard.GetNamespaceCache().GetNamespace(request.GetNamespace())
 	if retError != nil {
 		return nil, retError
 	}
@@ -112,21 +112,21 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 	}
 
 	newMutableState, newHistorySize, newTransferTasks, newTimerTasks, retError := w.buildNewMutableStateForReset(
-		ctx, domainEntry, baseMutableState, currMutableState,
+		ctx, namespaceEntry, baseMutableState, currMutableState,
 		request.GetReason(), request.GetDecisionFinishEventId(), request.GetRequestId(), resetNewRunID,
 	)
 	if retError != nil {
 		return response, retError
 	}
 
-	retError = w.checkDomainStatus(newMutableState, currPrevRunVersion, domainEntry.GetInfo().Name)
+	retError = w.checkNamespaceStatus(newMutableState, currPrevRunVersion, namespaceEntry.GetInfo().Name)
 	if retError != nil {
 		return response, retError
 	}
 
 	// update replication and generate replication task
 	currReplicationTasks, newReplicationTasks, err := w.generateReplicationTasksForReset(
-		currTerminated, currMutableState, newMutableState, domainEntry,
+		currTerminated, currMutableState, newMutableState, namespaceEntry,
 	)
 	if err != nil {
 		return nil, err
@@ -143,13 +143,13 @@ func (w *workflowResetorImpl) ResetWorkflowExecution(
 	return response, retError
 }
 
-func (w *workflowResetorImpl) checkDomainStatus(newMutableState mutableState, prevRunVersion int64, domain string) error {
+func (w *workflowResetorImpl) checkNamespaceStatus(newMutableState mutableState, prevRunVersion int64, namespace string) error {
 	if newMutableState.GetReplicationState() != nil || newMutableState.GetVersionHistories() != nil {
 		clusterMetadata := w.eng.shard.GetService().GetClusterMetadata()
 		currentVersion := newMutableState.GetCurrentVersion()
 		if currentVersion < prevRunVersion {
-			return serviceerror.NewDomainNotActive(
-				domain,
+			return serviceerror.NewNamespaceNotActive(
+				namespace,
 				clusterMetadata.GetCurrentClusterName(),
 				clusterMetadata.ClusterNameForFailoverVersion(prevRunVersion),
 			)
@@ -157,7 +157,7 @@ func (w *workflowResetorImpl) checkDomainStatus(newMutableState mutableState, pr
 		activeCluster := clusterMetadata.ClusterNameForFailoverVersion(currentVersion)
 		currentCluster := clusterMetadata.GetCurrentClusterName()
 		if activeCluster != currentCluster {
-			return serviceerror.NewDomainNotActive(domain, currentCluster, activeCluster)
+			return serviceerror.NewNamespaceNotActive(namespace, currentCluster, activeCluster)
 		}
 	}
 	return nil
@@ -216,9 +216,9 @@ func (w *workflowResetorImpl) scheduleUnstartedActivities(msBuilder mutableState
 			return nil, serviceerror.NewInternal("started activities should have been failed.")
 		}
 		t := &persistence.ActivityTask{
-			DomainID:   exeInfo.DomainID,
-			TaskList:   exeInfo.TaskList,
-			ScheduleID: ai.ScheduleID,
+			NamespaceID: exeInfo.NamespaceID,
+			TaskList:    exeInfo.TaskList,
+			ScheduleID:  ai.ScheduleID,
 		}
 		tasks = append(tasks, t)
 	}
@@ -228,20 +228,20 @@ func (w *workflowResetorImpl) scheduleUnstartedActivities(msBuilder mutableState
 // TODO: @shreyassrivatsan reduce number of return parameters
 func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	ctx context.Context,
-	domainEntry *cache.DomainCacheEntry,
+	namespaceEntry *cache.NamespaceCacheEntry,
 	baseMutableState, currMutableState mutableState,
 	resetReason string,
 	resetDecisionCompletedEventID int64,
 	requestedID, newRunID string,
 ) (newMutableState mutableState, newHistorySize int64, newTransferTasks, newTimerTasks []persistence.Task, retError error) {
 
-	domainID := baseMutableState.GetExecutionInfo().DomainID
+	namespaceID := baseMutableState.GetExecutionInfo().NamespaceID
 	workflowID := baseMutableState.GetExecutionInfo().WorkflowID
 	baseRunID := baseMutableState.GetExecutionInfo().RunID
 
 	// replay history to reset point(exclusive) to rebuild mutableState
 	forkEventVersion, wfTimeoutSecs, receivedSignals, continueRunID, newStateBuilder, historySize, retError := w.replayHistoryEvents(
-		domainEntry, resetDecisionCompletedEventID, requestedID, baseMutableState, newRunID,
+		namespaceEntry, resetDecisionCompletedEventID, requestedID, baseMutableState, newRunID,
 	)
 	if retError != nil {
 		return
@@ -265,9 +265,9 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 		return
 	}
 
-	// set the new mutable state with the version in domain
+	// set the new mutable state with the version in namespace
 	if retError = newMutableState.UpdateCurrentVersion(
-		domainEntry.GetFailoverVersion(),
+		namespaceEntry.GetFailoverVersion(),
 		false,
 	); retError != nil {
 		return
@@ -321,9 +321,9 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	// TODO workflow reset logic should use built-in task management
 	newTransferTasks = append(newTransferTasks,
 		&persistence.DecisionTask{
-			DomainID:   domainID,
-			TaskList:   decision.TaskList,
-			ScheduleID: decision.ScheduleID,
+			NamespaceID: namespaceID,
+			TaskList:    decision.TaskList,
+			ScheduleID:  decision.ScheduleID,
 		},
 		&persistence.RecordWorkflowStartedTask{},
 	)
@@ -338,7 +338,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	forkResp, retError := w.eng.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      resetDecisionCompletedEventID,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(domainID, workflowID, newRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, newRunID),
 		ShardID:         &shardId,
 	})
 	if retError != nil {
@@ -366,8 +366,8 @@ func (w *workflowResetorImpl) terminateIfCurrIsRunning(
 			return
 		}
 		closeTask, cleanupTask, retError = getWorkflowCleanupTasks(
-			w.eng.shard.GetDomainCache(),
-			currMutableState.GetExecutionInfo().DomainID,
+			w.eng.shard.GetNamespaceCache(),
+			currMutableState.GetExecutionInfo().NamespaceID,
 			currMutableState.GetExecutionInfo().WorkflowID,
 		)
 		if retError != nil {
@@ -401,7 +401,7 @@ func (w *workflowResetorImpl) setEventIDsWithHistory(msBuilder mutableState) (in
 func (w *workflowResetorImpl) generateReplicationTasksForReset(
 	terminateCurr bool,
 	currMutableState, newMutableState mutableState,
-	domainEntry *cache.DomainCacheEntry,
+	namespaceEntry *cache.NamespaceCacheEntry,
 ) ([]persistence.Task, []persistence.Task, error) {
 	var currRepTasks, insertRepTasks []persistence.Task
 	if newMutableState.GetReplicationState() != nil || newMutableState.GetVersionHistories() != nil {
@@ -411,7 +411,7 @@ func (w *workflowResetorImpl) generateReplicationTasksForReset(
 			if err != nil {
 				return nil, nil, err
 			}
-			if domainEntry.GetReplicationPolicy() == cache.ReplicationPolicyMultiCluster {
+			if namespaceEntry.GetReplicationPolicy() == cache.ReplicationPolicyMultiCluster {
 				currentBranchToken, err := currMutableState.GetCurrentBranchToken()
 				if err != nil {
 					return nil, nil, err
@@ -434,7 +434,7 @@ func (w *workflowResetorImpl) generateReplicationTasksForReset(
 		if err != nil {
 			return nil, nil, err
 		}
-		if domainEntry.GetReplicationPolicy() == cache.ReplicationPolicyMultiCluster {
+		if namespaceEntry.GetReplicationPolicy() == cache.ReplicationPolicyMultiCluster {
 			newBranchToken, err := newMutableState.GetCurrentBranchToken()
 			if err != nil {
 				return nil, nil, err
@@ -485,7 +485,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 				WorkflowId: newMutableState.GetExecutionInfo().WorkflowID,
 				RunId:      continueRunID,
 			}
-			continueContext, continueRelease, err := w.eng.historyCache.getOrCreateWorkflowExecution(ctx, newMutableState.GetExecutionInfo().DomainID, continueExe)
+			continueContext, continueRelease, err := w.eng.historyCache.getOrCreateWorkflowExecution(ctx, newMutableState.GetExecutionInfo().NamespaceID, continueExe)
 			if err != nil {
 				return err
 			}
@@ -607,7 +607,7 @@ func getRespondActivityTaskFailedRequestFromActivity(ai *persistence.ActivityInf
 
 // TODO: @shreyassrivatsan reduce the number of return parameters from this method or return a struct
 func (w *workflowResetorImpl) replayHistoryEvents(
-	domainEntry *cache.DomainCacheEntry,
+	namespaceEntry *cache.NamespaceCacheEntry,
 	decisionFinishEventID int64,
 	requestID string,
 	prevMutableState mutableState,
@@ -618,7 +618,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 		WorkflowId: prevMutableState.GetExecutionInfo().WorkflowID,
 		RunId:      prevMutableState.GetExecutionInfo().RunID,
 	}
-	domainID := prevMutableState.GetExecutionInfo().DomainID
+	namespaceID := prevMutableState.GetExecutionInfo().NamespaceID
 	var nextPageToken []byte
 	prevBranchToken, err := prevMutableState.GetCurrentBranchToken()
 	if err != nil {
@@ -675,17 +675,17 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 						w.eng.shard,
 						w.eng.shard.GetEventsCache(),
 						w.eng.logger,
-						domainEntry,
+						namespaceEntry,
 					)
 				} else if prevMutableState.GetVersionHistories() != nil {
 					resetMutableState = newMutableStateBuilderWithVersionHistories(
 						w.eng.shard,
 						w.eng.shard.GetEventsCache(),
 						w.eng.logger,
-						domainEntry,
+						namespaceEntry,
 					)
 				} else {
-					resetMutableState = newMutableStateBuilder(w.eng.shard, w.eng.shard.GetEventsCache(), w.eng.logger, domainEntry)
+					resetMutableState = newMutableStateBuilder(w.eng.shard, w.eng.shard.GetEventsCache(), w.eng.logger, namespaceEntry)
 				}
 
 				sBuilder = newStateBuilder(
@@ -693,7 +693,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 					w.eng.logger,
 					resetMutableState,
 					func(mutableState mutableState) mutableStateTaskGenerator {
-						return newMutableStateTaskGenerator(w.eng.shard.GetDomainCache(), w.eng.logger, mutableState)
+						return newMutableStateTaskGenerator(w.eng.shard.GetNamespaceCache(), w.eng.logger, mutableState)
 					},
 				)
 			}
@@ -704,7 +704,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 				return
 			}
 
-			_, retError = sBuilder.applyEvents(domainID, requestID, prevExecution, history, nil, false)
+			_, retError = sBuilder.applyEvents(namespaceID, requestID, prevExecution, history, nil, false)
 			if retError != nil {
 				return
 			}
@@ -765,7 +765,7 @@ func validateResetReplicationTask(request *historyservice.ReplicateEventsRequest
 func (w *workflowResetorImpl) ApplyResetEvent(
 	ctx context.Context,
 	request *historyservice.ReplicateEventsRequest,
-	domainID, workflowID, currentRunID string,
+	namespaceID, workflowID, currentRunID string,
 ) error {
 	var currContext workflowExecutionContext
 	var baseMutableState, currMutableState, newMsBuilder mutableState
@@ -784,7 +784,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		RunId:      resetAttr.GetBaseRunId(),
 	}
 
-	baseContext, baseRelease, baseErr := w.eng.historyCache.getOrCreateWorkflowExecution(ctx, domainID, baseExecution)
+	baseContext, baseRelease, baseErr := w.eng.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, baseExecution)
 	if baseErr != nil {
 		return baseErr
 	}
@@ -795,7 +795,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 	}
 	if baseMutableState.GetNextEventID() < decisionFinishEventID {
 		// re-replicate the whole new run
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
+		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
 	}
 
 	if currentRunID == resetAttr.GetBaseRunId() {
@@ -808,7 +808,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 			RunId:      currentRunID,
 		}
 		var currErr error
-		currContext, currRelease, currErr = w.eng.historyCache.getOrCreateWorkflowExecution(ctx, domainID, currExecution)
+		currContext, currRelease, currErr = w.eng.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, currExecution)
 		if currErr != nil {
 			return currErr
 		}
@@ -833,7 +833,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 	forkResp, retError := w.eng.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      decisionFinishEventID,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(domainID, workflowID, resetAttr.GetNewRunId()),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, resetAttr.GetNewRunId()),
 		ShardID:         &shardID,
 	})
 	if retError != nil {
@@ -878,7 +878,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	newRunHistory []*commonproto.HistoryEvent,
 	forkEventVersion int64,
 ) (newMsBuilder mutableState, newHistorySize int64, transferTasks, timerTasks []persistence.Task, retError error) {
-	domainID := baseMutableState.GetExecutionInfo().DomainID
+	namespaceID := baseMutableState.GetExecutionInfo().NamespaceID
 	workflowID := baseMutableState.GetExecutionInfo().WorkflowID
 	firstEvent := newRunHistory[0]
 
@@ -889,7 +889,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	var sBuilder stateBuilder
 	var wfTimeoutSecs int64
 
-	domainEntry, retError := w.eng.shard.GetDomainCache().GetDomainByID(domainID)
+	namespaceEntry, retError := w.eng.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if retError != nil {
 		return
 	}
@@ -926,7 +926,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 					w.eng.shard,
 					w.eng.shard.GetEventsCache(),
 					w.eng.logger,
-					domainEntry,
+					namespaceEntry,
 				)
 				if err := newMsBuilder.UpdateCurrentVersion(
 					firstEvent.GetVersion(),
@@ -940,11 +940,11 @@ func (w *workflowResetorImpl) replicateResetEvent(
 					w.eng.logger,
 					newMsBuilder,
 					func(mutableState mutableState) mutableStateTaskGenerator {
-						return newMutableStateTaskGenerator(w.eng.shard.GetDomainCache(), w.eng.logger, mutableState)
+						return newMutableStateTaskGenerator(w.eng.shard.GetNamespaceCache(), w.eng.logger, mutableState)
 					},
 				)
 			}
-			_, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, events, nil, false)
+			_, retError = sBuilder.applyEvents(namespaceID, requestID, *baseExecution, events, nil, false)
 			if retError != nil {
 				return
 			}
@@ -958,7 +958,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	}
 	if lastEvent.GetEventId() != decisionFinishEventID-1 || lastEvent.GetVersion() != forkEventVersion {
 		// re-replicate the whole new run
-		retError = newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
+		retError = newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
 		return
 	}
 	startTime := time.Unix(0, firstEvent.GetTimestamp())
@@ -994,7 +994,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 
 	lastEvent = newRunHistory[len(newRunHistory)-1]
 	// replay new history (including decisionTaskScheduled)
-	_, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, newRunHistory, nil, false)
+	_, retError = sBuilder.applyEvents(namespaceID, requestID, *baseExecution, newRunHistory, nil, false)
 	if retError != nil {
 		return
 	}
@@ -1014,7 +1014,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	decisionScheduledID := newMsBuilder.GetExecutionInfo().DecisionScheduleID
 	decision, _ = newMsBuilder.GetDecisionInfo(decisionScheduledID)
 	transferTasks = append(transferTasks, &persistence.DecisionTask{
-		DomainID:         domainID,
+		NamespaceID:      namespaceID,
 		TaskList:         decision.TaskList,
 		ScheduleID:       decision.ScheduleID,
 		RecordVisibility: true,
@@ -1049,19 +1049,19 @@ func FindAutoResetPoint(
 }
 
 func getWorkflowCleanupTasks(
-	domainCache cache.DomainCache,
-	domainID string,
+	namespaceCache cache.NamespaceCache,
+	namespaceID string,
 	workflowID string,
 ) (persistence.Task, persistence.Task, error) {
 
 	var retentionInDays int32
-	domainEntry, err := domainCache.GetDomainByID(domainID)
+	namespaceEntry, err := namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return nil, nil, err
 		}
 	} else {
-		retentionInDays = domainEntry.GetRetentionDays(workflowID)
+		retentionInDays = namespaceEntry.GetRetentionDays(workflowID)
 	}
 	deleteTask := createDeleteHistoryEventTimerTask(retentionInDays)
 	return &persistence.CloseExecutionTask{}, deleteTask, nil

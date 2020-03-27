@@ -61,32 +61,32 @@ func (m *MockworkflowExecutionContext) EXPECT() *MockworkflowExecutionContextMoc
 	return m.recorder
 }
 
-// getDomainName mocks base method
-func (m *MockworkflowExecutionContext) getDomainName() string {
+// getNamespace mocks base method
+func (m *MockworkflowExecutionContext) getNamespace() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getDomainName")
+	ret := m.ctrl.Call(m, "getNamespace")
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// getDomainName indicates an expected call of getDomainName
-func (mr *MockworkflowExecutionContextMockRecorder) getDomainName() *gomock.Call {
+// getNamespace indicates an expected call of getNamespace
+func (mr *MockworkflowExecutionContextMockRecorder) getNamespace() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getDomainName", reflect.TypeOf((*MockworkflowExecutionContext)(nil).getDomainName))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNamespace", reflect.TypeOf((*MockworkflowExecutionContext)(nil).getNamespace))
 }
 
-// getDomainID mocks base method
-func (m *MockworkflowExecutionContext) getDomainID() string {
+// getNamespaceID mocks base method
+func (m *MockworkflowExecutionContext) getNamespaceID() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getDomainID")
+	ret := m.ctrl.Call(m, "getNamespaceID")
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// getDomainID indicates an expected call of getDomainID
-func (mr *MockworkflowExecutionContextMockRecorder) getDomainID() *gomock.Call {
+// getNamespaceID indicates an expected call of getNamespaceID
+func (mr *MockworkflowExecutionContextMockRecorder) getNamespaceID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getDomainID", reflect.TypeOf((*MockworkflowExecutionContext)(nil).getDomainID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNamespaceID", reflect.TypeOf((*MockworkflowExecutionContext)(nil).getNamespaceID))
 }
 
 // getExecution mocks base method

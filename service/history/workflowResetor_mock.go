@@ -76,15 +76,15 @@ func (mr *MockworkflowResetorMockRecorder) ResetWorkflowExecution(ctx, resetRequ
 }
 
 // ApplyResetEvent mocks base method
-func (m *MockworkflowResetor) ApplyResetEvent(ctx context.Context, request *historyservice.ReplicateEventsRequest, domainID, workflowID, currentRunID string) error {
+func (m *MockworkflowResetor) ApplyResetEvent(ctx context.Context, request *historyservice.ReplicateEventsRequest, namespaceID, workflowID, currentRunID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyResetEvent", ctx, request, domainID, workflowID, currentRunID)
+	ret := m.ctrl.Call(m, "ApplyResetEvent", ctx, request, namespaceID, workflowID, currentRunID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ApplyResetEvent indicates an expected call of ApplyResetEvent
-func (mr *MockworkflowResetorMockRecorder) ApplyResetEvent(ctx, request, domainID, workflowID, currentRunID interface{}) *gomock.Call {
+func (mr *MockworkflowResetorMockRecorder) ApplyResetEvent(ctx, request, namespaceID, workflowID, currentRunID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyResetEvent", reflect.TypeOf((*MockworkflowResetor)(nil).ApplyResetEvent), ctx, request, domainID, workflowID, currentRunID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyResetEvent", reflect.TypeOf((*MockworkflowResetor)(nil).ApplyResetEvent), ctx, request, namespaceID, workflowID, currentRunID)
 }

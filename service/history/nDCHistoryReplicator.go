@@ -55,7 +55,7 @@ type (
 		logger log.Logger) stateBuilder
 
 	mutableStateProvider func(
-		domainEntry *cache.DomainCacheEntry,
+		namespaceEntry *cache.NamespaceCacheEntry,
 		logger log.Logger,
 	) mutableState
 
@@ -72,7 +72,7 @@ type (
 	) nDCConflictResolver
 
 	nDCWorkflowResetterProvider func(
-		domainID string,
+		namespaceID string,
 		workflowID string,
 		baseRunID string,
 		newContext workflowExecutionContext,
@@ -93,7 +93,7 @@ type (
 		historyV2Mgr      persistence.HistoryManager
 		historySerializer persistence.PayloadSerializer
 		metricsClient     metrics.Client
-		domainCache       cache.DomainCache
+		namespaceCache    cache.NamespaceCache
 		historyCache      *historyCache
 		eventsReapplier   nDCEventsReapplier
 		transactionMgr    nDCTransactionMgr
@@ -123,7 +123,7 @@ func newNDCHistoryReplicator(
 		historyV2Mgr:      shard.GetHistoryManager(),
 		historySerializer: persistence.NewPayloadSerializer(),
 		metricsClient:     shard.GetMetricsClient(),
-		domainCache:       shard.GetDomainCache(),
+		namespaceCache:    shard.GetNamespaceCache(),
 		historyCache:      historyCache,
 		transactionMgr:    transactionMgr,
 		eventsReapplier:   eventsReapplier,
@@ -144,14 +144,14 @@ func newNDCHistoryReplicator(
 			return newNDCConflictResolver(shard, context, mutableState, logger)
 		},
 		newWorkflowResetter: func(
-			domainID string,
+			namespaceID string,
 			workflowID string,
 			baseRunID string,
 			newContext workflowExecutionContext,
 			newRunID string,
 			logger log.Logger,
 		) nDCWorkflowResetter {
-			return newNDCWorkflowResetter(shard, transactionMgr, domainID, workflowID, baseRunID, newContext, newRunID, logger)
+			return newNDCWorkflowResetter(shard, transactionMgr, namespaceID, workflowID, baseRunID, newContext, newRunID, logger)
 		},
 		newStateBuilder: func(
 			state mutableState,
@@ -163,19 +163,19 @@ func newNDCHistoryReplicator(
 				logger,
 				state,
 				func(mutableState mutableState) mutableStateTaskGenerator {
-					return newMutableStateTaskGenerator(shard.GetDomainCache(), logger, mutableState)
+					return newMutableStateTaskGenerator(shard.GetNamespaceCache(), logger, mutableState)
 				},
 			)
 		},
 		newMutableState: func(
-			domainEntry *cache.DomainCacheEntry,
+			namespaceEntry *cache.NamespaceCacheEntry,
 			logger log.Logger,
 		) mutableState {
 			return newMutableStateBuilderWithVersionHistories(
 				shard,
 				shard.GetEventsCache(),
 				logger,
-				domainEntry,
+				namespaceEntry,
 			)
 		},
 	}
@@ -210,7 +210,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 
 	context, releaseFn, err := r.historyCache.getOrCreateWorkflowExecution(
 		ctx,
-		task.getDomainID(),
+		task.getNamespaceID(),
 		*task.getExecution(),
 	)
 	if err != nil {
@@ -283,17 +283,17 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 	task nDCReplicationTask,
 ) (retError error) {
 
-	domainEntry, err := r.domainCache.GetDomainByID(task.getDomainID())
+	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(task.getNamespaceID())
 	if err != nil {
 		return err
 	}
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
-	mutableState := r.newMutableState(domainEntry, task.getLogger())
+	mutableState := r.newMutableState(namespaceEntry, task.getLogger())
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
 
 	// use state builder for workflow mutable state mutation
 	_, err = stateBuilder.applyEvents(
-		task.getDomainID(),
+		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),
 		task.getEvents(),
@@ -313,7 +313,7 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 		task.getEventTime(),
 		newNDCWorkflow(
 			ctx,
-			r.domainCache,
+			r.namespaceCache,
 			r.clusterMetadata,
 			context,
 			mutableState,
@@ -398,7 +398,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
 	newMutableState, err := stateBuilder.applyEvents(
-		task.getDomainID(),
+		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),
 		task.getEvents(),
@@ -415,7 +415,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 
 	targetWorkflow := newNDCWorkflow(
 		ctx,
-		r.domainCache,
+		r.namespaceCache,
 		r.clusterMetadata,
 		context,
 		mutableState,
@@ -426,7 +426,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	if newMutableState != nil {
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newContext := newWorkflowExecutionContext(
-			newExecutionInfo.DomainID,
+			newExecutionInfo.NamespaceID,
 			commonproto.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowID,
 				RunId:      newExecutionInfo.RunID,
@@ -438,7 +438,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 
 		newWorkflow = newNDCWorkflow(
 			ctx,
-			r.domainCache,
+			r.namespaceCache,
 			r.clusterMetadata,
 			newContext,
 			newMutableState,
@@ -518,14 +518,14 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 		task.getEventTime(),
 		newNDCWorkflow(
 			ctx,
-			r.domainCache,
+			r.namespaceCache,
 			r.clusterMetadata,
 			context,
 			mutableState,
 			releaseFn,
 		),
 		&persistence.WorkflowEvents{
-			DomainID:    task.getDomainID(),
+			NamespaceID: task.getNamespaceID(),
 			WorkflowID:  task.getExecution().GetWorkflowId(),
 			RunID:       task.getExecution().GetRunId(),
 			BranchToken: versionHistory.GetBranchToken(),
@@ -598,7 +598,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 		firstEvent := task.getFirstEvent()
 		return nil, newNDCRetryTaskErrorWithHint(
 			mutableStateMissingMessage,
-			task.getDomainID(),
+			task.getNamespaceID(),
 			task.getWorkflowID(),
 			task.getRunID(),
 			common.EmptyEventID,
@@ -616,7 +616,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 	newRunID := attr.GetNewRunId()
 
 	workflowResetter := r.newWorkflowResetter(
-		task.getDomainID(),
+		task.getNamespaceID(),
 		task.getWorkflowID(),
 		baseRunID,
 		newContext,
@@ -652,7 +652,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
 	_, err := stateBuilder.applyEvents(
-		task.getDomainID(),
+		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),
 		task.getEvents(),
@@ -669,7 +669,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 
 	targetWorkflow := newNDCWorkflow(
 		ctx,
-		r.domainCache,
+		r.namespaceCache,
 		r.clusterMetadata,
 		context,
 		mutableState,
@@ -707,7 +707,7 @@ func (r *nDCHistoryReplicatorImpl) notify(
 
 func newNDCRetryTaskErrorWithHint(
 	message string,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	startEventID int64,
@@ -718,7 +718,7 @@ func newNDCRetryTaskErrorWithHint(
 
 	return serviceerror.NewRetryTaskV2(
 		message,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		startEventID,

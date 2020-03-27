@@ -41,14 +41,14 @@ type TaskMatcher struct {
 	taskC chan *internalTask
 	// synchronous task channel to match query task - the reason to have
 	// separate channel for this is because there are cases when consumers
-	// are interested in queryTasks but not others. Example is when domain is
+	// are interested in queryTasks but not others. Example is when namespace is
 	// not active in a cluster
 	queryTaskC chan *internalTask
 	// ratelimiter that limits the rate at which tasks can be dispatched to consumers
 	limiter *quotas.RateLimiter
 
 	fwdr          *Forwarder
-	scope         func() metrics.Scope // domain metric scope
+	scope         func() metrics.Scope // namespace metric scope
 	numPartitions func() int           // number of task list partitions
 }
 

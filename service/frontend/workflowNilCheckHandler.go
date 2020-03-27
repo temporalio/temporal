@@ -50,52 +50,52 @@ func NewWorkflowNilCheckHandler(
 	return handler
 }
 
-// RegisterDomain creates a new domain which can be used as a container for all resources.  Domain is a top level
-// entity within Cadence, used as a container for all resources like workflow executions, tasklists, etc.  Domain
-// acts as a sandbox and provides isolation for all resources within the domain.  All resources belongs to exactly one
-// domain.
-func (wh *WorkflowNilCheckHandler) RegisterDomain(ctx context.Context, request *workflowservice.RegisterDomainRequest) (_ *workflowservice.RegisterDomainResponse, retError error) {
-	resp, err := wh.parentHandler.RegisterDomain(ctx, request)
+// RegisterNamespace creates a new namespace which can be used as a container for all resources.  Namespace is a top level
+// entity within Cadence, used as a container for all resources like workflow executions, tasklists, etc.  Namespace
+// acts as a sandbox and provides isolation for all resources within the namespace.  All resources belongs to exactly one
+// namespace.
+func (wh *WorkflowNilCheckHandler) RegisterNamespace(ctx context.Context, request *workflowservice.RegisterNamespaceRequest) (_ *workflowservice.RegisterNamespaceResponse, retError error) {
+	resp, err := wh.parentHandler.RegisterNamespace(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.RegisterDomainResponse{}
+		resp = &workflowservice.RegisterNamespaceResponse{}
 	}
 	return resp, err
 }
 
-// DescribeDomain returns the information and configuration for a registered domain.
-func (wh *WorkflowNilCheckHandler) DescribeDomain(ctx context.Context, request *workflowservice.DescribeDomainRequest) (_ *workflowservice.DescribeDomainResponse, retError error) {
-	resp, err := wh.parentHandler.DescribeDomain(ctx, request)
+// DescribeNamespace returns the information and configuration for a registered namespace.
+func (wh *WorkflowNilCheckHandler) DescribeNamespace(ctx context.Context, request *workflowservice.DescribeNamespaceRequest) (_ *workflowservice.DescribeNamespaceResponse, retError error) {
+	resp, err := wh.parentHandler.DescribeNamespace(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.DescribeDomainResponse{}
+		resp = &workflowservice.DescribeNamespaceResponse{}
 	}
 	return resp, err
 }
 
-// ListDomains returns the information and configuration for all domains.
-func (wh *WorkflowNilCheckHandler) ListDomains(ctx context.Context, request *workflowservice.ListDomainsRequest) (_ *workflowservice.ListDomainsResponse, retError error) {
-	resp, err := wh.parentHandler.ListDomains(ctx, request)
+// ListNamespaces returns the information and configuration for all namespaces.
+func (wh *WorkflowNilCheckHandler) ListNamespaces(ctx context.Context, request *workflowservice.ListNamespacesRequest) (_ *workflowservice.ListNamespacesResponse, retError error) {
+	resp, err := wh.parentHandler.ListNamespaces(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.ListDomainsResponse{}
+		resp = &workflowservice.ListNamespacesResponse{}
 	}
 	return resp, err
 }
 
-// UpdateDomain is used to update the information and configuration for a registered domain.
-func (wh *WorkflowNilCheckHandler) UpdateDomain(ctx context.Context, request *workflowservice.UpdateDomainRequest) (_ *workflowservice.UpdateDomainResponse, retError error) {
-	resp, err := wh.parentHandler.UpdateDomain(ctx, request)
+// UpdateNamespace is used to update the information and configuration for a registered namespace.
+func (wh *WorkflowNilCheckHandler) UpdateNamespace(ctx context.Context, request *workflowservice.UpdateNamespaceRequest) (_ *workflowservice.UpdateNamespaceResponse, retError error) {
+	resp, err := wh.parentHandler.UpdateNamespace(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.UpdateDomainResponse{}
+		resp = &workflowservice.UpdateNamespaceResponse{}
 	}
 	return resp, err
 }
 
-// DeprecateDomain us used to update status of a registered domain to DEPRECATED.  Once the domain is deprecated
+// DeprecateNamespace us used to update status of a registered namespace to DEPRECATED.  Once the namespace is deprecated
 // it cannot be used to start new workflow executions.  Existing workflow executions will continue to run on
-// deprecated domains.
-func (wh *WorkflowNilCheckHandler) DeprecateDomain(ctx context.Context, request *workflowservice.DeprecateDomainRequest) (_ *workflowservice.DeprecateDomainResponse, retError error) {
-	resp, err := wh.parentHandler.DeprecateDomain(ctx, request)
+// deprecated namespaces.
+func (wh *WorkflowNilCheckHandler) DeprecateNamespace(ctx context.Context, request *workflowservice.DeprecateNamespaceRequest) (_ *workflowservice.DeprecateNamespaceResponse, retError error) {
+	resp, err := wh.parentHandler.DeprecateNamespace(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.DeprecateDomainResponse{}
+		resp = &workflowservice.DeprecateNamespaceResponse{}
 	}
 	return resp, err
 }
@@ -193,7 +193,7 @@ func (wh *WorkflowNilCheckHandler) RecordActivityTaskHeartbeat(ctx context.Conte
 // to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and
 // 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeatByID' will
 // fail with 'EntityNotExistsError' in such situations.  Instead of using 'taskToken' like in RecordActivityTaskHeartbeat,
-// use Domain, WorkflowID and ActivityID
+// use Namespace, WorkflowID and ActivityID
 func (wh *WorkflowNilCheckHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIDRequest) (_ *workflowservice.RecordActivityTaskHeartbeatByIDResponse, retError error) {
 	resp, err := wh.parentHandler.RecordActivityTaskHeartbeatByID(ctx, request)
 	if resp == nil && err == nil {
@@ -217,7 +217,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompleted(ctx context.Cont
 
 // RespondActivityTaskCompletedByID is called by application worker when it is done processing an ActivityTask.
 // It will result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask
-// created for the workflow so new decisions could be made.  Similar to RespondActivityTaskCompleted but use Domain,
+// created for the workflow so new decisions could be made.  Similar to RespondActivityTaskCompleted but use Namespace,
 // WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompletedByID(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIDRequest) (_ *workflowservice.RespondActivityTaskCompletedByIDResponse, retError error) {
@@ -244,7 +244,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailed(ctx context.Context
 // RespondActivityTaskFailedByID is called by application worker when it is done processing an ActivityTask.
 // It will result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask
 // created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskFailed but use
-// Domain, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
+// Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailedByID(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIDRequest) (_ *workflowservice.RespondActivityTaskFailedByIDResponse, retError error) {
 	resp, err := wh.parentHandler.RespondActivityTaskFailedByID(ctx, request)
@@ -270,7 +270,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceled(ctx context.Conte
 // RespondActivityTaskCanceledByID is called by application worker when it is successfully canceled an ActivityTask.
 // It will result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
 // created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskCanceled but use
-// Domain, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
+// Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceledByID(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIDRequest) (_ *workflowservice.RespondActivityTaskCanceledByIDResponse, retError error) {
 	resp, err := wh.parentHandler.RespondActivityTaskCanceledByID(ctx, request)
@@ -335,7 +335,7 @@ func (wh *WorkflowNilCheckHandler) TerminateWorkflowExecution(ctx context.Contex
 	return resp, err
 }
 
-// ListOpenWorkflowExecutions is a visibility API to list the open executions in a specific domain.
+// ListOpenWorkflowExecutions is a visibility API to list the open executions in a specific namespace.
 func (wh *WorkflowNilCheckHandler) ListOpenWorkflowExecutions(ctx context.Context, request *workflowservice.ListOpenWorkflowExecutionsRequest) (_ *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.ListOpenWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {
@@ -344,7 +344,7 @@ func (wh *WorkflowNilCheckHandler) ListOpenWorkflowExecutions(ctx context.Contex
 	return resp, err
 }
 
-// ListClosedWorkflowExecutions is a visibility API to list the closed executions in a specific domain.
+// ListClosedWorkflowExecutions is a visibility API to list the closed executions in a specific namespace.
 func (wh *WorkflowNilCheckHandler) ListClosedWorkflowExecutions(ctx context.Context, request *workflowservice.ListClosedWorkflowExecutionsRequest) (_ *workflowservice.ListClosedWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.ListClosedWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {
@@ -353,7 +353,7 @@ func (wh *WorkflowNilCheckHandler) ListClosedWorkflowExecutions(ctx context.Cont
 	return resp, err
 }
 
-// ListWorkflowExecutions is a visibility API to list workflow executions in a specific domain.
+// ListWorkflowExecutions is a visibility API to list workflow executions in a specific namespace.
 func (wh *WorkflowNilCheckHandler) ListWorkflowExecutions(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.ListWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {
@@ -362,7 +362,7 @@ func (wh *WorkflowNilCheckHandler) ListWorkflowExecutions(ctx context.Context, r
 	return resp, err
 }
 
-// ListArchivedWorkflowExecutions is a visibility API to list archived workflow executions in a specific domain.
+// ListArchivedWorkflowExecutions is a visibility API to list archived workflow executions in a specific namespace.
 func (wh *WorkflowNilCheckHandler) ListArchivedWorkflowExecutions(ctx context.Context, request *workflowservice.ListArchivedWorkflowExecutionsRequest) (_ *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.ListArchivedWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {
@@ -371,7 +371,7 @@ func (wh *WorkflowNilCheckHandler) ListArchivedWorkflowExecutions(ctx context.Co
 	return resp, err
 }
 
-// ScanWorkflowExecutions is a visibility API to list large amount of workflow executions in a specific domain without order.
+// ScanWorkflowExecutions is a visibility API to list large amount of workflow executions in a specific namespace without order.
 func (wh *WorkflowNilCheckHandler) ScanWorkflowExecutions(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (_ *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.ScanWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {
@@ -380,7 +380,7 @@ func (wh *WorkflowNilCheckHandler) ScanWorkflowExecutions(ctx context.Context, r
 	return resp, err
 }
 
-// CountWorkflowExecutions is a visibility API to count of workflow executions in a specific domain.
+// CountWorkflowExecutions is a visibility API to count of workflow executions in a specific namespace.
 func (wh *WorkflowNilCheckHandler) CountWorkflowExecutions(ctx context.Context, request *workflowservice.CountWorkflowExecutionsRequest) (_ *workflowservice.CountWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.CountWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {

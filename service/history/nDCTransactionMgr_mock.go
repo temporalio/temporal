@@ -103,46 +103,46 @@ func (mr *MocknDCTransactionMgrMockRecorder) backfillWorkflow(ctx, now, targetWo
 }
 
 // checkWorkflowExists mocks base method
-func (m *MocknDCTransactionMgr) checkWorkflowExists(ctx context.Context, domainID, workflowID, runID string) (bool, error) {
+func (m *MocknDCTransactionMgr) checkWorkflowExists(ctx context.Context, namespaceID, workflowID, runID string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "checkWorkflowExists", ctx, domainID, workflowID, runID)
+	ret := m.ctrl.Call(m, "checkWorkflowExists", ctx, namespaceID, workflowID, runID)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // checkWorkflowExists indicates an expected call of checkWorkflowExists
-func (mr *MocknDCTransactionMgrMockRecorder) checkWorkflowExists(ctx, domainID, workflowID, runID interface{}) *gomock.Call {
+func (mr *MocknDCTransactionMgrMockRecorder) checkWorkflowExists(ctx, namespaceID, workflowID, runID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "checkWorkflowExists", reflect.TypeOf((*MocknDCTransactionMgr)(nil).checkWorkflowExists), ctx, domainID, workflowID, runID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "checkWorkflowExists", reflect.TypeOf((*MocknDCTransactionMgr)(nil).checkWorkflowExists), ctx, namespaceID, workflowID, runID)
 }
 
 // getCurrentWorkflowRunID mocks base method
-func (m *MocknDCTransactionMgr) getCurrentWorkflowRunID(ctx context.Context, domainID, workflowID string) (string, error) {
+func (m *MocknDCTransactionMgr) getCurrentWorkflowRunID(ctx context.Context, namespaceID, workflowID string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getCurrentWorkflowRunID", ctx, domainID, workflowID)
+	ret := m.ctrl.Call(m, "getCurrentWorkflowRunID", ctx, namespaceID, workflowID)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // getCurrentWorkflowRunID indicates an expected call of getCurrentWorkflowRunID
-func (mr *MocknDCTransactionMgrMockRecorder) getCurrentWorkflowRunID(ctx, domainID, workflowID interface{}) *gomock.Call {
+func (mr *MocknDCTransactionMgrMockRecorder) getCurrentWorkflowRunID(ctx, namespaceID, workflowID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getCurrentWorkflowRunID", reflect.TypeOf((*MocknDCTransactionMgr)(nil).getCurrentWorkflowRunID), ctx, domainID, workflowID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getCurrentWorkflowRunID", reflect.TypeOf((*MocknDCTransactionMgr)(nil).getCurrentWorkflowRunID), ctx, namespaceID, workflowID)
 }
 
 // loadNDCWorkflow mocks base method
-func (m *MocknDCTransactionMgr) loadNDCWorkflow(ctx context.Context, domainID, workflowID, runID string) (nDCWorkflow, error) {
+func (m *MocknDCTransactionMgr) loadNDCWorkflow(ctx context.Context, namespaceID, workflowID, runID string) (nDCWorkflow, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "loadNDCWorkflow", ctx, domainID, workflowID, runID)
+	ret := m.ctrl.Call(m, "loadNDCWorkflow", ctx, namespaceID, workflowID, runID)
 	ret0, _ := ret[0].(nDCWorkflow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // loadNDCWorkflow indicates an expected call of loadNDCWorkflow
-func (mr *MocknDCTransactionMgrMockRecorder) loadNDCWorkflow(ctx, domainID, workflowID, runID interface{}) *gomock.Call {
+func (mr *MocknDCTransactionMgrMockRecorder) loadNDCWorkflow(ctx, namespaceID, workflowID, runID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "loadNDCWorkflow", reflect.TypeOf((*MocknDCTransactionMgr)(nil).loadNDCWorkflow), ctx, domainID, workflowID, runID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "loadNDCWorkflow", reflect.TypeOf((*MocknDCTransactionMgr)(nil).loadNDCWorkflow), ctx, namespaceID, workflowID, runID)
 }

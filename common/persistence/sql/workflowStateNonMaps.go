@@ -38,7 +38,7 @@ func updateSignalsRequested(
 	signalRequestedIDs []string,
 	deleteSignalRequestID string,
 	shardID int,
-	domainID primitives.UUID,
+	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
 ) error {
@@ -47,11 +47,11 @@ func updateSignalsRequested(
 		rows := make([]sqlplugin.SignalsRequestedSetsRow, len(signalRequestedIDs))
 		for i, v := range signalRequestedIDs {
 			rows[i] = sqlplugin.SignalsRequestedSetsRow{
-				ShardID:    int64(shardID),
-				DomainID:   domainID,
-				WorkflowID: workflowID,
-				RunID:      runID,
-				SignalID:   v,
+				ShardID:     int64(shardID),
+				NamespaceID: namespaceID,
+				WorkflowID:  workflowID,
+				RunID:       runID,
+				SignalID:    v,
 			}
 		}
 		if _, err := tx.InsertIntoSignalsRequestedSets(rows); err != nil {
@@ -61,11 +61,11 @@ func updateSignalsRequested(
 
 	if deleteSignalRequestID != "" {
 		if _, err := tx.DeleteFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
-			ShardID:    int64(shardID),
-			DomainID:   domainID,
-			WorkflowID: workflowID,
-			RunID:      runID,
-			SignalID:   &deleteSignalRequestID,
+			ShardID:     int64(shardID),
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowID,
+			RunID:       runID,
+			SignalID:    &deleteSignalRequestID,
 		}); err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Failed to update signals requested. Failed to execute delete query. Error: %v", err))
 		}
@@ -77,16 +77,16 @@ func updateSignalsRequested(
 func getSignalsRequested(
 	db sqlplugin.DB,
 	shardID int,
-	domainID primitives.UUID,
+	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
 ) (map[string]struct{}, error) {
 
 	rows, err := db.SelectFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
-		ShardID:    int64(shardID),
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      runID,
+		ShardID:     int64(shardID),
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get signals requested. Error: %v", err))
@@ -101,16 +101,16 @@ func getSignalsRequested(
 func deleteSignalsRequestedSet(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID primitives.UUID,
+	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
 ) error {
 
 	if _, err := tx.DeleteFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
-		ShardID:    int64(shardID),
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      runID,
+		ShardID:     int64(shardID),
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
 	}); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to delete signals requested set. Error: %v", err))
 	}
@@ -121,7 +121,7 @@ func updateBufferedEvents(
 	tx sqlplugin.Tx,
 	batch *serialization.DataBlob,
 	shardID int,
-	domainID primitives.UUID,
+	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
 ) error {
@@ -131,7 +131,7 @@ func updateBufferedEvents(
 	}
 	row := sqlplugin.BufferedEventsRow{
 		ShardID:      shardID,
-		DomainID:     domainID,
+		NamespaceID:  namespaceID,
 		WorkflowID:   workflowID,
 		RunID:        runID,
 		Data:         batch.Data,
@@ -147,16 +147,16 @@ func updateBufferedEvents(
 func getBufferedEvents(
 	db sqlplugin.DB,
 	shardID int,
-	domainID primitives.UUID,
+	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
 ) ([]*serialization.DataBlob, error) {
 
 	rows, err := db.SelectFromBufferedEvents(&sqlplugin.BufferedEventsFilter{
-		ShardID:    shardID,
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      runID,
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("getBufferedEvents operation failed. Select failed: %v", err))
@@ -171,16 +171,16 @@ func getBufferedEvents(
 func deleteBufferedEvents(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID primitives.UUID,
+	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
 ) error {
 
 	if _, err := tx.DeleteFromBufferedEvents(&sqlplugin.BufferedEventsFilter{
-		ShardID:    shardID,
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      runID,
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
 	}); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("updateBufferedEvents delete operation failed. Error: %v", err))
 	}

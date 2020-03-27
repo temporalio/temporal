@@ -61,7 +61,7 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockEventsCache          *MockeventsCache
-		mockDomainCache          *cache.MockDomainCache
+		mockNamespaceCache       *cache.MockNamespaceCache
 		mockClusterMetadata      *cluster.MockMetadata
 
 		mockExecutionMgr *mocks.ExecutionManager
@@ -115,10 +115,10 @@ func (s *resetorSuite) SetupTest() {
 
 	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
 	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.mockEventsCache
-	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -154,15 +154,15 @@ func (s *resetorSuite) TearDownTest() {
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
-	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: testDomainID}, &persistence.DomainConfig{Retention: 1}, "", nil,
+	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: testNamespaceID}, &persistence.NamespaceConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
 	request := &historyservice.ResetWorkflowExecutionRequest{}
-	domainID := testDomainID
-	request.DomainUUID = domainID
+	namespaceID := testNamespaceID
+	request.NamespaceUUID = namespaceID
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
@@ -175,7 +175,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Domain:                "testDomainName",
+		Namespace:             "testNamespace",
 		WorkflowExecution:     &we,
 		Reason:                "test reset",
 		DecisionFinishEventId: 29,
@@ -183,7 +183,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
@@ -204,7 +204,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	signalName2 := "sig2"
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -221,14 +221,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -831,15 +831,15 @@ func (s *resetorSuite) assertActivityIDs(ids []string, timers []*persistence.Act
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCancel() {
-	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: testDomainID}, &persistence.DomainConfig{Retention: 1}, "", nil,
+	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: testNamespaceID}, &persistence.NamespaceConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
 	request := &historyservice.ResetWorkflowExecutionRequest{}
-	domainID := testDomainID
-	request.DomainUUID = domainID
+	namespaceID := testNamespaceID
+	request.NamespaceUUID = namespaceID
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
@@ -852,7 +852,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Domain:                "testDomainName",
+		Namespace:             "testNamespace",
 		WorkflowExecution:     &we,
 		Reason:                "test reset",
 		DecisionFinishEventId: 30,
@@ -860,7 +860,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
@@ -884,7 +884,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -901,14 +901,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -1236,7 +1236,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						Version:   common.EmptyVersion,
 						EventType: enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated,
 						Attributes: &commonproto.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &commonproto.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
-							Domain:                       "any-domain-name",
+							Namespace:                    "any-namespace",
 							WorkflowExecution:            cancelWE,
 							DecisionTaskCompletedEventId: 16,
 							ChildWorkflowOnly:            true,
@@ -1399,16 +1399,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCurrent() {
-	domainName := "testDomainName"
+	namespace := "testNamespace"
 	beforeResetVersion := int64(100)
 	afterResetVersion := int64(101)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(beforeResetVersion).Return("standby").AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("active").AnyTimes()
 
-	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: testDomainID},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: testNamespaceID},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{
@@ -1421,13 +1421,13 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		afterResetVersion,
 		cluster.GetTestClusterMetadata(true, true),
 	)
-	// override domain cache
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	// override namespace cache
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
 	request := &historyservice.ResetWorkflowExecutionRequest{}
-	domainID := testDomainID
-	request.DomainUUID = domainID
+	namespaceID := testNamespaceID
+	request.NamespaceUUID = namespaceID
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
@@ -1440,7 +1440,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Domain:                domainName,
+		Namespace:             namespace,
 		WorkflowExecution:     &we,
 		Reason:                "test reset",
 		DecisionFinishEventId: 30,
@@ -1448,7 +1448,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
@@ -1471,7 +1471,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -1497,14 +1497,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -2105,16 +2105,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
-	domainName := "testDomainName"
+	namespace := "testNamespace"
 	beforeResetVersion := int64(100)
 	afterResetVersion := int64(101)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(beforeResetVersion).Return("active").AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("standby").AnyTimes()
 
-	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: testDomainID},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: testNamespaceID},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{
@@ -2127,13 +2127,13 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		afterResetVersion,
 		cluster.GetTestClusterMetadata(true, true),
 	)
-	// override domain cache
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	// override namespace cache
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
 	request := &historyservice.ResetWorkflowExecutionRequest{}
-	domainID := testDomainID
-	request.DomainUUID = domainID
+	namespaceID := testNamespaceID
+	request.NamespaceUUID = namespaceID
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
@@ -2146,7 +2146,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Domain:                domainName,
+		Namespace:             namespace,
 		WorkflowExecution:     &we,
 		Reason:                "test reset",
 		DecisionFinishEventId: 30,
@@ -2154,7 +2154,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
@@ -2177,7 +2177,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -2203,14 +2203,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -2701,20 +2701,20 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(forkResp, nil).Once()
 
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
-	s.IsType(&serviceerror.DomainNotActive{}, err)
+	s.IsType(&serviceerror.NamespaceNotActive{}, err)
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurrent() {
-	domainName := "testDomainName"
+	namespace := "testNamespace"
 	beforeResetVersion := int64(100)
 	afterResetVersion := int64(101)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(beforeResetVersion).Return("standby").AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("active").AnyTimes()
 
-	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: testDomainID},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: testNamespaceID},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{
@@ -2727,13 +2727,13 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		afterResetVersion,
 		cluster.GetTestClusterMetadata(true, true),
 	)
-	// override domain cache
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	// override namespace cache
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
 	request := &historyservice.ResetWorkflowExecutionRequest{}
-	domainID := testDomainID
-	request.DomainUUID = domainID
+	namespaceID := testNamespaceID
+	request.NamespaceUUID = namespaceID
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
@@ -2746,7 +2746,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		RunId:      forkRunID,
 	}
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
-		Domain:                domainName,
+		Namespace:             namespace,
 		WorkflowExecution:     &we,
 		Reason:                "test reset",
 		DecisionFinishEventId: 30,
@@ -2754,7 +2754,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
@@ -2777,7 +2777,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -2803,14 +2803,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -3398,16 +3398,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 }
 
 func (s *resetorSuite) TestApplyReset() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	beforeResetVersion := int64(100)
 	afterResetVersion := int64(101)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(beforeResetVersion).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: testDomainID},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: testNamespaceID},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -3417,9 +3417,9 @@ func (s *resetorSuite) TestApplyReset() {
 		afterResetVersion,
 		cluster.GetTestClusterMetadata(true, true),
 	)
-	// override domain cache
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	// override namespace cache
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
 	wid := "wId"
 	wfType := "wfType"
@@ -3433,7 +3433,7 @@ func (s *resetorSuite) TestApplyReset() {
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
@@ -3455,7 +3455,7 @@ func (s *resetorSuite) TestApplyReset() {
 
 	forkBranchToken := []byte("forkBranchToken")
 	forkExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -3481,14 +3481,14 @@ func (s *resetorSuite) TestApplyReset() {
 	}}
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
@@ -3911,7 +3911,7 @@ func (s *resetorSuite) TestApplyReset() {
 	forkReq := &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      30,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(domainID, wid, newRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, wid, newRunID),
 		ShardID:         &s.shardID,
 	}
 	forkResp := &persistence.ForkHistoryBranchResponse{
@@ -3981,7 +3981,7 @@ func (s *resetorSuite) TestApplyReset() {
 
 	request := &historyservice.ReplicateEventsRequest{
 		SourceCluster:     "standby",
-		DomainUUID:        domainID,
+		NamespaceUUID:     namespaceID,
 		WorkflowExecution: &we,
 		FirstEventId:      30,
 		NextEventId:       35,
@@ -3994,7 +3994,7 @@ func (s *resetorSuite) TestApplyReset() {
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", forkReq).Return(forkResp, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(appendV2Resp, nil).Once()
 	s.mockExecutionMgr.On("ResetWorkflowExecution", mock.Anything).Return(nil).Once()
-	err := s.resetor.ApplyResetEvent(context.Background(), request, domainID, wid, currRunID)
+	err := s.resetor.ApplyResetEvent(context.Background(), request, namespaceID, wid, currRunID)
 	s.Nil(err)
 
 	// verify historyEvent: 5 events to append
@@ -4024,7 +4024,7 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(int64(33), appendReq.Events[3].GetEventId())
 	s.Equal(int64(34), appendReq.Events[4].GetEventId())
 
-	s.Equal(common.EncodingType(s.config.EventEncodingType(domainID)), appendReq.Encoding)
+	s.Equal(common.EncodingType(s.config.EventEncodingType(namespaceID)), appendReq.Encoding)
 
 	// verify executionManager request
 	calls = s.mockExecutionMgr.Calls

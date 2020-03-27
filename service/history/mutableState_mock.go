@@ -1013,18 +1013,18 @@ func (mr *MockmutableStateMockRecorder) GetDecisionInfo(arg0 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDecisionInfo", reflect.TypeOf((*MockmutableState)(nil).GetDecisionInfo), arg0)
 }
 
-// GetDomainEntry mocks base method
-func (m *MockmutableState) GetDomainEntry() *cache.DomainCacheEntry {
+// GetNamespaceEntry mocks base method
+func (m *MockmutableState) GetNamespaceEntry() *cache.NamespaceCacheEntry {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDomainEntry")
-	ret0, _ := ret[0].(*cache.DomainCacheEntry)
+	ret := m.ctrl.Call(m, "GetNamespaceEntry")
+	ret0, _ := ret[0].(*cache.NamespaceCacheEntry)
 	return ret0
 }
 
-// GetDomainEntry indicates an expected call of GetDomainEntry
-func (mr *MockmutableStateMockRecorder) GetDomainEntry() *gomock.Call {
+// GetNamespaceEntry indicates an expected call of GetNamespaceEntry
+func (mr *MockmutableStateMockRecorder) GetNamespaceEntry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDomainEntry", reflect.TypeOf((*MockmutableState)(nil).GetDomainEntry))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceEntry", reflect.TypeOf((*MockmutableState)(nil).GetNamespaceEntry))
 }
 
 // GetStartEvent mocks base method
@@ -2407,7 +2407,7 @@ func (mr *MockmutableStateMockRecorder) GetUpdateCondition() *gomock.Call {
 }
 
 // StartTransaction mocks base method
-func (m *MockmutableState) StartTransaction(entry *cache.DomainCacheEntry) (bool, error) {
+func (m *MockmutableState) StartTransaction(entry *cache.NamespaceCacheEntry) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartTransaction", entry)
 	ret0, _ := ret[0].(bool)

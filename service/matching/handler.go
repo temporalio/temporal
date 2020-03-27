@@ -75,7 +75,7 @@ func NewHandler(
 			config,
 			resource.GetLogger(),
 			resource.GetMetricsClient(),
-			resource.GetDomainCache(),
+			resource.GetNamespaceCache(),
 			resource.GetMatchingServiceResolver(),
 		),
 	}
@@ -313,8 +313,8 @@ func (h *Handler) handleErr(err error, scope int) error {
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		h.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
 		return err
-	case *serviceerror.DomainAlreadyExists:
-		h.metricsClient.IncCounter(scope, metrics.ServiceErrDomainAlreadyExistsCounter)
+	case *serviceerror.NamespaceAlreadyExists:
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrNamespaceAlreadyExistsCounter)
 		return err
 	case *serviceerror.QueryFailed:
 		h.metricsClient.IncCounter(scope, metrics.ServiceErrQueryFailedCounter)
@@ -322,8 +322,8 @@ func (h *Handler) handleErr(err error, scope int) error {
 	case *serviceerror.ResourceExhausted:
 		h.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
 		return err
-	case *serviceerror.DomainNotActive:
-		h.metricsClient.IncCounter(scope, metrics.ServiceErrDomainNotActiveCounter)
+	case *serviceerror.NamespaceNotActive:
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrNamespaceNotActiveCounter)
 		return err
 	default:
 		h.metricsClient.IncCounter(scope, metrics.ServiceFailures)

@@ -28,28 +28,28 @@ import (
 )
 
 const (
-	createDomainQuery = `INSERT INTO 
- domains (id, name, is_global, data, data_encoding)
+	createNamespaceQuery = `INSERT INTO 
+ namespaces (id, name, is_global, data, data_encoding)
  VALUES(?, ?, ?, ?, ?)`
 
-	updateDomainQuery = `UPDATE domains 
+	updateNamespaceQuery = `UPDATE namespaces 
  SET name = ?, data = ?, data_encoding = ?
  WHERE shard_id=54321 AND id = ?`
 
-	getDomainPart = `SELECT id, name, is_global, data, data_encoding FROM domains`
+	getNamespacePart = `SELECT id, name, is_global, data, data_encoding FROM namespaces`
 
-	getDomainByIDQuery   = getDomainPart + ` WHERE shard_id=? AND id = ?`
-	getDomainByNameQuery = getDomainPart + ` WHERE shard_id=? AND name = ?`
+	getNamespaceByIDQuery   = getNamespacePart + ` WHERE shard_id=? AND id = ?`
+	getNamespaceByNameQuery = getNamespacePart + ` WHERE shard_id=? AND name = ?`
 
-	listDomainsQuery      = getDomainPart + ` WHERE shard_id=? ORDER BY id LIMIT ?`
-	listDomainsRangeQuery = getDomainPart + ` WHERE shard_id=? AND id > ? ORDER BY id LIMIT ?`
+	listNamespacesQuery      = getNamespacePart + ` WHERE shard_id=? ORDER BY id LIMIT ?`
+	listNamespacesRangeQuery = getNamespacePart + ` WHERE shard_id=? AND id > ? ORDER BY id LIMIT ?`
 
-	deleteDomainByIDQuery   = `DELETE FROM domains WHERE shard_id=? AND id = ?`
-	deleteDomainByNameQuery = `DELETE FROM domains WHERE shard_id=? AND name = ?`
+	deleteNamespaceByIDQuery   = `DELETE FROM namespaces WHERE shard_id=? AND id = ?`
+	deleteNamespaceByNameQuery = `DELETE FROM namespaces WHERE shard_id=? AND name = ?`
 
-	getDomainMetadataQuery    = `SELECT notification_version FROM domain_metadata`
-	lockDomainMetadataQuery   = `SELECT notification_version FROM domain_metadata FOR UPDATE`
-	updateDomainMetadataQuery = `UPDATE domain_metadata SET notification_version = ? WHERE notification_version = ?`
+	getNamespaceMetadataQuery    = `SELECT notification_version FROM namespace_metadata`
+	lockNamespaceMetadataQuery   = `SELECT notification_version FROM namespace_metadata FOR UPDATE`
+	updateNamespaceMetadataQuery = `UPDATE namespace_metadata SET notification_version = ? WHERE notification_version = ?`
 )
 
 const (
@@ -58,83 +58,83 @@ const (
 
 var errMissingArgs = errors.New("missing one or more args for API")
 
-// InsertIntoDomain inserts a single row into domains table
-func (mdb *db) InsertIntoDomain(row *sqlplugin.DomainRow) (sql.Result, error) {
-	return mdb.conn.Exec(createDomainQuery, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding)
+// InsertIntoNamespace inserts a single row into namespaces table
+func (mdb *db) InsertIntoNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
+	return mdb.conn.Exec(createNamespaceQuery, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding)
 }
 
-// UpdateDomain updates a single row in domains table
-func (mdb *db) UpdateDomain(row *sqlplugin.DomainRow) (sql.Result, error) {
-	return mdb.conn.Exec(updateDomainQuery, row.Name, row.Data, row.DataEncoding, row.ID)
+// UpdateNamespace updates a single row in namespaces table
+func (mdb *db) UpdateNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
+	return mdb.conn.Exec(updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.ID)
 }
 
-// SelectFromDomain reads one or more rows from domains table
-func (mdb *db) SelectFromDomain(filter *sqlplugin.DomainFilter) ([]sqlplugin.DomainRow, error) {
+// SelectFromNamespace reads one or more rows from namespaces table
+func (mdb *db) SelectFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
 	switch {
 	case filter.ID != nil || filter.Name != nil:
-		return mdb.selectFromDomain(filter)
+		return mdb.selectFromNamespace(filter)
 	case filter.PageSize != nil && *filter.PageSize > 0:
-		return mdb.selectAllFromDomain(filter)
+		return mdb.selectAllFromNamespace(filter)
 	default:
 		return nil, errMissingArgs
 	}
 }
 
-func (mdb *db) selectFromDomain(filter *sqlplugin.DomainFilter) ([]sqlplugin.DomainRow, error) {
+func (mdb *db) selectFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
 	var err error
-	var row sqlplugin.DomainRow
+	var row sqlplugin.NamespaceRow
 	switch {
 	case filter.ID != nil:
-		err = mdb.conn.Get(&row, getDomainByIDQuery, shardID, *filter.ID)
+		err = mdb.conn.Get(&row, getNamespaceByIDQuery, shardID, *filter.ID)
 	case filter.Name != nil:
-		err = mdb.conn.Get(&row, getDomainByNameQuery, shardID, *filter.Name)
+		err = mdb.conn.Get(&row, getNamespaceByNameQuery, shardID, *filter.Name)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return []sqlplugin.DomainRow{row}, err
+	return []sqlplugin.NamespaceRow{row}, err
 }
 
-func (mdb *db) selectAllFromDomain(filter *sqlplugin.DomainFilter) ([]sqlplugin.DomainRow, error) {
+func (mdb *db) selectAllFromNamespace(filter *sqlplugin.NamespaceFilter) ([]sqlplugin.NamespaceRow, error) {
 	var err error
-	var rows []sqlplugin.DomainRow
+	var rows []sqlplugin.NamespaceRow
 	switch {
 	case filter.GreaterThanID != nil:
-		err = mdb.conn.Select(&rows, listDomainsRangeQuery, shardID, *filter.GreaterThanID, *filter.PageSize)
+		err = mdb.conn.Select(&rows, listNamespacesRangeQuery, shardID, *filter.GreaterThanID, *filter.PageSize)
 	default:
-		err = mdb.conn.Select(&rows, listDomainsQuery, shardID, filter.PageSize)
+		err = mdb.conn.Select(&rows, listNamespacesQuery, shardID, filter.PageSize)
 	}
 	return rows, err
 }
 
-// DeleteFromDomain deletes a single row in domains table
-func (mdb *db) DeleteFromDomain(filter *sqlplugin.DomainFilter) (sql.Result, error) {
+// DeleteFromNamespace deletes a single row in namespaces table
+func (mdb *db) DeleteFromNamespace(filter *sqlplugin.NamespaceFilter) (sql.Result, error) {
 	var err error
 	var result sql.Result
 	switch {
 	case filter.ID != nil:
-		result, err = mdb.conn.Exec(deleteDomainByIDQuery, shardID, filter.ID)
+		result, err = mdb.conn.Exec(deleteNamespaceByIDQuery, shardID, filter.ID)
 	default:
-		result, err = mdb.conn.Exec(deleteDomainByNameQuery, shardID, filter.Name)
+		result, err = mdb.conn.Exec(deleteNamespaceByNameQuery, shardID, filter.Name)
 	}
 	return result, err
 }
 
-// LockDomainMetadata acquires a write lock on a single row in domain_metadata table
-func (mdb *db) LockDomainMetadata() error {
-	var row sqlplugin.DomainMetadataRow
-	err := mdb.conn.Get(&row.NotificationVersion, lockDomainMetadataQuery)
+// LockNamespaceMetadata acquires a write lock on a single row in namespace_metadata table
+func (mdb *db) LockNamespaceMetadata() error {
+	var row sqlplugin.NamespaceMetadataRow
+	err := mdb.conn.Get(&row.NotificationVersion, lockNamespaceMetadataQuery)
 	return err
 }
 
-// SelectFromDomainMetadata reads a single row in domain_metadata table
-func (mdb *db) SelectFromDomainMetadata() (*sqlplugin.DomainMetadataRow, error) {
-	var row sqlplugin.DomainMetadataRow
-	err := mdb.conn.Get(&row.NotificationVersion, getDomainMetadataQuery)
+// SelectFromNamespaceMetadata reads a single row in namespace_metadata table
+func (mdb *db) SelectFromNamespaceMetadata() (*sqlplugin.NamespaceMetadataRow, error) {
+	var row sqlplugin.NamespaceMetadataRow
+	err := mdb.conn.Get(&row.NotificationVersion, getNamespaceMetadataQuery)
 	return &row, err
 }
 
-// UpdateDomainMetadata updates a single row in domain_metadata table
-func (mdb *db) UpdateDomainMetadata(row *sqlplugin.DomainMetadataRow) (sql.Result, error) {
-	return mdb.conn.Exec(updateDomainMetadataQuery, row.NotificationVersion+1, row.NotificationVersion)
+// UpdateNamespaceMetadata updates a single row in namespace_metadata table
+func (mdb *db) UpdateNamespaceMetadata(row *sqlplugin.NamespaceMetadataRow) (sql.Result, error) {
+	return mdb.conn.Exec(updateNamespaceMetadataQuery, row.NotificationVersion+1, row.NotificationVersion)
 }

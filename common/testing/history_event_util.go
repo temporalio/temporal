@@ -48,7 +48,7 @@ var (
 
 // InitializeHistoryEventGenerator initializes the history event generator
 func InitializeHistoryEventGenerator(
-	domain string,
+	namespace string,
 	defaultVersion int64,
 ) Generator {
 
@@ -385,7 +385,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
 			ActivityId:   uuid.New(),
 			ActivityType: &commonproto.ActivityType{Name: "activity"},
-			Domain:       domain,
+			Namespace:    namespace,
 			TaskList: &commonproto.TaskList{
 				Name: taskList,
 				Kind: enums.TaskListKindNormal,
@@ -611,7 +611,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = enums.EventTypeStartChildWorkflowExecutionInitiated
 		historyEvent.Attributes = &commonproto.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: &commonproto.StartChildWorkflowExecutionInitiatedEventAttributes{
-			Domain:       domain,
+			Namespace:    namespace,
 			WorkflowId:   childWorkflowID,
 			WorkflowType: &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			TaskList: &commonproto.TaskList{
@@ -634,7 +634,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = enums.EventTypeStartChildWorkflowExecutionFailed
 		historyEvent.Attributes = &commonproto.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{StartChildWorkflowExecutionFailedEventAttributes: &commonproto.StartChildWorkflowExecutionFailedEventAttributes{
-			Domain:                       domain,
+			Namespace:                    namespace,
 			WorkflowId:                   childWorkflowID,
 			WorkflowType:                 &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			Cause:                        enums.ChildWorkflowExecutionFailedCauseWorkflowAlreadyRunning,
@@ -652,7 +652,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionStarted
 		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{ChildWorkflowExecutionStartedEventAttributes: &commonproto.ChildWorkflowExecutionStartedEventAttributes{
-			Domain:           domain,
+			Namespace:        namespace,
 			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.EventId,
 			WorkflowExecution: &commonproto.WorkflowExecution{
@@ -671,7 +671,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionCanceled
 		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{ChildWorkflowExecutionCanceledEventAttributes: &commonproto.ChildWorkflowExecutionCanceledEventAttributes{
-			Domain:           domain,
+			Namespace:        namespace,
 			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
 			WorkflowExecution: &commonproto.WorkflowExecution{
@@ -691,7 +691,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionCompleted
 		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{ChildWorkflowExecutionCompletedEventAttributes: &commonproto.ChildWorkflowExecutionCompletedEventAttributes{
-			Domain:           domain,
+			Namespace:        namespace,
 			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
 			WorkflowExecution: &commonproto.WorkflowExecution{
@@ -711,7 +711,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionFailed
 		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{ChildWorkflowExecutionFailedEventAttributes: &commonproto.ChildWorkflowExecutionFailedEventAttributes{
-			Domain:           domain,
+			Namespace:        namespace,
 			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
 			WorkflowExecution: &commonproto.WorkflowExecution{
@@ -731,7 +731,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionTerminated
 		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{ChildWorkflowExecutionTerminatedEventAttributes: &commonproto.ChildWorkflowExecutionTerminatedEventAttributes{
-			Domain:           domain,
+			Namespace:        namespace,
 			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
 			WorkflowExecution: &commonproto.WorkflowExecution{
@@ -751,7 +751,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionTimedOut
 		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{ChildWorkflowExecutionTimedOutEventAttributes: &commonproto.ChildWorkflowExecutionTimedOutEventAttributes{
-			Domain:           domain,
+			Namespace:        namespace,
 			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
 			WorkflowExecution: &commonproto.WorkflowExecution{
@@ -801,7 +801,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.EventType = enums.EventTypeSignalExternalWorkflowExecutionInitiated
 		historyEvent.Attributes = &commonproto.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{SignalExternalWorkflowExecutionInitiatedEventAttributes: &commonproto.SignalExternalWorkflowExecutionInitiatedEventAttributes{
 			DecisionTaskCompletedEventId: lastEvent.EventId,
-			Domain:                       domain,
+			Namespace:                    namespace,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: externalWorkflowID,
 				RunId:      uuid.New(),
@@ -822,7 +822,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &commonproto.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{SignalExternalWorkflowExecutionFailedEventAttributes: &commonproto.SignalExternalWorkflowExecutionFailedEventAttributes{
 			Cause:                        enums.SignalExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution,
 			DecisionTaskCompletedEventId: lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
-			Domain:                       domain,
+			Namespace:                    namespace,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,
@@ -841,7 +841,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.EventType = enums.EventTypeExternalWorkflowExecutionSignaled
 		historyEvent.Attributes = &commonproto.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{ExternalWorkflowExecutionSignaledEventAttributes: &commonproto.ExternalWorkflowExecutionSignaledEventAttributes{
 			InitiatedEventId: lastEvent.EventId,
-			Domain:           domain,
+			Namespace:        namespace,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,
@@ -860,7 +860,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &commonproto.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 			RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &commonproto.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 				DecisionTaskCompletedEventId: lastEvent.EventId,
-				Domain:                       domain,
+				Namespace:                    namespace,
 				WorkflowExecution: &commonproto.WorkflowExecution{
 					WorkflowId: externalWorkflowID,
 					RunId:      uuid.New(),
@@ -880,7 +880,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &commonproto.HistoryEvent_RequestCancelExternalWorkflowExecutionFailedEventAttributes{RequestCancelExternalWorkflowExecutionFailedEventAttributes: &commonproto.RequestCancelExternalWorkflowExecutionFailedEventAttributes{
 			Cause:                        enums.CancelExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution,
 			DecisionTaskCompletedEventId: lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
-			Domain:                       domain,
+			Namespace:                    namespace,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,
@@ -899,7 +899,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.EventType = enums.EventTypeExternalWorkflowExecutionCancelRequested
 		historyEvent.Attributes = &commonproto.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{ExternalWorkflowExecutionCancelRequestedEventAttributes: &commonproto.ExternalWorkflowExecutionCancelRequestedEventAttributes{
 			InitiatedEventId: lastEvent.EventId,
-			Domain:           domain,
+			Namespace:        namespace,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,

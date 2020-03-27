@@ -261,14 +261,14 @@ func (s *UtilSuite) TestValidateDirPath() {
 
 func (s *UtilSuite) TestconstructHistoryFilename() {
 	testCases := []struct {
-		domainID             string
+		namespaceID          string
 		workflowID           string
 		runID                string
 		closeFailoverVersion int64
 		expectBuiltName      string
 	}{
 		{
-			domainID:             "testDomainID",
+			namespaceID:          "testNamespaceID",
 			workflowID:           "testWorkflowID",
 			runID:                "testRunID",
 			closeFailoverVersion: 5,
@@ -277,7 +277,7 @@ func (s *UtilSuite) TestconstructHistoryFilename() {
 	}
 
 	for _, tc := range testCases {
-		filename := constructHistoryFilename(tc.domainID, tc.workflowID, tc.runID, tc.closeFailoverVersion)
+		filename := constructHistoryFilename(tc.namespaceID, tc.workflowID, tc.runID, tc.closeFailoverVersion)
 		s.Equal(tc.expectBuiltName, filename)
 	}
 }

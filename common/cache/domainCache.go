@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination domainCache_mock.go -self_package github.com/temporalio/temporal/common/cache
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination namespaceCache_mock.go -self_package github.com/temporalio/temporal/common/cache
 
 package cache
 
@@ -42,32 +42,32 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 )
 
-// ReplicationPolicy is the domain's replication policy,
-// derived from domain's replication config
+// ReplicationPolicy is the namespace's replication policy,
+// derived from namespace's replication config
 type ReplicationPolicy int
 
 const (
 	// ReplicationPolicyOneCluster indicate that workflows does not need to be replicated
-	// applicable to local domain & global domain with one cluster
+	// applicable to local namespace & global namespace with one cluster
 	ReplicationPolicyOneCluster ReplicationPolicy = 0
 	// ReplicationPolicyMultiCluster indicate that workflows need to be replicated
 	ReplicationPolicyMultiCluster ReplicationPolicy = 1
 )
 
 const (
-	domainCacheInitialSize = 10 * 1024
-	domainCacheMaxSize     = 64 * 1024
-	domainCacheTTL         = 0 // 0 means infinity
-	// DomainCacheRefreshInterval domain cache refresh interval
-	DomainCacheRefreshInterval = 10 * time.Second
-	// DomainCacheRefreshFailureRetryInterval is the wait time
+	namespaceCacheInitialSize = 10 * 1024
+	namespaceCacheMaxSize     = 64 * 1024
+	namespaceCacheTTL         = 0 // 0 means infinity
+	// NamespaceCacheRefreshInterval namespace cache refresh interval
+	NamespaceCacheRefreshInterval = 10 * time.Second
+	// NamespaceCacheRefreshFailureRetryInterval is the wait time
 	// if refreshment encounters error
-	DomainCacheRefreshFailureRetryInterval = 1 * time.Second
-	domainCacheRefreshPageSize             = 200
+	NamespaceCacheRefreshFailureRetryInterval = 1 * time.Second
+	namespaceCacheRefreshPageSize             = 200
 
-	domainCacheInitialized int32 = 0
-	domainCacheStarted     int32 = 1
-	domainCacheStopped     int32 = 2
+	namespaceCacheInitialized int32 = 0
+	namespaceCacheStarted     int32 = 1
+	namespaceCacheStopped     int32 = 2
 )
 
 type (
@@ -75,28 +75,28 @@ type (
 	// it is guaranteed that PrepareCallbackFn and CallbackFn pair will be both called or non will be called
 	PrepareCallbackFn func()
 
-	// CallbackFn is function to be called when the domain cache entries are changed
+	// CallbackFn is function to be called when the namespace cache entries are changed
 	// it is guaranteed that PrepareCallbackFn and CallbackFn pair will be both called or non will be called
-	CallbackFn func(prevDomains []*DomainCacheEntry, nextDomains []*DomainCacheEntry)
+	CallbackFn func(prevNamespaces []*NamespaceCacheEntry, nextNamespaces []*NamespaceCacheEntry)
 
-	// DomainCache is used the cache domain information and configuration to avoid making too many calls to cassandra.
-	// This cache is mainly used by frontend for resolving domain names to domain uuids which are used throughout the
-	// system.  Each domain entry is kept in the cache for one hour but also has an expiry of 10 seconds.  This results
-	// in updating the domain entry every 10 seconds but in the case of a cassandra failure we can still keep on serving
+	// NamespaceCache is used the cache namespace information and configuration to avoid making too many calls to cassandra.
+	// This cache is mainly used by frontend for resolving namespace names to namespace uuids which are used throughout the
+	// system.  Each namespace entry is kept in the cache for one hour but also has an expiry of 10 seconds.  This results
+	// in updating the namespace entry every 10 seconds but in the case of a cassandra failure we can still keep on serving
 	// requests using the stale entry from cache upto an hour
-	DomainCache interface {
+	NamespaceCache interface {
 		common.Daemon
-		RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn)
-		UnregisterDomainChangeCallback(shard int)
-		GetDomain(name string) (*DomainCacheEntry, error)
-		GetDomainByID(id string) (*DomainCacheEntry, error)
-		GetDomainID(name string) (string, error)
-		GetDomainName(id string) (string, error)
-		GetAllDomain() map[string]*DomainCacheEntry
+		RegisterNamespaceChangeCallback(shard int, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn)
+		UnregisterNamespaceChangeCallback(shard int)
+		GetNamespace(name string) (*NamespaceCacheEntry, error)
+		GetNamespaceByID(id string) (*NamespaceCacheEntry, error)
+		GetNamespaceID(name string) (string, error)
+		GetNamespace(id string) (string, error)
+		GetAllNamespace() map[string]*NamespaceCacheEntry
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
 	}
 
-	domainCache struct {
+	namespaceCache struct {
 		status          int32
 		shutdownChan    chan struct{}
 		cacheNameToID   *atomic.Value
@@ -108,7 +108,7 @@ type (
 		logger          log.Logger
 
 		// refresh lock is used to guarantee at most one
-		// coroutine is doing domain refreshment
+		// coroutine is doing namespace refreshment
 		refreshLock sync.Mutex
 
 		callbackLock     sync.Mutex
@@ -116,35 +116,35 @@ type (
 		callbacks        map[int]CallbackFn
 	}
 
-	// DomainCacheEntries is DomainCacheEntry slice
-	DomainCacheEntries []*DomainCacheEntry
+	// NamespaceCacheEntries is NamespaceCacheEntry slice
+	NamespaceCacheEntries []*NamespaceCacheEntry
 
-	// DomainCacheEntry contains the info and config for a domain
-	DomainCacheEntry struct {
+	// NamespaceCacheEntry contains the info and config for a namespace
+	NamespaceCacheEntry struct {
 		clusterMetadata cluster.Metadata
 		sync.RWMutex
-		info                        *persistence.DomainInfo
-		config                      *persistence.DomainConfig
-		replicationConfig           *persistence.DomainReplicationConfig
+		info                        *persistence.NamespaceInfo
+		config                      *persistence.NamespaceConfig
+		replicationConfig           *persistence.NamespaceReplicationConfig
 		configVersion               int64
 		failoverVersion             int64
-		isGlobalDomain              bool
+		isGlobalNamespace           bool
 		failoverNotificationVersion int64
 		notificationVersion         int64
 		initialized                 bool
 	}
 )
 
-// NewDomainCache creates a new instance of cache for holding onto domain information to reduce the load on persistence
-func NewDomainCache(
+// NewNamespaceCache creates a new instance of cache for holding onto namespace information to reduce the load on persistence
+func NewNamespaceCache(
 	metadataMgr persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) DomainCache {
+) NamespaceCache {
 
-	cache := &domainCache{
-		status:           domainCacheInitialized,
+	cache := &namespaceCache{
+		status:           namespaceCacheInitialized,
 		shutdownChan:     make(chan struct{}),
 		cacheNameToID:    &atomic.Value{},
 		cacheByID:        &atomic.Value{},
@@ -156,61 +156,61 @@ func NewDomainCache(
 		prepareCallbacks: make(map[int]PrepareCallbackFn),
 		callbacks:        make(map[int]CallbackFn),
 	}
-	cache.cacheNameToID.Store(newDomainCache())
-	cache.cacheByID.Store(newDomainCache())
+	cache.cacheNameToID.Store(newNamespaceCache())
+	cache.cacheByID.Store(newNamespaceCache())
 
 	return cache
 }
 
-func newDomainCache() Cache {
+func newNamespaceCache() Cache {
 	opts := &Options{}
-	opts.InitialCapacity = domainCacheInitialSize
-	opts.TTL = domainCacheTTL
-	return New(domainCacheMaxSize, opts)
+	opts.InitialCapacity = namespaceCacheInitialSize
+	opts.TTL = namespaceCacheTTL
+	return New(namespaceCacheMaxSize, opts)
 }
 
-func newDomainCacheEntry(
+func newNamespaceCacheEntry(
 	clusterMetadata cluster.Metadata,
-) *DomainCacheEntry {
+) *NamespaceCacheEntry {
 
-	return &DomainCacheEntry{
+	return &NamespaceCacheEntry{
 		clusterMetadata: clusterMetadata,
 		initialized:     false,
 	}
 }
 
-// NewGlobalDomainCacheEntryForTest returns an entry with test data
-func NewGlobalDomainCacheEntryForTest(
-	info *persistence.DomainInfo,
-	config *persistence.DomainConfig,
-	repConfig *persistence.DomainReplicationConfig,
+// NewGlobalNamespaceCacheEntryForTest returns an entry with test data
+func NewGlobalNamespaceCacheEntryForTest(
+	info *persistence.NamespaceInfo,
+	config *persistence.NamespaceConfig,
+	repConfig *persistence.NamespaceReplicationConfig,
 	failoverVersion int64,
 	clusterMetadata cluster.Metadata,
-) *DomainCacheEntry {
+) *NamespaceCacheEntry {
 
-	return &DomainCacheEntry{
+	return &NamespaceCacheEntry{
 		info:              info,
 		config:            config,
-		isGlobalDomain:    true,
+		isGlobalNamespace: true,
 		replicationConfig: repConfig,
 		failoverVersion:   failoverVersion,
 		clusterMetadata:   clusterMetadata,
 	}
 }
 
-// NewLocalDomainCacheEntryForTest returns an entry with test data
-func NewLocalDomainCacheEntryForTest(
-	info *persistence.DomainInfo,
-	config *persistence.DomainConfig,
+// NewLocalNamespaceCacheEntryForTest returns an entry with test data
+func NewLocalNamespaceCacheEntryForTest(
+	info *persistence.NamespaceInfo,
+	config *persistence.NamespaceConfig,
 	targetCluster string,
 	clusterMetadata cluster.Metadata,
-) *DomainCacheEntry {
+) *NamespaceCacheEntry {
 
-	return &DomainCacheEntry{
-		info:           info,
-		config:         config,
-		isGlobalDomain: false,
-		replicationConfig: &persistence.DomainReplicationConfig{
+	return &NamespaceCacheEntry{
+		info:              info,
+		config:            config,
+		isGlobalNamespace: false,
+		replicationConfig: &persistence.NamespaceReplicationConfig{
 			ActiveClusterName: targetCluster,
 			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: targetCluster}},
 		},
@@ -219,74 +219,74 @@ func NewLocalDomainCacheEntryForTest(
 	}
 }
 
-// NewDomainCacheEntryForTest returns an entry with test data
-func NewDomainCacheEntryForTest(
-	info *persistence.DomainInfo,
-	config *persistence.DomainConfig,
-	isGlobalDomain bool,
-	repConfig *persistence.DomainReplicationConfig,
+// NewNamespaceCacheEntryForTest returns an entry with test data
+func NewNamespaceCacheEntryForTest(
+	info *persistence.NamespaceInfo,
+	config *persistence.NamespaceConfig,
+	isGlobalNamespace bool,
+	repConfig *persistence.NamespaceReplicationConfig,
 	failoverVersion int64,
 	clusterMetadata cluster.Metadata,
-) *DomainCacheEntry {
+) *NamespaceCacheEntry {
 
-	return &DomainCacheEntry{
+	return &NamespaceCacheEntry{
 		info:              info,
 		config:            config,
-		isGlobalDomain:    isGlobalDomain,
+		isGlobalNamespace: isGlobalNamespace,
 		replicationConfig: repConfig,
 		failoverVersion:   failoverVersion,
 		clusterMetadata:   clusterMetadata,
 	}
 }
 
-func (c *domainCache) GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64) {
+func (c *namespaceCache) GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64) {
 	return int64(c.cacheByID.Load().(Cache).Size()), int64(c.cacheNameToID.Load().(Cache).Size())
 }
 
-// Start start the background refresh of domain
-func (c *domainCache) Start() {
-	if !atomic.CompareAndSwapInt32(&c.status, domainCacheInitialized, domainCacheStarted) {
+// Start start the background refresh of namespace
+func (c *namespaceCache) Start() {
+	if !atomic.CompareAndSwapInt32(&c.status, namespaceCacheInitialized, namespaceCacheStarted) {
 		return
 	}
 
 	// initialize the cache by initial scan
-	err := c.refreshDomains()
+	err := c.refreshNamespaces()
 	if err != nil {
-		c.logger.Fatal("Unable to initialize domain cache", tag.Error(err))
+		c.logger.Fatal("Unable to initialize namespace cache", tag.Error(err))
 	}
 	go c.refreshLoop()
 }
 
-// Start start the background refresh of domain
-func (c *domainCache) Stop() {
-	if !atomic.CompareAndSwapInt32(&c.status, domainCacheStarted, domainCacheStopped) {
+// Start start the background refresh of namespace
+func (c *namespaceCache) Stop() {
+	if !atomic.CompareAndSwapInt32(&c.status, namespaceCacheStarted, namespaceCacheStopped) {
 		return
 	}
 	close(c.shutdownChan)
 }
 
-func (c *domainCache) GetAllDomain() map[string]*DomainCacheEntry {
-	result := make(map[string]*DomainCacheEntry)
+func (c *namespaceCache) GetAllNamespace() map[string]*NamespaceCacheEntry {
+	result := make(map[string]*NamespaceCacheEntry)
 	ite := c.cacheByID.Load().(Cache).Iterator()
 	defer ite.Close()
 
 	for ite.HasNext() {
 		entry := ite.Next()
 		id := entry.Key().(string)
-		domainCacheEntry := entry.Value().(*DomainCacheEntry)
-		domainCacheEntry.RLock()
-		dup := domainCacheEntry.duplicate()
-		domainCacheEntry.RUnlock()
+		namespaceCacheEntry := entry.Value().(*NamespaceCacheEntry)
+		namespaceCacheEntry.RLock()
+		dup := namespaceCacheEntry.duplicate()
+		namespaceCacheEntry.RUnlock()
 		result[id] = dup
 	}
 	return result
 }
 
-// RegisterDomainChangeCallback set a domain change callback
-// WARN: the beforeCallback function will be triggered by domain cache when holding the domain cache lock,
-// make sure the callback function will not call domain cache again in case of dead lock
-// afterCallback will be invoked when NOT holding the domain cache lock.
-func (c *domainCache) RegisterDomainChangeCallback(
+// RegisterNamespaceChangeCallback set a namespace change callback
+// WARN: the beforeCallback function will be triggered by namespace cache when holding the namespace cache lock,
+// make sure the callback function will not call namespace cache again in case of dead lock
+// afterCallback will be invoked when NOT holding the namespace cache lock.
+func (c *namespaceCache) RegisterNamespaceChangeCallback(
 	shard int,
 	initialNotificationVersion int64,
 	prepareCallback PrepareCallbackFn,
@@ -298,22 +298,22 @@ func (c *domainCache) RegisterDomainChangeCallback(
 	c.callbacks[shard] = callback
 	c.callbackLock.Unlock()
 
-	// this section is trying to make the shard catch up with domain changes
-	domains := DomainCacheEntries{}
-	for _, domain := range c.GetAllDomain() {
-		domains = append(domains, domain)
+	// this section is trying to make the shard catch up with namespace changes
+	namespaces := NamespaceCacheEntries{}
+	for _, namespace := range c.GetAllNamespace() {
+		namespaces = append(namespaces, namespace)
 	}
 	// we mush notify the change in a ordered fashion
 	// since history shard have to update the shard info
-	// with domain change version.
-	sort.Sort(domains)
+	// with namespace change version.
+	sort.Sort(namespaces)
 
-	prevEntries := []*DomainCacheEntry{}
-	nextEntries := []*DomainCacheEntry{}
-	for _, domain := range domains {
-		if domain.notificationVersion >= initialNotificationVersion {
+	prevEntries := []*NamespaceCacheEntry{}
+	nextEntries := []*NamespaceCacheEntry{}
+	for _, namespace := range namespaces {
+		if namespace.notificationVersion >= initialNotificationVersion {
 			prevEntries = append(prevEntries, nil)
-			nextEntries = append(nextEntries, domain)
+			nextEntries = append(nextEntries, namespace)
 		}
 	}
 	if len(prevEntries) > 0 {
@@ -322,8 +322,8 @@ func (c *domainCache) RegisterDomainChangeCallback(
 	}
 }
 
-// UnregisterDomainChangeCallback delete a domain failover callback
-func (c *domainCache) UnregisterDomainChangeCallback(
+// UnregisterNamespaceChangeCallback delete a namespace failover callback
+func (c *namespaceCache) UnregisterNamespaceChangeCallback(
 	shard int,
 ) {
 
@@ -334,56 +334,56 @@ func (c *domainCache) UnregisterDomainChangeCallback(
 	delete(c.callbacks, shard)
 }
 
-// GetDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
+// GetNamespace retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) GetDomain(
+func (c *namespaceCache) GetNamespace(
 	name string,
-) (*DomainCacheEntry, error) {
+) (*NamespaceCacheEntry, error) {
 
 	if name == "" {
-		return nil, serviceerror.NewInvalidArgument("Domain is empty.")
+		return nil, serviceerror.NewInvalidArgument("Namespace is empty.")
 	}
-	return c.getDomain(name)
+	return c.getNamespace(name)
 }
 
-// GetDomainByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
+// GetNamespaceByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) GetDomainByID(
+func (c *namespaceCache) GetNamespaceByID(
 	id string,
-) (*DomainCacheEntry, error) {
+) (*NamespaceCacheEntry, error) {
 
 	if id == "" {
-		return nil, serviceerror.NewInvalidArgument("DomainID is empty.")
+		return nil, serviceerror.NewInvalidArgument("NamespaceID is empty.")
 	}
-	return c.getDomainByID(id, true)
+	return c.getNamespaceByID(id, true)
 }
 
-// GetDomainID retrieves domainID by using GetDomain
-func (c *domainCache) GetDomainID(
+// GetNamespaceID retrieves namespaceID by using GetNamespace
+func (c *namespaceCache) GetNamespaceID(
 	name string,
 ) (string, error) {
 
-	entry, err := c.GetDomain(name)
+	entry, err := c.GetNamespace(name)
 	if err != nil {
 		return "", err
 	}
 	return entry.info.ID, nil
 }
 
-// GetDomainName returns domain name given the domain id
-func (c *domainCache) GetDomainName(
+// GetNamespace returns namespace name given the namespace id
+func (c *namespaceCache) GetNamespace(
 	id string,
 ) (string, error) {
 
-	entry, err := c.getDomainByID(id, false)
+	entry, err := c.getNamespaceByID(id, false)
 	if err != nil {
 		return "", err
 	}
 	return entry.info.Name, nil
 }
 
-func (c *domainCache) refreshLoop() {
-	timer := time.NewTicker(DomainCacheRefreshInterval)
+func (c *namespaceCache) refreshLoop() {
+	timer := time.NewTicker(NamespaceCacheRefreshInterval)
 	defer timer.Stop()
 
 	for {
@@ -391,81 +391,81 @@ func (c *domainCache) refreshLoop() {
 		case <-c.shutdownChan:
 			return
 		case <-timer.C:
-			for err := c.refreshDomains(); err != nil; err = c.refreshDomains() {
+			for err := c.refreshNamespaces(); err != nil; err = c.refreshNamespaces() {
 				select {
 				case <-c.shutdownChan:
 					return
 				default:
-					c.logger.Error("Error refreshing domain cache", tag.Error(err))
-					time.Sleep(DomainCacheRefreshFailureRetryInterval)
+					c.logger.Error("Error refreshing namespace cache", tag.Error(err))
+					time.Sleep(NamespaceCacheRefreshFailureRetryInterval)
 				}
 			}
 		}
 	}
 }
 
-func (c *domainCache) refreshDomains() error {
+func (c *namespaceCache) refreshNamespaces() error {
 	c.refreshLock.Lock()
 	defer c.refreshLock.Unlock()
-	return c.refreshDomainsLocked()
+	return c.refreshNamespacesLocked()
 }
 
-// this function only refresh the domains in the v2 table
-// the domains in the v1 table will be refreshed if cache is stale
-func (c *domainCache) refreshDomainsLocked() error {
-	// first load the metadata record, then load domains
-	// this can guarantee that domains in the cache are not updated more than metadata record
+// this function only refresh the namespaces in the v2 table
+// the namespaces in the v1 table will be refreshed if cache is stale
+func (c *namespaceCache) refreshNamespacesLocked() error {
+	// first load the metadata record, then load namespaces
+	// this can guarantee that namespaces in the cache are not updated more than metadata record
 	metadata, err := c.metadataMgr.GetMetadata()
 	if err != nil {
 		return err
 	}
-	domainNotificationVersion := metadata.NotificationVersion
+	namespaceNotificationVersion := metadata.NotificationVersion
 
 	var token []byte
-	request := &persistence.ListDomainsRequest{PageSize: domainCacheRefreshPageSize}
-	var domains DomainCacheEntries
+	request := &persistence.ListNamespacesRequest{PageSize: namespaceCacheRefreshPageSize}
+	var namespaces NamespaceCacheEntries
 	continuePage := true
 
 	for continuePage {
 		request.NextPageToken = token
-		response, err := c.metadataMgr.ListDomains(request)
+		response, err := c.metadataMgr.ListNamespaces(request)
 		if err != nil {
 			return err
 		}
 		token = response.NextPageToken
-		for _, domain := range response.Domains {
-			domains = append(domains, c.buildEntryFromRecord(domain))
+		for _, namespace := range response.Namespaces {
+			namespaces = append(namespaces, c.buildEntryFromRecord(namespace))
 		}
 		continuePage = len(token) != 0
 	}
 
-	// we mush apply the domain change by order
+	// we mush apply the namespace change by order
 	// since history shard have to update the shard info
-	// with domain change version.
-	sort.Sort(domains)
+	// with namespace change version.
+	sort.Sort(namespaces)
 
-	prevEntries := []*DomainCacheEntry{}
-	nextEntries := []*DomainCacheEntry{}
+	prevEntries := []*NamespaceCacheEntry{}
+	nextEntries := []*NamespaceCacheEntry{}
 
-	// make a copy of the existing domain cache, so we can calculate diff and do compare and swap
-	newCacheNameToID := newDomainCache()
-	newCacheByID := newDomainCache()
-	for _, domain := range c.GetAllDomain() {
-		newCacheNameToID.Put(domain.info.Name, domain.info.ID)
-		newCacheByID.Put(domain.info.ID, domain)
+	// make a copy of the existing namespace cache, so we can calculate diff and do compare and swap
+	newCacheNameToID := newNamespaceCache()
+	newCacheByID := newNamespaceCache()
+	for _, namespace := range c.GetAllNamespace() {
+		newCacheNameToID.Put(namespace.info.Name, namespace.info.ID)
+		newCacheByID.Put(namespace.info.ID, namespace)
 	}
 
 UpdateLoop:
-	for _, domain := range domains {
-		if domain.notificationVersion >= domainNotificationVersion {
-			// this guarantee that domain change events before the
-			// domainNotificationVersion is loaded into the cache.
+	for _, namespace := range namespaces {
+		if namespace.notificationVersion >= namespaceNotificationVersion {
+			// this guarantee that namespace change events before the
+			// namespaceNotificationVersion is loaded into the cache.
 
-			// the domain change events after the domainNotificationVersion
+			// the namespace change events after the namespaceNotificationVersion
 			// will be loaded into cache in the next refresh
 			break UpdateLoop
 		}
-		prevEntry, nextEntry, err := c.updateIDToDomainCache(newCacheByID, domain.info.ID, domain)
+		prevEntry, nextEntry, err := c.updateIDToNamespaceCache(newCacheByID, namespace.info.ID, namespace)
 		if err != nil {
 			return err
 		}
@@ -478,26 +478,26 @@ UpdateLoop:
 	}
 
 	// NOTE: READ REF BEFORE MODIFICATION
-	// ref: historyEngine.go registerDomainFailoverCallback function
+	// ref: historyEngine.go registerNamespaceFailoverCallback function
 	c.callbackLock.Lock()
 	defer c.callbackLock.Unlock()
-	c.triggerDomainChangePrepareCallbackLocked()
+	c.triggerNamespaceChangePrepareCallbackLocked()
 	c.cacheByID.Store(newCacheByID)
 	c.cacheNameToID.Store(newCacheNameToID)
-	c.triggerDomainChangeCallbackLocked(prevEntries, nextEntries)
+	c.triggerNamespaceChangeCallbackLocked(prevEntries, nextEntries)
 	return nil
 }
 
-func (c *domainCache) checkDomainExists(
+func (c *namespaceCache) checkNamespaceExists(
 	name string,
 	id string,
 ) error {
 
-	_, err := c.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: name, ID: id})
+	_, err := c.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: name, ID: id})
 	return err
 }
 
-func (c *domainCache) updateNameToIDCache(
+func (c *namespaceCache) updateNameToIDCache(
 	cacheNameToID Cache,
 	name string,
 	id string,
@@ -506,28 +506,28 @@ func (c *domainCache) updateNameToIDCache(
 	cacheNameToID.Put(name, id)
 }
 
-func (c *domainCache) updateIDToDomainCache(
+func (c *namespaceCache) updateIDToNamespaceCache(
 	cacheByID Cache,
 	id string,
-	record *DomainCacheEntry,
-) (*DomainCacheEntry, *DomainCacheEntry, error) {
+	record *NamespaceCacheEntry,
+) (*NamespaceCacheEntry, *NamespaceCacheEntry, error) {
 
-	elem, err := cacheByID.PutIfNotExist(id, newDomainCacheEntry(c.clusterMetadata))
+	elem, err := cacheByID.PutIfNotExist(id, newNamespaceCacheEntry(c.clusterMetadata))
 	if err != nil {
 		return nil, nil, err
 	}
-	entry := elem.(*DomainCacheEntry)
+	entry := elem.(*NamespaceCacheEntry)
 
 	entry.Lock()
 	defer entry.Unlock()
 
-	var prevDomain *DomainCacheEntry
-	triggerCallback := c.clusterMetadata.IsGlobalDomainEnabled() &&
+	var prevNamespace *NamespaceCacheEntry
+	triggerCallback := c.clusterMetadata.IsGlobalNamespaceEnabled() &&
 		// initialized will be true when the entry contains valid data
 		entry.initialized &&
 		record.notificationVersion > entry.notificationVersion
 	if triggerCallback {
-		prevDomain = entry.duplicate()
+		prevNamespace = entry.duplicate()
 	}
 
 	entry.info = record.info
@@ -535,28 +535,28 @@ func (c *domainCache) updateIDToDomainCache(
 	entry.replicationConfig = record.replicationConfig
 	entry.configVersion = record.configVersion
 	entry.failoverVersion = record.failoverVersion
-	entry.isGlobalDomain = record.isGlobalDomain
+	entry.isGlobalNamespace = record.isGlobalNamespace
 	entry.failoverNotificationVersion = record.failoverNotificationVersion
 	entry.notificationVersion = record.notificationVersion
 	entry.initialized = record.initialized
 
-	nextDomain := entry.duplicate()
+	nextNamespace := entry.duplicate()
 
-	return prevDomain, nextDomain, nil
+	return prevNamespace, nextNamespace, nil
 }
 
-// getDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
+// getNamespace retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) getDomain(
+func (c *namespaceCache) getNamespace(
 	name string,
-) (*DomainCacheEntry, error) {
+) (*NamespaceCacheEntry, error) {
 
 	id, cacheHit := c.cacheNameToID.Load().(Cache).Get(name).(string)
 	if cacheHit {
-		return c.getDomainByID(id, true)
+		return c.getNamespaceByID(id, true)
 	}
 
-	if err := c.checkDomainExists(name, ""); err != nil {
+	if err := c.checkNamespaceExists(name, ""); err != nil {
 		return nil, err
 	}
 
@@ -564,28 +564,28 @@ func (c *domainCache) getDomain(
 	defer c.refreshLock.Unlock()
 	id, cacheHit = c.cacheNameToID.Load().(Cache).Get(name).(string)
 	if cacheHit {
-		return c.getDomainByID(id, true)
+		return c.getNamespaceByID(id, true)
 	}
-	if err := c.refreshDomainsLocked(); err != nil {
+	if err := c.refreshNamespacesLocked(); err != nil {
 		return nil, err
 	}
 	id, cacheHit = c.cacheNameToID.Load().(Cache).Get(name).(string)
 	if cacheHit {
-		return c.getDomainByID(id, true)
+		return c.getNamespaceByID(id, true)
 	}
 	// impossible case
-	return nil, serviceerror.NewInternal("domainCache encounter case where domain exists but cannot be loaded")
+	return nil, serviceerror.NewInternal("namespaceCache encounter case where namespace exists but cannot be loaded")
 }
 
-// getDomainByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
+// getNamespaceByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) getDomainByID(
+func (c *namespaceCache) getNamespaceByID(
 	id string,
 	deepCopy bool,
-) (*DomainCacheEntry, error) {
+) (*NamespaceCacheEntry, error) {
 
-	var result *DomainCacheEntry
-	entry, cacheHit := c.cacheByID.Load().(Cache).Get(id).(*DomainCacheEntry)
+	var result *NamespaceCacheEntry
+	entry, cacheHit := c.cacheByID.Load().(Cache).Get(id).(*NamespaceCacheEntry)
 	if cacheHit {
 		entry.RLock()
 		result = entry
@@ -596,13 +596,13 @@ func (c *domainCache) getDomainByID(
 		return result, nil
 	}
 
-	if err := c.checkDomainExists("", id); err != nil {
+	if err := c.checkNamespaceExists("", id); err != nil {
 		return nil, err
 	}
 
 	c.refreshLock.Lock()
 	defer c.refreshLock.Unlock()
-	entry, cacheHit = c.cacheByID.Load().(Cache).Get(id).(*DomainCacheEntry)
+	entry, cacheHit = c.cacheByID.Load().(Cache).Get(id).(*NamespaceCacheEntry)
 	if cacheHit {
 		entry.RLock()
 		result = entry
@@ -612,10 +612,10 @@ func (c *domainCache) getDomainByID(
 		entry.RUnlock()
 		return result, nil
 	}
-	if err := c.refreshDomainsLocked(); err != nil {
+	if err := c.refreshNamespacesLocked(); err != nil {
 		return nil, err
 	}
-	entry, cacheHit = c.cacheByID.Load().(Cache).Get(id).(*DomainCacheEntry)
+	entry, cacheHit = c.cacheByID.Load().(Cache).Get(id).(*NamespaceCacheEntry)
 	if cacheHit {
 		entry.RLock()
 		result = entry
@@ -626,11 +626,11 @@ func (c *domainCache) getDomainByID(
 		return result, nil
 	}
 	// impossible case
-	return nil, serviceerror.NewInternal("domainCache encounter case where domain exists but cannot be loaded")
+	return nil, serviceerror.NewInternal("namespaceCache encounter case where namespace exists but cannot be loaded")
 }
 
-func (c *domainCache) triggerDomainChangePrepareCallbackLocked() {
-	sw := c.metricsClient.StartTimer(metrics.DomainCacheScope, metrics.DomainCachePrepareCallbacksLatency)
+func (c *namespaceCache) triggerNamespaceChangePrepareCallbackLocked() {
+	sw := c.metricsClient.StartTimer(metrics.NamespaceCacheScope, metrics.NamespaceCachePrepareCallbacksLatency)
 	defer sw.Stop()
 
 	for _, prepareCallback := range c.prepareCallbacks {
@@ -638,32 +638,32 @@ func (c *domainCache) triggerDomainChangePrepareCallbackLocked() {
 	}
 }
 
-func (c *domainCache) triggerDomainChangeCallbackLocked(
-	prevDomains []*DomainCacheEntry,
-	nextDomains []*DomainCacheEntry,
+func (c *namespaceCache) triggerNamespaceChangeCallbackLocked(
+	prevNamespaces []*NamespaceCacheEntry,
+	nextNamespaces []*NamespaceCacheEntry,
 ) {
 
-	sw := c.metricsClient.StartTimer(metrics.DomainCacheScope, metrics.DomainCacheCallbacksLatency)
+	sw := c.metricsClient.StartTimer(metrics.NamespaceCacheScope, metrics.NamespaceCacheCallbacksLatency)
 	defer sw.Stop()
 
 	for _, callback := range c.callbacks {
-		callback(prevDomains, nextDomains)
+		callback(prevNamespaces, nextNamespaces)
 	}
 }
 
-func (c *domainCache) buildEntryFromRecord(
-	record *persistence.GetDomainResponse,
-) *DomainCacheEntry {
+func (c *namespaceCache) buildEntryFromRecord(
+	record *persistence.GetNamespaceResponse,
+) *NamespaceCacheEntry {
 
 	// this is a shallow copy, but since the record is generated by persistence
 	// and only accessible here, it would be fine
-	newEntry := newDomainCacheEntry(c.clusterMetadata)
+	newEntry := newNamespaceCacheEntry(c.clusterMetadata)
 	newEntry.info = record.Info
 	newEntry.config = record.Config
 	newEntry.replicationConfig = record.ReplicationConfig
 	newEntry.configVersion = record.ConfigVersion
 	newEntry.failoverVersion = record.FailoverVersion
-	newEntry.isGlobalDomain = record.IsGlobalDomain
+	newEntry.isGlobalNamespace = record.IsGlobalNamespace
 	newEntry.failoverNotificationVersion = record.FailoverNotificationVersion
 	newEntry.notificationVersion = record.NotificationVersion
 	newEntry.initialized = true
@@ -680,10 +680,10 @@ func copyResetBinary(bins commonproto.BadBinaries) commonproto.BadBinaries {
 	}
 }
 
-func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
+func (entry *NamespaceCacheEntry) duplicate() *NamespaceCacheEntry {
 	// this is a deep copy
-	result := newDomainCacheEntry(entry.clusterMetadata)
-	result.info = &persistence.DomainInfo{
+	result := newNamespaceCacheEntry(entry.clusterMetadata)
+	result.info = &persistence.NamespaceInfo{
 		ID:          entry.info.ID,
 		Name:        entry.info.Name,
 		Status:      entry.info.Status,
@@ -694,7 +694,7 @@ func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
 	for k, v := range entry.info.Data {
 		result.info.Data[k] = v
 	}
-	result.config = &persistence.DomainConfig{
+	result.config = &persistence.NamespaceConfig{
 		Retention:                entry.config.Retention,
 		EmitMetric:               entry.config.EmitMetric,
 		HistoryArchivalStatus:    entry.config.HistoryArchivalStatus,
@@ -703,7 +703,7 @@ func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
 		VisibilityArchivalURI:    entry.config.VisibilityArchivalURI,
 		BadBinaries:              copyResetBinary(entry.config.BadBinaries),
 	}
-	result.replicationConfig = &persistence.DomainReplicationConfig{
+	result.replicationConfig = &persistence.NamespaceReplicationConfig{
 		ActiveClusterName: entry.replicationConfig.ActiveClusterName,
 	}
 	for _, clusterName := range entry.replicationConfig.Clusters {
@@ -711,79 +711,79 @@ func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
 	}
 	result.configVersion = entry.configVersion
 	result.failoverVersion = entry.failoverVersion
-	result.isGlobalDomain = entry.isGlobalDomain
+	result.isGlobalNamespace = entry.isGlobalNamespace
 	result.failoverNotificationVersion = entry.failoverNotificationVersion
 	result.notificationVersion = entry.notificationVersion
 	result.initialized = entry.initialized
 	return result
 }
 
-// GetInfo return the domain info
-func (entry *DomainCacheEntry) GetInfo() *persistence.DomainInfo {
+// GetInfo return the namespace info
+func (entry *NamespaceCacheEntry) GetInfo() *persistence.NamespaceInfo {
 	return entry.info
 }
 
-// GetConfig return the domain config
-func (entry *DomainCacheEntry) GetConfig() *persistence.DomainConfig {
+// GetConfig return the namespace config
+func (entry *NamespaceCacheEntry) GetConfig() *persistence.NamespaceConfig {
 	return entry.config
 }
 
-// GetReplicationConfig return the domain replication config
-func (entry *DomainCacheEntry) GetReplicationConfig() *persistence.DomainReplicationConfig {
+// GetReplicationConfig return the namespace replication config
+func (entry *NamespaceCacheEntry) GetReplicationConfig() *persistence.NamespaceReplicationConfig {
 	return entry.replicationConfig
 }
 
-// GetConfigVersion return the domain config version
-func (entry *DomainCacheEntry) GetConfigVersion() int64 {
+// GetConfigVersion return the namespace config version
+func (entry *NamespaceCacheEntry) GetConfigVersion() int64 {
 	return entry.configVersion
 }
 
-// GetFailoverVersion return the domain failover version
-func (entry *DomainCacheEntry) GetFailoverVersion() int64 {
+// GetFailoverVersion return the namespace failover version
+func (entry *NamespaceCacheEntry) GetFailoverVersion() int64 {
 	return entry.failoverVersion
 }
 
-// IsGlobalDomain return whether the domain is a global domain
-func (entry *DomainCacheEntry) IsGlobalDomain() bool {
-	return entry.isGlobalDomain
+// IsGlobalNamespace return whether the namespace is a global namespace
+func (entry *NamespaceCacheEntry) IsGlobalNamespace() bool {
+	return entry.isGlobalNamespace
 }
 
 // GetFailoverNotificationVersion return the global notification version of when failover happened
-func (entry *DomainCacheEntry) GetFailoverNotificationVersion() int64 {
+func (entry *NamespaceCacheEntry) GetFailoverNotificationVersion() int64 {
 	return entry.failoverNotificationVersion
 }
 
-// GetNotificationVersion return the global notification version of when domain changed
-func (entry *DomainCacheEntry) GetNotificationVersion() int64 {
+// GetNotificationVersion return the global notification version of when namespace changed
+func (entry *NamespaceCacheEntry) GetNotificationVersion() int64 {
 	return entry.notificationVersion
 }
 
-// IsDomainActive return whether the domain is active, i.e. non global domain or global domain which active cluster is the current cluster
-func (entry *DomainCacheEntry) IsDomainActive() bool {
-	if !entry.isGlobalDomain {
-		// domain is not a global domain, meaning domain is always "active" within each cluster
+// IsNamespaceActive return whether the namespace is active, i.e. non global namespace or global namespace which active cluster is the current cluster
+func (entry *NamespaceCacheEntry) IsNamespaceActive() bool {
+	if !entry.isGlobalNamespace {
+		// namespace is not a global namespace, meaning namespace is always "active" within each cluster
 		return true
 	}
 	return entry.clusterMetadata.GetCurrentClusterName() == entry.replicationConfig.ActiveClusterName
 }
 
 // GetReplicationPolicy return the derived workflow replication policy
-func (entry *DomainCacheEntry) GetReplicationPolicy() ReplicationPolicy {
-	// frontend guarantee that the clusters always contains the active domain, so if the # of clusters is 1
+func (entry *NamespaceCacheEntry) GetReplicationPolicy() ReplicationPolicy {
+	// frontend guarantee that the clusters always contains the active namespace, so if the # of clusters is 1
 	// then we do not need to send out any events for replication
-	if entry.isGlobalDomain && len(entry.replicationConfig.Clusters) > 1 {
+	if entry.isGlobalNamespace && len(entry.replicationConfig.Clusters) > 1 {
 		return ReplicationPolicyMultiCluster
 	}
 	return ReplicationPolicyOneCluster
 }
 
-// GetDomainNotActiveErr return err if domain is not active, nil otherwise
-func (entry *DomainCacheEntry) GetDomainNotActiveErr() error {
-	if entry.IsDomainActive() {
-		// domain is consider active
+// GetNamespaceNotActiveErr return err if namespace is not active, nil otherwise
+func (entry *NamespaceCacheEntry) GetNamespaceNotActiveErr() error {
+	if entry.IsNamespaceActive() {
+		// namespace is consider active
 		return nil
 	}
-	return serviceerror.NewDomainNotActive(
+	return serviceerror.NewNamespaceNotActive(
 		entry.info.Name,
 		entry.clusterMetadata.GetCurrentClusterName(),
 		entry.replicationConfig.ActiveClusterName,
@@ -791,26 +791,26 @@ func (entry *DomainCacheEntry) GetDomainNotActiveErr() error {
 }
 
 // Len return length
-func (t DomainCacheEntries) Len() int {
+func (t NamespaceCacheEntries) Len() int {
 	return len(t)
 }
 
 // Swap implements sort.Interface.
-func (t DomainCacheEntries) Swap(i, j int) {
+func (t NamespaceCacheEntries) Swap(i, j int) {
 	t[i], t[j] = t[j], t[i]
 }
 
 // Less implements sort.Interface
-func (t DomainCacheEntries) Less(i, j int) bool {
+func (t NamespaceCacheEntries) Less(i, j int) bool {
 	return t[i].notificationVersion < t[j].notificationVersion
 }
 
-// CreateDomainCacheEntry create a cache entry with domainName
-func CreateDomainCacheEntry(
-	domainName string,
-) *DomainCacheEntry {
+// CreateNamespaceCacheEntry create a cache entry with namespace
+func CreateNamespaceCacheEntry(
+	namespace string,
+) *NamespaceCacheEntry {
 
-	return &DomainCacheEntry{info: &persistence.DomainInfo{Name: domainName}}
+	return &NamespaceCacheEntry{info: &persistence.NamespaceInfo{Name: namespace}}
 }
 
 // SampleRetentionKey is key to specify sample retention
@@ -820,7 +820,7 @@ var SampleRetentionKey = "sample_retention_days"
 var SampleRateKey = "sample_retention_rate"
 
 // GetRetentionDays returns retention in days for given workflow
-func (entry *DomainCacheEntry) GetRetentionDays(
+func (entry *NamespaceCacheEntry) GetRetentionDays(
 	workflowID string,
 ) int32 {
 
@@ -837,7 +837,7 @@ func (entry *DomainCacheEntry) GetRetentionDays(
 }
 
 // IsSampledForLongerRetentionEnabled return whether sample for longer retention is enabled or not
-func (entry *DomainCacheEntry) IsSampledForLongerRetentionEnabled(
+func (entry *NamespaceCacheEntry) IsSampledForLongerRetentionEnabled(
 	workflowID string,
 ) bool {
 
@@ -846,7 +846,7 @@ func (entry *DomainCacheEntry) IsSampledForLongerRetentionEnabled(
 }
 
 // IsSampledForLongerRetention return should given workflow been sampled or not
-func (entry *DomainCacheEntry) IsSampledForLongerRetention(
+func (entry *NamespaceCacheEntry) IsSampledForLongerRetention(
 	workflowID string,
 ) bool {
 

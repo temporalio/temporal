@@ -50,16 +50,16 @@ func registerReset(r registrar) {
 	registerActivity(r, resetBaseActivity, activityTypeResetBase)
 }
 
-func resetWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func resetWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	profile, err := beginWorkflow(ctx, wfTypeReset, scheduledTimeNanos)
 	if err != nil {
 		return err
 	}
 	info := workflow.GetInfo(ctx)
 
-	cwo := newChildWorkflowOptions(domain, wfTypeResetBase+"-"+info.WorkflowExecution.RunID)
+	cwo := newChildWorkflowOptions(namespace, wfTypeResetBase+"-"+info.WorkflowExecution.RunID)
 	baseCtx := workflow.WithChildOptions(ctx, cwo)
-	baseFuture := workflow.ExecuteChildWorkflow(baseCtx, wfTypeResetBase, workflow.Now(ctx).UnixNano(), info.WorkflowExecution.ID, info.WorkflowExecution.RunID, domain)
+	baseFuture := workflow.ExecuteChildWorkflow(baseCtx, wfTypeResetBase, workflow.Now(ctx).UnixNano(), info.WorkflowExecution.ID, info.WorkflowExecution.RunID, namespace)
 	var baseWE workflow.Execution
 	if err := baseFuture.GetChildWorkflowExecution().Get(baseCtx, &baseWE); err != nil {
 		return profile.end(err)
@@ -89,19 +89,19 @@ func resetWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 		StartToCloseTimeout:    expiration,
 	})
 	var newWE workflow.Execution
-	err = workflow.ExecuteActivity(activityCtx, activityTypeTriggerReset, domain, baseWE).Get(activityCtx, &newWE)
+	err = workflow.ExecuteActivity(activityCtx, activityTypeTriggerReset, namespace, baseWE).Get(activityCtx, &newWE)
 	if err != nil {
 		return profile.end(err)
 	}
 	if err := workflow.Sleep(ctx, time.Duration(bigWait*2)*time.Second); err != nil {
 		return profile.end(err)
 	}
-	err = workflow.ExecuteActivity(activityCtx, activityTypeVerifyReset, domain, newWE).Get(activityCtx, nil)
+	err = workflow.ExecuteActivity(activityCtx, activityTypeVerifyReset, namespace, newWE).Get(activityCtx, nil)
 
 	return profile.end(err)
 }
 
-func resetBaseWorkflow(ctx workflow.Context, scheduledTimeNanos int64, parentID, parentRunID, domain string) error {
+func resetBaseWorkflow(ctx workflow.Context, scheduledTimeNanos int64, parentID, parentRunID, namespace string) error {
 	profile, err := beginWorkflow(ctx, wfTypeResetBase, scheduledTimeNanos)
 	if err != nil {
 		return err
@@ -175,7 +175,7 @@ func resetBaseWorkflow(ctx workflow.Context, scheduledTimeNanos int64, parentID,
 	return profile.end(err)
 }
 
-func triggerResetActivity(ctx context.Context, domain string, baseWE workflow.Execution) (workflow.Execution, error) {
+func triggerResetActivity(ctx context.Context, namespace string, baseWE workflow.Execution) (workflow.Execution, error) {
 	svClient := getActivityContext(ctx).cadence.Service
 
 	reason := "reset canary"
@@ -207,7 +207,7 @@ func triggerResetActivity(ctx context.Context, domain string, baseWE workflow.Ex
 	}
 
 	req := &workflowservice.ResetWorkflowExecutionRequest{
-		Domain: domain,
+		Namespace: namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: baseWE.ID,
 			RunId:      baseWE.RunID,
@@ -224,11 +224,11 @@ func triggerResetActivity(ctx context.Context, domain string, baseWE workflow.Ex
 	return baseWE, nil
 }
 
-func verifyResetActivity(ctx context.Context, domain string, newWE workflow.Execution) error {
+func verifyResetActivity(ctx context.Context, namespace string, newWE workflow.Execution) error {
 	svClient := getActivityContext(ctx).cadence.Service
 
 	resp, err := svClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Domain: domain,
+		Namespace: namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: newWE.ID,
 			RunId:      newWE.RunID,

@@ -38,8 +38,8 @@ type (
 	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly
 	// started execution
 	RecordWorkflowExecutionStartedRequest struct {
-		DomainUUID         string
-		Domain             string // not persisted, used as config filter key
+		NamespaceUUID      string
+		Namespace          string // not persisted, used as config filter key
 		Execution          commonproto.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
@@ -53,8 +53,8 @@ type (
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a newly
 	// closed execution
 	RecordWorkflowExecutionClosedRequest struct {
-		DomainUUID         string
-		Domain             string // not persisted, used as config filter key
+		NamespaceUUID      string
+		Namespace          string // not persisted, used as config filter key
 		Execution          commonproto.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
@@ -70,8 +70,8 @@ type (
 
 	// UpsertWorkflowExecutionRequest is used to upsert workflow execution
 	UpsertWorkflowExecutionRequest struct {
-		DomainUUID         string
-		Domain             string // not persisted, used as config filter key
+		NamespaceUUID      string
+		Namespace          string // not persisted, used as config filter key
 		Execution          commonproto.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
@@ -82,10 +82,10 @@ type (
 		SearchAttributes   map[string][]byte
 	}
 
-	// ListWorkflowExecutionsRequest is used to list executions in a domain
+	// ListWorkflowExecutionsRequest is used to list executions in a namespace
 	ListWorkflowExecutionsRequest struct {
-		DomainUUID        string
-		Domain            string // domain name is not persisted, but used as config filter key
+		NamespaceUUID     string
+		Namespace         string // namespace name is not persisted, but used as config filter key
 		EarliestStartTime int64
 		LatestStartTime   int64
 		// Maximum number of workflow executions per page
@@ -95,11 +95,11 @@ type (
 		NextPageToken []byte
 	}
 
-	// ListWorkflowExecutionsRequestV2 is used to list executions in a domain
+	// ListWorkflowExecutionsRequestV2 is used to list executions in a namespace
 	ListWorkflowExecutionsRequestV2 struct {
-		DomainUUID string
-		Domain     string // domain name is not persisted, but used as config filter key
-		PageSize   int    // Maximum number of workflow executions per page
+		NamespaceUUID string
+		Namespace     string // namespace name is not persisted, but used as config filter key
+		PageSize      int    // Maximum number of workflow executions per page
 		// Token to continue reading next page of workflow executions.
 		// Pass in empty slice for first page.
 		NextPageToken []byte
@@ -116,9 +116,9 @@ type (
 
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions
 	CountWorkflowExecutionsRequest struct {
-		DomainUUID string
-		Domain     string // domain name is not persisted, but used as config filter key
-		Query      string
+		NamespaceUUID string
+		Namespace     string // namespace name is not persisted, but used as config filter key
+		Query         string
 	}
 
 	// CountWorkflowExecutionsResponse is response to CountWorkflowExecutions
@@ -127,14 +127,14 @@ type (
 	}
 
 	// ListWorkflowExecutionsByTypeRequest is used to list executions of
-	// a specific type in a domain
+	// a specific type in a namespace
 	ListWorkflowExecutionsByTypeRequest struct {
 		ListWorkflowExecutionsRequest
 		WorkflowTypeName string
 	}
 
 	// ListWorkflowExecutionsByWorkflowIDRequest is used to list executions that
-	// have specific WorkflowID in a domain
+	// have specific WorkflowID in a namespace
 	ListWorkflowExecutionsByWorkflowIDRequest struct {
 		ListWorkflowExecutionsRequest
 		WorkflowID string
@@ -149,9 +149,9 @@ type (
 
 	// GetClosedWorkflowExecutionRequest is used retrieve the record for a specific execution
 	GetClosedWorkflowExecutionRequest struct {
-		DomainUUID string
-		Domain     string // domain name is not persisted, but used as config filter key
-		Execution  commonproto.WorkflowExecution
+		NamespaceUUID string
+		Namespace     string // namespace name is not persisted, but used as config filter key
+		Execution     commonproto.WorkflowExecution
 	}
 
 	// GetClosedWorkflowExecutionResponse is the response to GetClosedWorkflowExecutionRequest
@@ -161,10 +161,10 @@ type (
 
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call
 	VisibilityDeleteWorkflowExecutionRequest struct {
-		DomainID   string
-		RunID      string
-		WorkflowID string
-		TaskID     int64
+		NamespaceID string
+		RunID       string
+		WorkflowID  string
+		TaskID      int64
 	}
 
 	// VisibilityManager is used to manage the visibility store

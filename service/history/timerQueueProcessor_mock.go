@@ -82,16 +82,16 @@ func (mr *MocktimerQueueProcessorMockRecorder) Stop() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MocktimerQueueProcessor)(nil).Stop))
 }
 
-// FailoverDomain mocks base method
-func (m *MocktimerQueueProcessor) FailoverDomain(domainIDs map[string]struct{}) {
+// FailoverNamespace mocks base method
+func (m *MocktimerQueueProcessor) FailoverNamespace(namespaceIDs map[string]struct{}) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "FailoverDomain", domainIDs)
+	m.ctrl.Call(m, "FailoverNamespace", namespaceIDs)
 }
 
-// FailoverDomain indicates an expected call of FailoverDomain
-func (mr *MocktimerQueueProcessorMockRecorder) FailoverDomain(domainIDs interface{}) *gomock.Call {
+// FailoverNamespace indicates an expected call of FailoverNamespace
+func (mr *MocktimerQueueProcessorMockRecorder) FailoverNamespace(namespaceIDs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailoverDomain", reflect.TypeOf((*MocktimerQueueProcessor)(nil).FailoverDomain), domainIDs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailoverNamespace", reflect.TypeOf((*MocktimerQueueProcessor)(nil).FailoverNamespace), namespaceIDs)
 }
 
 // NotifyNewTimers mocks base method

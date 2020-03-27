@@ -58,18 +58,18 @@ func (m *MockMetadata) EXPECT() *MockMetadataMockRecorder {
 	return m.recorder
 }
 
-// IsGlobalDomainEnabled mocks base method
-func (m *MockMetadata) IsGlobalDomainEnabled() bool {
+// IsGlobalNamespaceEnabled mocks base method
+func (m *MockMetadata) IsGlobalNamespaceEnabled() bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsGlobalDomainEnabled")
+	ret := m.ctrl.Call(m, "IsGlobalNamespaceEnabled")
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
-// IsGlobalDomainEnabled indicates an expected call of IsGlobalDomainEnabled
-func (mr *MockMetadataMockRecorder) IsGlobalDomainEnabled() *gomock.Call {
+// IsGlobalNamespaceEnabled indicates an expected call of IsGlobalNamespaceEnabled
+func (mr *MockMetadataMockRecorder) IsGlobalNamespaceEnabled() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsGlobalDomainEnabled", reflect.TypeOf((*MockMetadata)(nil).IsGlobalDomainEnabled))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsGlobalNamespaceEnabled", reflect.TypeOf((*MockMetadata)(nil).IsGlobalNamespaceEnabled))
 }
 
 // IsMasterCluster mocks base method

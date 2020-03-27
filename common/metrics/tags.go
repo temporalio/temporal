@@ -28,14 +28,14 @@ const (
 	goVersionTag    = "go_version"
 
 	instance      = "instance"
-	domain        = "domain"
+	namespace     = "namespace"
 	targetCluster = "target_cluster"
 	taskList      = "tasklist"
 	workflowType  = "workflowType"
 	activityType  = "activityType"
 
-	domainAllValue = "all"
-	unknownValue   = "_unknown_"
+	namespaceAllValue = "all"
+	unknownValue      = "_unknown_"
 )
 
 // Tag is an interface to define metrics tags
@@ -45,11 +45,11 @@ type Tag interface {
 }
 
 type (
-	domainTag struct {
+	namespaceTag struct {
 		value string
 	}
 
-	domainUnknownTag struct{}
+	namespaceUnknownTag struct{}
 
 	instanceTag struct {
 		value string
@@ -72,38 +72,38 @@ type (
 	}
 )
 
-// DomainTag returns a new domain tag. For timers, this also ensures that we
-// dual emit the metric with the all tag. If a blank domain is provided then
-// this converts that to an unknown domain.
-func DomainTag(value string) Tag {
+// NamespaceTag returns a new namespace tag. For timers, this also ensures that we
+// dual emit the metric with the all tag. If a blank namespace is provided then
+// this converts that to an unknown namespace.
+func NamespaceTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return domainTag{value}
+	return namespaceTag{value}
 }
 
-// Key returns the key of the domain tag
-func (d domainTag) Key() string {
-	return domain
+// Key returns the key of the namespace tag
+func (d namespaceTag) Key() string {
+	return namespace
 }
 
-// Value returns the value of a domain tag
-func (d domainTag) Value() string {
+// Value returns the value of a namespace tag
+func (d namespaceTag) Value() string {
 	return d.value
 }
 
-// DomainUnknownTag returns a new domain:unknown tag-value
-func DomainUnknownTag() Tag {
-	return domainUnknownTag{}
+// NamespaceUnknownTag returns a new namespace:unknown tag-value
+func NamespaceUnknownTag() Tag {
+	return namespaceUnknownTag{}
 }
 
-// Key returns the key of the domain unknown tag
-func (d domainUnknownTag) Key() string {
-	return domain
+// Key returns the key of the namespace unknown tag
+func (d namespaceUnknownTag) Key() string {
+	return namespace
 }
 
-// Value returns the value of the domain unknown tag
-func (d domainUnknownTag) Value() string {
+// Value returns the value of the namespace unknown tag
+func (d namespaceUnknownTag) Value() string {
 	return unknownValue
 }
 

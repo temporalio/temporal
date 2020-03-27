@@ -20,7 +20,7 @@
 
 //go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination dlqMessageHandler_mock.go
 
-package domain
+package namespace
 
 import (
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -32,7 +32,7 @@ import (
 )
 
 type (
-	// DLQMessageHandler is the interface handles domain DLQ messages
+	// DLQMessageHandler is the interface handles namespace DLQ messages
 	DLQMessageHandler interface {
 		Read(lastMessageID int, pageSize int, pageToken []byte) ([]*replication.ReplicationTask, []byte, error)
 		Purge(lastMessageID int) error
@@ -40,38 +40,38 @@ type (
 	}
 
 	dlqMessageHandlerImpl struct {
-		replicationHandler     ReplicationTaskExecutor
-		domainReplicationQueue persistence.DomainReplicationQueue
-		logger                 log.Logger
+		replicationHandler        ReplicationTaskExecutor
+		namespaceReplicationQueue persistence.NamespaceReplicationQueue
+		logger                    log.Logger
 	}
 )
 
 // NewDLQMessageHandler returns a DLQTaskHandler instance
 func NewDLQMessageHandler(
 	replicationHandler ReplicationTaskExecutor,
-	domainReplicationQueue persistence.DomainReplicationQueue,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.Logger,
 ) DLQMessageHandler {
 	return &dlqMessageHandlerImpl{
-		replicationHandler:     replicationHandler,
-		domainReplicationQueue: domainReplicationQueue,
-		logger:                 logger,
+		replicationHandler:        replicationHandler,
+		namespaceReplicationQueue: namespaceReplicationQueue,
+		logger:                    logger,
 	}
 }
 
-// ReadMessages reads domain replication DLQ messages
+// ReadMessages reads namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Read(
 	lastMessageID int,
 	pageSize int,
 	pageToken []byte,
 ) ([]*replication.ReplicationTask, []byte, error) {
 
-	ackLevel, err := d.domainReplicationQueue.GetDLQAckLevel()
+	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return d.domainReplicationQueue.GetMessagesFromDLQ(
+	return d.namespaceReplicationQueue.GetMessagesFromDLQ(
 		ackLevel,
 		lastMessageID,
 		pageSize,
@@ -79,24 +79,24 @@ func (d *dlqMessageHandlerImpl) Read(
 	)
 }
 
-// PurgeMessages purges domain replication DLQ messages
+// PurgeMessages purges namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Purge(
 	lastMessageID int,
 ) error {
 
-	ackLevel, err := d.domainReplicationQueue.GetDLQAckLevel()
+	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
 	if err != nil {
 		return err
 	}
 
-	if err := d.domainReplicationQueue.RangeDeleteMessagesFromDLQ(
+	if err := d.namespaceReplicationQueue.RangeDeleteMessagesFromDLQ(
 		ackLevel,
 		lastMessageID,
 	); err != nil {
 		return err
 	}
 
-	if err := d.domainReplicationQueue.UpdateDLQAckLevel(
+	if err := d.namespaceReplicationQueue.UpdateDLQAckLevel(
 		lastMessageID,
 	); err != nil {
 		d.logger.Error("Failed to update DLQ ack level after purging messages", tag.Error(err))
@@ -105,19 +105,19 @@ func (d *dlqMessageHandlerImpl) Purge(
 	return nil
 }
 
-// MergeMessages merges domain replication DLQ messages
+// MergeMessages merges namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Merge(
 	lastMessageID int,
 	pageSize int,
 	pageToken []byte,
 ) ([]byte, error) {
 
-	ackLevel, err := d.domainReplicationQueue.GetDLQAckLevel()
+	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
 	if err != nil {
 		return nil, err
 	}
 
-	messages, token, err := d.domainReplicationQueue.GetMessagesFromDLQ(
+	messages, token, err := d.namespaceReplicationQueue.GetMessagesFromDLQ(
 		ackLevel,
 		lastMessageID,
 		pageSize,
@@ -129,28 +129,28 @@ func (d *dlqMessageHandlerImpl) Merge(
 
 	var ackedMessageID int
 	for _, message := range messages {
-		domainTask := message.GetDomainTaskAttributes()
-		if domainTask == nil {
-			return nil, serviceerror.NewInternal("Encounter non domain replication task in domain replication queue.")
+		namespaceTask := message.GetNamespaceTaskAttributes()
+		if namespaceTask == nil {
+			return nil, serviceerror.NewInternal("Encounter non namespace replication task in namespace replication queue.")
 		}
 
 		if err := d.replicationHandler.Execute(
-			domainTask,
+			namespaceTask,
 		); err != nil {
 			return nil, err
 		}
 		ackedMessageID = int(message.SourceTaskId)
 	}
 
-	if err := d.domainReplicationQueue.RangeDeleteMessagesFromDLQ(
+	if err := d.namespaceReplicationQueue.RangeDeleteMessagesFromDLQ(
 		ackLevel,
 		ackedMessageID,
 	); err != nil {
-		d.logger.Error("failed to delete merged tasks on merging domain DLQ message", tag.Error(err))
+		d.logger.Error("failed to delete merged tasks on merging namespace DLQ message", tag.Error(err))
 		return nil, err
 	}
-	if err := d.domainReplicationQueue.UpdateDLQAckLevel(ackedMessageID); err != nil {
-		d.logger.Error("failed to update ack level on merging domain DLQ message", tag.Error(err))
+	if err := d.namespaceReplicationQueue.UpdateDLQAckLevel(ackedMessageID); err != nil {
+		d.logger.Error("failed to update ack level on merging namespace DLQ message", tag.Error(err))
 	}
 
 	return token, nil

@@ -33,8 +33,8 @@ type (
 	// taskListID is the key that uniquely identifies a task list
 	taskListID struct {
 		qualifiedTaskListName
-		domainID string
-		taskType int32
+		namespaceID string
+		taskType    int32
 	}
 	// qualifiedTaskListName refers to the fully qualified task list name
 	qualifiedTaskListName struct {
@@ -127,14 +127,14 @@ func (tn *qualifiedTaskListName) init() error {
 }
 
 // newTaskListID returns taskListID which uniquely identfies as task list
-func newTaskListID(domainID string, taskListName string, taskType int32) (*taskListID, error) {
+func newTaskListID(namespaceID string, taskListName string, taskType int32) (*taskListID, error) {
 	name, err := newTaskListName(taskListName)
 	if err != nil {
 		return nil, err
 	}
 	return &taskListID{
 		qualifiedTaskListName: name,
-		domainID:              domainID,
+		namespaceID:           namespaceID,
 		taskType:              taskType,
 	}, nil
 }

@@ -45,7 +45,7 @@ import (
 
 const (
 	testWorkflowTypeName    = "test-workflow-type"
-	exampleVisibilityRecord = `{"DomainID":"test-domain-id","DomainName":"test-domain-name","WorkflowID":"test-workflow-id","RunID":"test-run-id","WorkflowTypeName":"test-workflow-type","StartTimestamp":1580896574804475000,"ExecutionTimestamp":0,"CloseTimestamp":1580896575946478000,"CloseStatus":"WorkflowExecutionCloseStatusCompleted","HistoryLength":36,"Memo":null,"SearchAttributes":{},"HistoryArchivalURI":"gs://my-bucket-cad/cadence_archival/development"}`
+	exampleVisibilityRecord = `{"NamespaceID":"test-namespace-id","Namespace":"test-namespace","WorkflowID":"test-workflow-id","RunID":"test-run-id","WorkflowTypeName":"test-workflow-type","StartTimestamp":1580896574804475000,"ExecutionTimestamp":0,"CloseTimestamp":1580896575946478000,"CloseStatus":"WorkflowExecutionCloseStatusCompleted","HistoryLength":36,"Memo":null,"SearchAttributes":{},"HistoryArchivalURI":"gs://my-bucket-cad/cadence_archival/development"}`
 )
 
 func (s *visibilityArchiverSuite) SetupTest() {
@@ -57,8 +57,8 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	}
 	s.expectedVisibilityRecords = []*archiverproto.ArchiveVisibilityRequest{
 		{
-			DomainID:         testDomainID,
-			DomainName:       testDomainName,
+			NamespaceID:      testNamespaceID,
+			Namespace:        testNamespace,
 			WorkflowID:       testWorkflowID,
 			RunID:            testRunID,
 			WorkflowTypeName: testWorkflowTypeName,
@@ -134,10 +134,10 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidVisibilityURI() {
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
 	request := &archiverproto.ArchiveVisibilityRequest{
-		DomainID:   testDomainID,
-		DomainName: testDomainName,
-		WorkflowID: testWorkflowID,
-		RunID:      testRunID,
+		NamespaceID: testNamespaceID,
+		Namespace:   testNamespace,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
 	}
 
 	err = visibilityArchiver.Archive(ctx, URI, request)
@@ -156,9 +156,9 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidVisibilityURI() {
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
 	request := &archiver.QueryVisibilityRequest{
-		DomainID: testDomainID,
-		PageSize: 10,
-		Query:    "WorkflowType='type::example' AND CloseTime='2020-02-05T11:00:00Z' AND SearchPrecision='Day'",
+		NamespaceID: testNamespaceID,
+		PageSize:    10,
+		Query:       "WorkflowType='type::example' AND CloseTime='2020-02-05T11:00:00Z' AND SearchPrecision='Day'",
 	}
 
 	_, err = visibilityArchiver.Query(ctx, URI, request)
@@ -179,8 +179,8 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	s.NoError(err)
 
 	request := &archiverproto.ArchiveVisibilityRequest{
-		DomainName:         testDomainName,
-		DomainID:           testDomainID,
+		Namespace:          testNamespace,
+		NamespaceID:        testNamespaceID,
 		WorkflowID:         testWorkflowID,
 		RunID:              testRunID,
 		WorkflowTypeName:   testWorkflowTypeName,
@@ -210,9 +210,9 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(nil, errors.New("invalid query"))
 	visibilityArchiver.queryParser = mockParser
 	response, err := visibilityArchiver.Query(ctx, URI, &archiver.QueryVisibilityRequest{
-		DomainID: "some random domainID",
-		PageSize: 10,
-		Query:    "some invalid query",
+		NamespaceID: "some random namespaceID",
+		PageSize:    10,
+		Query:       "some invalid query",
 	})
 	s.Error(err)
 	s.Nil(response)
@@ -235,7 +235,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
-		DomainID:      testDomainID,
+		NamespaceID:   testNamespaceID,
 		Query:         "parsed by mockParser",
 		PageSize:      1,
 		NextPageToken: []byte{1, 2, 3},
@@ -252,7 +252,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", mock.Anything, URI, mock.Anything).Return(false, nil)
 	storageWrapper.On("QueryWithFilters", mock.Anything, URI, mock.Anything, 10, 0, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]string{"closeTimeout_2020-02-05T09:56:14Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility"}, true, 1, nil).Times(1)
-	storageWrapper.On("Get", mock.Anything, URI, "test-domain-id/closeTimeout_2020-02-05T09:56:14Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility").Return([]byte(exampleVisibilityRecord), nil)
+	storageWrapper.On("Get", mock.Anything, URI, "test-namespace-id/closeTimeout_2020-02-05T09:56:14Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility").Return([]byte(exampleVisibilityRecord), nil)
 
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
@@ -270,9 +270,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
-		DomainID: testDomainID,
-		PageSize: 10,
-		Query:    "parsed by mockParser",
+		NamespaceID: testNamespaceID,
+		PageSize:    10,
+		Query:       "parsed by mockParser",
 	}
 
 	response, err := visibilityArchiver.Query(ctx, URI, request)
@@ -293,9 +293,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	storageWrapper.On("Exist", mock.Anything, URI, mock.Anything).Return(false, nil)
 	storageWrapper.On("QueryWithFilters", mock.Anything, URI, mock.Anything, pageSize, 0, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]string{"closeTimeout_2020-02-05T09:56:14Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility", "closeTimeout_2020-02-05T09:56:15Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility"}, false, 1, nil).Times(2)
 	storageWrapper.On("QueryWithFilters", mock.Anything, URI, mock.Anything, pageSize, 1, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]string{"closeTimeout_2020-02-05T09:56:16Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility"}, true, 2, nil).Times(2)
-	storageWrapper.On("Get", mock.Anything, URI, "test-domain-id/closeTimeout_2020-02-05T09:56:14Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility").Return([]byte(exampleVisibilityRecord), nil)
-	storageWrapper.On("Get", mock.Anything, URI, "test-domain-id/closeTimeout_2020-02-05T09:56:15Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility").Return([]byte(exampleVisibilityRecord), nil)
-	storageWrapper.On("Get", mock.Anything, URI, "test-domain-id/closeTimeout_2020-02-05T09:56:16Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility").Return([]byte(exampleVisibilityRecord), nil)
+	storageWrapper.On("Get", mock.Anything, URI, "test-namespace-id/closeTimeout_2020-02-05T09:56:14Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility").Return([]byte(exampleVisibilityRecord), nil)
+	storageWrapper.On("Get", mock.Anything, URI, "test-namespace-id/closeTimeout_2020-02-05T09:56:15Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility").Return([]byte(exampleVisibilityRecord), nil)
+	storageWrapper.On("Get", mock.Anything, URI, "test-namespace-id/closeTimeout_2020-02-05T09:56:16Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility").Return([]byte(exampleVisibilityRecord), nil)
 
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
@@ -313,9 +313,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
-		DomainID: testDomainID,
-		PageSize: pageSize,
-		Query:    "parsed by mockParser",
+		NamespaceID: testNamespaceID,
+		PageSize:    pageSize,
+		Query:       "parsed by mockParser",
 	}
 
 	response, err := visibilityArchiver.Query(ctx, URI, request)

@@ -97,8 +97,8 @@ type (
 	}
 
 	mutableStateTaskGeneratorImpl struct {
-		domainCache cache.DomainCache
-		logger      log.Logger
+		namespaceCache cache.NamespaceCache
+		logger         log.Logger
 
 		mutableState mutableState
 	}
@@ -109,14 +109,14 @@ const defaultWorkflowRetentionInDays int32 = 1
 var _ mutableStateTaskGenerator = (*mutableStateTaskGeneratorImpl)(nil)
 
 func newMutableStateTaskGenerator(
-	domainCache cache.DomainCache,
+	namespaceCache cache.NamespaceCache,
 	logger log.Logger,
 	mutableState mutableState,
 ) *mutableStateTaskGeneratorImpl {
 
 	return &mutableStateTaskGeneratorImpl{
-		domainCache: domainCache,
-		logger:      logger,
+		namespaceCache: namespaceCache,
+		logger:         logger,
 
 		mutableState: mutableState,
 	}
@@ -162,12 +162,12 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 	})
 
 	retentionInDays := defaultWorkflowRetentionInDays
-	domainEntry, err := r.domainCache.GetDomainByID(executionInfo.DomainID)
+	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(executionInfo.NamespaceID)
 	switch err.(type) {
 	case nil:
-		retentionInDays = domainEntry.GetRetentionDays(executionInfo.WorkflowID)
+		retentionInDays = namespaceEntry.GetRetentionDays(executionInfo.WorkflowID)
 	case *serviceerror.NotFound:
-		// domain is not accessible, use default value above
+		// namespace is not accessible, use default value above
 	default:
 		return err
 	}
@@ -247,7 +247,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
 	r.mutableState.AddTransferTasks(&persistence.DecisionTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
-		DomainID:            executionInfo.DomainID,
+		NamespaceID:         executionInfo.NamespaceID,
 		TaskList:            decision.TaskList,
 		ScheduleID:          decision.ScheduleID,
 		Version:             decision.Version,
@@ -314,16 +314,16 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID))
 	}
 
-	var targetDomainID string
+	var targetNamespaceID string
 	var err error
-	if activityInfo.DomainID != "" {
-		targetDomainID = activityInfo.DomainID
+	if activityInfo.NamespaceID != "" {
+		targetNamespaceID = activityInfo.NamespaceID
 	} else {
 		// TODO remove this block after Mar, 1th, 2020
-		//  previously, DomainID in activity info is not used, so need to get
+		//  previously, NamespaceID in activity info is not used, so need to get
 		//  schedule event from DB checking whether activity to be scheduled
-		//  belongs to this domain
-		targetDomainID, err = r.getTargetDomainID(attr.GetDomain())
+		//  belongs to this namespace
+		targetNamespaceID, err = r.getTargetNamespaceID(attr.GetNamespace())
 		if err != nil {
 			return err
 		}
@@ -332,7 +332,7 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
 	r.mutableState.AddTransferTasks(&persistence.ActivityTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
-		DomainID:            targetDomainID,
+		NamespaceID:         targetNamespaceID,
 		TaskList:            activityInfo.TaskList,
 		ScheduleID:          activityInfo.ScheduleID,
 		Version:             activityInfo.Version,
@@ -367,14 +367,14 @@ func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
 
 	attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 	childWorkflowScheduleID := event.GetEventId()
-	childWorkflowTargetDomain := attr.GetDomain()
+	childWorkflowTargetNamespace := attr.GetNamespace()
 
 	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childWorkflowScheduleID)
 	if !ok {
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduleID))
 	}
 
-	targetDomainID, err := r.getTargetDomainID(childWorkflowTargetDomain)
+	targetNamespaceID, err := r.getTargetNamespaceID(childWorkflowTargetNamespace)
 	if err != nil {
 		return err
 	}
@@ -382,7 +382,7 @@ func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
 	r.mutableState.AddTransferTasks(&persistence.StartChildExecutionTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
-		TargetDomainID:      targetDomainID,
+		TargetNamespaceID:   targetNamespaceID,
 		TargetWorkflowID:    childWorkflowInfo.StartedWorkflowID,
 		InitiatedID:         childWorkflowInfo.InitiatedID,
 		Version:             childWorkflowInfo.Version,
@@ -399,7 +399,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 	attr := event.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 	scheduleID := event.GetEventId()
 	version := event.GetVersion()
-	targetDomainName := attr.GetDomain()
+	targetNamespace := attr.GetNamespace()
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
@@ -409,7 +409,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduleID))
 	}
 
-	targetDomainID, err := r.getTargetDomainID(targetDomainName)
+	targetNamespaceID, err := r.getTargetNamespaceID(targetNamespace)
 	if err != nil {
 		return err
 	}
@@ -417,7 +417,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 	r.mutableState.AddTransferTasks(&persistence.CancelExecutionTask{
 		// TaskID is set by shard
 		VisibilityTimestamp:     now,
-		TargetDomainID:          targetDomainID,
+		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
 		TargetRunID:             targetRunID,
 		TargetChildWorkflowOnly: targetChildOnly,
@@ -436,7 +436,7 @@ func (r *mutableStateTaskGeneratorImpl) generateSignalExternalTasks(
 	attr := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 	scheduleID := event.GetEventId()
 	version := event.GetVersion()
-	targetDomainName := attr.GetDomain()
+	targetNamespace := attr.GetNamespace()
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
@@ -446,7 +446,7 @@ func (r *mutableStateTaskGeneratorImpl) generateSignalExternalTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduleID))
 	}
 
-	targetDomainID, err := r.getTargetDomainID(targetDomainName)
+	targetNamespaceID, err := r.getTargetNamespaceID(targetNamespace)
 	if err != nil {
 		return err
 	}
@@ -454,7 +454,7 @@ func (r *mutableStateTaskGeneratorImpl) generateSignalExternalTasks(
 	r.mutableState.AddTransferTasks(&persistence.SignalExecutionTask{
 		// TaskID is set by shard
 		VisibilityTimestamp:     now,
-		TargetDomainID:          targetDomainID,
+		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
 		TargetRunID:             targetRunID,
 		TargetChildWorkflowOnly: targetChildOnly,
@@ -517,18 +517,18 @@ func (r *mutableStateTaskGeneratorImpl) getTimerSequence(now time.Time) timerSeq
 	return newTimerSequence(timeSource, r.mutableState)
 }
 
-func (r *mutableStateTaskGeneratorImpl) getTargetDomainID(
-	targetDomainName string,
+func (r *mutableStateTaskGeneratorImpl) getTargetNamespaceID(
+	targetNamespace string,
 ) (string, error) {
 
-	targetDomainID := r.mutableState.GetExecutionInfo().DomainID
-	if targetDomainName != "" {
-		targetDomainEntry, err := r.domainCache.GetDomain(targetDomainName)
+	targetNamespaceID := r.mutableState.GetExecutionInfo().NamespaceID
+	if targetNamespace != "" {
+		targetNamespaceEntry, err := r.namespaceCache.GetNamespace(targetNamespace)
 		if err != nil {
 			return "", err
 		}
-		targetDomainID = targetDomainEntry.GetInfo().ID
+		targetNamespaceID = targetNamespaceEntry.GetInfo().ID
 	}
 
-	return targetDomainID, nil
+	return targetNamespaceID, nil
 }

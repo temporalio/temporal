@@ -70,8 +70,8 @@ type (
 		serializer persistence.PayloadSerializer
 		logger     log.Logger
 
-		domainName                  string
-		domainID                    string
+		namespace                   string
+		namespaceID                 string
 		version                     int64
 		versionIncrement            int64
 		mockAdminClient             map[string]adminClient.Client
@@ -137,11 +137,11 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.active = cluster
 
-	s.registerDomain()
+	s.registerNamespace()
 
 	s.version = clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].InitialFailoverVersion
 	s.versionIncrement = clusterConfigs[0].ClusterMetadata.FailoverVersionIncrement
-	s.generator = test.InitializeHistoryEventGenerator(s.domainName, s.version)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.version)
 }
 
 func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
@@ -180,7 +180,7 @@ func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
 func (s *nDCIntegrationTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.generator = test.InitializeHistoryEventGenerator(s.domainName, s.version)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.version)
 }
 
 func (s *nDCIntegrationTestSuite) TearDownSuite() {
@@ -205,7 +205,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	for _, version := range versions {
 		runID := uuid.New()
 		var historyBatch []*commonproto.History
-		s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
+		s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
 
 		for s.generator.HasNextVertex() {
 			events := s.generator.GetNextVertices()
@@ -242,7 +242,7 @@ func (s *nDCIntegrationTestSuite) verifyEventHistory(
 	replicatedHistory, err := passiveClient.GetWorkflowExecutionHistory(
 		host.NewContext(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -295,7 +295,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 		runID := uuid.New()
 
 		var baseBranch []*commonproto.History
-		baseGenerator := test.InitializeHistoryEventGenerator(s.domainName, version)
+		baseGenerator := test.InitializeHistoryEventGenerator(s.namespace, version)
 		baseGenerator.SetVersion(version)
 
 		for i := 0; i < 10 && baseGenerator.HasNextVertex(); i++ {
@@ -952,7 +952,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	version := int64(101)
 	runID := uuid.New()
 	historyBatch := []*commonproto.History{}
-	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
@@ -977,7 +977,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	version = int64(1)
 	runID = uuid.New()
 	historyBatch = []*commonproto.History{}
-	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
 
 	// verify two batches of zombie workflow are call reapply API
 	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).Times(2)
@@ -1013,7 +1013,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 
 	historyClient := s.active.GetHistoryClient()
 
-	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
 	baseBranch := []*commonproto.History{}
 	var taskID int64
 	for i := 0; i < 4 && s.generator.HasNextVertex(); i++ {
@@ -1123,7 +1123,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	historyClient := s.active.GetHistoryClient()
 	adminClient := s.active.GetAdminClient()
 	getHistory := func(
-		domain string,
+		namespace string,
 		workflowID string,
 		runID string,
 		startEventID int64,
@@ -1139,7 +1139,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			RunId:      runID,
 		}
 		return adminClient.GetWorkflowExecutionRawHistoryV2(host.NewContext(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Domain:            domain,
+			Namespace:         namespace,
 			Execution:         execution,
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
@@ -1492,7 +1492,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	batchCount := 0
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
-			s.domainName,
+			s.namespace,
 			workflowID,
 			runID,
 			14,
@@ -1514,7 +1514,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	batchCount = 0
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
-			s.domainName,
+			s.namespace,
 			workflowID,
 			runID,
 			17,
@@ -1536,7 +1536,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	batchCount = 0
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
-			s.domainName,
+			s.namespace,
 			workflowID,
 			runID,
 			14,
@@ -1558,7 +1558,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	batchCount = 0
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
-			s.domainName,
+			s.namespace,
 			workflowID,
 			runID,
 			common.EmptyEventID,
@@ -1576,35 +1576,35 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	s.Equal(batchCount, 10)
 }
 
-func (s *nDCIntegrationTestSuite) registerDomain() {
-	s.domainName = "test-simple-workflow-ndc-" + common.GenerateRandomString(5)
+func (s *nDCIntegrationTestSuite) registerNamespace() {
+	s.namespace = "test-simple-workflow-ndc-" + common.GenerateRandomString(5)
 	client1 := s.active.GetFrontendClient() // active
-	_, err := client1.RegisterDomain(host.NewContext(), &workflowservice.RegisterDomainRequest{
-		Name:           s.domainName,
-		IsGlobalDomain: true,
-		Clusters:       clusterReplicationConfig,
+	_, err := client1.RegisterNamespace(host.NewContext(), &workflowservice.RegisterNamespaceRequest{
+		Name:              s.namespace,
+		IsGlobalNamespace: true,
+		Clusters:          clusterReplicationConfig,
 		// make the active cluster `standby` and replicate to `active` cluster
 		ActiveClusterName:                      clusterName[1],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	})
 	s.Require().NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: s.domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: s.namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.Require().NoError(err)
 	s.Require().NotNil(resp)
-	s.domainID = resp.GetDomainInfo().GetUuid()
-	// Wait for domain cache to pick the change
-	time.Sleep(2 * cache.DomainCacheRefreshInterval)
+	s.namespaceID = resp.GetNamespaceInfo().GetUuid()
+	// Wait for namespace cache to pick the change
+	time.Sleep(2 * cache.NamespaceCacheRefreshInterval)
 
-	s.logger.Info("Registered domain", tag.WorkflowDomainName(s.domainName), tag.WorkflowDomainID(s.domainID))
+	s.logger.Info("Registered namespace", tag.WorkflowNamespace(s.namespace), tag.WorkflowNamespaceID(s.namespaceID))
 }
 
 func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 	event *commonproto.HistoryEvent,
-	domain string,
+	namespace string,
 	workflowID string,
 	runID string,
 	version int64,
@@ -1628,8 +1628,8 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 		Version:   version,
 		TaskId:    1,
 		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:         &commonproto.WorkflowType{Name: workflowType},
-			ParentWorkflowDomain: domain,
+			WorkflowType:            &commonproto.WorkflowType{Name: workflowType},
+			ParentWorkflowNamespace: namespace,
 			ParentWorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: uuid.New(),
 				RunId:      uuid.New(),
@@ -1695,7 +1695,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	//  we should generate these as part of modeled based testing
 	lastEvent := batch.Events[len(batch.Events)-1]
 	newRunEventBlob := s.generateNewRunHistory(
-		lastEvent, s.domainName, workflowID, runID, lastEvent.GetVersion(), workflowType, tasklist,
+		lastEvent, s.namespace, workflowID, runID, lastEvent.GetVersion(), workflowType, tasklist,
 	)
 	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
 	// modify the NewExecutionRunId attr
@@ -1716,7 +1716,7 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
 		req := &historyservice.ReplicateEventsV2Request{
-			DomainUUID: s.domainID,
+			NamespaceUUID: s.namespaceID,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -1752,7 +1752,7 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 			SourceTaskId: 1,
 			Attributes: &replication.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replication.HistoryTaskV2Attributes{
 				TaskId:              1,
-				DomainId:            s.domainID,
+				NamespaceId:         s.namespaceID,
 				WorkflowId:          workflowID,
 				RunId:               runID,
 				VersionHistoryItems: s.toProtoVersionHistoryItems(versionHistory),

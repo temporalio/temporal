@@ -88,18 +88,18 @@ func (mr *MockBeanMockRecorder) SetHistoryClient(client interface{}) *gomock.Cal
 }
 
 // GetMatchingClient mocks base method
-func (m *MockBean) GetMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error) {
+func (m *MockBean) GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMatchingClient", domainIDToName)
+	ret := m.ctrl.Call(m, "GetMatchingClient", namespaceIDToName)
 	ret0, _ := ret[0].(matching.Client)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetMatchingClient indicates an expected call of GetMatchingClient
-func (mr *MockBeanMockRecorder) GetMatchingClient(domainIDToName interface{}) *gomock.Call {
+func (mr *MockBeanMockRecorder) GetMatchingClient(namespaceIDToName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMatchingClient", reflect.TypeOf((*MockBean)(nil).GetMatchingClient), domainIDToName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMatchingClient", reflect.TypeOf((*MockBean)(nil).GetMatchingClient), namespaceIDToName)
 }
 
 // SetMatchingClient mocks base method

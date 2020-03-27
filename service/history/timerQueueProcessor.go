@@ -46,7 +46,7 @@ var (
 type (
 	timerQueueProcessor interface {
 		common.Daemon
-		FailoverDomain(domainIDs map[string]struct{})
+		FailoverNamespace(namespaceIDs map[string]struct{})
 		NotifyNewTimers(clusterName string, timerTask []persistence.Task)
 		LockTaskProcessing()
 		UnlockTaskProcessing()
@@ -56,21 +56,21 @@ type (
 	updateTimerAckLevel     func(timerKey) error
 	timerQueueShutdown      func() error
 	timerQueueProcessorImpl struct {
-		isGlobalDomainEnabled  bool
-		currentClusterName     string
-		shard                  ShardContext
-		taskAllocator          taskAllocator
-		config                 *Config
-		metricsClient          metrics.Client
-		historyService         *historyEngineImpl
-		ackLevel               timerKey
-		logger                 log.Logger
-		matchingClient         matching.Client
-		isStarted              int32
-		isStopped              int32
-		shutdownChan           chan struct{}
-		activeTimerProcessor   *timerQueueActiveProcessorImpl
-		standbyTimerProcessors map[string]*timerQueueStandbyProcessorImpl
+		isGlobalNamespaceEnabled bool
+		currentClusterName       string
+		shard                    ShardContext
+		taskAllocator            taskAllocator
+		config                   *Config
+		metricsClient            metrics.Client
+		historyService           *historyEngineImpl
+		ackLevel                 timerKey
+		logger                   log.Logger
+		matchingClient           matching.Client
+		isStarted                int32
+		isStopped                int32
+		shutdownChan             chan struct{}
+		activeTimerProcessor     *timerQueueActiveProcessorImpl
+		standbyTimerProcessors   map[string]*timerQueueStandbyProcessorImpl
 	}
 )
 
@@ -94,7 +94,7 @@ func newTimerQueueProcessor(
 		if clusterName != shard.GetService().GetClusterMetadata().GetCurrentClusterName() {
 			historyRereplicator := xdc.NewHistoryRereplicator(
 				currentClusterName,
-				shard.GetDomainCache(),
+				shard.GetNamespaceCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
 					return historyService.ReplicateRawEvents(ctx, request)
@@ -104,7 +104,7 @@ func newTimerQueueProcessor(
 				logger,
 			)
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				shard.GetDomainCache(),
+				shard.GetNamespaceCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 					return historyService.ReplicateEventsV2(ctx, request)
@@ -125,19 +125,19 @@ func newTimerQueueProcessor(
 	}
 
 	return &timerQueueProcessorImpl{
-		isGlobalDomainEnabled:  shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled(),
-		currentClusterName:     currentClusterName,
-		shard:                  shard,
-		taskAllocator:          taskAllocator,
-		config:                 shard.GetConfig(),
-		metricsClient:          historyService.metricsClient,
-		historyService:         historyService,
-		ackLevel:               timerKey{VisibilityTimestamp: shard.GetTimerAckLevel()},
-		logger:                 logger,
-		matchingClient:         matchingClient,
-		shutdownChan:           make(chan struct{}),
-		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, taskAllocator, logger),
-		standbyTimerProcessors: standbyTimerProcessors,
+		isGlobalNamespaceEnabled: shard.GetService().GetClusterMetadata().IsGlobalNamespaceEnabled(),
+		currentClusterName:       currentClusterName,
+		shard:                    shard,
+		taskAllocator:            taskAllocator,
+		config:                   shard.GetConfig(),
+		metricsClient:            historyService.metricsClient,
+		historyService:           historyService,
+		ackLevel:                 timerKey{VisibilityTimestamp: shard.GetTimerAckLevel()},
+		logger:                   logger,
+		matchingClient:           matchingClient,
+		shutdownChan:             make(chan struct{}),
+		activeTimerProcessor:     newTimerQueueActiveProcessor(shard, historyService, matchingClient, taskAllocator, logger),
+		standbyTimerProcessors:   standbyTimerProcessors,
 	}
 }
 
@@ -146,7 +146,7 @@ func (t *timerQueueProcessorImpl) Start() {
 		return
 	}
 	t.activeTimerProcessor.Start()
-	if t.isGlobalDomainEnabled {
+	if t.isGlobalNamespaceEnabled {
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			standbyTimerProcessor.Start()
 		}
@@ -159,7 +159,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 		return
 	}
 	t.activeTimerProcessor.Stop()
-	if t.isGlobalDomainEnabled {
+	if t.isGlobalNamespaceEnabled {
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			standbyTimerProcessor.Stop()
 		}
@@ -188,8 +188,8 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(
 	standbyTimerProcessor.retryTasks()
 }
 
-func (t *timerQueueProcessorImpl) FailoverDomain(
-	domainIDs map[string]struct{},
+func (t *timerQueueProcessorImpl) FailoverNamespace(
+	namespaceIDs map[string]struct{},
 ) {
 
 	minLevel := t.shard.GetTimerClusterAckLevel(t.currentClusterName)
@@ -208,14 +208,14 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 	// the ack manager is exclusive, so just add a cassandra min precision
 	maxLevel := t.activeTimerProcessor.getReadLevel().VisibilityTimestamp.Add(1 * time.Millisecond)
 	t.logger.Info("Timer Failover Triggered",
-		tag.WorkflowDomainIDs(domainIDs),
+		tag.WorkflowNamespaceIDs(namespaceIDs),
 		tag.MinLevel(minLevel.UnixNano()),
 		tag.MaxLevel(maxLevel.UnixNano()))
 	// we should consider make the failover idempotent
 	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(
 		t.shard,
 		t.historyService,
-		domainIDs,
+		namespaceIDs,
 		standbyClusterName,
 		minLevel,
 		maxLevel,
@@ -229,7 +229,7 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 	}
 
 	// NOTE: READ REF BEFORE MODIFICATION
-	// ref: historyEngine.go registerDomainFailoverCallback function
+	// ref: historyEngine.go registerNamespaceFailoverCallback function
 	err := updateShardAckLevel(timerKey{VisibilityTimestamp: minLevel})
 	if err != nil {
 		t.logger.Error("Error when update shard ack level", tag.Error(err))
@@ -275,7 +275,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	lowerAckLevel := t.ackLevel
 	upperAckLevel := t.activeTimerProcessor.getAckLevel()
 
-	if t.isGlobalDomainEnabled {
+	if t.isGlobalNamespaceEnabled {
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			ackLevel := standbyTimerProcessor.getAckLevel()
 			if !compareTimerIDLess(&upperAckLevel, &ackLevel) {

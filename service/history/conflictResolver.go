@@ -77,13 +77,13 @@ func (r *conflictResolverImpl) reset(
 	updateCondition int64,
 ) (mutableState, error) {
 
-	domainID := r.context.getDomainID()
+	namespaceID := r.context.getNamespaceID()
 	execution := *r.context.getExecution()
 	startTime := info.StartTimestamp
 	branchToken := info.BranchToken // in 2DC world branch token is stored in execution info
 	replayNextEventID := replayEventID + 1
 
-	domainEntry, err := r.shard.GetDomainCache().GetDomainByID(domainID)
+	namespaceEntry, err := r.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (r *conflictResolverImpl) reset(
 	eventsToApply := replayNextEventID - common.FirstEventID
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
 		var size int
-		history, size, _, nextPageToken, err = r.getHistory(domainID, execution, common.FirstEventID, replayNextEventID, nextPageToken, branchToken)
+		history, size, _, nextPageToken, err = r.getHistory(namespaceID, execution, common.FirstEventID, replayNextEventID, nextPageToken, branchToken)
 		if err != nil {
 			r.logError("Conflict resolution err getting history.", err)
 			return nil, err
@@ -122,7 +122,7 @@ func (r *conflictResolverImpl) reset(
 				r.shard,
 				r.shard.GetEventsCache(),
 				r.logger,
-				domainEntry,
+				namespaceEntry,
 			)
 
 			sBuilder = newStateBuilder(
@@ -130,12 +130,12 @@ func (r *conflictResolverImpl) reset(
 				r.logger,
 				resetMutableStateBuilder,
 				func(mutableState mutableState) mutableStateTaskGenerator {
-					return newMutableStateTaskGenerator(r.shard.GetDomainCache(), r.logger, mutableState)
+					return newMutableStateTaskGenerator(r.shard.GetNamespaceCache(), r.logger, mutableState)
 				},
 			)
 		}
 
-		_, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil, false)
+		_, err = sBuilder.applyEvents(namespaceID, requestID, execution, history, nil, false)
 		if err != nil {
 			r.logError("Conflict resolution err applying events.", err)
 			return nil, err
@@ -192,7 +192,7 @@ func (r *conflictResolverImpl) reset(
 	return r.context.loadWorkflowExecution()
 }
 
-func (r *conflictResolverImpl) getHistory(domainID string, execution commonproto.WorkflowExecution, firstEventID,
+func (r *conflictResolverImpl) getHistory(namespaceID string, execution commonproto.WorkflowExecution, firstEventID,
 	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*commonproto.HistoryEvent, int, int64, []byte, error) {
 
 	response, err := r.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{

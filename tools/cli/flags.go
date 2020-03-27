@@ -33,9 +33,9 @@ const (
 	FlagDBAddress                         = "db_address"
 	FlagDBPort                            = "db_port"
 	FlagHistoryAddressWithAlias           = FlagHistoryAddress + ", had"
-	FlagDomainID                          = "domain_id"
-	FlagDomain                            = "domain"
-	FlagDomainWithAlias                   = FlagDomain + ", do"
+	FlagNamespaceID                       = "namespace_id"
+	FlagNamespace                         = "namespace"
+	FlagNamespaceWithAlias                = FlagNamespace + ", do"
 	FlagShardID                           = "shard_id"
 	FlagShardIDWithAlias                  = FlagShardID + ", sid"
 	FlagWorkflowID                        = "workflow_id"
@@ -148,10 +148,10 @@ const (
 	FlagActiveClusterNameWithAlias        = FlagActiveClusterName + ", ac"
 	FlagClusters                          = "clusters"
 	FlagClustersWithAlias                 = FlagClusters + ", cl"
-	FlagIsGlobalDomain                    = "global_domain"
-	FlagIsGlobalDomainWithAlias           = FlagIsGlobalDomain + ", gd"
-	FlagDomainData                        = "domain_data"
-	FlagDomainDataWithAlias               = FlagDomainData + ", dmd"
+	FlagIsGlobalNamespace                 = "global_namespace"
+	FlagIsGlobalNamespaceWithAlias        = FlagIsGlobalNamespace + ", gd"
+	FlagNamespaceData                     = "namespace_data"
+	FlagNamespaceDataWithAlias            = FlagNamespaceData + ", dmd"
 	FlagEventID                           = "event_id"
 	FlagEventIDWithAlias                  = FlagEventID + ", eid"
 	FlagActivityID                        = "activity_id"
@@ -461,7 +461,7 @@ func getFlagsForListArchived() []cli.Flag {
 	flagsForListArchived := []cli.Flag{
 		cli.StringFlag{
 			Name:  FlagListQueryWithAlias,
-			Usage: "SQL like query. Please check the documentation of the visibility archiver used by your domain for detailed instructions",
+			Usage: "SQL like query. Please check the documentation of the visibility archiver used by your namespace for detailed instructions",
 		},
 		cli.IntFlag{
 			Name:  FlagPageSizeWithAlias,

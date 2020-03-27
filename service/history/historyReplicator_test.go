@@ -66,7 +66,7 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockStateBuilder         *MockstateBuilder
-		mockDomainCache          *cache.MockDomainCache
+		mockNamespaceCache       *cache.MockNamespaceCache
 		mockClusterMetadata      *cluster.MockMetadata
 
 		logger           log.Logger
@@ -119,8 +119,8 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
 	s.mockShardManager = s.mockShard.resource.ShardMgr
 	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockDomainCache = s.mockShard.resource.DomainCache
-	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
+	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
@@ -144,7 +144,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 	}
 	s.mockShard.SetEngine(engine)
 
-	s.historyReplicator = newHistoryReplicator(s.mockShard, clock.NewEventTimeSource(), engine, historyCache, s.mockDomainCache, s.mockHistoryV2Mgr, s.logger)
+	s.historyReplicator = newHistoryReplicator(s.mockShard, clock.NewEventTimeSource(), engine, historyCache, s.mockNamespaceCache, s.mockHistoryV2Mgr, s.logger)
 	s.historyReplicator.resetor = s.mockWorkflowResetor
 }
 
@@ -159,7 +159,7 @@ func (s *historyReplicatorSuite) TestApplyStartEvent() {
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_MissingCurrent() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -176,16 +176,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Missing
 	}
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(nil, serviceerror.NewNotFound(""))
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), domainID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID), err)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
+	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent_NoEventsReapplication() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -216,12 +216,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		WorkflowId: workflowID,
 		RunId:      currentRunID,
 	}
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
@@ -238,12 +238,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), domainID, workflowID, runID, req, s.logger)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
 	s.Nil(err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent_EventsReapplication_PendingDecision() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -284,12 +284,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		WorkflowId: workflowID,
 		RunId:      currentRunID,
 	}
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
@@ -321,12 +321,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	contextCurrent.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), domainID, workflowID, runID, req, s.logger)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
 	s.Nil(err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent_EventsReapplication_NoPendingDecision() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -372,19 +372,19 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		WorkflowId: workflowID,
 		RunId:      currentRunID,
 	}
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
 	}, nil)
 
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:                     domainID,
+		NamespaceID:                  namespaceID,
 		RunID:                        currentRunID,
 		NextEventID:                  currentNextEventID,
 		TaskList:                     currentDecisionTasklist,
@@ -423,13 +423,13 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 
 	contextCurrent.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), domainID, workflowID, runID, req, s.logger)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
 	s.Nil(err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingEqualToCurrent_CurrentRunning() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -448,11 +448,11 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -465,14 +465,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	).AnyTimes()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
@@ -492,13 +492,13 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}, nil)
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), domainID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, currentRunID, currentNextEventID), err)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
+	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, currentRunID, currentNextEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingEqualToCurrent_CurrentRunning_OutOfOrder() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -520,11 +520,11 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -537,14 +537,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	).AnyTimes()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
@@ -565,12 +565,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}, nil)
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), domainID, workflowID, runID, req, s.logger)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
 	s.Nil(err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLargerThanCurrent_CurrentRunning() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -605,12 +605,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		RunId:      currentRunID,
 	}
 	contextCurrent.EXPECT().getExecution().Return(currentExecution).AnyTimes()
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:       currentRunID,
 		CloseStatus: persistence.WorkflowCloseStatusRunning,
@@ -628,8 +628,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:       currentRunID,
 		CloseStatus: persistence.WorkflowCloseStatusRunning,
@@ -640,13 +640,13 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
 	contextCurrent.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), domainID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID), err)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
+	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingNotLessThanCurrent_CurrentFinished() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -665,11 +665,11 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -682,14 +682,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	).AnyTimes()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
@@ -709,13 +709,13 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}, nil)
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), domainID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID), err)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
+	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestWorkflowReset() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -735,11 +735,11 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 		ResetWorkflow: true,
 	}
 
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -752,14 +752,14 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 	).AnyTimes()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
@@ -782,16 +782,16 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 	reqCtx := context.Background()
 
 	s.mockWorkflowResetor.EXPECT().ApplyResetEvent(
-		reqCtx, req, domainID, workflowID, currentRunID,
+		reqCtx, req, namespaceID, workflowID, currentRunID,
 	).Return(nil).Times(1)
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(reqCtx, domainID, workflowID, runID, req, s.logger)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(reqCtx, namespaceID, workflowID, runID, req, s.logger)
 	s.Nil(err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -809,11 +809,11 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -826,14 +826,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	).AnyTimes()
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
@@ -851,19 +851,19 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}, nil)
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), domainID, workflowID, runID, req, s.logger)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), namespaceID, workflowID, runID, req, s.logger)
 	s.Nil(err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsCurrent_NoEventsReapplication() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	incomingVersion := int64(110)
 	currentLastWriteVersion := int64(123)
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().getDomainID().Return(domainID).AnyTimes()
+	weContext.EXPECT().getNamespaceID().Return(namespaceID).AnyTimes()
 	weContext.EXPECT().getExecution().Return(&commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
@@ -882,8 +882,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: runID,
 		// other attributes are not used
@@ -899,7 +899,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsNotCurrent_NoEventsReapplication() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	currentRunID := uuid.New()
@@ -907,7 +907,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	lastWriteVersion := int64(123)
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().getDomainID().Return(domainID).AnyTimes()
+	weContext.EXPECT().getNamespaceID().Return(namespaceID).AnyTimes()
 	weContext.EXPECT().getExecution().Return(&commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
@@ -926,8 +926,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: lastWriteVersion}).AnyTimes()
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
@@ -944,7 +944,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		WorkflowId: workflowID,
 		RunId:      currentRunID,
 	}
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -957,7 +957,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsNotCurrent_EventsReapplication_PendingDecision() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	currentRunID := uuid.New()
@@ -970,7 +970,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	signalIdentity := "some random signal identity"
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().getDomainID().Return(domainID).AnyTimes()
+	weContext.EXPECT().getNamespaceID().Return(namespaceID).AnyTimes()
 	weContext.EXPECT().getExecution().Return(&commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
@@ -994,8 +994,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: lastWriteVersion}).AnyTimes()
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
@@ -1012,7 +1012,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		WorkflowId: workflowID,
 		RunId:      currentRunID,
 	}
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -1041,7 +1041,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsNotCurrent_EventsReapplication_NoPendingDecision() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	currentRunID := uuid.New()
@@ -1056,7 +1056,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	decisionStickyTasklist := "some random decision sticky tasklist"
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().getDomainID().Return(domainID).AnyTimes()
+	weContext.EXPECT().getNamespaceID().Return(namespaceID).AnyTimes()
 	weContext.EXPECT().getExecution().Return(&commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
@@ -1080,8 +1080,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: lastWriteVersion}).AnyTimes()
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
@@ -1098,7 +1098,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 		WorkflowId: workflowID,
 		RunId:      currentRunID,
 	}
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -1654,7 +1654,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_ReplicationInfoVersionEqual_BufferedEvent_ResolveConflict() {
-	domainID := uuid.New()
+	namespaceID := uuid.New()
 	runID := uuid.New()
 
 	currentLastWriteVersion := int64(10)
@@ -1706,7 +1706,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	currentState := persistence.WorkflowStateRunning
 	exeInfo := &persistence.WorkflowExecutionInfo{
 		StartTimestamp:               startTimeStamp,
-		DomainID:                     domainID,
+		NamespaceID:                  namespaceID,
 		RunID:                        runID,
 		TaskList:                     decisionTasklist,
 		StickyTaskList:               decisionStickyTasklist,
@@ -1777,7 +1777,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingEqualToCurrent() {
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	currentVersion := int64(4096)
@@ -1789,7 +1789,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 	incomingNextEventID := incomingFirstEventID + 4
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().getDomainID().Return(domainID).AnyTimes()
+	weContext.EXPECT().getNamespaceID().Return(namespaceID).AnyTimes()
 	weContext.EXPECT().getExecution().Return(&commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
@@ -1809,7 +1809,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 	msBuilder.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
 	err := s.historyReplicator.ApplyOtherEvents(context.Background(), weContext, msBuilder, request, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrRetryBufferEventsMsg, domainID, workflowID, runID, currentNextEventID), err)
+	s.Equal(newRetryTaskErrorWithHint(ErrRetryBufferEventsMsg, namespaceID, workflowID, runID, currentNextEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyReplicationTask() {
@@ -1844,7 +1844,7 @@ func (s *historyReplicatorSuite) TestApplyReplicationTask_WorkflowClosed() {
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -1854,11 +1854,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -1894,10 +1894,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -1924,7 +1924,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -1941,11 +1941,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		}, input)
 		return true
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -1962,7 +1962,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -1972,11 +1972,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -2012,10 +2012,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -2042,7 +2042,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -2055,11 +2055,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet)
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil) // this is called when err is returned, and shard will try to update
 
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -2076,7 +2076,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2086,11 +2086,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -2126,10 +2126,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -2156,7 +2156,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -2175,11 +2175,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	}
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -2196,7 +2196,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_IncomingLessThanCurrent() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2215,11 +2215,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	}
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -2255,10 +2255,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -2293,7 +2293,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -2328,11 +2328,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -2349,7 +2349,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_IncomingEqualToThanCurrent() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2359,11 +2359,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -2399,10 +2399,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -2429,7 +2429,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -2464,11 +2464,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -2485,7 +2485,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_IncomingNotLessThanCurrent() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2495,11 +2495,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -2535,10 +2535,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -2565,7 +2565,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -2600,11 +2600,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -2621,7 +2621,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLessThanCurrent_NoEventsReapplication() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2631,11 +2631,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -2671,10 +2671,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -2702,7 +2702,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -2727,11 +2727,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", delReq).Return(nil).Once()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -2754,12 +2754,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowId: workflowID,
 		RunId:      currentRunID,
 	}
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
@@ -2770,7 +2770,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLessThanCurrent_EventsReapplication_PendingDecision() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2780,7 +2780,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -2788,7 +2788,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	signalInput := []byte("some random signal input")
 	signalIdentity := "some random signal identity"
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -2834,10 +2834,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -2865,7 +2865,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -2885,11 +2885,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -2912,12 +2912,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowId: workflowID,
 		RunId:      currentRunID,
 	}
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
@@ -2946,7 +2946,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLessThanCurrent_EventsReapplication_NoPendingDecision() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2956,7 +2956,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -2964,7 +2964,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	signalInput := []byte("some random signal input")
 	signalIdentity := "some random signal identity"
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -3010,10 +3010,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -3041,7 +3041,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -3063,11 +3063,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -3090,12 +3090,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowId: workflowID,
 		RunId:      currentRunID,
 	}
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
@@ -3134,7 +3134,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingEqualToCurrent() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -3144,11 +3144,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -3184,10 +3184,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -3214,7 +3214,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -3246,19 +3246,19 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowId: workflowID,
 		RunId:      currentRunID,
 	}
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
 	}, nil)
 
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         workflowID,
 		RunID:              currentRunID,
 		DecisionVersion:    common.EmptyVersion,
@@ -3267,11 +3267,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}).AnyTimes()
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -3284,11 +3284,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	).AnyTimes()
 
 	err := s.historyReplicator.replicateWorkflowStarted(context.Background(), weContext, msBuilder, history, s.mockStateBuilder, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrRetryExistingWorkflowMsg, domainID, workflowID, currentRunID, currentNextEventID), err)
+	s.Equal(newRetryTaskErrorWithHint(ErrRetryExistingWorkflowMsg, namespaceID, workflowID, currentRunID, currentNextEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingEqualToCurrent_OutOfOrder() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -3298,12 +3298,12 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 	lastEventTaskID := int64(2333)
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -3339,10 +3339,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -3369,7 +3369,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -3401,19 +3401,19 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowId: workflowID,
 		RunId:      currentRunID,
 	}
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID: currentRunID,
 		// other attributes are not used
 	}, nil)
 
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         workflowID,
 		RunID:              currentRunID,
 		LastEventTaskID:    lastEventTaskID + 10,
@@ -3423,11 +3423,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}).AnyTimes()
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -3444,7 +3444,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLargerThanCurrent() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -3463,11 +3463,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}
 
 	initiatedID := int64(4810)
-	parentDomainID := testDomainID
+	parentNamespaceID := testNamespaceID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+	weContext := newWorkflowExecutionContext(namespaceID, commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -3503,10 +3503,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	historySize := 111
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		CreateRequestID:             requestID,
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  workflowID,
 		RunID:                       runID,
-		ParentDomainID:              parentDomainID,
+		ParentNamespaceID:           parentNamespaceID,
 		ParentWorkflowID:            parentWorkflowID,
 		ParentRunID:                 parentRunID,
 		InitiatedID:                 initiatedID,
@@ -3541,7 +3541,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		TimerTasks:       timerTasks,
 	}
 	newWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		DomainID:    domainID,
+		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
@@ -3579,20 +3579,20 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
 
 	// this mocks are for the terminate current workflow operation
-	domainVersion := int64(4081)
-	domainName := "some random domain name"
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	namespaceVersion := int64(4081)
+	namespace := "some random namespace name"
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
 					{ClusterName: cluster.TestAlternativeClusterName},
 				},
 			},
-			domainVersion,
+			namespaceVersion,
 			nil,
 		), nil,
 	).AnyTimes()
@@ -3608,7 +3608,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		RunId:      currentRunID,
 	}
 	contextCurrent.EXPECT().getExecution().Return(currentExecution).AnyTimes()
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
@@ -3659,7 +3659,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	incomingVersion := int64(4096)
 	incomingTimestamp := int64(11238)
 
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random target workflow ID"
 	targetRunID := uuid.New()
 
@@ -3667,7 +3667,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 
 	msBuilderTarget.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	msBuilderTarget.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         workflowID,
 		RunID:              targetRunID,
 		State:              persistence.WorkflowStateCompleted,
@@ -3681,8 +3681,8 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	currentLastWriteVersion := int64(1394)
 	currentState := persistence.WorkflowStateCompleted
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
 		State:            currentState,
@@ -3705,14 +3705,14 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	incomingCluster := cluster.TestAlternativeClusterName
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(incomingVersion).Return(incomingCluster).AnyTimes()
 
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random target workflow ID"
 	targetRunID := uuid.New()
 
 	msBuilderTarget := NewMockmutableState(s.controller)
 	msBuilderTarget.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	msBuilderTarget.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         workflowID,
 		RunID:              targetRunID,
 		State:              persistence.WorkflowStateCompleted,
@@ -3734,7 +3734,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 		RunId:      currentRunID,
 	}
 	contextCurrent.EXPECT().getExecution().Return(currentExecution).AnyTimes()
-	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
+	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
 	currentNextEventID := int64(2333)
@@ -3748,8 +3748,8 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
 		State:            persistence.WorkflowStateRunning,
@@ -3775,14 +3775,14 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	incomingCluster := cluster.TestAlternativeClusterName
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(incomingVersion).Return(incomingCluster).AnyTimes()
 
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "some random target workflow ID"
 	targetRunID := uuid.New()
 
 	msBuilderTarget := NewMockmutableState(s.controller)
 	msBuilderTarget.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	msBuilderTarget.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:           domainID,
+		NamespaceID:        namespaceID,
 		WorkflowID:         workflowID,
 		RunID:              targetRunID,
 		CloseStatus:        persistence.WorkflowCloseStatusContinuedAsNew,
@@ -3793,8 +3793,8 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 
 	currentRunID := uuid.New()
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
 		CloseStatus:      persistence.WorkflowCloseStatusRunning,

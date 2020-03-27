@@ -52,37 +52,37 @@ func (m *metadataManagerImpl) GetName() string {
 	return m.persistence.GetName()
 }
 
-func (m *metadataManagerImpl) CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error) {
-	dc, err := m.serializeDomainConfig(request.Config)
+func (m *metadataManagerImpl) CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error) {
+	dc, err := m.serializeNamespaceConfig(request.Config)
 	if err != nil {
 		return nil, err
 	}
-	return m.persistence.CreateDomain(&InternalCreateDomainRequest{
+	return m.persistence.CreateNamespace(&InternalCreateNamespaceRequest{
 		Info:              request.Info,
 		Config:            &dc,
 		ReplicationConfig: request.ReplicationConfig,
-		IsGlobalDomain:    request.IsGlobalDomain,
+		IsGlobalNamespace: request.IsGlobalNamespace,
 		ConfigVersion:     request.ConfigVersion,
 		FailoverVersion:   request.FailoverVersion,
 	})
 }
 
-func (m *metadataManagerImpl) GetDomain(request *GetDomainRequest) (*GetDomainResponse, error) {
-	resp, err := m.persistence.GetDomain(request)
+func (m *metadataManagerImpl) GetNamespace(request *GetNamespaceRequest) (*GetNamespaceResponse, error) {
+	resp, err := m.persistence.GetNamespace(request)
 	if err != nil {
 		return nil, err
 	}
 
-	dc, err := m.deserializeDomainConfig(resp.Config)
+	dc, err := m.deserializeNamespaceConfig(resp.Config)
 	if err != nil {
 		return nil, err
 	}
 
-	return &GetDomainResponse{
+	return &GetNamespaceResponse{
 		Info:                        resp.Info,
 		Config:                      &dc,
 		ReplicationConfig:           resp.ReplicationConfig,
-		IsGlobalDomain:              resp.IsGlobalDomain,
+		IsGlobalNamespace:           resp.IsGlobalNamespace,
 		ConfigVersion:               resp.ConfigVersion,
 		FailoverVersion:             resp.FailoverVersion,
 		FailoverNotificationVersion: resp.FailoverNotificationVersion,
@@ -90,12 +90,12 @@ func (m *metadataManagerImpl) GetDomain(request *GetDomainRequest) (*GetDomainRe
 	}, nil
 }
 
-func (m *metadataManagerImpl) UpdateDomain(request *UpdateDomainRequest) error {
-	dc, err := m.serializeDomainConfig(request.Config)
+func (m *metadataManagerImpl) UpdateNamespace(request *UpdateNamespaceRequest) error {
+	dc, err := m.serializeNamespaceConfig(request.Config)
 	if err != nil {
 		return err
 	}
-	return m.persistence.UpdateDomain(&InternalUpdateDomainRequest{
+	return m.persistence.UpdateNamespace(&InternalUpdateNamespaceRequest{
 		Info:                        request.Info,
 		Config:                      &dc,
 		ReplicationConfig:           request.ReplicationConfig,
@@ -106,54 +106,54 @@ func (m *metadataManagerImpl) UpdateDomain(request *UpdateDomainRequest) error {
 	})
 }
 
-func (m *metadataManagerImpl) DeleteDomain(request *DeleteDomainRequest) error {
-	return m.persistence.DeleteDomain(request)
+func (m *metadataManagerImpl) DeleteNamespace(request *DeleteNamespaceRequest) error {
+	return m.persistence.DeleteNamespace(request)
 }
 
-func (m *metadataManagerImpl) DeleteDomainByName(request *DeleteDomainByNameRequest) error {
-	return m.persistence.DeleteDomainByName(request)
+func (m *metadataManagerImpl) DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error {
+	return m.persistence.DeleteNamespaceByName(request)
 }
 
-func (m *metadataManagerImpl) ListDomains(request *ListDomainsRequest) (*ListDomainsResponse, error) {
-	resp, err := m.persistence.ListDomains(request)
+func (m *metadataManagerImpl) ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error) {
+	resp, err := m.persistence.ListNamespaces(request)
 	if err != nil {
 		return nil, err
 	}
-	domains := make([]*GetDomainResponse, 0, len(resp.Domains))
-	for _, d := range resp.Domains {
-		dc, err := m.deserializeDomainConfig(d.Config)
+	namespaces := make([]*GetNamespaceResponse, 0, len(resp.Namespaces))
+	for _, d := range resp.Namespaces {
+		dc, err := m.deserializeNamespaceConfig(d.Config)
 		if err != nil {
 			return nil, err
 		}
-		domains = append(domains, &GetDomainResponse{
+		namespaces = append(namespaces, &GetNamespaceResponse{
 			Info:                        d.Info,
 			Config:                      &dc,
 			ReplicationConfig:           d.ReplicationConfig,
-			IsGlobalDomain:              d.IsGlobalDomain,
+			IsGlobalNamespace:           d.IsGlobalNamespace,
 			ConfigVersion:               d.ConfigVersion,
 			FailoverVersion:             d.FailoverVersion,
 			FailoverNotificationVersion: d.FailoverNotificationVersion,
 			NotificationVersion:         d.NotificationVersion,
 		})
 	}
-	return &ListDomainsResponse{
-		Domains:       domains,
+	return &ListNamespacesResponse{
+		Namespaces:    namespaces,
 		NextPageToken: resp.NextPageToken,
 	}, nil
 }
 
-func (m *metadataManagerImpl) serializeDomainConfig(c *DomainConfig) (InternalDomainConfig, error) {
+func (m *metadataManagerImpl) serializeNamespaceConfig(c *NamespaceConfig) (InternalNamespaceConfig, error) {
 	if c == nil {
-		return InternalDomainConfig{}, nil
+		return InternalNamespaceConfig{}, nil
 	}
 	if c.BadBinaries.Binaries == nil {
 		c.BadBinaries.Binaries = map[string]*commonproto.BadBinaryInfo{}
 	}
 	badBinaries, err := m.serializer.SerializeBadBinaries(&c.BadBinaries, common.EncodingTypeThriftRW)
 	if err != nil {
-		return InternalDomainConfig{}, err
+		return InternalNamespaceConfig{}, err
 	}
-	return InternalDomainConfig{
+	return InternalNamespaceConfig{
 		Retention:                c.Retention,
 		EmitMetric:               c.EmitMetric,
 		HistoryArchivalStatus:    c.HistoryArchivalStatus,
@@ -164,18 +164,18 @@ func (m *metadataManagerImpl) serializeDomainConfig(c *DomainConfig) (InternalDo
 	}, nil
 }
 
-func (m *metadataManagerImpl) deserializeDomainConfig(ic *InternalDomainConfig) (DomainConfig, error) {
+func (m *metadataManagerImpl) deserializeNamespaceConfig(ic *InternalNamespaceConfig) (NamespaceConfig, error) {
 	if ic == nil {
-		return DomainConfig{}, nil
+		return NamespaceConfig{}, nil
 	}
 	badBinaries, err := m.serializer.DeserializeBadBinaries(ic.BadBinaries)
 	if err != nil {
-		return DomainConfig{}, err
+		return NamespaceConfig{}, err
 	}
 	if badBinaries.Binaries == nil {
 		badBinaries.Binaries = map[string]*commonproto.BadBinaryInfo{}
 	}
-	return DomainConfig{
+	return NamespaceConfig{
 		Retention:                ic.Retention,
 		EmitMetric:               ic.EmitMetric,
 		HistoryArchivalStatus:    ic.HistoryArchivalStatus,

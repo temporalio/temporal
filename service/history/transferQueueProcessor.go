@@ -47,7 +47,7 @@ var (
 type (
 	transferQueueProcessor interface {
 		common.Daemon
-		FailoverDomain(domainIDs map[string]struct{})
+		FailoverNamespace(namespaceIDs map[string]struct{})
 		NotifyNewTask(clusterName string, transferTasks []persistence.Task)
 		LockTaskProcessing()
 		UnlockTaskPrrocessing()
@@ -56,23 +56,23 @@ type (
 	taskFilter func(task queueTaskInfo) (bool, error)
 
 	transferQueueProcessorImpl struct {
-		isGlobalDomainEnabled bool
-		currentClusterName    string
-		shard                 ShardContext
-		taskAllocator         taskAllocator
-		config                *Config
-		metricsClient         metrics.Client
-		historyService        *historyEngineImpl
-		visibilityMgr         persistence.VisibilityManager
-		matchingClient        matching.Client
-		historyClient         history.Client
-		ackLevel              int64
-		logger                log.Logger
-		isStarted             int32
-		isStopped             int32
-		shutdownChan          chan struct{}
-		activeTaskProcessor   *transferQueueActiveProcessorImpl
-		standbyTaskProcessors map[string]*transferQueueStandbyProcessorImpl
+		isGlobalNamespaceEnabled bool
+		currentClusterName       string
+		shard                    ShardContext
+		taskAllocator            taskAllocator
+		config                   *Config
+		metricsClient            metrics.Client
+		historyService           *historyEngineImpl
+		visibilityMgr            persistence.VisibilityManager
+		matchingClient           matching.Client
+		historyClient            history.Client
+		ackLevel                 int64
+		logger                   log.Logger
+		isStarted                int32
+		isStopped                int32
+		shutdownChan             chan struct{}
+		activeTaskProcessor      *transferQueueActiveProcessorImpl
+		standbyTaskProcessors    map[string]*transferQueueStandbyProcessorImpl
 	}
 )
 
@@ -97,7 +97,7 @@ func newTransferQueueProcessor(
 		if clusterName != currentClusterName {
 			historyRereplicator := xdc.NewHistoryRereplicator(
 				currentClusterName,
-				shard.GetDomainCache(),
+				shard.GetNamespaceCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
 					return historyService.ReplicateRawEvents(ctx, request)
@@ -107,7 +107,7 @@ func newTransferQueueProcessor(
 				logger,
 			)
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				shard.GetDomainCache(),
+				shard.GetNamespaceCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 					return historyService.ReplicateEventsV2(ctx, request)
@@ -130,19 +130,19 @@ func newTransferQueueProcessor(
 	}
 
 	return &transferQueueProcessorImpl{
-		isGlobalDomainEnabled: shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled(),
-		currentClusterName:    currentClusterName,
-		shard:                 shard,
-		taskAllocator:         taskAllocator,
-		config:                shard.GetConfig(),
-		metricsClient:         historyService.metricsClient,
-		historyService:        historyService,
-		visibilityMgr:         visibilityMgr,
-		matchingClient:        matchingClient,
-		historyClient:         historyClient,
-		ackLevel:              shard.GetTransferAckLevel(),
-		logger:                logger,
-		shutdownChan:          make(chan struct{}),
+		isGlobalNamespaceEnabled: shard.GetService().GetClusterMetadata().IsGlobalNamespaceEnabled(),
+		currentClusterName:       currentClusterName,
+		shard:                    shard,
+		taskAllocator:            taskAllocator,
+		config:                   shard.GetConfig(),
+		metricsClient:            historyService.metricsClient,
+		historyService:           historyService,
+		visibilityMgr:            visibilityMgr,
+		matchingClient:           matchingClient,
+		historyClient:            historyClient,
+		ackLevel:                 shard.GetTransferAckLevel(),
+		logger:                   logger,
+		shutdownChan:             make(chan struct{}),
 		activeTaskProcessor: newTransferQueueActiveProcessor(
 			shard,
 			historyService,
@@ -161,7 +161,7 @@ func (t *transferQueueProcessorImpl) Start() {
 		return
 	}
 	t.activeTaskProcessor.Start()
-	if t.isGlobalDomainEnabled {
+	if t.isGlobalNamespaceEnabled {
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 			standbyTaskProcessor.Start()
 		}
@@ -175,7 +175,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 		return
 	}
 	t.activeTaskProcessor.Stop()
-	if t.isGlobalDomainEnabled {
+	if t.isGlobalNamespaceEnabled {
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 			standbyTaskProcessor.Stop()
 		}
@@ -208,8 +208,8 @@ func (t *transferQueueProcessorImpl) NotifyNewTask(
 	standbyTaskProcessor.retryTasks()
 }
 
-func (t *transferQueueProcessorImpl) FailoverDomain(
-	domainIDs map[string]struct{},
+func (t *transferQueueProcessorImpl) FailoverNamespace(
+	namespaceIDs map[string]struct{},
 ) {
 
 	minLevel := t.shard.GetTransferClusterAckLevel(t.currentClusterName)
@@ -228,7 +228,7 @@ func (t *transferQueueProcessorImpl) FailoverDomain(
 	// the ack manager is exclusive, so add 1
 	maxLevel := t.activeTaskProcessor.getQueueReadLevel() + 1
 	t.logger.Info("Transfer Failover Triggered",
-		tag.WorkflowDomainIDs(domainIDs),
+		tag.WorkflowNamespaceIDs(namespaceIDs),
 		tag.MinLevel(minLevel),
 		tag.MaxLevel(maxLevel))
 	updateShardAckLevel, failoverTaskProcessor := newTransferQueueFailoverProcessor(
@@ -237,7 +237,7 @@ func (t *transferQueueProcessorImpl) FailoverDomain(
 		t.visibilityMgr,
 		t.matchingClient,
 		t.historyClient,
-		domainIDs,
+		namespaceIDs,
 		standbyClusterName,
 		minLevel,
 		maxLevel,
@@ -250,7 +250,7 @@ func (t *transferQueueProcessorImpl) FailoverDomain(
 	}
 
 	// NOTE: READ REF BEFORE MODIFICATION
-	// ref: historyEngine.go registerDomainFailoverCallback function
+	// ref: historyEngine.go registerNamespaceFailoverCallback function
 	err := updateShardAckLevel(minLevel)
 	if err != nil {
 		t.logger.Error("Error update shard ack level", tag.Error(err))
@@ -300,7 +300,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	lowerAckLevel := t.ackLevel
 	upperAckLevel := t.activeTaskProcessor.queueAckMgr.getQueueAckLevel()
 
-	if t.isGlobalDomainEnabled {
+	if t.isGlobalNamespaceEnabled {
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 			ackLevel := standbyTaskProcessor.queueAckMgr.getQueueAckLevel()
 			if upperAckLevel > ackLevel {
