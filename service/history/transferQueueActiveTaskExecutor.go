@@ -22,18 +22,17 @@ package history
 
 import (
 	"bytes"
-	ctx "context"
+	"context"
 	"fmt"
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"golang.org/x/net/context"
 
 	commonproto "go.temporal.io/temporal-proto/common"
 
-	h "github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
@@ -214,20 +213,15 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
-<<<<<<< Updated upstream
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(task),
-=======
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
 		t.getNamespaceIDAndWorkflowExecution(task),
->>>>>>> Stashed changes
 	)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -296,10 +290,10 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 
 	// Communicate the result to parent execution if this is Child Workflow execution
 	if replyToParentWorkflow {
-		ctx, cancel := ctx.WithTimeout(ctx.Background(), transferActiveTaskDefaultTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 		defer cancel()
 <<<<<<< Updated upstream
-		_, err = t.historyClient.RecordChildExecutionCompleted(ctx, &h.RecordChildExecutionCompletedRequest{
+		_, err = t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
 			DomainUUID: parentDomainID,
 =======
 		_, err = t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
@@ -510,10 +504,10 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(retError)
 	// remove signalRequestedID from target commonproto, after Signal detail is removed from source commonproto
-	ctx, cancel := ctx.WithTimeout(ctx.Background(), transferActiveTaskDefaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 <<<<<<< Updated upstream
-	_, err = t.historyClient.RemoveSignalMutableState(ctx, &h.RemoveSignalMutableStateRequest{
+	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
 		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
 =======
 	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
@@ -910,7 +904,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstDecisionTask(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 <<<<<<< Updated upstream
-	_, err := t.historyClient.ScheduleDecisionTask(ctx, &h.ScheduleDecisionTaskRequest{
+	_, err := t.historyClient.ScheduleDecisionTask(ctx, &historyservice.ScheduleDecisionTaskRequest{
 		DomainUUID:        domainID,
 =======
 	_, err := t.historyClient.ScheduleDecisionTask(ctx, &historyservice.ScheduleDecisionTaskRequest{
@@ -1120,7 +1114,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 ) error {
 
 <<<<<<< Updated upstream
-	request := &h.RequestCancelWorkflowExecutionRequest{
+	request := &historyservice.RequestCancelWorkflowExecutionRequest{
 		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
 =======
 	request := &historyservice.RequestCancelWorkflowExecutionRequest{
@@ -1169,7 +1163,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 ) error {
 
 <<<<<<< Updated upstream
-	request := &h.SignalWorkflowExecutionRequest{
+	request := &historyservice.SignalWorkflowExecutionRequest{
 		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
 =======
 	request := &historyservice.SignalWorkflowExecutionRequest{
@@ -1215,7 +1209,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 
 	now := t.shard.GetTimeSource().Now()
 <<<<<<< Updated upstream
-	request := &h.StartWorkflowExecutionRequest{
+	request := &historyservice.StartWorkflowExecutionRequest{
 		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
 =======
 	request := &historyservice.StartWorkflowExecutionRequest{
@@ -1256,7 +1250,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
-	var response *h.StartWorkflowExecutionResponse
+	var response *historyservice.StartWorkflowExecutionResponse
 	var err error
 	op := func() error {
 		response, err = t.historyClient.StartWorkflowExecution(ctx, request)
@@ -1283,7 +1277,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 ) error {
 
 	var err error
-	ctx, cancel := ctx.WithTimeout(ctx.Background(), transferActiveTaskDefaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
 	namespaceID := task.NamespaceID
@@ -1429,7 +1423,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	childInfo *persistence.ChildExecutionInfo,
 ) error {
 
-	ctx, cancel := ctx.WithTimeout(ctx.Background(), transferActiveTaskDefaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
 	switch childInfo.ParentClosePolicy {
@@ -1439,7 +1433,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 
 	case enums.ParentClosePolicyTerminate:
 <<<<<<< Updated upstream
-		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &h.TerminateWorkflowExecutionRequest{
+		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 			DomainUUID: domainID,
 =======
 		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
@@ -1459,7 +1453,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 
 	case enums.ParentClosePolicyRequestCancel:
 <<<<<<< Updated upstream
-		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &h.RequestCancelWorkflowExecutionRequest{
+		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 			DomainUUID: domainID,
 =======
 		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{

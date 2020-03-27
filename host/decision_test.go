@@ -21,7 +21,6 @@
 package host
 
 import (
-	"encoding/json"
 	"strconv"
 	"time"
 
@@ -851,7 +850,8 @@ func (s *integrationSuite) assertLastHistoryEvent(we *commonproto.WorkflowExecut
 	})
 	s.NoError(err)
 	history := historyResponse.History
-	data, err := json.MarshalIndent(history, "", "    ")
+	encoder := codec.NewJSONPBIndentEncoder("    ")
+	data, err := encoder.Encode(history)
 	s.NoError(err)
 	s.Equal(count, len(history.Events), string(data))
 	s.Equal(eventType, history.Events[len(history.Events)-1].GetEventType(), string(data))

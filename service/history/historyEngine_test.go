@@ -4315,7 +4315,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 		id1: result1,
 		id2: result2,
 	}
-	_, err = s.mockHistoryEngine.RespondDecisionTaskCompleted(s.constructCallContext(headers.GoWorkerConsistentQueryVersion), &historyservice.RespondDecisionTaskCompletedRequest{
+	_, err = s.mockHistoryEngine.RespondDecisionTaskCompleted(s.constructCallContext(headers.SupportedGoSDKVersion), &historyservice.RespondDecisionTaskCompletedRequest{
 		NamespaceUUID: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
@@ -4390,84 +4390,6 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
-}
-
-func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWithConsistentQueriesUnsupported() {
-	we := commonproto.WorkflowExecution{
-		WorkflowId: "wId",
-		RunId:      testRunID,
-	}
-	tl := "testTaskList"
-	tt := &token.Task{
-		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
-		ScheduleId: 7,
-	}
-	taskToken, _ := tt.Marshal()
-	identity := "testIdentity"
-	activityID := "activity1_id"
-	activityType := "activity_type1"
-	activityInput := []byte("input1")
-
-	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
-	di := addDecisionTaskScheduledEvent(msBuilder)
-	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
-	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID,
-		decisionStartedEvent.EventId, nil, identity)
-	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
-		activityType, tl, activityInput, 100, 10, 1)
-	addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
-	di2 := addDecisionTaskScheduledEvent(msBuilder)
-	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
-
-	ms := createMutableState(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
-
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeRequestCancelActivityTask,
-		Attributes: &commonproto.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &commonproto.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
-		}},
-	}}
-
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
-	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
-
-	// load mutable state such that it already exists in memory when respond decision task is called
-	// this enables us to set query registry on it
-	ctx, release, err := s.mockHistoryEngine.historyCache.getOrCreateWorkflowExecutionForBackground(testNamespaceID, we)
-	s.NoError(err)
-	loadedMS, err := ctx.loadWorkflowExecution()
-	s.NoError(err)
-	qr := newQueryRegistry()
-	qr.bufferQuery(&commonproto.WorkflowQuery{})
-	qr.bufferQuery(&commonproto.WorkflowQuery{})
-	qr.bufferQuery(&commonproto.WorkflowQuery{})
-	loadedMS.(*mutableStateBuilder).queryRegistry = qr
-	release(nil)
-	_, err = s.mockHistoryEngine.RespondDecisionTaskCompleted(s.constructCallContext("0.0.0"), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
-		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
-			TaskToken:        taskToken,
-			Decisions:        decisions,
-			ExecutionContext: []byte("context"),
-			Identity:         identity,
-		},
-	})
-	s.Nil(err)
-
-	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecision())
-	s.Len(qr.getBufferedIDs(), 0)
-	s.Len(qr.getCompletedIDs(), 0)
-	s.Len(qr.getUnblockedIDs(), 0)
-	s.Len(qr.getFailedIDs(), 3)
 }
 
 func (s *engineSuite) constructCallContext(featureVersion string) context.Context {

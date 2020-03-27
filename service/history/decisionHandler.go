@@ -284,7 +284,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
-	clientHeaders := headers.GetValues(ctx, headers.LibraryVersionHeaderName, headers.FeatureVersionHeaderName, headers.ClientImplHeaderName)
+	clientHeaders := headers.GetValues(ctx, headers.ClientVersionHeaderName, headers.ClientFeatureVersionHeaderName, headers.ClientImplHeaderName)
 	clientLibVersion := clientHeaders[0]
 	clientFeatureVersion := clientHeaders[1]
 	clientImpl := clientHeaders[2]
@@ -547,14 +547,7 @@ Update_History_Loop:
 			return nil, updateErr
 		}
 
-		handler.handleBufferedQueries(
-			msBuilder,
-			clientImpl,
-			clientFeatureVersion,
-			req.GetCompleteRequest().GetQueryResults(),
-			createNewDecisionTask,
-			namespaceEntry,
-			decisionHeartbeating)
+		handler.handleBufferedQueries(msBuilder, req.GetCompleteRequest().GetQueryResults(), createNewDecisionTask, namespaceEntry, decisionHeartbeating)
 
 		if decisionHeartbeatTimeout {
 			// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
@@ -634,15 +627,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	return response, nil
 }
 
-func (handler *decisionHandlerImpl) handleBufferedQueries(
-	msBuilder mutableState,
-	clientImpl string,
-	clientFeatureVersion string,
-	queryResults map[string]*commonproto.WorkflowQueryResult,
-	createNewDecisionTask bool,
-	namespaceEntry *cache.NamespaceCacheEntry,
-	decisionHeartbeating bool,
-) {
+func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*commonproto.WorkflowQueryResult, createNewDecisionTask bool, namespaceEntry *cache.NamespaceCacheEntry, decisionHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.hasBufferedQuery() {
 		return
@@ -654,36 +639,6 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(
 	runID := msBuilder.GetExecutionInfo().RunID
 
 	scope := handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope)
-
-	// Consistent query requires both server and client worker support. If a consistent query was requested (meaning there are
-	// buffered queries) but worker does not support consistent query then all buffered queries should be failed.
-	if versionErr := handler.versionChecker.SupportsConsistentQuery(clientImpl, clientFeatureVersion); versionErr != nil {
-		scope.IncCounter(metrics.WorkerNotSupportsConsistentQueryCount)
-		failedTerminationState := &queryTerminationState{
-			queryTerminationType: queryTerminationTypeFailed,
-			failure:              serviceerror.NewInvalidArgument(versionErr.Error()),
-		}
-		buffered := queryRegistry.getBufferedIDs()
-		handler.logger.Info(
-			"failing query because worker does not support consistent query",
-			tag.WorkflowNamespace(namespace),
-			tag.WorkflowID(workflowID),
-			tag.WorkflowRunID(runID),
-			tag.Error(versionErr))
-		for _, id := range buffered {
-			if err := queryRegistry.setTerminationState(id, failedTerminationState); err != nil {
-				handler.logger.Error(
-					"failed to set query termination state to failed",
-					tag.WorkflowNamespace(namespace),
-					tag.WorkflowID(workflowID),
-					tag.WorkflowRunID(runID),
-					tag.QueryID(id),
-					tag.Error(err))
-				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
-			}
-		}
-		return
-	}
 
 	// if its a heartbeat decision it means local activities may still be running on the worker
 	// which were started by an external event which happened before the query
