@@ -77,30 +77,24 @@ func (s *DecisionHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *DecisionHandlerSuite) TestHandleBufferedQueries_ClientNotSupports() {
-	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
-	s.decisionHandler.handleBufferedQueries(s.mockMutableState, headers.GoSDK, "0.0.0", nil, false, testGlobalDomainEntry, false)
-	s.assertQueryCounts(s.queryRegistry, 0, 0, 0, 10)
-}
-
 func (s *DecisionHandlerSuite) TestHandleBufferedQueries_HeartbeatDecision() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
-	s.decisionHandler.handleBufferedQueries(s.mockMutableState, headers.GoSDK, headers.GoWorkerConsistentQueryVersion, queryResults, false, testGlobalDomainEntry, true)
+	s.decisionHandler.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalDomainEntry, true)
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 }
 
 func (s *DecisionHandlerSuite) TestHandleBufferedQueries_NewDecisionTask() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
-	s.decisionHandler.handleBufferedQueries(s.mockMutableState, headers.GoSDK, headers.GoWorkerConsistentQueryVersion, queryResults, true, testGlobalDomainEntry, false)
+	s.decisionHandler.handleBufferedQueries(s.mockMutableState, queryResults, true, testGlobalDomainEntry, false)
 	s.assertQueryCounts(s.queryRegistry, 5, 5, 0, 0)
 }
 
 func (s *DecisionHandlerSuite) TestHandleBufferedQueries_NoNewDecisionTask() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
-	s.decisionHandler.handleBufferedQueries(s.mockMutableState, headers.GoSDK, headers.GoWorkerConsistentQueryVersion, queryResults, false, testGlobalDomainEntry, false)
+	s.decisionHandler.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalDomainEntry, false)
 	s.assertQueryCounts(s.queryRegistry, 0, 5, 5, 0)
 }
 
@@ -112,7 +106,7 @@ func (s *DecisionHandlerSuite) TestHandleBufferedQueries_QueryTooLarge() {
 	for k, v := range largeQueryResults {
 		queryResults[k] = v
 	}
-	s.decisionHandler.handleBufferedQueries(s.mockMutableState, headers.GoSDK, headers.GoWorkerConsistentQueryVersion, queryResults, false, testGlobalDomainEntry, false)
+	s.decisionHandler.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalDomainEntry, false)
 	s.assertQueryCounts(s.queryRegistry, 0, 5, 0, 5)
 }
 
