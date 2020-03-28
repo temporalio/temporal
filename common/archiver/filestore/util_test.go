@@ -272,7 +272,7 @@ func (s *UtilSuite) TestconstructHistoryFilename() {
 			workflowID:           "testWorkflowID",
 			runID:                "testRunID",
 			closeFailoverVersion: 5,
-			expectBuiltName:      "17971674567288329890367046253745284795510285995943906173973_5.history",
+			expectBuiltName:      "11936904199538907273367046253745284795510285995943906173973_5.history",
 		},
 	}
 
@@ -289,7 +289,7 @@ func (s *UtilSuite) TestExtractCloseFailoverVersion() {
 		expectedErr     bool
 	}{
 		{
-			filename:        "17971674567288329890367046253745284795510285995943906173973_5.history",
+			filename:        "11936904199538907273367046253745284795510285995943906173973_5.history",
 			expectedVersion: 5,
 			expectedErr:     false,
 		},

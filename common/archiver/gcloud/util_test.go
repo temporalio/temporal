@@ -94,7 +94,7 @@ func (s *utilSuite) TestconstructHistoryFilename() {
 			workflowID:           "testWorkflowID",
 			runID:                "testRunID",
 			closeFailoverVersion: 5,
-			expectBuiltName:      "17971674567288329890367046253745284795510285995943906173973_5_0.history",
+			expectBuiltName:      "11936904199538907273367046253745284795510285995943906173973_5_0.history",
 		},
 	}
 
@@ -119,11 +119,11 @@ func (s *utilSuite) TestSerializeDeserializeGetHistoryToken() {
 }
 
 func (s *utilSuite) TestConstructHistoryFilenamePrefix() {
-	s.Equal("28646288347718592068344541402884576509131521284625246243", constructHistoryFilenamePrefix("namespaceID", "workflowID", "runID"))
+	s.Equal("67753999582745295208344541402884576509131521284625246243", constructHistoryFilenamePrefix("namespaceID", "workflowID", "runID"))
 }
 
 func (s *utilSuite) TestConstructHistoryFilenameMultipart() {
-	s.Equal("28646288347718592068344541402884576509131521284625246243_-24_0.history", constructHistoryFilenameMultipart("namespaceID", "workflowID", "runID", -24, 0))
+	s.Equal("67753999582745295208344541402884576509131521284625246243_-24_0.history", constructHistoryFilenameMultipart("namespaceID", "workflowID", "runID", -24, 0))
 }
 
 func (s *utilSuite) TestConstructVisibilityFilenamePrefix() {

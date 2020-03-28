@@ -139,16 +139,16 @@ wait_for_db() {
     fi
 }
 
-register_default_domain() {
+register_default_namespace() {
     echo "Temporal CLI Address: $TEMPORAL_CLI_ADDRESS"
     sleep 5
-    echo "Registering default domain: $DEFAULT_DOMAIN_NAME"
-    until tctl --do $DEFAULT_DOMAIN_NAME domain describe < /dev/null; do
-        echo "Default domain $DEFAULT_DOMAIN_NAME not found.  Creating..."
+    echo "Registering default namespace: $DEFAULT_DOMAIN_NAME"
+    until tctl --do $DEFAULT_DOMAIN_NAME namespace describe < /dev/null; do
+        echo "Default namespace $DEFAULT_DOMAIN_NAME not found.  Creating..."
         sleep 1
-        tctl --do $DEFAULT_DOMAIN_NAME domain register --rd $DEFAULT_DOMAIN_RETENTION --desc "Default domain for Temporal Server"
+        tctl --do $DEFAULT_DOMAIN_NAME namespace register --rd $DEFAULT_DOMAIN_RETENTION --desc "Default namespace for Temporal Server"
     done
-    echo "Default domain registration complete."
+    echo "Default namespace registration complete."
 }
 
 wait_for_db
@@ -157,7 +157,7 @@ if [ "$SKIP_SCHEMA_SETUP" != true ]; then
 fi
 
 if [ "$SKIP_DEFAULT_DOMAIN_CREATION" != true ]; then
-    register_default_domain &
+    register_default_namespace &
 fi
 
 bash /start-temporal.sh

@@ -1,6 +1,6 @@
 CREATE TABLE open_executions (
-  domain_id            uuid,
-  domain_partition     int,
+  namespace_id            uuid,
+  namespace_partition     int,
   workflow_id          text,
   run_id               uuid,
   start_time           timestamp,
@@ -8,7 +8,7 @@ CREATE TABLE open_executions (
   workflow_type_name   text,
   memo                 blob,
   encoding             text,
-  PRIMARY KEY  ((domain_id, domain_partition), start_time, run_id)
+  PRIMARY KEY  ((namespace_id, namespace_partition), start_time, run_id)
 ) WITH CLUSTERING ORDER BY (start_time DESC)
   AND COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy',
@@ -21,8 +21,8 @@ CREATE INDEX open_by_workflow_id ON open_executions (workflow_id);
 CREATE INDEX open_by_type ON open_executions (workflow_type_name);
 
 CREATE TABLE closed_executions (
-  domain_id            uuid,
-  domain_partition     int,
+  namespace_id            uuid,
+  namespace_partition     int,
   workflow_id          text,
   run_id               uuid,
   start_time           timestamp,
@@ -33,7 +33,7 @@ CREATE TABLE closed_executions (
   history_length       bigint,
   memo                 blob,
   encoding             text,
-  PRIMARY KEY  ((domain_id, domain_partition), start_time, run_id)
+  PRIMARY KEY  ((namespace_id, namespace_partition), start_time, run_id)
 ) WITH CLUSTERING ORDER BY (start_time DESC)
   AND COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
@@ -47,8 +47,8 @@ CREATE INDEX closed_by_status ON closed_executions (status);
 
 -- same as closed_executions but order by close_time
 CREATE TABLE closed_executions_v2 (
-  domain_id            uuid,
-  domain_partition     int,
+  namespace_id            uuid,
+  namespace_partition     int,
   workflow_id          text,
   run_id               uuid,
   start_time           timestamp,
@@ -59,7 +59,7 @@ CREATE TABLE closed_executions_v2 (
   history_length       bigint,
   memo                 blob,
   encoding             text,
-  PRIMARY KEY  ((domain_id, domain_partition), close_time, run_id)
+  PRIMARY KEY  ((namespace_id, namespace_partition), close_time, run_id)
 ) WITH CLUSTERING ORDER BY (close_time DESC)
   AND COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'

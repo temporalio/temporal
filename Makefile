@@ -153,7 +153,7 @@ clean-bins:
 	@rm -f temporal-sql-tool
 	@rm -f temporal-canary
 
-temporal-server: proto
+temporal-server: #proto
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -o temporal-server cmd/server/main.go
 
@@ -161,7 +161,7 @@ tctl: proto
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
 	go build -o tctl cmd/tools/cli/main.go
 
-temporal-cassandra-tool: proto
+temporal-cassandra-tool: #proto
 	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
 	go build -o temporal-cassandra-tool cmd/tools/cassandra/main.go
 
@@ -205,7 +205,7 @@ check: copyright goimports-check lint staticcheck errcheck
 clean-test-results:
 	@rm -f test.log
 
-unit-test: clean-test-results proto
+unit-test: clean-test-results #proto
 	@printf $(COLOR) "Run unit tests..."
 	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS), @go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log$(NEWLINE))
 

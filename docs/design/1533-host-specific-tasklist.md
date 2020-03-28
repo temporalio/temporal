@@ -212,7 +212,7 @@ When `EnableSessionWorker` is set to true, two more activity workers will be sta
 
    3. Special session creation activity scheduled by RecreateSession().
 
-When domain failover happens, since no worker will poll from the resource specific task, all activities within a session will timeout and the user will get an error. Also, Cadence server will detect the heartbeat timeout from the session creation activity.
+When namespace failover happens, since no worker will poll from the resource specific task, all activities within a session will timeout and the user will get an error. Also, Cadence server will detect the heartbeat timeout from the session creation activity.
 
 ### Sequence Diagrams
 

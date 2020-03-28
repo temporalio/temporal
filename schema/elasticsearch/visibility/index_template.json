@@ -13,7 +13,7 @@
     "_doc": {
       "dynamic": "false",
       "properties": {
-        "DomainID": {
+        "NamespaceID": {
           "type": "keyword"
         },
         "WorkflowID": {
@@ -58,7 +58,7 @@
             "addon": { "type": "keyword"},
             "addon-type": { "type": "keyword"},
             "user": { "type": "keyword"},
-            "CustomDomain": { "type": "keyword"},
+            "CustomNamespace": { "type": "keyword"},
             "Operator": { "type": "keyword"},
             "RolloutID": { "type": "keyword"},
             "BinaryChecksums": { "type": "keyword"}

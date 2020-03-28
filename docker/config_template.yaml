@@ -156,7 +156,7 @@ services:
         {{- end }}
 
 clusterMetadata:
-    enableGlobalDomain: false
+    enableGlobalNamespace: false
     failoverVersionIncrement: 10
     masterClusterName: "active"
     currentClusterName: "active"
@@ -183,7 +183,7 @@ archival:
     status: "disabled"
     enableRead: false
 
-domainDefaults:
+namespaceDefaults:
   archival:
     history:
       status: "enabled"
