@@ -134,7 +134,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoEr
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespace, nil).Times(1)
+	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil).Times(1)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
@@ -150,7 +150,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr()
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespace, nil).Times(1)
+	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil).Times(1)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
@@ -165,7 +165,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() 
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespace, nil).Times(1)
+	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil).Times(1)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
@@ -182,7 +182,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, err).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespace, nil).Times(2)
+	s.mockShard.resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil).Times(2)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,

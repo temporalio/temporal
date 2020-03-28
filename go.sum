@@ -238,6 +238,7 @@ go.temporal.io/temporal v0.20.1 h1:iiFFfgJaPNc54iyuPgetxWz8Ca5bql56RPzw/EuJqng=
 go.temporal.io/temporal v0.20.1/go.mod h1:y8DDRZEsHi5LXoyqZIYB6GrJjTVMe3oKQzb1RXUWRBc=
 go.temporal.io/temporal-proto v0.20.1 h1:hiu9DbQVYOZDp3IVkn0wCahIN6iQR429ctVXcUCARBw=
 go.temporal.io/temporal-proto v0.20.1/go.mod h1:Lv8L8YBpbp0Z7V5nbvw5UD0j7x0isebhCOIDLkBqn6s=
+go.temporal.io/temporal-proto v0.20.2/go.mod h1:Lv8L8YBpbp0Z7V5nbvw5UD0j7x0isebhCOIDLkBqn6s=
 go.uber.org/atomic v1.5.0 h1:OI5t8sDa1Or+q8AeE+yKeB/SDYioSHAgcVljj9JIETY=
 go.uber.org/atomic v1.5.0/go.mod h1:sABNBOSYdrvTF6hTgEIbc7YasKWGhgEQZyfxyTvoXHQ=
 go.uber.org/atomic v1.6.0 h1:Ezj3JGmsOnG1MoRWQkPBsKLe9DwWD9QeXzTRzzldNVk=
