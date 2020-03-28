@@ -79,7 +79,7 @@ func newTransferQueueActiveProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyActiveTask(primitives.UUID(task.DomainID).String(), task)
+		return taskAllocator.verifyActiveTask(primitives.UUID(task.NamespaceID).String(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
@@ -129,7 +129,7 @@ func newTransferQueueFailoverProcessor(
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
 	historyClient history.Client,
-	domainIDs map[string]struct{},
+	namespaceIDs map[string]struct{},
 	standbyClusterName string,
 	minLevel int64,
 	maxLevel int64,
@@ -153,7 +153,7 @@ func newTransferQueueFailoverProcessor(
 	failoverUUID := uuid.New()
 	logger = logger.WithTags(
 		tag.ClusterName(currentClusterName),
-		tag.WorkflowDomainIDs(domainIDs),
+		tag.WorkflowNamespaceIDs(namespaceIDs),
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
 
@@ -162,7 +162,7 @@ func newTransferQueueFailoverProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyFailoverActiveTask(domainIDs, primitives.UUID(task.DomainID).String(), task)
+		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, primitives.UUID(task.NamespaceID).String(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return maxLevel // this is a const
@@ -176,7 +176,7 @@ func newTransferQueueFailoverProcessor(
 				MinLevel:     minLevel,
 				CurrentLevel: ackLevel,
 				MaxLevel:     maxLevel,
-				DomainIDs:    domainIDs,
+				NamespaceIDs: namespaceIDs,
 			},
 		)
 	}

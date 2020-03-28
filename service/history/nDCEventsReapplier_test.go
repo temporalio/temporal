@@ -75,7 +75,7 @@ func (s *nDCEventReapplicationSuite) TearDownTest() {
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 	runID := uuid.New()
 	execution := &persistence.WorkflowExecutionInfo{
-		DomainID: uuid.New(),
+		NamespaceID: uuid.New(),
 	}
 	event := &commonproto.HistoryEvent{
 		EventId:   1,
@@ -136,7 +136,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	runID := uuid.New()
 	execution := &persistence.WorkflowExecutionInfo{
-		DomainID: uuid.New(),
+		NamespaceID: uuid.New(),
 	}
 	event1 := &commonproto.HistoryEvent{
 		EventId:   1,
@@ -185,7 +185,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	runID := uuid.New()
 	execution := &persistence.WorkflowExecutionInfo{
-		DomainID: uuid.New(),
+		NamespaceID: uuid.New(),
 	}
 	event := &commonproto.HistoryEvent{
 		EventId:   1,

@@ -57,7 +57,7 @@ type (
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
-		mockDomainCache          *cache.MockDomainCache
+		mockNamespaceCache       *cache.MockNamespaceCache
 		mockClusterMetadata      *cluster.MockMetadata
 		mockMutableState         *MockmutableState
 
@@ -106,10 +106,10 @@ func (s *activityReplicatorSuite) SetupTest() {
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
@@ -146,29 +146,29 @@ func (s *activityReplicatorSuite) TearDownTest() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(100)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:   domainID,
-		WorkflowId: workflowID,
-		RunId:      runID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       runID,
 	}
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -185,13 +185,13 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(100)
 
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -200,19 +200,19 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 	request := &historyservice.SyncActivityRequest{
-		DomainId:   domainID,
-		WorkflowId: workflowID,
-		RunId:      runID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       runID,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -229,8 +229,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_IncomingVersionSmaller() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -238,7 +238,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 	lastWriteVersion := version + 100
 	nextEventID := scheduleID - 10
 
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -248,7 +248,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:    domainID,
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 		RunId:       runID,
 		Version:     version,
@@ -260,11 +260,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -281,8 +281,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_IncomingVersionLarger() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -290,7 +290,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 	lastWriteVersion := version - 100
 	nextEventID := scheduleID - 10
 
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -300,7 +300,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:    domainID,
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 		RunId:       runID,
 		Version:     version,
@@ -312,11 +312,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -329,12 +329,12 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 	).AnyTimes()
 
 	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
-	s.Equal(newRetryTaskErrorWithHint(ErrRetrySyncActivityMsg, domainID, workflowID, runID, nextEventID), err)
+	s.Equal(newRetryTaskErrorWithHint(ErrRetrySyncActivityMsg, namespaceID, workflowID, runID, nextEventID), err)
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVersionSmaller_DiscardTask() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -354,7 +354,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 			},
 		},
 	}
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -364,7 +364,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:       domainID,
+		NamespaceId:    namespaceID,
 		WorkflowId:     workflowID,
 		RunId:          runID,
 		Version:        version,
@@ -390,11 +390,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 		},
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -411,8 +411,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_IncomingVersionLarger_ReturnRetryError() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -432,7 +432,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 			},
 		},
 	}
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -442,7 +442,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:       domainID,
+		NamespaceId:    namespaceID,
 		WorkflowId:     workflowID,
 		RunId:          runID,
 		Version:        version,
@@ -464,11 +464,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 		},
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -483,7 +483,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
 	s.Equal(newNDCRetryTaskErrorWithHint(
 		resendHigherVersionMessage,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		50,
@@ -496,8 +496,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingScheduleIDLarger_ReturnRetryError() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(99)
@@ -521,7 +521,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 			},
 		},
 	}
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -531,7 +531,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:       domainID,
+		NamespaceId:    namespaceID,
 		WorkflowId:     workflowID,
 		RunId:          runID,
 		Version:        version,
@@ -553,11 +553,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 		},
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -572,7 +572,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
 	s.Equal(newNDCRetryTaskErrorWithHint(
 		resendMissingEventMessage,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		scheduleID-10,
@@ -585,8 +585,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameScheduleID() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(99)
@@ -606,7 +606,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 			},
 		},
 	}
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -616,7 +616,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:       domainID,
+		NamespaceId:    namespaceID,
 		WorkflowId:     workflowID,
 		RunId:          runID,
 		Version:        version,
@@ -641,11 +641,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateCloseStatus().
 		Return(persistence.WorkflowStateCreated, persistence.WorkflowCloseStatusRunning).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -662,8 +662,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersionHistoryWin() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(99)
@@ -679,7 +679,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersion
 			},
 		},
 	}
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -689,7 +689,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersion
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:       domainID,
+		NamespaceId:    namespaceID,
 		WorkflowId:     workflowID,
 		RunId:          runID,
 		Version:        version,
@@ -718,11 +718,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersion
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateCloseStatus().
 		Return(persistence.WorkflowStateCreated, persistence.WorkflowCloseStatusRunning).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -739,8 +739,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersion
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityCompleted() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -748,7 +748,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 	lastWriteVersion := version
 	nextEventID := scheduleID + 10
 
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -758,7 +758,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:    domainID,
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 		RunId:       runID,
 		Version:     version,
@@ -769,11 +769,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -791,8 +791,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivityVersionLarger() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -800,7 +800,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivity
 	lastWriteVersion := version + 10
 	nextEventID := scheduleID + 10
 
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -810,7 +810,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivity
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:    domainID,
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
 		RunId:       runID,
 		Version:     version,
@@ -821,11 +821,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivity
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -845,8 +845,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivity
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVersionSameAttempt() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(100)
@@ -859,7 +859,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	details := []byte("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -869,7 +869,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:          domainID,
+		NamespaceId:       namespaceID,
 		WorkflowId:        workflowID,
 		RunId:             runID,
 		Version:           version,
@@ -886,11 +886,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -917,8 +917,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVersionLargerAttempt() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(100)
@@ -931,7 +931,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	details := []byte("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -941,7 +941,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:          domainID,
+		NamespaceId:       namespaceID,
 		WorkflowId:        workflowID,
 		RunId:             runID,
 		Version:           version,
@@ -958,11 +958,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -989,8 +989,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_LargerVersion() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(100)
@@ -1003,7 +1003,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 	details := []byte("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -1013,7 +1013,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:          domainID,
+		NamespaceId:       namespaceID,
 		WorkflowId:        workflowID,
 		RunId:             runID,
 		Version:           version,
@@ -1030,11 +1030,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -1061,8 +1061,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(100)
@@ -1075,7 +1075,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	details := []byte("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -1084,7 +1084,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:          domainID,
+		NamespaceId:       namespaceID,
 		WorkflowId:        workflowID,
 		RunId:             runID,
 		Version:           version,
@@ -1102,11 +1102,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateCloseStatus().Return(1, 0).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},
@@ -1145,8 +1145,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflow() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(100)
@@ -1159,7 +1159,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	details := []byte("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
-	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -1168,7 +1168,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:          domainID,
+		NamespaceId:       namespaceID,
 		WorkflowId:        workflowID,
 		RunId:             runID,
 		Version:           version,
@@ -1186,11 +1186,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateCloseStatus().Return(3, 0).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
-		cache.NewGlobalDomainCacheEntryForTest(
-			&persistence.DomainInfo{ID: domainID, Name: domainName},
-			&persistence.DomainConfig{Retention: 1},
-			&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
+		cache.NewGlobalNamespaceCacheEntryForTest(
+			&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+			&persistence.NamespaceConfig{Retention: 1},
+			&persistence.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{ClusterName: cluster.TestCurrentClusterName},

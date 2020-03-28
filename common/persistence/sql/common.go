@@ -68,7 +68,7 @@ func (m *sqlStore) txExecute(operation string, f func(tx sqlplugin.Tx) error) er
 			*persistence.CurrentWorkflowConditionFailedError,
 			*serviceerror.Internal,
 			*persistence.WorkflowExecutionAlreadyStartedError,
-			*serviceerror.DomainAlreadyExists,
+			*serviceerror.NamespaceAlreadyExists,
 			*persistence.ShardOwnershipLostError:
 			return err
 		default:

@@ -23,17 +23,17 @@ package definition
 type (
 	// WorkflowIdentifier is the combinations which represent a workflow
 	WorkflowIdentifier struct {
-		DomainID   string
-		WorkflowID string
-		RunID      string
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
 	}
 )
 
 // NewWorkflowIdentifier create a new WorkflowIdentifier
-func NewWorkflowIdentifier(domainID string, workflowID string, runID string) WorkflowIdentifier {
+func NewWorkflowIdentifier(namespaceID string, workflowID string, runID string) WorkflowIdentifier {
 	return WorkflowIdentifier{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      runID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
 	}
 }

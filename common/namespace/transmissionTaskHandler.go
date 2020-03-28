@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package domain
+package namespace
 
 import (
 	"github.com/gogo/protobuf/types"
@@ -32,57 +32,57 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 )
 
-// NOTE: the counterpart of domain replication receiving logic is in service/worker package
+// NOTE: the counterpart of namespace replication receiving logic is in service/worker package
 
 type (
-	// Replicator is the interface which can replicate the domain
+	// Replicator is the interface which can replicate the namespace
 	Replicator interface {
-		HandleTransmissionTask(domainOperation enums.DomainOperation, info *persistence.DomainInfo,
-			config *persistence.DomainConfig, replicationConfig *persistence.DomainReplicationConfig,
-			configVersion int64, failoverVersion int64, isGlobalDomainEnabled bool) error
+		HandleTransmissionTask(namespaceOperation enums.NamespaceOperation, info *persistence.NamespaceInfo,
+			config *persistence.NamespaceConfig, replicationConfig *persistence.NamespaceReplicationConfig,
+			configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error
 	}
 
-	domainReplicatorImpl struct {
+	namespaceReplicatorImpl struct {
 		replicationMessageSink messaging.Producer
 		logger                 log.Logger
 	}
 )
 
-// NewDomainReplicator create a new instance of domain replicator
-func NewDomainReplicator(replicationMessageSink messaging.Producer, logger log.Logger) Replicator {
-	return &domainReplicatorImpl{
+// NewNamespaceReplicator create a new instance of namespace replicator
+func NewNamespaceReplicator(replicationMessageSink messaging.Producer, logger log.Logger) Replicator {
+	return &namespaceReplicatorImpl{
 		replicationMessageSink: replicationMessageSink,
 		logger:                 logger,
 	}
 }
 
-// HandleTransmissionTask handle transmission of the domain replication task
-func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOperation enums.DomainOperation,
-	info *persistence.DomainInfo, config *persistence.DomainConfig, replicationConfig *persistence.DomainReplicationConfig,
-	configVersion int64, failoverVersion int64, isGlobalDomainEnabled bool) error {
+// HandleTransmissionTask handle transmission of the namespace replication task
+func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(namespaceOperation enums.NamespaceOperation,
+	info *persistence.NamespaceInfo, config *persistence.NamespaceConfig, replicationConfig *persistence.NamespaceReplicationConfig,
+	configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error {
 
-	if !isGlobalDomainEnabled {
-		domainReplicator.logger.Warn("Should not replicate non global domain", tag.WorkflowDomainID(info.ID))
+	if !isGlobalNamespaceEnabled {
+		namespaceReplicator.logger.Warn("Should not replicate non global namespace", tag.WorkflowNamespaceID(info.ID))
 		return nil
 	}
 
-	status, err := domainReplicator.convertDomainStatusToProto(info.Status)
+	status, err := namespaceReplicator.convertNamespaceStatusToProto(info.Status)
 	if err != nil {
 		return err
 	}
 
-	taskType := enums.ReplicationTaskTypeDomain
-	task := &replication.DomainTaskAttributes{
-		DomainOperation: domainOperation,
-		Id:              info.ID,
-		Info: &commonproto.DomainInfo{
+	taskType := enums.ReplicationTaskTypeNamespace
+	task := &replication.NamespaceTaskAttributes{
+		NamespaceOperation: namespaceOperation,
+		Id:                 info.ID,
+		Info: &commonproto.NamespaceInfo{
 			Name:        info.Name,
 			Status:      status,
 			Description: info.Description,
 			OwnerEmail:  info.OwnerEmail,
 			Data:        info.Data,
 		},
-		Config: &commonproto.DomainConfiguration{
+		Config: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: config.Retention,
 			EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 			HistoryArchivalStatus:                  config.HistoryArchivalStatus,
@@ -91,24 +91,24 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 			VisibilityArchivalURI:                  config.VisibilityArchivalURI,
 			BadBinaries:                            &config.BadBinaries,
 		},
-		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: replicationConfig.ActiveClusterName,
-			Clusters:          domainReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
+			Clusters:          namespaceReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 		},
 		ConfigVersion:   configVersion,
 		FailoverVersion: failoverVersion,
 	}
 
-	return domainReplicator.replicationMessageSink.Publish(
+	return namespaceReplicator.replicationMessageSink.Publish(
 		&replication.ReplicationTask{
 			TaskType: taskType,
-			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-				DomainTaskAttributes: task,
+			Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+				NamespaceTaskAttributes: task,
 			},
 		})
 }
 
-func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigToProto(
+func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationConfigToProto(
 	input []*persistence.ClusterReplicationConfig,
 ) []*commonproto.ClusterReplicationConfiguration {
 	output := []*commonproto.ClusterReplicationConfiguration{}
@@ -119,15 +119,15 @@ func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigToP
 	return output
 }
 
-func (domainReplicator *domainReplicatorImpl) convertDomainStatusToProto(input int) (enums.DomainStatus, error) {
+func (namespaceReplicator *namespaceReplicatorImpl) convertNamespaceStatusToProto(input int) (enums.NamespaceStatus, error) {
 	switch input {
-	case persistence.DomainStatusRegistered:
-		output := enums.DomainStatusRegistered
+	case persistence.NamespaceStatusRegistered:
+		output := enums.NamespaceStatusRegistered
 		return output, nil
-	case persistence.DomainStatusDeprecated:
-		output := enums.DomainStatusDeprecated
+	case persistence.NamespaceStatusDeprecated:
+		output := enums.NamespaceStatusDeprecated
 		return output, nil
 	default:
-		return enums.DomainStatusRegistered, ErrInvalidDomainStatus
+		return enums.NamespaceStatusRegistered, ErrInvalidNamespaceStatus
 	}
 }

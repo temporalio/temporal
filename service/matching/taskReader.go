@@ -278,5 +278,5 @@ func (tr *taskReader) logger() log.Logger {
 }
 
 func (tr *taskReader) scope() metrics.Scope {
-	return tr.tlMgr.domainScope()
+	return tr.tlMgr.namespaceScope()
 }

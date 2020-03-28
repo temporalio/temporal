@@ -18,7 +18,7 @@ archival:
       s3store:
         region: "us-east-1"
 
-domainDefaults:
+namespaceDefaults:
   archival:
     history:
       status: "enabled"
@@ -55,11 +55,11 @@ it will search all records starting from `2020-01-21T00:00:00Z` to `2020-01-21T5
 
 *Searches for all records done in day 2020-01-21 with the specified workflow id*
 
-`./cadence --do samples-domain workflow listarchived -q "StartTime = '2020-01-21T00:00:00Z' AND WorkflowID='workflow-id' AND SearchPrecision='Day'"`
+`./cadence --do samples-namespace workflow listarchived -q "StartTime = '2020-01-21T00:00:00Z' AND WorkflowID='workflow-id' AND SearchPrecision='Day'"`
 ## Storage in S3
 Workflow runs are stored in s3 using the following structure
 ```
-s3://<bucket-name>/<domain-id>/
+s3://<bucket-name>/<namespace-id>/
 	history/<workflow-id>/<run-id>
 	visibility/
             workflowTypeName/<workflow-type-name>/
@@ -75,7 +75,7 @@ s3://<bucket-name>/<domain-id>/
 2. Install localstack from [here](https://github.com/localstack/localstack#installing)
 3. Launch localstack with `SERVICES=s3 localstack start`
 4. Create a bucket using `aws --endpoint-url=http://localhost:4572 s3 mb s3://cadence-development` 
-5. Configure archival and domainDefaults with the following configuration
+5. Configure archival and namespaceDefaults with the following configuration
 ```
 archival:
   history:
@@ -95,7 +95,7 @@ archival:
         endpoint: "http://127.0.0.1:4572"
         s3ForcePathStyle: true
 
-domainDefaults:
+namespaceDefaults:
   archival:
     history:
       status: "enabled"

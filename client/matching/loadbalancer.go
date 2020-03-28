@@ -43,7 +43,7 @@ type (
 		// to a parent partition in which case, no load balancing should be
 		// performed
 		PickWritePartition(
-			domainID string,
+			namespaceID string,
 			taskList commonproto.TaskList,
 			taskListType int32,
 			forwardedFrom string,
@@ -53,7 +53,7 @@ type (
 		// Input is name of the original task list as specified by caller. When
 		// forwardedFrom is non-empty, no load balancing should be done.
 		PickReadPartition(
-			domainID string,
+			namespaceID string,
 			taskList commonproto.TaskList,
 			taskListType int32,
 			forwardedFrom string,
@@ -61,9 +61,9 @@ type (
 	}
 
 	defaultLoadBalancer struct {
-		nReadPartitions  dynamicconfig.IntPropertyFnWithTaskListInfoFilters
-		nWritePartitions dynamicconfig.IntPropertyFnWithTaskListInfoFilters
-		domainIDToName   func(string) (string, error)
+		nReadPartitions   dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+		nWritePartitions  dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+		namespaceIDToName func(string) (string, error)
 	}
 )
 
@@ -74,36 +74,36 @@ const (
 // NewLoadBalancer returns an instance of matching load balancer that
 // can help distribute api calls across task list partitions
 func NewLoadBalancer(
-	domainIDToName func(string) (string, error),
+	namespaceIDToName func(string) (string, error),
 	dc *dynamicconfig.Collection,
 ) LoadBalancer {
 	return &defaultLoadBalancer{
-		domainIDToName:   domainIDToName,
-		nReadPartitions:  dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingNumTasklistReadPartitions, 1),
-		nWritePartitions: dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingNumTasklistWritePartitions, 1),
+		namespaceIDToName: namespaceIDToName,
+		nReadPartitions:   dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingNumTasklistReadPartitions, 1),
+		nWritePartitions:  dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingNumTasklistWritePartitions, 1),
 	}
 }
 
 func (lb *defaultLoadBalancer) PickWritePartition(
-	domainID string,
+	namespaceID string,
 	taskList commonproto.TaskList,
 	taskListType int32,
 	forwardedFrom string,
 ) string {
-	return lb.pickPartition(domainID, taskList, taskListType, forwardedFrom, lb.nWritePartitions)
+	return lb.pickPartition(namespaceID, taskList, taskListType, forwardedFrom, lb.nWritePartitions)
 }
 
 func (lb *defaultLoadBalancer) PickReadPartition(
-	domainID string,
+	namespaceID string,
 	taskList commonproto.TaskList,
 	taskListType int32,
 	forwardedFrom string,
 ) string {
-	return lb.pickPartition(domainID, taskList, taskListType, forwardedFrom, lb.nReadPartitions)
+	return lb.pickPartition(namespaceID, taskList, taskListType, forwardedFrom, lb.nReadPartitions)
 }
 
 func (lb *defaultLoadBalancer) pickPartition(
-	domainID string,
+	namespaceID string,
 	taskList commonproto.TaskList,
 	taskListType int32,
 	forwardedFrom string,
@@ -119,12 +119,12 @@ func (lb *defaultLoadBalancer) pickPartition(
 		return taskList.GetName()
 	}
 
-	domainName, err := lb.domainIDToName(domainID)
+	namespace, err := lb.namespaceIDToName(namespaceID)
 	if err != nil {
 		return taskList.GetName()
 	}
 
-	n := nPartitions(domainName, taskList.GetName(), taskListType)
+	n := nPartitions(namespace, taskList.GetName(), taskListType)
 	if n <= 0 {
 		return taskList.GetName()
 	}

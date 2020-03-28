@@ -40,20 +40,20 @@ bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 -
 ./temporal-server --zone standby start
 ```
 
-5. Create global domains
+5. Create global namespaces
 ```
-cadence --do sample domain register --gd true --ac active --cl active standby
+cadence --do sample namespace register --gd true --ac active --cl active standby
 ```
 
 6. Failover between zones:
 
 Failover to standby:
 ```
-cadence --do sample domain update --ac standby
+cadence --do sample namespace update --ac standby
 ```
 Failback to active:
 ```
-cadence --do sample domain update --ac active
+cadence --do sample namespace update --ac active
 ```
 
 Create replication task using CLI

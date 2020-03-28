@@ -65,7 +65,7 @@ message ActivityInfo {
     string retryLastFailureReason = 29;
     string retryLastWorkerIdentity = 30;
     bytes retryLastFailureDetails = 31;
-    bytes domainID = 32;
+    bytes namespaceID = 32;
     int64 scheduleID = 33;
     bytes lastHeartbeatDetails = 34;
     google.protobuf.Timestamp lastHeartbeatUpdatedTime = 35;
@@ -81,7 +81,7 @@ message ShardInfo {
     int32 stolenSinceRenew = 6;
     google.protobuf.Timestamp updatedAt = 7;
     google.protobuf.Timestamp timerAckLevel = 8;
-    int64 domainNotificationVersion = 9;
+    int64 namespaceNotificationVersion = 9;
     map<string, int64> clusterTransferAckLevel = 10;
     map<string, google.protobuf.Timestamp> clusterTimerAckLevel = 11;
     map<string, int64> clusterReplicationLevel = 12;
@@ -89,7 +89,7 @@ message ShardInfo {
 }
 
 message ReplicationTaskInfo {
-    bytes domainID = 1;
+    bytes namespaceID = 1;
     string workflowID = 2;
     bytes runID = 3;
     int32 taskType = 4;
@@ -107,7 +107,7 @@ message ReplicationTaskInfo {
 }
 
 message TimerTaskInfo {
-    bytes domainID = 1;
+    bytes namespaceID = 1;
     string workflowID = 2;
     bytes runID = 3;
     int32 taskType = 4;
@@ -120,11 +120,11 @@ message TimerTaskInfo {
 }
 
 message TransferTaskInfo {
-    bytes domainID = 1;
+    bytes namespaceID = 1;
     string workflowID = 2;
     bytes runID = 3;
     int32 taskType = 4;
-    bytes targetDomainID = 5;
+    bytes targetNamespaceID = 5;
     string targetWorkflowID = 6;
     bytes targetRunID = 7;
     string taskList = 8;
@@ -174,7 +174,7 @@ message TimerInfo {
 }
 
 message TaskInfo {
-    bytes domainID = 1;
+    bytes namespaceID = 1;
     string workflowID = 2;
     bytes runID = 3;
     int64 scheduleID = 4;
@@ -188,7 +188,7 @@ message AllocatedTaskInfo {
 }
 
 message TaskListInfo {
-    bytes domainID = 1;
+    bytes namespaceID = 1;
     string name = 2;
     int32 taskType = 3;
     // {Normal, Sticky}
@@ -223,9 +223,9 @@ message WorkflowExecutionState {
 }
 
 message WorkflowExecutionInfo {
-    bytes domainID = 61;
+    bytes namespaceID = 61;
     string workflowID = 62;
-    bytes parentDomainID = 1;
+    bytes parentNamespaceID = 1;
     string parentWorkflowID = 2;
     bytes parentRunID = 3;
     int64 initiatedID = 4;
@@ -305,13 +305,13 @@ message ChildExecutionInfo {
     bytes startedEvent = 8;
     string startedEventEncoding = 9;
     string createRequestID = 10;
-    string domainName = 11;
+    string namespace = 11;
     string workflowTypeName = 12;
     int32 parentClosePolicy = 13;
     int64 initiatedID = 14;
 }
 
-message DomainInfo {
+message NamespaceInfo {
     string name = 1;
     string description = 2;
     string owner = 3;

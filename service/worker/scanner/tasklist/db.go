@@ -36,7 +36,7 @@ func (s *Scavenger) completeTasks(key *p.TaskListKey, taskID int64, limit int) (
 	var err error
 	err = s.retryForever(func() error {
 		n, err = s.db.CompleteTasksLessThan(&p.CompleteTasksLessThanRequest{
-			DomainID:     key.DomainID,
+			NamespaceID:  key.NamespaceID,
 			TaskListName: key.Name,
 			TaskType:     key.TaskType,
 			TaskID:       taskID,
@@ -52,11 +52,11 @@ func (s *Scavenger) getTasks(key *p.TaskListKey, batchSize int) (*p.GetTasksResp
 	var resp *p.GetTasksResponse
 	err = s.retryForever(func() error {
 		resp, err = s.db.GetTasks(&p.GetTasksRequest{
-			DomainID:  key.DomainID,
-			TaskList:  key.Name,
-			TaskType:  key.TaskType,
-			ReadLevel: -1, // get the first N tasks sorted by taskID
-			BatchSize: batchSize,
+			NamespaceID: key.NamespaceID,
+			TaskList:    key.Name,
+			TaskType:    key.TaskType,
+			ReadLevel:   -1, // get the first N tasks sorted by taskID
+			BatchSize:   batchSize,
 		})
 		return err
 	})
@@ -81,9 +81,9 @@ func (s *Scavenger) deleteTaskList(key *p.TaskListKey, rangeID int64) error {
 	return backoff.Retry(func() error {
 		return s.db.DeleteTaskList(&p.DeleteTaskListRequest{
 			TaskList: &p.TaskListKey{
-				DomainID: key.DomainID,
-				Name:     key.Name,
-				TaskType: key.TaskType,
+				NamespaceID: key.NamespaceID,
+				Name:        key.Name,
+				TaskType:    key.TaskType,
 			},
 			RangeID: rangeID,
 		})

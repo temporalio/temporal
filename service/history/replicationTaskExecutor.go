@@ -45,7 +45,7 @@ type (
 
 	replicationTaskExecutorImpl struct {
 		currentCluster      string
-		domainCache         cache.DomainCache
+		namespaceCache      cache.NamespaceCache
 		nDCHistoryResender  xdc.NDCHistoryResender
 		historyRereplicator xdc.HistoryRereplicator
 		historyEngine       Engine
@@ -59,7 +59,7 @@ type (
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func newReplicationTaskExecutor(
 	currentCluster string,
-	domainCache cache.DomainCache,
+	namespaceCache cache.NamespaceCache,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyRereplicator xdc.HistoryRereplicator,
 	historyEngine Engine,
@@ -68,7 +68,7 @@ func newReplicationTaskExecutor(
 ) replicationTaskExecutor {
 	return &replicationTaskExecutorImpl{
 		currentCluster:      currentCluster,
-		domainCache:         domainCache,
+		namespaceCache:      namespaceCache,
 		nDCHistoryResender:  nDCHistoryResender,
 		historyRereplicator: historyRereplicator,
 		historyEngine:       historyEngine,
@@ -116,13 +116,13 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 ) error {
 
 	attr := task.GetSyncActivityTaskAttributes()
-	doContinue, err := e.filterTask(attr.GetDomainId(), forceApply)
+	doContinue, err := e.filterTask(attr.GetNamespaceId(), forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
 
 	request := &historyservice.SyncActivityRequest{
-		DomainId:           attr.DomainId,
+		NamespaceId:        attr.NamespaceId,
 		WorkflowId:         attr.WorkflowId,
 		RunId:              attr.RunId,
 		Version:            attr.Version,
@@ -157,7 +157,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 
 		// this is the retry error
 		if resendErr := e.historyRereplicator.SendMultiWorkflowHistory(
-			attr.GetDomainId(),
+			attr.GetNamespaceId(),
 			attr.GetWorkflowId(),
 			retryV1Err.RunId,
 			retryV1Err.NextEventId,
@@ -174,7 +174,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 		defer stopwatch.Stop()
 
 		if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
-			retryV2Err.DomainId,
+			retryV2Err.NamespaceId,
 			retryV2Err.WorkflowId,
 			retryV2Err.RunId,
 			retryV2Err.StartEventId,
@@ -199,14 +199,14 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 ) error {
 
 	attr := task.GetHistoryTaskAttributes()
-	doContinue, err := e.filterTask(attr.GetDomainId(), forceApply)
+	doContinue, err := e.filterTask(attr.GetNamespaceId(), forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
 
 	request := &historyservice.ReplicateEventsRequest{
 		SourceCluster: sourceCluster,
-		DomainUUID:    attr.DomainId,
+		NamespaceUUID: attr.NamespaceId,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: attr.WorkflowId,
 			RunId:      attr.RunId,
@@ -235,7 +235,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	defer stopwatch.Stop()
 
 	resendErr := e.historyRereplicator.SendMultiWorkflowHistory(
-		attr.GetDomainId(),
+		attr.GetNamespaceId(),
 		attr.GetWorkflowId(),
 		retryErr.RunId,
 		retryErr.NextEventId,
@@ -257,13 +257,13 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 ) error {
 
 	attr := task.GetHistoryTaskV2Attributes()
-	doContinue, err := e.filterTask(attr.GetDomainId(), forceApply)
+	doContinue, err := e.filterTask(attr.GetNamespaceId(), forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
 
 	request := &historyservice.ReplicateEventsV2Request{
-		DomainUUID: attr.DomainId,
+		NamespaceUUID: attr.NamespaceId,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: attr.WorkflowId,
 			RunId:      attr.RunId,
@@ -286,7 +286,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 	defer stopwatch.Stop()
 
 	if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
-		retryErr.DomainId,
+		retryErr.NamespaceId,
 		retryErr.WorkflowId,
 		retryErr.RunId,
 		retryErr.StartEventId,
@@ -303,7 +303,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 }
 
 func (e *replicationTaskExecutorImpl) filterTask(
-	domainID string,
+	namespaceID string,
 	forceApply bool,
 ) (bool, error) {
 
@@ -311,14 +311,14 @@ func (e *replicationTaskExecutorImpl) filterTask(
 		return true, nil
 	}
 
-	domainEntry, err := e.domainCache.GetDomainByID(domainID)
+	namespaceEntry, err := e.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return false, err
 	}
 
 	shouldProcessTask := false
 FilterLoop:
-	for _, targetCluster := range domainEntry.GetReplicationConfig().Clusters {
+	for _, targetCluster := range namespaceEntry.GetReplicationConfig().Clusters {
 		if e.currentCluster == targetCluster.ClusterName {
 			shouldProcessTask = true
 			break FilterLoop

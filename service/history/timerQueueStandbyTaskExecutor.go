@@ -273,7 +273,7 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, decision.Version, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.NamespaceID, decision.Version, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -347,7 +347,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, startVersion, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.NamespaceID, startVersion, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -392,7 +392,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(timerTask),
+		t.getNamespaceIDAndWorkflowExecution(timerTask),
 	)
 	if err != nil {
 		return err
@@ -447,7 +447,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			primitives.UUIDString(timerTask.DomainID),
+			primitives.UUIDString(timerTask.NamespaceID),
 			timerTask.WorkflowID,
 			primitives.UUIDString(timerTask.RunID),
 			resendInfo.lastEventID,
@@ -457,7 +457,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			primitives.UUIDString(timerTask.DomainID),
+			primitives.UUIDString(timerTask.NamespaceID),
 			timerTask.WorkflowID,
 			primitives.UUIDString(timerTask.RunID),
 			*resendInfo.nextEventID,
@@ -471,7 +471,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowDomainIDBytes(timerTask.DomainID),
+			tag.WorkflowNamespaceIDBytes(timerTask.NamespaceID),
 			tag.WorkflowID(timerTask.WorkflowID),
 			tag.WorkflowRunIDBytes(timerTask.RunID),
 			tag.ClusterName(t.clusterName))

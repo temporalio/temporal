@@ -32,7 +32,7 @@ import "common/workflow_execution.proto";
 import "workflowservice/request_response.proto";
 
 message PollForDecisionTaskRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     string pollerID = 2;
     workflowservice.PollForDecisionTaskRequest pollRequest = 3;
     string forwardedFrom = 4;
@@ -59,7 +59,7 @@ message PollForDecisionTaskResponse {
 }
 
 message PollForActivityTaskRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     string pollerID = 2;
     workflowservice.PollForActivityTaskRequest pollRequest = 3;
     string forwardedFrom = 4;
@@ -80,12 +80,12 @@ message PollForActivityTaskResponse {
     int64 scheduledTimestampOfThisAttempt = 12;
     bytes heartbeatDetails = 13;
     common.WorkflowType workflowType = 14;
-    string workflowDomain = 15;
+    string workflowNamespace = 15;
     common.Header header = 16;
 }
 
 message AddDecisionTaskRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution execution = 2;
     common.TaskList taskList = 3;
     int64 scheduleId = 4;
@@ -98,9 +98,9 @@ message AddDecisionTaskResponse {
 }
 
 message AddActivityTaskRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution execution = 2;
-    string sourceDomainUUID = 3;
+    string sourceNamespaceUUID = 3;
     common.TaskList taskList = 4;
     int64 scheduleId = 5;
     int32 scheduleToStartTimeoutSeconds = 6;
@@ -112,7 +112,7 @@ message AddActivityTaskResponse {
 }
 
 message QueryWorkflowRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.TaskList taskList = 2;
     workflowservice.QueryWorkflowRequest queryRequest = 3;
     string forwardedFrom = 4;
@@ -124,7 +124,7 @@ message QueryWorkflowResponse {
 }
 
 message RespondQueryTaskCompletedRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.TaskList taskList = 2;
     string taskID = 3;
     workflowservice.RespondQueryTaskCompletedRequest completedRequest = 4;
@@ -134,7 +134,7 @@ message RespondQueryTaskCompletedResponse {
 }
 
 message CancelOutstandingPollRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     int32 taskListType = 2;
     common.TaskList taskList = 3;
     string pollerID = 4;
@@ -144,7 +144,7 @@ message CancelOutstandingPollResponse {
 }
 
 message DescribeTaskListRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.DescribeTaskListRequest descRequest = 2;
 }
 
@@ -154,7 +154,7 @@ message DescribeTaskListResponse {
 }
 
 message ListTaskListPartitionsRequest {
-    string domain = 1;
+    string namespace = 1;
     common.TaskList taskList = 2;
 }
 

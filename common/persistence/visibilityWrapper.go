@@ -33,7 +33,7 @@ type (
 	visibilityManagerWrapper struct {
 		visibilityManager          VisibilityManager
 		esVisibilityManager        VisibilityManager
-		enableReadVisibilityFromES dynamicconfig.BoolPropertyFnWithDomainFilter
+		enableReadVisibilityFromES dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		advancedVisWritingMode     dynamicconfig.StringPropertyFn
 	}
 )
@@ -42,7 +42,7 @@ var _ VisibilityManager = (*visibilityManagerWrapper)(nil)
 
 // NewVisibilityManagerWrapper create a visibility manager that operate on DB or ElasticSearch based on dynamic config.
 func NewVisibilityManagerWrapper(visibilityManager, esVisibilityManager VisibilityManager,
-	enableReadVisibilityFromES dynamicconfig.BoolPropertyFnWithDomainFilter,
+	enableReadVisibilityFromES dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	advancedVisWritingMode dynamicconfig.StringPropertyFn) VisibilityManager {
 	return &visibilityManagerWrapper{
 		visibilityManager:          visibilityManager,
@@ -106,42 +106,42 @@ func (v *visibilityManagerWrapper) UpsertWorkflowExecution(request *UpsertWorkfl
 }
 
 func (v *visibilityManagerWrapper) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
+	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ListOpenWorkflowExecutions(request)
 }
 
 func (v *visibilityManagerWrapper) ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
+	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ListClosedWorkflowExecutions(request)
 }
 
 func (v *visibilityManagerWrapper) ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
+	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ListOpenWorkflowExecutionsByType(request)
 }
 
 func (v *visibilityManagerWrapper) ListClosedWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
+	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ListClosedWorkflowExecutionsByType(request)
 }
 
 func (v *visibilityManagerWrapper) ListOpenWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
+	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ListOpenWorkflowExecutionsByWorkflowID(request)
 }
 
 func (v *visibilityManagerWrapper) ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
+	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ListClosedWorkflowExecutionsByWorkflowID(request)
 }
 
 func (v *visibilityManagerWrapper) ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error) {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
+	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ListClosedWorkflowExecutionsByStatus(request)
 }
 
 func (v *visibilityManagerWrapper) GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error) {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
+	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.GetClosedWorkflowExecution(request)
 }
 
@@ -155,23 +155,23 @@ func (v *visibilityManagerWrapper) DeleteWorkflowExecution(request *VisibilityDe
 }
 
 func (v *visibilityManagerWrapper) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
+	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ListWorkflowExecutions(request)
 }
 
 func (v *visibilityManagerWrapper) ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
+	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ScanWorkflowExecutions(request)
 }
 
 func (v *visibilityManagerWrapper) CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error) {
-	manager := v.chooseVisibilityManagerForDomain(request.Domain)
+	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.CountWorkflowExecutions(request)
 }
 
-func (v *visibilityManagerWrapper) chooseVisibilityManagerForDomain(domain string) VisibilityManager {
+func (v *visibilityManagerWrapper) chooseVisibilityManagerForNamespace(namespace string) VisibilityManager {
 	var visibilityMgr VisibilityManager
-	if v.enableReadVisibilityFromES(domain) && v.esVisibilityManager != nil {
+	if v.enableReadVisibilityFromES(namespace) && v.esVisibilityManager != nil {
 		visibilityMgr = v.esVisibilityManager
 	} else {
 		visibilityMgr = v.visibilityManager

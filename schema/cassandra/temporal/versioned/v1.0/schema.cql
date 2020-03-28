@@ -6,23 +6,23 @@ CREATE TYPE replication_info (
 
 -- This is used to store replication information for a workflow execution
 CREATE TYPE replication_state (
-  current_version                  bigint, -- current version for domain, incremented on failover
-  start_version                    bigint, -- version of domain when the workflow execution was started
-  last_write_version               bigint, -- version of domain when the last event was written to history
+  current_version                  bigint, -- current version for namespace, incremented on failover
+  start_version                    bigint, -- version of namespace when the workflow execution was started
+  last_write_version               bigint, -- version of namespace when the last event was written to history
   last_write_event_id              bigint, -- last written event id for a given version
   last_replication_info            map<text, frozen<replication_info>>, -- information about replication events from other clusters
 );
 
-CREATE TYPE domain (
+CREATE TYPE namespace (
   id          uuid,
   name        text,
-  status      int, -- enum DomainStatus {Registered, Deprecated, Deleted}
+  status      int, -- enum NamespaceStatus {Registered, Deprecated, Deleted}
   description text,
-  data        map<text,text>, -- Used for customized domain information, key values pair
+  data        map<text,text>, -- Used for customized namespace information, key values pair
   owner_email text,
 );
 
-CREATE TYPE domain_config (
+CREATE TYPE namespace_config (
   retention   int,
   emit_metric boolean,
   archival_bucket text, -- deprecated, use the two uri fields below
@@ -39,7 +39,7 @@ CREATE TYPE cluster_replication_config (
   cluster_name text,
 );
 
-CREATE TYPE domain_replication_config (
+CREATE TYPE namespace_replication_config (
   active_cluster_name text,
   clusters            list<frozen<cluster_replication_config>>
 );
@@ -64,7 +64,7 @@ CREATE TYPE buffered_replication_task_info (
 CREATE TABLE executions (
   shard_id                       int,
   type                           int, -- enum RowType { Shard, Execution, TransferTask, TimerTask, ReplicationTask}
-  domain_id                      uuid,
+  namespace_id                      uuid,
   workflow_id                    text,
   run_id                         uuid,
   current_run_id                 uuid,
@@ -104,7 +104,7 @@ CREATE TABLE executions (
   version_histories_encoding     text,
   checksum                       blob,
   checksum_encoding              text,
-  PRIMARY KEY  (shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id)
+  PRIMARY KEY  (shard_id, type, namespace_id, workflow_id, run_id, visibility_ts, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
@@ -134,7 +134,7 @@ CREATE TABLE history_tree (
 
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
-  domain_id             uuid,
+  namespace_id             uuid,
   task_list_name        text,
   task_list_type        int, -- enum TaskListType {ActivityTask, DecisionTask}
   type                  int, -- enum rowType {Task, TaskList}
@@ -144,33 +144,33 @@ CREATE TABLE tasks (
   task_encoding         text,
   task_list             blob,
   task_list_encoding    text,
-  PRIMARY KEY ((domain_id, task_list_name, task_list_type), type, task_id)
+  PRIMARY KEY ((namespace_id, task_list_name, task_list_type), type, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
 
--- this table is only used for storage of mapping of domain uuid to domain name
-CREATE TABLE domains (
+-- this table is only used for storage of mapping of namespace uuid to namespace name
+CREATE TABLE namespaces (
   id     uuid,
-  domain frozen<domain>,
-  config frozen<domain_config>,
+  namespace frozen<namespace>,
+  config frozen<namespace_config>,
   PRIMARY KEY (id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
 
-CREATE TABLE domains_by_name_v2 (
-  domains_partition             int,
+CREATE TABLE namespaces_by_name_v2 (
+  namespaces_partition             int,
   name                          text,
-  domain                        frozen<domain>,
-  config                        frozen<domain_config>,
-  replication_config            frozen<domain_replication_config>, -- indicating active cluster and standby cluster used for replication
-  is_global_domain              boolean, -- indicating whether a domain is a global domain
-  config_version                bigint, -- indicating the version of domain config, excluding the failover / change of active cluster name
-  failover_version              bigint, -- indicating the version of active domain only, used for domain failover
-  failover_notification_version bigint, -- indicating the last change related to domain failover
+  namespace                        frozen<namespace>,
+  config                        frozen<namespace_config>,
+  replication_config            frozen<namespace_replication_config>, -- indicating active cluster and standby cluster used for replication
+  is_global_namespace              boolean, -- indicating whether a namespace is a global namespace
+  config_version                bigint, -- indicating the version of namespace config, excluding the failover / change of active cluster name
+  failover_version              bigint, -- indicating the version of active namespace only, used for namespace failover
+  failover_notification_version bigint, -- indicating the last change related to namespace failover
   notification_version          bigint,
-  PRIMARY KEY (domains_partition, name)
+  PRIMARY KEY (namespaces_partition, name)
 )  WITH COMPACTION = {
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
    };
@@ -202,10 +202,10 @@ CREATE TABLE cluster_metadata (
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
     };
 
--- Create metadata for system domain
-INSERT INTO domains (
+-- Create metadata for system namespace
+INSERT INTO namespaces (
    id,
-   domain
+   namespace
 ) VALUES (
    32049b68-7872-4094-8e63-d0dd59896a83,
    {
@@ -213,12 +213,12 @@ INSERT INTO domains (
    }
 ) IF NOT EXISTS;
 
-INSERT INTO domains_by_name_v2 (
-   domains_partition,
+INSERT INTO namespaces_by_name_v2 (
+   namespaces_partition,
    name,
-   domain,
+   namespace,
    config,
-   is_global_domain,
+   is_global_namespace,
    config_version,
    failover_version,
    failover_notification_version,
@@ -229,7 +229,7 @@ INSERT INTO domains_by_name_v2 (
    {
        id: 32049b68-7872-4094-8e63-d0dd59896a83,
        name: 'cadence-system',
-       description: 'cadence system workflow domain',
+       description: 'cadence system workflow namespace',
        owner_email: 'cadence-dev-group@uber.com'
    },
    {

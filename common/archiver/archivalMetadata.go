@@ -44,8 +44,8 @@ type (
 		ClusterConfiguredForArchival() bool
 		GetClusterStatus() ArchivalStatus
 		ReadEnabled() bool
-		GetDomainDefaultStatus() enums.ArchivalStatus
-		GetDomainDefaultURI() string
+		GetNamespaceDefaultStatus() enums.ArchivalStatus
+		GetNamespaceDefaultURI() string
 	}
 
 	archivalMetadata struct {
@@ -54,11 +54,11 @@ type (
 	}
 
 	archivalConfig struct {
-		staticClusterStatus  ArchivalStatus
-		dynamicClusterStatus dynamicconfig.StringPropertyFn
-		enableRead           dynamicconfig.BoolPropertyFn
-		domainDefaultStatus  enums.ArchivalStatus
-		domainDefaultURI     string
+		staticClusterStatus    ArchivalStatus
+		dynamicClusterStatus   dynamicconfig.StringPropertyFn
+		enableRead             dynamicconfig.BoolPropertyFn
+		namespaceDefaultStatus enums.ArchivalStatus
+		namespaceDefaultURI    string
 	}
 
 	// ArchivalStatus represents the archival status of the cluster
@@ -82,22 +82,22 @@ func NewArchivalMetadata(
 	historyReadEnabled bool,
 	visibilityStatus string,
 	visibilityReadEnabled bool,
-	domainDefaults *config.ArchivalDomainDefaults,
+	namespaceDefaults *config.ArchivalNamespaceDefaults,
 ) ArchivalMetadata {
 	historyConfig := NewArchivalConfig(
 		historyStatus,
 		dc.GetStringProperty(dynamicconfig.HistoryArchivalStatus, historyStatus),
 		dc.GetBoolProperty(dynamicconfig.EnableReadFromHistoryArchival, historyReadEnabled),
-		domainDefaults.History.Status,
-		domainDefaults.History.URI,
+		namespaceDefaults.History.Status,
+		namespaceDefaults.History.URI,
 	)
 
 	visibilityConfig := NewArchivalConfig(
 		visibilityStatus,
 		dc.GetStringProperty(dynamicconfig.VisibilityArchivalStatus, visibilityStatus),
 		dc.GetBoolProperty(dynamicconfig.EnableReadFromVisibilityArchival, visibilityReadEnabled),
-		domainDefaults.Visibility.Status,
-		domainDefaults.Visibility.URI,
+		namespaceDefaults.Visibility.Status,
+		namespaceDefaults.Visibility.URI,
 	)
 
 	return &archivalMetadata{
@@ -119,35 +119,35 @@ func NewArchivalConfig(
 	staticClusterStatusStr string,
 	dynamicClusterStatus dynamicconfig.StringPropertyFn,
 	enableRead dynamicconfig.BoolPropertyFn,
-	domainDefaultStatusStr string,
-	domainDefaultURI string,
+	namespaceDefaultStatusStr string,
+	namespaceDefaultURI string,
 ) ArchivalConfig {
 	staticClusterStatus, err := getClusterArchivalStatus(staticClusterStatusStr)
 	if err != nil {
 		panic(err)
 	}
-	domainDefaultStatus, err := getDomainArchivalStatus(domainDefaultStatusStr)
+	namespaceDefaultStatus, err := getNamespaceArchivalStatus(namespaceDefaultStatusStr)
 	if err != nil {
 		panic(err)
 	}
 
 	return &archivalConfig{
-		staticClusterStatus:  staticClusterStatus,
-		dynamicClusterStatus: dynamicClusterStatus,
-		enableRead:           enableRead,
-		domainDefaultStatus:  domainDefaultStatus,
-		domainDefaultURI:     domainDefaultURI,
+		staticClusterStatus:    staticClusterStatus,
+		dynamicClusterStatus:   dynamicClusterStatus,
+		enableRead:             enableRead,
+		namespaceDefaultStatus: namespaceDefaultStatus,
+		namespaceDefaultURI:    namespaceDefaultURI,
 	}
 }
 
 // NewDisabledArchvialConfig returns a disabled ArchivalConfig
 func NewDisabledArchvialConfig() ArchivalConfig {
 	return &archivalConfig{
-		staticClusterStatus:  ArchivalDisabled,
-		dynamicClusterStatus: nil,
-		enableRead:           nil,
-		domainDefaultStatus:  enums.ArchivalStatusDisabled,
-		domainDefaultURI:     "",
+		staticClusterStatus:    ArchivalDisabled,
+		dynamicClusterStatus:   nil,
+		enableRead:             nil,
+		namespaceDefaultStatus: enums.ArchivalStatusDisabled,
+		namespaceDefaultURI:    "",
 	}
 }
 
@@ -181,12 +181,12 @@ func (a *archivalConfig) ReadEnabled() bool {
 	return a.enableRead()
 }
 
-func (a *archivalConfig) GetDomainDefaultStatus() enums.ArchivalStatus {
-	return a.domainDefaultStatus
+func (a *archivalConfig) GetNamespaceDefaultStatus() enums.ArchivalStatus {
+	return a.namespaceDefaultStatus
 }
 
-func (a *archivalConfig) GetDomainDefaultURI() string {
-	return a.domainDefaultURI
+func (a *archivalConfig) GetNamespaceDefaultURI() string {
+	return a.namespaceDefaultURI
 }
 
 func getClusterArchivalStatus(str string) (ArchivalStatus, error) {
@@ -202,7 +202,7 @@ func getClusterArchivalStatus(str string) (ArchivalStatus, error) {
 	return ArchivalDisabled, fmt.Errorf("invalid archival status of %v for cluster, valid status are: {\"\", \"disabled\", \"paused\", \"enabled\"}", str)
 }
 
-func getDomainArchivalStatus(str string) (enums.ArchivalStatus, error) {
+func getNamespaceArchivalStatus(str string) (enums.ArchivalStatus, error) {
 	str = strings.TrimSpace(strings.ToLower(str))
 	switch str {
 	case "", common.ArchivalDisabled:
@@ -210,5 +210,5 @@ func getDomainArchivalStatus(str string) (enums.ArchivalStatus, error) {
 	case common.ArchivalEnabled:
 		return enums.ArchivalStatusEnabled, nil
 	}
-	return enums.ArchivalStatusDisabled, fmt.Errorf("invalid archival status of %v for domain, valid status are: {\"\", \"disabled\", \"enabled\"}", str)
+	return enums.ArchivalStatusDisabled, fmt.Errorf("invalid archival status of %v for namespace, valid status are: {\"\", \"disabled\", \"enabled\"}", str)
 }

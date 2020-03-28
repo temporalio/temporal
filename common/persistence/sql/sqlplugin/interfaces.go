@@ -74,8 +74,8 @@ type (
 		MaxRecordsAffected int
 	}
 
-	// DomainRow represents a row in domain table
-	DomainRow struct {
+	// NamespaceRow represents a row in namespace table
+	NamespaceRow struct {
 		ID           primitives.UUID
 		Name         string
 		Data         []byte
@@ -83,20 +83,20 @@ type (
 		IsGlobal     bool
 	}
 
-	// DomainFilter contains the column names within domain table that
+	// NamespaceFilter contains the column names within namespace table that
 	// can be used to filter results through a WHERE clause. When ID is not
 	// nil, it will be used for WHERE condition. If ID is nil and Name is non-nil,
 	// Name will be used for WHERE condition. When both ID and Name are nil,
 	// no WHERE clause will be used
-	DomainFilter struct {
+	NamespaceFilter struct {
 		ID            *primitives.UUID
 		Name          *string
 		GreaterThanID *primitives.UUID
 		PageSize      *int
 	}
 
-	// DomainMetadataRow represents a row in domain_metadata table
-	DomainMetadataRow struct {
+	// NamespaceMetadataRow represents a row in namespace_metadata table
+	NamespaceMetadataRow struct {
 		NotificationVersion int64
 	}
 
@@ -134,7 +134,7 @@ type (
 	// ExecutionsRow represents a row in executions table
 	ExecutionsRow struct {
 		ShardID                  int
-		DomainID                 primitives.UUID
+		NamespaceID              primitives.UUID
 		WorkflowID               string
 		RunID                    primitives.UUID
 		NextEventID              int64
@@ -150,16 +150,16 @@ type (
 	// ExecutionsFilter contains the column names within executions table that
 	// can be used to filter results through a WHERE clause
 	ExecutionsFilter struct {
-		ShardID    int
-		DomainID   primitives.UUID
-		WorkflowID string
-		RunID      primitives.UUID
+		ShardID     int
+		NamespaceID primitives.UUID
+		WorkflowID  string
+		RunID       primitives.UUID
 	}
 
 	// CurrentExecutionsRow represents a row in current_executions table
 	CurrentExecutionsRow struct {
 		ShardID          int64
-		DomainID         primitives.UUID
+		NamespaceID      primitives.UUID
 		WorkflowID       string
 		RunID            primitives.UUID
 		CreateRequestID  string
@@ -172,16 +172,16 @@ type (
 	// CurrentExecutionsFilter contains the column names within current_executions table that
 	// can be used to filter results through a WHERE clause
 	CurrentExecutionsFilter struct {
-		ShardID    int64
-		DomainID   primitives.UUID
-		WorkflowID string
-		RunID      primitives.UUID
+		ShardID     int64
+		NamespaceID primitives.UUID
+		WorkflowID  string
+		RunID       primitives.UUID
 	}
 
 	// BufferedEventsRow represents a row in buffered_events table
 	BufferedEventsRow struct {
 		ShardID      int
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
 		Data         []byte
@@ -191,15 +191,15 @@ type (
 	// BufferedEventsFilter contains the column names within buffered_events table that
 	// can be used to filter results through a WHERE clause
 	BufferedEventsFilter struct {
-		ShardID    int
-		DomainID   primitives.UUID
-		WorkflowID string
-		RunID      primitives.UUID
+		ShardID     int
+		NamespaceID primitives.UUID
+		WorkflowID  string
+		RunID       primitives.UUID
 	}
 
 	// TasksRow represents a row in tasks table
 	TasksRow struct {
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		TaskType     int64
 		TaskID       int64
 		TaskListName string
@@ -210,7 +210,7 @@ type (
 	// TasksFilter contains the column names within tasks table that
 	// can be used to filter results through a WHERE clause
 	TasksFilter struct {
-		DomainID             primitives.UUID
+		NamespaceID          primitives.UUID
 		TaskListName         string
 		TaskType             int64
 		TaskID               *int64
@@ -224,7 +224,7 @@ type (
 	// TaskListsRow represents a row in task_lists table
 	TaskListsRow struct {
 		ShardID      int
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		Name         string
 		TaskType     int64
 		RangeID      int64
@@ -235,15 +235,15 @@ type (
 	// TaskListsFilter contains the column names within task_lists table that
 	// can be used to filter results through a WHERE clause
 	TaskListsFilter struct {
-		ShardID             int
-		DomainID            *primitives.UUID
-		Name                *string
-		TaskType            *int64
-		DomainIDGreaterThan *primitives.UUID
-		NameGreaterThan     *string
-		TaskTypeGreaterThan *int64
-		RangeID             *int64
-		PageSize            *int
+		ShardID                int
+		NamespaceID            *primitives.UUID
+		Name                   *string
+		TaskType               *int64
+		NamespaceIDGreaterThan *primitives.UUID
+		NameGreaterThan        *string
+		TaskTypeGreaterThan    *int64
+		RangeID                *int64
+		PageSize               *int
 	}
 
 	// ReplicationTasksRow represents a row in replication_tasks table
@@ -303,7 +303,7 @@ type (
 
 	// EventsRow represents a row in events table
 	EventsRow struct {
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
 		FirstEventID int64
@@ -317,7 +317,7 @@ type (
 	// EventsFilter contains the column names within events table that
 	// can be used to filter results through a WHERE clause
 	EventsFilter struct {
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
 		FirstEventID *int64
@@ -370,7 +370,7 @@ type (
 	// ActivityInfoMapsRow represents a row in activity_info_maps table
 	ActivityInfoMapsRow struct {
 		ShardID                  int64
-		DomainID                 primitives.UUID
+		NamespaceID              primitives.UUID
 		WorkflowID               string
 		RunID                    primitives.UUID
 		ScheduleID               int64
@@ -383,17 +383,17 @@ type (
 	// ActivityInfoMapsFilter contains the column names within activity_info_maps table that
 	// can be used to filter results through a WHERE clause
 	ActivityInfoMapsFilter struct {
-		ShardID    int64
-		DomainID   primitives.UUID
-		WorkflowID string
-		RunID      primitives.UUID
-		ScheduleID *int64
+		ShardID     int64
+		NamespaceID primitives.UUID
+		WorkflowID  string
+		RunID       primitives.UUID
+		ScheduleID  *int64
 	}
 
 	// TimerInfoMapsRow represents a row in timer_info_maps table
 	TimerInfoMapsRow struct {
 		ShardID      int64
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
 		TimerID      string
@@ -404,17 +404,17 @@ type (
 	// TimerInfoMapsFilter contains the column names within timer_info_maps table that
 	// can be used to filter results through a WHERE clause
 	TimerInfoMapsFilter struct {
-		ShardID    int64
-		DomainID   primitives.UUID
-		WorkflowID string
-		RunID      primitives.UUID
-		TimerID    *string
+		ShardID     int64
+		NamespaceID primitives.UUID
+		WorkflowID  string
+		RunID       primitives.UUID
+		TimerID     *string
 	}
 
 	// ChildExecutionInfoMapsRow represents a row in child_execution_info_maps table
 	ChildExecutionInfoMapsRow struct {
 		ShardID      int64
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
 		InitiatedID  int64
@@ -426,7 +426,7 @@ type (
 	// can be used to filter results through a WHERE clause
 	ChildExecutionInfoMapsFilter struct {
 		ShardID     int64
-		DomainID    primitives.UUID
+		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
 		InitiatedID *int64
@@ -435,7 +435,7 @@ type (
 	// RequestCancelInfoMapsRow represents a row in request_cancel_info_maps table
 	RequestCancelInfoMapsRow struct {
 		ShardID      int64
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
 		InitiatedID  int64
@@ -447,7 +447,7 @@ type (
 	// can be used to filter results through a WHERE clause
 	RequestCancelInfoMapsFilter struct {
 		ShardID     int64
-		DomainID    primitives.UUID
+		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
 		InitiatedID *int64
@@ -456,7 +456,7 @@ type (
 	// SignalInfoMapsRow represents a row in signal_info_maps table
 	SignalInfoMapsRow struct {
 		ShardID      int64
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		WorkflowID   string
 		RunID        primitives.UUID
 		InitiatedID  int64
@@ -468,7 +468,7 @@ type (
 	// can be used to filter results through a WHERE clause
 	SignalInfoMapsFilter struct {
 		ShardID     int64
-		DomainID    primitives.UUID
+		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
 		InitiatedID *int64
@@ -476,26 +476,26 @@ type (
 
 	// SignalsRequestedSetsRow represents a row in signals_requested_sets table
 	SignalsRequestedSetsRow struct {
-		ShardID    int64
-		DomainID   primitives.UUID
-		WorkflowID string
-		RunID      primitives.UUID
-		SignalID   string
+		ShardID     int64
+		NamespaceID primitives.UUID
+		WorkflowID  string
+		RunID       primitives.UUID
+		SignalID    string
 	}
 
 	// SignalsRequestedSetsFilter contains the column names within signals_requested_sets table that
 	// can be used to filter results through a WHERE clause
 	SignalsRequestedSetsFilter struct {
-		ShardID    int64
-		DomainID   primitives.UUID
-		WorkflowID string
-		RunID      primitives.UUID
-		SignalID   *string
+		ShardID     int64
+		NamespaceID primitives.UUID
+		WorkflowID  string
+		RunID       primitives.UUID
+		SignalID    *string
 	}
 
 	// VisibilityRow represents a row in executions_visibility table
 	VisibilityRow struct {
-		DomainID         string
+		NamespaceID      string
 		RunID            string
 		WorkflowTypeName string
 		WorkflowID       string
@@ -511,7 +511,7 @@ type (
 	// VisibilityFilter contains the column names within executions_visibility table that
 	// can be used to filter results through a WHERE clause
 	VisibilityFilter struct {
-		DomainID         string
+		NamespaceID      string
 		Closed           bool
 		RunID            *string
 		WorkflowID       *string
@@ -543,18 +543,18 @@ type (
 		UpsertClusterMembership(row *ClusterMembershipRow) (sql.Result, error)
 		PruneClusterMembership(filter *PruneClusterMembershipFilter) (sql.Result, error)
 
-		InsertIntoDomain(rows *DomainRow) (sql.Result, error)
-		UpdateDomain(row *DomainRow) (sql.Result, error)
-		// SelectFromDomain returns domains that match filter criteria. Either ID or
+		InsertIntoNamespace(rows *NamespaceRow) (sql.Result, error)
+		UpdateNamespace(row *NamespaceRow) (sql.Result, error)
+		// SelectFromNamespace returns namespaces that match filter criteria. Either ID or
 		// Name can be specified to filter results. If both are not specified, all rows
 		// will be returned
-		SelectFromDomain(filter *DomainFilter) ([]DomainRow, error)
-		// DeleteDomain deletes a single row. One of ID or Name MUST be specified
-		DeleteFromDomain(filter *DomainFilter) (sql.Result, error)
+		SelectFromNamespace(filter *NamespaceFilter) ([]NamespaceRow, error)
+		// DeleteNamespace deletes a single row. One of ID or Name MUST be specified
+		DeleteFromNamespace(filter *NamespaceFilter) (sql.Result, error)
 
-		LockDomainMetadata() error
-		UpdateDomainMetadata(row *DomainMetadataRow) (sql.Result, error)
-		SelectFromDomainMetadata() (*DomainMetadataRow, error)
+		LockNamespaceMetadata() error
+		UpdateNamespaceMetadata(row *NamespaceMetadataRow) (sql.Result, error)
+		SelectFromNamespaceMetadata() (*NamespaceMetadataRow, error)
 
 		InsertIntoShards(rows *ShardsRow) (sql.Result, error)
 		UpdateShards(row *ShardsRow) (sql.Result, error)
@@ -564,14 +564,14 @@ type (
 
 		InsertIntoTasks(rows []TasksRow) (sql.Result, error)
 		// SelectFromTasks retrieves one or more rows from the tasks table
-		// Required filter params - {domainID, tasklistName, taskType, minTaskID, maxTaskID, pageSize}
+		// Required filter params - {namespaceID, tasklistName, taskType, minTaskID, maxTaskID, pageSize}
 		SelectFromTasks(filter *TasksFilter) ([]TasksRow, error)
 		// DeleteFromTasks deletes a row from tasks table
 		// Required filter params:
 		//  to delete single row
-		//     - {domainID, tasklistName, taskType, taskID}
+		//     - {namespaceID, tasklistName, taskType, taskID}
 		//  to delete multiple rows
-		//    - {domainID, tasklistName, taskType, taskIDLessThanEquals, limit }
+		//    - {namespaceID, tasklistName, taskType, taskIDLessThanEquals, limit }
 		//    - this will delete upto limit number of tasks less than or equal to the given task id
 		DeleteFromTasks(filter *TasksFilter) (sql.Result, error)
 
@@ -580,8 +580,8 @@ type (
 		UpdateTaskLists(row *TaskListsRow) (sql.Result, error)
 		// SelectFromTaskLists returns one or more rows from task_lists table
 		// Required Filter params:
-		//  to read a single row: {shardID, domainID, name, taskType}
-		//  to range read multiple rows: {shardID, domainIDGreaterThan, nameGreaterThan, taskTypeGreaterThan, pageSize}
+		//  to read a single row: {shardID, namespaceID, name, taskType}
+		//  to range read multiple rows: {shardID, namespaceIDGreaterThan, nameGreaterThan, taskTypeGreaterThan, pageSize}
 		SelectFromTaskLists(filter *TaskListsFilter) ([]TaskListsRow, error)
 		DeleteFromTaskLists(filter *TaskListsFilter) (sql.Result, error)
 		LockTaskLists(filter *TaskListsFilter) (int64, error)
@@ -606,13 +606,13 @@ type (
 		InsertIntoCurrentExecutions(row *CurrentExecutionsRow) (sql.Result, error)
 		UpdateCurrentExecutions(row *CurrentExecutionsRow) (sql.Result, error)
 		// SelectFromCurrentExecutions returns one or more rows from current_executions table
-		// Required params - {shardID, domainID, workflowID}
+		// Required params - {shardID, namespaceID, workflowID}
 		SelectFromCurrentExecutions(filter *CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
 		// DeleteFromCurrentExecutions deletes a single row that matches the filter criteria
 		// If a row exist, that row will be deleted and this method will return success
 		// If there is no row matching the filter criteria, this method will still return success
 		// Callers can check the output of Result.RowsAffected() to see if a row was deleted or not
-		// Required params - {shardID, domainID, workflowID, runID}
+		// Required params - {shardID, namespaceID, workflowID, runID}
 		DeleteFromCurrentExecutions(filter *CurrentExecutionsFilter) (sql.Result, error)
 		LockCurrentExecutions(filter *CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
 
@@ -663,62 +663,62 @@ type (
 
 		ReplaceIntoActivityInfoMaps(rows []ActivityInfoMapsRow) (sql.Result, error)
 		// SelectFromActivityInfoMaps returns one or more rows from activity_info_maps
-		// Required filter params - {shardID, domainID, workflowID, runID}
+		// Required filter params - {shardID, namespaceID, workflowID, runID}
 		SelectFromActivityInfoMaps(filter *ActivityInfoMapsFilter) ([]ActivityInfoMapsRow, error)
 		// DeleteFromActivityInfoMaps deletes a row from activity_info_maps table
 		// Required filter params
-		// - single row delete - {shardID, domainID, workflowID, runID, scheduleID}
-		// - range delete - {shardID, domainID, workflowID, runID}
+		// - single row delete - {shardID, namespaceID, workflowID, runID, scheduleID}
+		// - range delete - {shardID, namespaceID, workflowID, runID}
 		DeleteFromActivityInfoMaps(filter *ActivityInfoMapsFilter) (sql.Result, error)
 
 		ReplaceIntoTimerInfoMaps(rows []TimerInfoMapsRow) (sql.Result, error)
 		// SelectFromTimerInfoMaps returns one or more rows form timer_info_maps table
-		// Required filter params - {shardID, domainID, workflowID, runID}
+		// Required filter params - {shardID, namespaceID, workflowID, runID}
 		SelectFromTimerInfoMaps(filter *TimerInfoMapsFilter) ([]TimerInfoMapsRow, error)
 		// DeleteFromTimerInfoMaps deletes one or more rows from timer_info_maps
 		// Required filter params
-		// - single row - {shardID, domainID, workflowID, runID, timerID}
-		// - multiple rows - {shardID, domainID, workflowID, runID}
+		// - single row - {shardID, namespaceID, workflowID, runID, timerID}
+		// - multiple rows - {shardID, namespaceID, workflowID, runID}
 		DeleteFromTimerInfoMaps(filter *TimerInfoMapsFilter) (sql.Result, error)
 
 		ReplaceIntoChildExecutionInfoMaps(rows []ChildExecutionInfoMapsRow) (sql.Result, error)
 		// SelectFromChildExecutionInfoMaps returns one or more rows form child_execution_info_maps table
-		// Required filter params - {shardID, domainID, workflowID, runID}
+		// Required filter params - {shardID, namespaceID, workflowID, runID}
 		SelectFromChildExecutionInfoMaps(filter *ChildExecutionInfoMapsFilter) ([]ChildExecutionInfoMapsRow, error)
 		// DeleteFromChildExecutionInfoMaps deletes one or more rows from child_execution_info_maps
 		// Required filter params
-		// - single row - {shardID, domainID, workflowID, runID, initiatedID}
-		// - multiple rows - {shardID, domainID, workflowID, runID}
+		// - single row - {shardID, namespaceID, workflowID, runID, initiatedID}
+		// - multiple rows - {shardID, namespaceID, workflowID, runID}
 		DeleteFromChildExecutionInfoMaps(filter *ChildExecutionInfoMapsFilter) (sql.Result, error)
 
 		ReplaceIntoRequestCancelInfoMaps(rows []RequestCancelInfoMapsRow) (sql.Result, error)
 		// SelectFromRequestCancelInfoMaps returns one or more rows form request_cancel_info_maps table
-		// Required filter params - {shardID, domainID, workflowID, runID}
+		// Required filter params - {shardID, namespaceID, workflowID, runID}
 		SelectFromRequestCancelInfoMaps(filter *RequestCancelInfoMapsFilter) ([]RequestCancelInfoMapsRow, error)
 		// DeleteFromRequestCancelInfoMaps deletes one or more rows from request_cancel_info_maps
 		// Required filter params
-		// - single row - {shardID, domainID, workflowID, runID, initiatedID}
-		// - multiple rows - {shardID, domainID, workflowID, runID}
+		// - single row - {shardID, namespaceID, workflowID, runID, initiatedID}
+		// - multiple rows - {shardID, namespaceID, workflowID, runID}
 		DeleteFromRequestCancelInfoMaps(filter *RequestCancelInfoMapsFilter) (sql.Result, error)
 
 		ReplaceIntoSignalInfoMaps(rows []SignalInfoMapsRow) (sql.Result, error)
 		// SelectFromSignalInfoMaps returns one or more rows form signal_info_maps table
-		// Required filter params - {shardID, domainID, workflowID, runID}
+		// Required filter params - {shardID, namespaceID, workflowID, runID}
 		SelectFromSignalInfoMaps(filter *SignalInfoMapsFilter) ([]SignalInfoMapsRow, error)
 		// DeleteFromSignalInfoMaps deletes one or more rows from signal_info_maps table
 		// Required filter params
-		// - single row - {shardID, domainID, workflowID, runID, initiatedID}
-		// - multiple rows - {shardID, domainID, workflowID, runID}
+		// - single row - {shardID, namespaceID, workflowID, runID, initiatedID}
+		// - multiple rows - {shardID, namespaceID, workflowID, runID}
 		DeleteFromSignalInfoMaps(filter *SignalInfoMapsFilter) (sql.Result, error)
 
 		InsertIntoSignalsRequestedSets(rows []SignalsRequestedSetsRow) (sql.Result, error)
 		// SelectFromSignalInfoMaps returns one or more rows form singals_requested_sets table
-		// Required filter params - {shardID, domainID, workflowID, runID}
+		// Required filter params - {shardID, namespaceID, workflowID, runID}
 		SelectFromSignalsRequestedSets(filter *SignalsRequestedSetsFilter) ([]SignalsRequestedSetsRow, error)
 		// DeleteFromSignalsRequestedSets deletes one or more rows from signals_requested_sets
 		// Required filter params
-		// - single row - {shardID, domainID, workflowID, runID, signalID}
-		// - multiple rows - {shardID, domainID, workflowID, runID}
+		// - single row - {shardID, namespaceID, workflowID, runID, signalID}
+		// - multiple rows - {shardID, namespaceID, workflowID, runID}
 		DeleteFromSignalsRequestedSets(filter *SignalsRequestedSetsFilter) (sql.Result, error)
 
 		// InsertIntoVisibility inserts a row into visibility table. If a row already exist,
@@ -728,10 +728,10 @@ type (
 		ReplaceIntoVisibility(row *VisibilityRow) (sql.Result, error)
 		// SelectFromVisibility returns one or more rows from visibility table
 		// Required filter params:
-		// - getClosedWorkflowExecution - retrieves single row - {domainID, runID, closed=true}
+		// - getClosedWorkflowExecution - retrieves single row - {namespaceID, runID, closed=true}
 		// - All other queries retrieve multiple rows (range):
 		//   - MUST specify following required params:
-		//     - domainID, minStartTime, maxStartTime, runID and pageSize where some or all of these may come from previous page token
+		//     - namespaceID, minStartTime, maxStartTime, runID and pageSize where some or all of these may come from previous page token
 		//   - OPTIONALLY specify one of following params
 		//     - workflowID, workflowTypeName, closeStatus (along with closed=true)
 		SelectFromVisibility(filter *VisibilityFilter) ([]VisibilityRow, error)

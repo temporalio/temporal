@@ -60,7 +60,7 @@ services:
         prefix: "temporal_active"
 
 clusterMetadata:
-  enableGlobalDomain: true
+  enableGlobalNamespace: true
   replicationConsumer:
     type: kafka
   failoverVersionIncrement: 10
@@ -137,7 +137,7 @@ archival:
         fileMode: "0666"
         dirMode: "0766"
 
-domainDefaults:
+namespaceDefaults:
   archival:
     history:
       status: "enabled"

@@ -42,7 +42,7 @@ type (
 
 	stateBuilder interface {
 		applyEvents(
-			domainID string,
+			namespaceID string,
 			requestID string,
 			execution commonproto.WorkflowExecution,
 			history []*commonproto.HistoryEvent,
@@ -54,7 +54,7 @@ type (
 	stateBuilderImpl struct {
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
-		domainCache     cache.DomainCache
+		namespaceCache  cache.NamespaceCache
 		logger          log.Logger
 
 		mutableState          mutableState
@@ -79,7 +79,7 @@ func newStateBuilder(
 	return &stateBuilderImpl{
 		shard:                 shard,
 		clusterMetadata:       shard.GetService().GetClusterMetadata(),
-		domainCache:           shard.GetDomainCache(),
+		namespaceCache:        shard.GetNamespaceCache(),
 		logger:                logger,
 		mutableState:          mutableState,
 		taskGeneratorProvider: taskGeneratorProvider,
@@ -87,7 +87,7 @@ func newStateBuilder(
 }
 
 func (b *stateBuilderImpl) applyEvents(
-	domainID string,
+	namespaceID string,
 	requestID string,
 	execution commonproto.WorkflowExecution,
 	history []*commonproto.HistoryEvent,
@@ -135,19 +135,19 @@ func (b *stateBuilderImpl) applyEvents(
 		switch event.GetEventType() {
 		case enums.EventTypeWorkflowExecutionStarted:
 			attributes := event.GetWorkflowExecutionStartedEventAttributes()
-			var parentDomainID string
-			if attributes.GetParentWorkflowDomain() != "" {
-				parentDomainEntry, err := b.domainCache.GetDomain(
-					attributes.GetParentWorkflowDomain(),
+			var parentNamespaceID string
+			if attributes.GetParentWorkflowNamespace() != "" {
+				parentNamespaceEntry, err := b.namespaceCache.GetNamespace(
+					attributes.GetParentWorkflowNamespace(),
 				)
 				if err != nil {
 					return nil, err
 				}
-				parentDomainID = parentDomainEntry.GetInfo().ID
+				parentNamespaceID = parentNamespaceEntry.GetInfo().ID
 			}
 
 			if err := b.mutableState.ReplicateWorkflowExecutionStartedEvent(
-				parentDomainID,
+				parentNamespaceID,
 				execution,
 				requestID,
 				event,
@@ -380,7 +380,7 @@ func (b *stateBuilderImpl) applyEvents(
 				firstEvent.GetEventId(),
 				event,
 				// create a new request ID which is used by transfer queue processor
-				// if domain is failed over at this point
+				// if namespace is failed over at this point
 				uuid.New(),
 			); err != nil {
 				return nil, err
@@ -447,7 +447,7 @@ func (b *stateBuilderImpl) applyEvents(
 				firstEvent.GetEventId(),
 				event,
 				// create a new request ID which is used by transfer queue processor
-				// if domain is failed over at this point
+				// if namespace is failed over at this point
 				uuid.New(),
 			); err != nil {
 				return nil, err
@@ -475,7 +475,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 		case enums.EventTypeSignalExternalWorkflowExecutionInitiated:
-			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
+			// Create a new request ID which is used by transfer queue processor if namespace is failed over at this point
 			signalRequestID := uuid.New()
 			if _, err := b.mutableState.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(
 				firstEvent.GetEventId(),
@@ -610,14 +610,14 @@ func (b *stateBuilderImpl) applyEvents(
 						b.shard,
 						b.shard.GetEventsCache(),
 						b.logger,
-						b.mutableState.GetDomainEntry(),
+						b.mutableState.GetNamespaceEntry(),
 					)
 				} else {
 					newRunMutableStateBuilder = newMutableStateBuilderWithReplicationState(
 						b.shard,
 						b.shard.GetEventsCache(),
 						b.logger,
-						b.mutableState.GetDomainEntry(),
+						b.mutableState.GetNamespaceEntry(),
 					)
 				}
 				newRunStateBuilder := newStateBuilder(b.shard, b.logger, newRunMutableStateBuilder, b.taskGeneratorProvider)
@@ -628,7 +628,7 @@ func (b *stateBuilderImpl) applyEvents(
 					RunId:      newRunID,
 				}
 				_, err := newRunStateBuilder.applyEvents(
-					domainID,
+					namespaceID,
 					uuid.New(),
 					newExecution,
 					newRunHistory,
@@ -642,7 +642,7 @@ func (b *stateBuilderImpl) applyEvents(
 
 			err := b.mutableState.ReplicateWorkflowExecutionContinuedAsNewEvent(
 				firstEvent.GetEventId(),
-				domainID,
+				namespaceID,
 				event,
 			)
 			if err != nil {

@@ -35,7 +35,7 @@ import (
 type ClientFactory interface {
 	FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient
 	AdminClient(c *cli.Context) adminservice.AdminServiceClient
-	SDKClient(c *cli.Context, domain string) sdkclient.Client
+	SDKClient(c *cli.Context, namespace string) sdkclient.Client
 }
 
 type clientFactory struct {
@@ -69,15 +69,15 @@ func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceCli
 }
 
 // AdminClient builds an admin client (based on server side thrift interface)
-func (b *clientFactory) SDKClient(c *cli.Context, domain string) sdkclient.Client {
+func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Client {
 	hostPort := c.GlobalString(FlagAddress)
 	if hostPort == "" {
 		hostPort = localHostPort
 	}
 
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
-		HostPort:   hostPort,
-		DomainName: domain,
+		HostPort:  hostPort,
+		Namespace: namespace,
 	})
 	if err != nil {
 		b.logger.Fatal("Failed to create SDK client", zap.Error(err))

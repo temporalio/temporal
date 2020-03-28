@@ -282,7 +282,7 @@ func (p *indexProcessor) isValidFieldToES(field string) bool {
 }
 
 func fulfillDoc(doc map[string]interface{}, msg *indexer.Message, keyToKafkaMsg string) {
-	doc[definition.DomainID] = msg.GetDomainID()
+	doc[definition.NamespaceID] = msg.GetNamespaceID()
 	doc[definition.WorkflowID] = msg.GetWorkflowID()
 	doc[definition.RunID] = msg.GetRunID()
 	doc[definition.KafkaKey] = keyToKafkaMsg

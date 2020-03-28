@@ -108,7 +108,7 @@ func newActivityReplicationTask(
 
 	attr := replicationTask.GetSyncActivityTaskAttributes()
 
-	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
+	logger = logger.WithTags(tag.WorkflowNamespaceID(attr.GetNamespaceId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
 		tag.WorkflowRunID(attr.GetRunId()),
 		tag.WorkflowEventID(attr.GetScheduledId()),
@@ -118,7 +118,7 @@ func newActivityReplicationTask(
 			metricsScope: metrics.SyncActivityTaskScope,
 			startTime:    timeSource.Now(),
 			queueID: definition.NewWorkflowIdentifier(
-				attr.GetDomainId(), attr.GetWorkflowId(), attr.GetRunId(),
+				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetScheduledId(),
 			attempt:       0,
@@ -131,7 +131,7 @@ func newActivityReplicationTask(
 			metricsClient: metricsClient,
 		},
 		req: &historyservice.SyncActivityRequest{
-			DomainId:           attr.DomainId,
+			NamespaceId:        attr.NamespaceId,
 			WorkflowId:         attr.WorkflowId,
 			RunId:              attr.RunId,
 			Version:            attr.Version,
@@ -165,7 +165,7 @@ func newHistoryReplicationTask(
 ) *historyReplicationTask {
 
 	attr := replicationTask.GetHistoryTaskAttributes()
-	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
+	logger = logger.WithTags(tag.WorkflowNamespaceID(attr.GetNamespaceId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
 		tag.WorkflowRunID(attr.GetRunId()),
 		tag.WorkflowFirstEventID(attr.GetFirstEventId()),
@@ -176,7 +176,7 @@ func newHistoryReplicationTask(
 			metricsScope: metrics.HistoryReplicationTaskScope,
 			startTime:    timeSource.Now(),
 			queueID: definition.NewWorkflowIdentifier(
-				attr.GetDomainId(), attr.GetWorkflowId(), attr.GetRunId(),
+				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetFirstEventId(),
 			attempt:       0,
@@ -190,7 +190,7 @@ func newHistoryReplicationTask(
 		},
 		req: &historyservice.ReplicateEventsRequest{
 			SourceCluster: sourceCluster,
-			DomainUUID:    attr.DomainId,
+			NamespaceUUID: attr.NamespaceId,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,
@@ -222,7 +222,7 @@ func newHistoryMetadataReplicationTask(
 ) *historyMetadataReplicationTask {
 
 	attr := replicationTask.GetHistoryMetadataTaskAttributes()
-	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
+	logger = logger.WithTags(tag.WorkflowNamespaceID(attr.GetNamespaceId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
 		tag.WorkflowRunID(attr.GetRunId()),
 		tag.WorkflowFirstEventID(attr.GetFirstEventId()),
@@ -232,7 +232,7 @@ func newHistoryMetadataReplicationTask(
 			metricsScope: metrics.HistoryMetadataReplicationTaskScope,
 			startTime:    timeSource.Now(),
 			queueID: definition.NewWorkflowIdentifier(
-				attr.GetDomainId(), attr.GetWorkflowId(), attr.GetRunId(),
+				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetFirstEventId(),
 			attempt:       0,
@@ -263,7 +263,7 @@ func newHistoryReplicationV2Task(
 ) *historyReplicationV2Task {
 
 	attr := replicationTask.GetHistoryTaskV2Attributes()
-	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
+	logger = logger.WithTags(tag.WorkflowNamespaceID(attr.GetNamespaceId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
 		tag.WorkflowRunID(attr.GetRunId()),
 	)
@@ -272,7 +272,7 @@ func newHistoryReplicationV2Task(
 			metricsScope: metrics.HistoryReplicationTaskScope,
 			startTime:    timeSource.Now(),
 			queueID: definition.NewWorkflowIdentifier(
-				attr.GetDomainId(), attr.GetWorkflowId(), attr.GetRunId(),
+				attr.GetNamespaceId(), attr.GetWorkflowId(), attr.GetRunId(),
 			),
 			taskID:        attr.GetTaskId(),
 			attempt:       0,
@@ -285,7 +285,7 @@ func newHistoryReplicationV2Task(
 			metricsClient: metricsClient,
 		},
 		req: &historyservice.ReplicateEventsV2Request{
-			DomainUUID: attr.DomainId,
+			NamespaceUUID: attr.NamespaceId,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,
@@ -332,7 +332,7 @@ func (t *activityReplicationTask) HandleErr(
 		endRunID := t.queueID.RunID
 		endEventID := t.taskID + 1 // the next event ID should be at activity schedule ID + 1
 		resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
-			t.queueID.DomainID, t.queueID.WorkflowID,
+			t.queueID.NamespaceID, t.queueID.WorkflowID,
 			beginRunID, beginEventID, endRunID, endEventID,
 		)
 
@@ -347,7 +347,7 @@ func (t *activityReplicationTask) HandleErr(
 		defer stopwatch.Stop()
 
 		if resendErr := t.nDCHistoryResender.SendSingleWorkflowHistory(
-			retryV2Err.DomainId,
+			retryV2Err.NamespaceId,
 			retryV2Err.WorkflowId,
 			retryV2Err.RunId,
 			retryV2Err.StartEventId,
@@ -396,7 +396,7 @@ func (t *historyReplicationTask) HandleErr(
 	endRunID := t.queueID.RunID
 	endEventID := t.taskID
 	resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
-		t.queueID.DomainID, t.queueID.WorkflowID,
+		t.queueID.NamespaceID, t.queueID.WorkflowID,
 		beginRunID, beginEventID, endRunID, endEventID,
 	)
 	if resendErr != nil {
@@ -414,7 +414,7 @@ func (t *historyMetadataReplicationTask) Execute() error {
 	defer stopwatch.Stop()
 
 	return t.historyRereplicator.SendMultiWorkflowHistory(
-		t.queueID.DomainID, t.queueID.WorkflowID,
+		t.queueID.NamespaceID, t.queueID.WorkflowID,
 		t.queueID.RunID, t.firstEventID,
 		t.queueID.RunID, t.nextEventID,
 	)
@@ -438,7 +438,7 @@ func (t *historyMetadataReplicationTask) HandleErr(
 	endRunID := t.queueID.RunID
 	endEventID := t.taskID
 	resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
-		t.queueID.DomainID, t.queueID.WorkflowID,
+		t.queueID.NamespaceID, t.queueID.WorkflowID,
 		beginRunID, beginEventID, endRunID, endEventID,
 	)
 	if resendErr != nil {
@@ -472,7 +472,7 @@ func (t *historyReplicationV2Task) HandleErr(err error) error {
 	defer stopwatch.Stop()
 
 	if resendErr := t.nDCHistoryResender.SendSingleWorkflowHistory(
-		retryErr.DomainId,
+		retryErr.NamespaceId,
 		retryErr.WorkflowId,
 		retryErr.RunId,
 		retryErr.StartEventId,
@@ -523,7 +523,7 @@ func (t *workflowReplicationTask) Nack() {
 	t.metricsClient.RecordTimer(t.metricsScope, metrics.ReplicatorLatency, t.timeSource.Now().Sub(t.startTime))
 
 	t.logger.Info("Replication task moved to DLQ",
-		tag.WorkflowDomainID(t.queueID.DomainID),
+		tag.WorkflowNamespaceID(t.queueID.NamespaceID),
 		tag.WorkflowID(t.queueID.WorkflowID),
 		tag.WorkflowRunID(t.queueID.RunID),
 		tag.TaskID(t.taskID),

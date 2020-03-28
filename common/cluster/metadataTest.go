@@ -77,13 +77,13 @@ var (
 )
 
 // GetTestClusterMetadata return an cluster metadata instance, which is initialized
-func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool) Metadata {
+func GetTestClusterMetadata(enableGlobalNamespace bool, isMasterCluster bool) Metadata {
 	masterClusterName := TestCurrentClusterName
 	if !isMasterCluster {
 		masterClusterName = TestAlternativeClusterName
 	}
 
-	if enableGlobalDomain {
+	if enableGlobalNamespace {
 		return NewMetadata(
 			loggerimpl.NewNopLogger(),
 			dynamicconfig.GetBoolPropertyFn(true),

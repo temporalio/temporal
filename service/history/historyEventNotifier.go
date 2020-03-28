@@ -74,7 +74,7 @@ type (
 var _ historyEventNotifier = (*historyEventNotifierImpl)(nil)
 
 func newHistoryEventNotification(
-	domainID string,
+	namespaceID string,
 	workflowExecution *commonproto.WorkflowExecution,
 	lastFirstEventID int64,
 	nextEventID int64,
@@ -86,7 +86,7 @@ func newHistoryEventNotification(
 
 	return &historyEventNotification{
 		id: definition.NewWorkflowIdentifier(
-			domainID,
+			namespaceID,
 			workflowExecution.GetWorkflowId(),
 			workflowExecution.GetRunId(),
 		),

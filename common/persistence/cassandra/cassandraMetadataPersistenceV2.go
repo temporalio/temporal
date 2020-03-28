@@ -34,11 +34,11 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 )
 
-const constDomainPartition = 0
-const domainMetadataRecordName = "cadence-domain-metadata"
+const constNamespacePartition = 0
+const namespaceMetadataRecordName = "cadence-namespace-metadata"
 
 const (
-	templateDomainInfoType = `{` +
+	templateNamespaceInfoType = `{` +
 		`id: ?, ` +
 		`name: ?, ` +
 		`status: ?, ` +
@@ -47,7 +47,7 @@ const (
 		`data: ? ` +
 		`}`
 
-	templateDomainConfigType = `{` +
+	templateNamespaceConfigType = `{` +
 		`retention: ?, ` +
 		`emit_metric: ?, ` +
 		`archival_bucket: ?, ` +
@@ -60,82 +60,82 @@ const (
 		`bad_binaries_encoding: ?` +
 		`}`
 
-	templateDomainReplicationConfigType = `{` +
+	templateNamespaceReplicationConfigType = `{` +
 		`active_cluster_name: ?, ` +
 		`clusters: ? ` +
 		`}`
 
-	templateCreateDomainQuery = `INSERT INTO domains (` +
-		`id, domain) ` +
+	templateCreateNamespaceQuery = `INSERT INTO namespaces (` +
+		`id, namespace) ` +
 		`VALUES(?, {name: ?}) IF NOT EXISTS`
 
-	templateGetDomainQuery = `SELECT domain.name ` +
-		`FROM domains ` +
+	templateGetNamespaceQuery = `SELECT namespace.name ` +
+		`FROM namespaces ` +
 		`WHERE id = ?`
 
-	templateDeleteDomainQuery = `DELETE FROM domains ` +
+	templateDeleteNamespaceQuery = `DELETE FROM namespaces ` +
 		`WHERE id = ?`
 
-	templateCreateDomainByNameQueryWithinBatchV2 = `INSERT INTO domains_by_name_v2 (` +
-		`domains_partition, name, domain, config, replication_config, is_global_domain, config_version, failover_version, failover_notification_version, notification_version) ` +
-		`VALUES(?, ?, ` + templateDomainInfoType + `, ` + templateDomainConfigType + `, ` + templateDomainReplicationConfigType + `, ?, ?, ?, ?, ?) IF NOT EXISTS`
+	templateCreateNamespaceByNameQueryWithinBatchV2 = `INSERT INTO namespaces_by_name_v2 (` +
+		`namespaces_partition, name, namespace, config, replication_config, is_global_namespace, config_version, failover_version, failover_notification_version, notification_version) ` +
+		`VALUES(?, ?, ` + templateNamespaceInfoType + `, ` + templateNamespaceConfigType + `, ` + templateNamespaceReplicationConfigType + `, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
-	templateGetDomainByNameQueryV2 = `SELECT domain.id, domain.name, domain.status, domain.description, ` +
-		`domain.owner_email, domain.data, config.retention, config.emit_metric, ` +
+	templateGetNamespaceByNameQueryV2 = `SELECT namespace.id, namespace.name, namespace.status, namespace.description, ` +
+		`namespace.owner_email, namespace.data, config.retention, config.emit_metric, ` +
 		`config.archival_bucket, config.archival_status, ` +
 		`config.history_archival_status, config.history_archival_uri, ` +
 		`config.visibility_archival_status, config.visibility_archival_uri, ` +
 		`config.bad_binaries, config.bad_binaries_encoding, ` +
 		`replication_config.active_cluster_name, replication_config.clusters, ` +
-		`is_global_domain, ` +
+		`is_global_namespace, ` +
 		`config_version, ` +
 		`failover_version, ` +
 		`failover_notification_version, ` +
 		`notification_version ` +
-		`FROM domains_by_name_v2 ` +
-		`WHERE domains_partition = ? ` +
+		`FROM namespaces_by_name_v2 ` +
+		`WHERE namespaces_partition = ? ` +
 		`and name = ?`
 
-	templateUpdateDomainByNameQueryWithinBatchV2 = `UPDATE domains_by_name_v2 ` +
-		`SET domain = ` + templateDomainInfoType + `, ` +
-		`config = ` + templateDomainConfigType + `, ` +
-		`replication_config = ` + templateDomainReplicationConfigType + `, ` +
+	templateUpdateNamespaceByNameQueryWithinBatchV2 = `UPDATE namespaces_by_name_v2 ` +
+		`SET namespace = ` + templateNamespaceInfoType + `, ` +
+		`config = ` + templateNamespaceConfigType + `, ` +
+		`replication_config = ` + templateNamespaceReplicationConfigType + `, ` +
 		`config_version = ? ,` +
 		`failover_version = ? ,` +
 		`failover_notification_version = ? , ` +
 		`notification_version = ? ` +
-		`WHERE domains_partition = ? ` +
+		`WHERE namespaces_partition = ? ` +
 		`and name = ?`
 
 	templateGetMetadataQueryV2 = `SELECT notification_version ` +
-		`FROM domains_by_name_v2 ` +
-		`WHERE domains_partition = ? ` +
+		`FROM namespaces_by_name_v2 ` +
+		`WHERE namespaces_partition = ? ` +
 		`and name = ? `
 
-	templateUpdateMetadataQueryWithinBatchV2 = `UPDATE domains_by_name_v2 ` +
+	templateUpdateMetadataQueryWithinBatchV2 = `UPDATE namespaces_by_name_v2 ` +
 		`SET notification_version = ? ` +
-		`WHERE domains_partition = ? ` +
+		`WHERE namespaces_partition = ? ` +
 		`and name = ? ` +
 		`IF notification_version = ? `
 
-	templateDeleteDomainByNameQueryV2 = `DELETE FROM domains_by_name_v2 ` +
-		`WHERE domains_partition = ? ` +
+	templateDeleteNamespaceByNameQueryV2 = `DELETE FROM namespaces_by_name_v2 ` +
+		`WHERE namespaces_partition = ? ` +
 		`and name = ?`
 
-	templateListDomainQueryV2 = `SELECT name, domain.id, domain.name, domain.status, domain.description, ` +
-		`domain.owner_email, domain.data, config.retention, config.emit_metric, ` +
+	templateListNamespaceQueryV2 = `SELECT name, namespace.id, namespace.name, namespace.status, namespace.description, ` +
+		`namespace.owner_email, namespace.data, config.retention, config.emit_metric, ` +
 		`config.archival_bucket, config.archival_status, ` +
 		`config.history_archival_status, config.history_archival_uri, ` +
 		`config.visibility_archival_status, config.visibility_archival_uri, ` +
 		`config.bad_binaries, config.bad_binaries_encoding, ` +
 		`replication_config.active_cluster_name, replication_config.clusters, ` +
-		`is_global_domain, ` +
+		`is_global_namespace, ` +
 		`config_version, ` +
 		`failover_version, ` +
 		`failover_notification_version, ` +
 		`notification_version ` +
-		`FROM domains_by_name_v2 ` +
-		`WHERE domains_partition = ? `
+		`FROM namespaces_by_name_v2 ` +
+		`WHERE namespaces_partition = ? `
 )
 
 type (
@@ -171,34 +171,34 @@ func (m *cassandraMetadataPersistenceV2) Close() {
 	}
 }
 
-// CreateDomain create a domain
+// CreateNamespace create a namespace
 // Cassandra does not support conditional updates across multiple tables.  For this reason we have to first insert into
-// 'Domains' table and then do a conditional insert into domains_by_name table.  If the conditional write fails we
-// delete the orphaned entry from domains table.  There is a chance delete entry could fail and we never delete the
-// orphaned entry from domains table.  We might need a background job to delete those orphaned record.
-func (m *cassandraMetadataPersistenceV2) CreateDomain(request *p.InternalCreateDomainRequest) (*p.CreateDomainResponse, error) {
-	query := m.session.Query(templateCreateDomainQuery, request.Info.ID, request.Info.Name)
+// 'Namespaces' table and then do a conditional insert into namespaces_by_name table.  If the conditional write fails we
+// delete the orphaned entry from namespaces table.  There is a chance delete entry could fail and we never delete the
+// orphaned entry from namespaces table.  We might need a background job to delete those orphaned record.
+func (m *cassandraMetadataPersistenceV2) CreateNamespace(request *p.InternalCreateNamespaceRequest) (*p.CreateNamespaceResponse, error) {
+	query := m.session.Query(templateCreateNamespaceQuery, request.Info.ID, request.Info.Name)
 	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateDomain operation failed. Inserting into domains table. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
 	}
 	if !applied {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateDomain operation failed because of uuid collision."))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed because of uuid collision."))
 	}
 
-	return m.CreateDomainInV2Table(request)
+	return m.CreateNamespaceInV2Table(request)
 }
 
-// CreateDomainInV2Table is the temporary function used by domain v1 -> v2 migration
-func (m *cassandraMetadataPersistenceV2) CreateDomainInV2Table(request *p.InternalCreateDomainRequest) (*p.CreateDomainResponse, error) {
+// CreateNamespaceInV2Table is the temporary function used by namespace v1 -> v2 migration
+func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.InternalCreateNamespaceRequest) (*p.CreateNamespaceResponse, error) {
 	metadata, err := m.GetMetadata()
 	if err != nil {
 		return nil, err
 	}
 
 	batch := m.session.NewBatch(gocql.LoggedBatch)
-	batch.Query(templateCreateDomainByNameQueryWithinBatchV2,
-		constDomainPartition,
+	batch.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
+		constNamespacePartition,
 		request.Info.Name,
 		request.Info.ID,
 		request.Info.Name,
@@ -218,7 +218,7 @@ func (m *cassandraMetadataPersistenceV2) CreateDomainInV2Table(request *p.Intern
 		string(request.Config.BadBinaries.GetEncoding()),
 		request.ReplicationConfig.ActiveClusterName,
 		p.SerializeClusterConfigs(request.ReplicationConfig.Clusters),
-		request.IsGlobalDomain,
+		request.IsGlobalNamespace,
 		request.ConfigVersion,
 		request.FailoverVersion,
 		p.InitialFailoverNotificationVersion,
@@ -235,29 +235,29 @@ func (m *cassandraMetadataPersistenceV2) CreateDomainInV2Table(request *p.Intern
 	}()
 
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateDomain operation failed. Inserting into domains_by_name_v2 table. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces_by_name_v2 table. Error: %v", err))
 	}
 
 	if !applied {
-		// Domain already exist.  Delete orphan domain record before returning back to user
-		if errDelete := m.session.Query(templateDeleteDomainQuery, request.Info.ID).Exec(); errDelete != nil {
-			m.logger.Warn("Unable to delete orphan domain record. Error", tag.Error(errDelete))
+		// Namespace already exist.  Delete orphan namespace record before returning back to user
+		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.Info.ID).Exec(); errDelete != nil {
+			m.logger.Warn("Unable to delete orphan namespace record. Error", tag.Error(errDelete))
 		}
 
-		if domain, ok := previous["domain"].(map[string]interface{}); ok {
-			msg := fmt.Sprintf("Domain already exists.  DomainId: %v", domain["id"])
-			return nil, serviceerror.NewDomainAlreadyExists(msg)
+		if namespace, ok := previous["namespace"].(map[string]interface{}); ok {
+			msg := fmt.Sprintf("Namespace already exists.  NamespaceId: %v", namespace["id"])
+			return nil, serviceerror.NewNamespaceAlreadyExists(msg)
 		}
 
-		return nil, serviceerror.NewDomainAlreadyExists(fmt.Sprintf("CreateDomain operation failed because of conditional failure."))
+		return nil, serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("CreateNamespace operation failed because of conditional failure."))
 	}
 
-	return &p.CreateDomainResponse{ID: request.Info.ID}, nil
+	return &p.CreateNamespaceResponse{ID: request.Info.ID}, nil
 }
 
-func (m *cassandraMetadataPersistenceV2) UpdateDomain(request *p.InternalUpdateDomainRequest) error {
+func (m *cassandraMetadataPersistenceV2) UpdateNamespace(request *p.InternalUpdateNamespaceRequest) error {
 	batch := m.session.NewBatch(gocql.LoggedBatch)
-	batch.Query(templateUpdateDomainByNameQueryWithinBatchV2,
+	batch.Query(templateUpdateNamespaceByNameQueryWithinBatchV2,
 		request.Info.ID,
 		request.Info.Name,
 		request.Info.Status,
@@ -280,7 +280,7 @@ func (m *cassandraMetadataPersistenceV2) UpdateDomain(request *p.InternalUpdateD
 		request.FailoverVersion,
 		request.FailoverNotificationVersion,
 		request.NotificationVersion,
-		constDomainPartition,
+		constNamespacePartition,
 		request.Info.Name,
 	)
 	m.updateMetadataBatch(batch, request.NotificationVersion)
@@ -294,32 +294,32 @@ func (m *cassandraMetadataPersistenceV2) UpdateDomain(request *p.InternalUpdateD
 	}()
 
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateDomain operation failed. Error: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("UpdateNamespace operation failed. Error: %v", err))
 	}
 	if !applied {
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateDomain operation failed because of conditional failure."))
+		return serviceerror.NewInternal(fmt.Sprintf("UpdateNamespace operation failed because of conditional failure."))
 	}
 
 	return nil
 }
 
-func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) (*p.InternalGetDomainResponse, error) {
+func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceRequest) (*p.InternalGetNamespaceResponse, error) {
 	var query *gocql.Query
 	var err error
-	info := &p.DomainInfo{}
-	config := &p.InternalDomainConfig{}
-	replicationConfig := &p.DomainReplicationConfig{}
+	info := &p.NamespaceInfo{}
+	config := &p.InternalNamespaceConfig{}
+	replicationConfig := &p.NamespaceReplicationConfig{}
 	var replicationClusters []map[string]interface{}
 	var failoverNotificationVersion int64
 	var notificationVersion int64
 	var failoverVersion int64
 	var configVersion int64
-	var isGlobalDomain bool
+	var isGlobalNamespace bool
 
 	if len(request.ID) > 0 && len(request.Name) > 0 {
-		return nil, serviceerror.NewInvalidArgument("GetDomain operation failed.  Both ID and Name specified in request.")
+		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name specified in request.")
 	} else if len(request.ID) == 0 && len(request.Name) == 0 {
-		return nil, serviceerror.NewInvalidArgument("GetDomain operation failed.  Both ID and Name are empty.")
+		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name are empty.")
 	}
 
 	handleError := func(name, ID string, err error) error {
@@ -328,15 +328,15 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 			identity = ID
 		}
 		if err == gocql.ErrNotFound {
-			return serviceerror.NewNotFound(fmt.Sprintf("Domain %s does not exist.", identity))
+			return serviceerror.NewNotFound(fmt.Sprintf("Namespace %s does not exist.", identity))
 		}
-		return serviceerror.NewInternal(fmt.Sprintf("GetDomain operation failed. Error %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("GetNamespace operation failed. Error %v", err))
 	}
 
-	domainName := request.Name
+	namespace := request.Name
 	if len(request.ID) > 0 {
-		query = m.session.Query(templateGetDomainQuery, request.ID)
-		err = query.Scan(&domainName)
+		query = m.session.Query(templateGetNamespaceQuery, request.ID)
+		err = query.Scan(&namespace)
 		if err != nil {
 			return nil, handleError(request.Name, request.ID, err)
 		}
@@ -345,7 +345,7 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 	var badBinariesData []byte
 	var badBinariesDataEncoding string
 
-	query = m.session.Query(templateGetDomainByNameQueryV2, constDomainPartition, domainName)
+	query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace)
 	err = query.Scan(
 		&info.ID,
 		&info.Name,
@@ -365,7 +365,7 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 		&badBinariesDataEncoding,
 		&replicationConfig.ActiveClusterName,
 		&replicationClusters,
-		&isGlobalDomain,
+		&isGlobalNamespace,
 		&configVersion,
 		&failoverVersion,
 		&failoverNotificationVersion,
@@ -384,11 +384,11 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 	replicationConfig.Clusters = p.DeserializeClusterConfigs(replicationClusters)
 	replicationConfig.Clusters = p.GetOrUseDefaultClusters(m.currentClusterName, replicationConfig.Clusters)
 
-	return &p.InternalGetDomainResponse{
+	return &p.InternalGetNamespaceResponse{
 		Info:                        info,
 		Config:                      config,
 		ReplicationConfig:           replicationConfig,
-		IsGlobalDomain:              isGlobalDomain,
+		IsGlobalNamespace:           isGlobalNamespace,
 		ConfigVersion:               configVersion,
 		FailoverVersion:             failoverVersion,
 		FailoverNotificationVersion: failoverNotificationVersion,
@@ -396,68 +396,68 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 	}, nil
 }
 
-func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsRequest) (*p.InternalListDomainsResponse, error) {
+func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespacesRequest) (*p.InternalListNamespacesResponse, error) {
 	var query *gocql.Query
 
-	query = m.session.Query(templateListDomainQueryV2, constDomainPartition)
+	query = m.session.Query(templateListNamespaceQueryV2, constNamespacePartition)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		return nil, serviceerror.NewInternal("ListDomains operation failed.  Not able to create query iterator.")
+		return nil, serviceerror.NewInternal("ListNamespaces operation failed.  Not able to create query iterator.")
 	}
 
 	var name string
-	domain := &p.InternalGetDomainResponse{
-		Info:              &p.DomainInfo{},
-		Config:            &p.InternalDomainConfig{},
-		ReplicationConfig: &p.DomainReplicationConfig{},
+	namespace := &p.InternalGetNamespaceResponse{
+		Info:              &p.NamespaceInfo{},
+		Config:            &p.InternalNamespaceConfig{},
+		ReplicationConfig: &p.NamespaceReplicationConfig{},
 	}
 	var replicationClusters []map[string]interface{}
 	var badBinariesData []byte
 	var badBinariesDataEncoding string
-	response := &p.InternalListDomainsResponse{}
+	response := &p.InternalListNamespacesResponse{}
 	for iter.Scan(
 		&name,
-		&domain.Info.ID,
-		&domain.Info.Name,
-		&domain.Info.Status,
-		&domain.Info.Description,
-		&domain.Info.OwnerEmail,
-		&domain.Info.Data,
-		&domain.Config.Retention,
-		&domain.Config.EmitMetric,
-		&domain.Config.ArchivalBucket,
-		&domain.Config.ArchivalStatus,
-		&domain.Config.HistoryArchivalStatus,
-		&domain.Config.HistoryArchivalURI,
-		&domain.Config.VisibilityArchivalStatus,
-		&domain.Config.VisibilityArchivalURI,
+		&namespace.Info.ID,
+		&namespace.Info.Name,
+		&namespace.Info.Status,
+		&namespace.Info.Description,
+		&namespace.Info.OwnerEmail,
+		&namespace.Info.Data,
+		&namespace.Config.Retention,
+		&namespace.Config.EmitMetric,
+		&namespace.Config.ArchivalBucket,
+		&namespace.Config.ArchivalStatus,
+		&namespace.Config.HistoryArchivalStatus,
+		&namespace.Config.HistoryArchivalURI,
+		&namespace.Config.VisibilityArchivalStatus,
+		&namespace.Config.VisibilityArchivalURI,
 		&badBinariesData,
 		&badBinariesDataEncoding,
-		&domain.ReplicationConfig.ActiveClusterName,
+		&namespace.ReplicationConfig.ActiveClusterName,
 		&replicationClusters,
-		&domain.IsGlobalDomain,
-		&domain.ConfigVersion,
-		&domain.FailoverVersion,
-		&domain.FailoverNotificationVersion,
-		&domain.NotificationVersion,
+		&namespace.IsGlobalNamespace,
+		&namespace.ConfigVersion,
+		&namespace.FailoverVersion,
+		&namespace.FailoverNotificationVersion,
+		&namespace.NotificationVersion,
 	) {
-		if name != domainMetadataRecordName {
+		if name != namespaceMetadataRecordName {
 			// do not include the metadata record
-			if domain.Info.Data == nil {
-				domain.Info.Data = map[string]string{}
+			if namespace.Info.Data == nil {
+				namespace.Info.Data = map[string]string{}
 			}
-			domain.Config.BadBinaries = p.NewDataBlob(badBinariesData, common.EncodingType(badBinariesDataEncoding))
+			namespace.Config.BadBinaries = p.NewDataBlob(badBinariesData, common.EncodingType(badBinariesDataEncoding))
 			badBinariesData = []byte("")
 			badBinariesDataEncoding = ""
-			domain.ReplicationConfig.ActiveClusterName = p.GetOrUseDefaultActiveCluster(m.currentClusterName, domain.ReplicationConfig.ActiveClusterName)
-			domain.ReplicationConfig.Clusters = p.DeserializeClusterConfigs(replicationClusters)
-			domain.ReplicationConfig.Clusters = p.GetOrUseDefaultClusters(m.currentClusterName, domain.ReplicationConfig.Clusters)
-			response.Domains = append(response.Domains, domain)
+			namespace.ReplicationConfig.ActiveClusterName = p.GetOrUseDefaultActiveCluster(m.currentClusterName, namespace.ReplicationConfig.ActiveClusterName)
+			namespace.ReplicationConfig.Clusters = p.DeserializeClusterConfigs(replicationClusters)
+			namespace.ReplicationConfig.Clusters = p.GetOrUseDefaultClusters(m.currentClusterName, namespace.ReplicationConfig.Clusters)
+			response.Namespaces = append(response.Namespaces, namespace)
 		}
-		domain = &p.InternalGetDomainResponse{
-			Info:              &p.DomainInfo{},
-			Config:            &p.InternalDomainConfig{},
-			ReplicationConfig: &p.DomainReplicationConfig{},
+		namespace = &p.InternalGetNamespaceResponse{
+			Info:              &p.NamespaceInfo{},
+			Config:            &p.InternalNamespaceConfig{},
+			ReplicationConfig: &p.NamespaceReplicationConfig{},
 		}
 	}
 
@@ -465,15 +465,15 @@ func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsReque
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListDomains operation failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListNamespaces operation failed. Error: %v", err))
 	}
 
 	return response, nil
 }
 
-func (m *cassandraMetadataPersistenceV2) DeleteDomain(request *p.DeleteDomainRequest) error {
+func (m *cassandraMetadataPersistenceV2) DeleteNamespace(request *p.DeleteNamespaceRequest) error {
 	var name string
-	query := m.session.Query(templateGetDomainQuery, request.ID)
+	query := m.session.Query(templateGetNamespaceQuery, request.ID)
 	err := query.Scan(&name)
 	if err != nil {
 		if err == gocql.ErrNotFound {
@@ -482,12 +482,12 @@ func (m *cassandraMetadataPersistenceV2) DeleteDomain(request *p.DeleteDomainReq
 		return err
 	}
 
-	return m.deleteDomain(name, request.ID)
+	return m.deleteNamespace(name, request.ID)
 }
 
-func (m *cassandraMetadataPersistenceV2) DeleteDomainByName(request *p.DeleteDomainByNameRequest) error {
+func (m *cassandraMetadataPersistenceV2) DeleteNamespaceByName(request *p.DeleteNamespaceByNameRequest) error {
 	var ID string
-	query := m.session.Query(templateGetDomainByNameQueryV2, constDomainPartition, request.Name)
+	query := m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, request.Name)
 	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		if err == gocql.ErrNotFound {
@@ -495,17 +495,17 @@ func (m *cassandraMetadataPersistenceV2) DeleteDomainByName(request *p.DeleteDom
 		}
 		return err
 	}
-	return m.deleteDomain(request.Name, ID)
+	return m.deleteNamespace(request.Name, ID)
 }
 
 func (m *cassandraMetadataPersistenceV2) GetMetadata() (*p.GetMetadataResponse, error) {
 	var notificationVersion int64
-	query := m.session.Query(templateGetMetadataQueryV2, constDomainPartition, domainMetadataRecordName)
+	query := m.session.Query(templateGetMetadataQueryV2, constNamespacePartition, namespaceMetadataRecordName)
 	err := query.Scan(&notificationVersion)
 	if err != nil {
 		if err == gocql.ErrNotFound {
 			// this error can be thrown in the very beginning,
-			// i.e. when domains_by_name_v2 is initialized
+			// i.e. when namespaces_by_name_v2 is initialized
 			return &p.GetMetadataResponse{NotificationVersion: 0}, nil
 		}
 		return nil, err
@@ -522,21 +522,21 @@ func (m *cassandraMetadataPersistenceV2) updateMetadataBatch(batch *gocql.Batch,
 	}
 	batch.Query(templateUpdateMetadataQueryWithinBatchV2,
 		nextVersion,
-		constDomainPartition,
-		domainMetadataRecordName,
+		constNamespacePartition,
+		namespaceMetadataRecordName,
 		currentVersion,
 	)
 }
 
-func (m *cassandraMetadataPersistenceV2) deleteDomain(name, ID string) error {
-	query := m.session.Query(templateDeleteDomainByNameQueryV2, constDomainPartition, name)
+func (m *cassandraMetadataPersistenceV2) deleteNamespace(name, ID string) error {
+	query := m.session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteDomainByName operation failed. Error %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteNamespaceByName operation failed. Error %v", err))
 	}
 
-	query = m.session.Query(templateDeleteDomainQuery, ID)
+	query = m.session.Query(templateDeleteNamespaceQuery, ID)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteDomain operation failed. Error %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteNamespace operation failed. Error %v", err))
 	}
 
 	return nil

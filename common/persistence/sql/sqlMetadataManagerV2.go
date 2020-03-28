@@ -54,30 +54,30 @@ func newMetadataPersistenceV2(db sqlplugin.DB, currentClusterName string,
 }
 
 func updateMetadata(tx sqlplugin.Tx, oldNotificationVersion int64) error {
-	result, err := tx.UpdateDomainMetadata(&sqlplugin.DomainMetadataRow{NotificationVersion: oldNotificationVersion})
+	result, err := tx.UpdateNamespaceMetadata(&sqlplugin.NamespaceMetadataRow{NotificationVersion: oldNotificationVersion})
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to update domain metadata. Error: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to update namespace metadata. Error: %v", err))
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("Could not verify whether domain metadata update occurred. Error: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("Could not verify whether namespace metadata update occurred. Error: %v", err))
 	} else if rowsAffected != 1 {
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to update domain metadata. <>1 rows affected. Error: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to update namespace metadata. <>1 rows affected. Error: %v", err))
 	}
 
 	return nil
 }
 
 func lockMetadata(tx sqlplugin.Tx) error {
-	err := tx.LockDomainMetadata()
+	err := tx.LockNamespaceMetadata()
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock domain metadata. Error: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock namespace metadata. Error: %v", err))
 	}
 	return nil
 }
 
-func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateDomainRequest) (*persistence.CreateDomainResponse, error) {
+func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
 	metadata, err := m.GetMetadata()
 	if err != nil {
 		return nil, err
@@ -94,7 +94,7 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateD
 		badBinaries = request.Config.BadBinaries.Data
 		badBinariesEncoding = string(request.Config.BadBinaries.GetEncoding())
 	}
-	domainInfo := &persistenceblobs.DomainInfo{
+	namespaceInfo := &persistenceblobs.NamespaceInfo{
 		Status:                      int32(request.Info.Status),
 		Description:                 request.Info.Description,
 		Owner:                       request.Info.OwnerEmail,
@@ -117,22 +117,22 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateD
 		BadBinariesEncoding:         badBinariesEncoding,
 	}
 
-	blob, err := serialization.DomainInfoToBlob(domainInfo)
+	blob, err := serialization.NamespaceInfoToBlob(namespaceInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	var resp *persistence.CreateDomainResponse
-	err = m.txExecute("CreateDomain", func(tx sqlplugin.Tx) error {
-		if _, err1 := tx.InsertIntoDomain(&sqlplugin.DomainRow{
+	var resp *persistence.CreateNamespaceResponse
+	err = m.txExecute("CreateNamespace", func(tx sqlplugin.Tx) error {
+		if _, err1 := tx.InsertIntoNamespace(&sqlplugin.NamespaceRow{
 			Name:         request.Info.Name,
 			ID:           primitives.MustParseUUID(request.Info.ID),
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
-			IsGlobal:     request.IsGlobalDomain,
+			IsGlobal:     request.IsGlobalNamespace,
 		}); err1 != nil {
 			if m.db.IsDupEntryError(err1) {
-				return serviceerror.NewDomainAlreadyExists(fmt.Sprintf("name: %v", request.Info.Name))
+				return serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("name: %v", request.Info.Name))
 			}
 			return err1
 		}
@@ -142,26 +142,26 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateD
 		if err1 := updateMetadata(tx, metadata.NotificationVersion); err1 != nil {
 			return err1
 		}
-		resp = &persistence.CreateDomainResponse{ID: request.Info.ID}
+		resp = &persistence.CreateNamespaceResponse{ID: request.Info.ID}
 		return nil
 	})
 	return resp, err
 }
 
-func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) (*persistence.InternalGetDomainResponse, error) {
-	filter := &sqlplugin.DomainFilter{}
+func (m *sqlMetadataManagerV2) GetNamespace(request *persistence.GetNamespaceRequest) (*persistence.InternalGetNamespaceResponse, error) {
+	filter := &sqlplugin.NamespaceFilter{}
 	switch {
 	case request.Name != "" && request.ID != "":
-		return nil, serviceerror.NewInvalidArgument("GetDomain operation failed.  Both ID and Name specified in request.")
+		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name specified in request.")
 	case request.Name != "":
 		filter.Name = &request.Name
 	case request.ID != "":
 		filter.ID = primitives.UUIDPtr(primitives.MustParseUUID(request.ID))
 	default:
-		return nil, serviceerror.NewInvalidArgument("GetDomain operation failed.  Both ID and Name are empty.")
+		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name are empty.")
 	}
 
-	rows, err := m.db.SelectFromDomain(filter)
+	rows, err := m.db.SelectFromNamespace(filter)
 	if err != nil {
 		switch err {
 		case sql.ErrNoRows:
@@ -171,13 +171,13 @@ func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) 
 				identity = request.ID
 			}
 
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("Domain %s does not exist.", identity))
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("Namespace %s does not exist.", identity))
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetDomain operation failed. Error %v", err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetNamespace operation failed. Error %v", err))
 		}
 	}
 
-	response, err := m.domainRowToGetDomainResponse(&rows[0])
+	response, err := m.namespaceRowToGetNamespaceResponse(&rows[0])
 	if err != nil {
 		return nil, err
 	}
@@ -185,55 +185,55 @@ func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) 
 	return response, nil
 }
 
-func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqlplugin.DomainRow) (*persistence.InternalGetDomainResponse, error) {
-	domainInfo, err := serialization.DomainInfoFromBlob(row.Data, row.DataEncoding)
+func (m *sqlMetadataManagerV2) namespaceRowToGetNamespaceResponse(row *sqlplugin.NamespaceRow) (*persistence.InternalGetNamespaceResponse, error) {
+	namespaceInfo, err := serialization.NamespaceInfoFromBlob(row.Data, row.DataEncoding)
 	if err != nil {
 		return nil, err
 	}
 
-	clusters := make([]*persistence.ClusterReplicationConfig, len(domainInfo.Clusters))
-	for i := range domainInfo.Clusters {
-		clusters[i] = &persistence.ClusterReplicationConfig{ClusterName: domainInfo.Clusters[i]}
+	clusters := make([]*persistence.ClusterReplicationConfig, len(namespaceInfo.Clusters))
+	for i := range namespaceInfo.Clusters {
+		clusters[i] = &persistence.ClusterReplicationConfig{ClusterName: namespaceInfo.Clusters[i]}
 	}
 
 	var badBinaries *serialization.DataBlob
-	if domainInfo.BadBinaries != nil {
-		badBinaries = persistence.NewDataBlob(domainInfo.BadBinaries, common.EncodingType(domainInfo.BadBinariesEncoding))
+	if namespaceInfo.BadBinaries != nil {
+		badBinaries = persistence.NewDataBlob(namespaceInfo.BadBinaries, common.EncodingType(namespaceInfo.BadBinariesEncoding))
 	}
 
-	return &persistence.InternalGetDomainResponse{
-		Info: &persistence.DomainInfo{
+	return &persistence.InternalGetNamespaceResponse{
+		Info: &persistence.NamespaceInfo{
 			ID:          row.ID.String(),
 			Name:        row.Name,
-			Status:      int(domainInfo.GetStatus()),
-			Description: domainInfo.GetDescription(),
-			OwnerEmail:  domainInfo.GetOwner(),
-			Data:        domainInfo.GetData(),
+			Status:      int(namespaceInfo.GetStatus()),
+			Description: namespaceInfo.GetDescription(),
+			OwnerEmail:  namespaceInfo.GetOwner(),
+			Data:        namespaceInfo.GetData(),
 		},
-		Config: &persistence.InternalDomainConfig{
-			Retention:                domainInfo.GetRetentionDays(),
-			EmitMetric:               domainInfo.GetEmitMetric(),
-			ArchivalBucket:           domainInfo.GetArchivalBucket(),
-			ArchivalStatus:           enums.ArchivalStatus(domainInfo.GetArchivalStatus()),
-			HistoryArchivalStatus:    enums.ArchivalStatus(domainInfo.GetHistoryArchivalStatus()),
-			HistoryArchivalURI:       domainInfo.GetHistoryArchivalURI(),
-			VisibilityArchivalStatus: enums.ArchivalStatus(domainInfo.GetVisibilityArchivalStatus()),
-			VisibilityArchivalURI:    domainInfo.GetVisibilityArchivalURI(),
+		Config: &persistence.InternalNamespaceConfig{
+			Retention:                namespaceInfo.GetRetentionDays(),
+			EmitMetric:               namespaceInfo.GetEmitMetric(),
+			ArchivalBucket:           namespaceInfo.GetArchivalBucket(),
+			ArchivalStatus:           enums.ArchivalStatus(namespaceInfo.GetArchivalStatus()),
+			HistoryArchivalStatus:    enums.ArchivalStatus(namespaceInfo.GetHistoryArchivalStatus()),
+			HistoryArchivalURI:       namespaceInfo.GetHistoryArchivalURI(),
+			VisibilityArchivalStatus: enums.ArchivalStatus(namespaceInfo.GetVisibilityArchivalStatus()),
+			VisibilityArchivalURI:    namespaceInfo.GetVisibilityArchivalURI(),
 			BadBinaries:              badBinaries,
 		},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: persistence.GetOrUseDefaultActiveCluster(m.activeClusterName, domainInfo.GetActiveClusterName()),
+		ReplicationConfig: &persistence.NamespaceReplicationConfig{
+			ActiveClusterName: persistence.GetOrUseDefaultActiveCluster(m.activeClusterName, namespaceInfo.GetActiveClusterName()),
 			Clusters:          persistence.GetOrUseDefaultClusters(m.activeClusterName, clusters),
 		},
-		IsGlobalDomain:              row.IsGlobal,
-		FailoverVersion:             domainInfo.GetFailoverVersion(),
-		ConfigVersion:               domainInfo.GetConfigVersion(),
-		NotificationVersion:         domainInfo.GetNotificationVersion(),
-		FailoverNotificationVersion: domainInfo.GetFailoverNotificationVersion(),
+		IsGlobalNamespace:           row.IsGlobal,
+		FailoverVersion:             namespaceInfo.GetFailoverVersion(),
+		ConfigVersion:               namespaceInfo.GetConfigVersion(),
+		NotificationVersion:         namespaceInfo.GetNotificationVersion(),
+		FailoverNotificationVersion: namespaceInfo.GetFailoverNotificationVersion(),
 	}, nil
 }
 
-func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateDomainRequest) error {
+func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpdateNamespaceRequest) error {
 	clusters := make([]string, len(request.ReplicationConfig.Clusters))
 	for i := range clusters {
 		clusters[i] = request.ReplicationConfig.Clusters[i].ClusterName
@@ -245,7 +245,7 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateD
 		badBinaries = request.Config.BadBinaries.Data
 		badBinariesEncoding = string(request.Config.BadBinaries.GetEncoding())
 	}
-	domainInfo := &persistenceblobs.DomainInfo{
+	namespaceInfo := &persistenceblobs.NamespaceInfo{
 		Status:                      int32(request.Info.Status),
 		Description:                 request.Info.Description,
 		Owner:                       request.Info.OwnerEmail,
@@ -268,13 +268,13 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateD
 		BadBinariesEncoding:         badBinariesEncoding,
 	}
 
-	blob, err := serialization.DomainInfoToBlob(domainInfo)
+	blob, err := serialization.NamespaceInfoToBlob(namespaceInfo)
 	if err != nil {
 		return err
 	}
 
-	return m.txExecute("UpdateDomain", func(tx sqlplugin.Tx) error {
-		result, err := tx.UpdateDomain(&sqlplugin.DomainRow{
+	return m.txExecute("UpdateNamespace", func(tx sqlplugin.Tx) error {
+		result, err := tx.UpdateNamespace(&sqlplugin.NamespaceRow{
 			Name:         request.Info.Name,
 			ID:           primitives.MustParseUUID(request.Info.ID),
 			Data:         blob.Data,
@@ -297,55 +297,55 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateD
 	})
 }
 
-func (m *sqlMetadataManagerV2) DeleteDomain(request *persistence.DeleteDomainRequest) error {
-	return m.txExecute("DeleteDomain", func(tx sqlplugin.Tx) error {
-		_, err := tx.DeleteFromDomain(&sqlplugin.DomainFilter{ID: primitives.UUIDPtr(primitives.MustParseUUID(request.ID))})
+func (m *sqlMetadataManagerV2) DeleteNamespace(request *persistence.DeleteNamespaceRequest) error {
+	return m.txExecute("DeleteNamespace", func(tx sqlplugin.Tx) error {
+		_, err := tx.DeleteFromNamespace(&sqlplugin.NamespaceFilter{ID: primitives.UUIDPtr(primitives.MustParseUUID(request.ID))})
 		return err
 	})
 }
 
-func (m *sqlMetadataManagerV2) DeleteDomainByName(request *persistence.DeleteDomainByNameRequest) error {
-	return m.txExecute("DeleteDomainByName", func(tx sqlplugin.Tx) error {
-		_, err := tx.DeleteFromDomain(&sqlplugin.DomainFilter{Name: &request.Name})
+func (m *sqlMetadataManagerV2) DeleteNamespaceByName(request *persistence.DeleteNamespaceByNameRequest) error {
+	return m.txExecute("DeleteNamespaceByName", func(tx sqlplugin.Tx) error {
+		_, err := tx.DeleteFromNamespace(&sqlplugin.NamespaceFilter{Name: &request.Name})
 		return err
 	})
 }
 
 func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, error) {
-	row, err := m.db.SelectFromDomainMetadata()
+	row, err := m.db.SelectFromNamespaceMetadata()
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetMetadata operation failed. Error: %v", err))
 	}
 	return &persistence.GetMetadataResponse{NotificationVersion: row.NotificationVersion}, nil
 }
 
-func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsRequest) (*persistence.InternalListDomainsResponse, error) {
+func (m *sqlMetadataManagerV2) ListNamespaces(request *persistence.ListNamespacesRequest) (*persistence.InternalListNamespacesResponse, error) {
 	var pageToken *primitives.UUID
 	if request.NextPageToken != nil {
 		token := primitives.UUID(request.NextPageToken)
 		pageToken = &token
 	}
-	rows, err := m.db.SelectFromDomain(&sqlplugin.DomainFilter{
+	rows, err := m.db.SelectFromNamespace(&sqlplugin.NamespaceFilter{
 		GreaterThanID: pageToken,
 		PageSize:      &request.PageSize,
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return &persistence.InternalListDomainsResponse{}, nil
+			return &persistence.InternalListNamespacesResponse{}, nil
 		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListDomains operation failed. Failed to get domain rows. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListNamespaces operation failed. Failed to get namespace rows. Error: %v", err))
 	}
 
-	var domains []*persistence.InternalGetDomainResponse
+	var namespaces []*persistence.InternalGetNamespaceResponse
 	for _, row := range rows {
-		resp, err := m.domainRowToGetDomainResponse(&row)
+		resp, err := m.namespaceRowToGetNamespaceResponse(&row)
 		if err != nil {
 			return nil, err
 		}
-		domains = append(domains, resp)
+		namespaces = append(namespaces, resp)
 	}
 
-	resp := &persistence.InternalListDomainsResponse{Domains: domains}
+	resp := &persistence.InternalListNamespacesResponse{Namespaces: namespaces}
 	if len(rows) >= request.PageSize {
 		resp.NextPageToken = rows[len(rows)-1].ID
 	}

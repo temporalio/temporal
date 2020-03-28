@@ -43,7 +43,7 @@ func registerCancellation(r registrar) {
 }
 
 // cancellationWorkflow is the workflow implementation to test for cancellation of workflows
-func cancellationWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func cancellationWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	profile, err := beginWorkflow(ctx, wfTypeCancellation, scheduledTimeNanos)
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func cancellationWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain
 	}
 
 	// this test cancellation of child workflow, inside workflow
-	cwo := newChildWorkflowOptions(domain, wfTypeCancellationExternal+"-child")
+	cwo := newChildWorkflowOptions(namespace, wfTypeCancellationExternal+"-child")
 	childCtx := workflow.WithChildOptions(ctx, cwo)
 	childCtx, cancel := workflow.WithCancel(childCtx)
 	childFuture := workflow.ExecuteChildWorkflow(childCtx, wfTypeCancellationExternal, workflow.Now(ctx).UnixNano(), sleepDuration)
@@ -81,7 +81,7 @@ func cancellationWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain
 
 	// this test cancellation of child workflow, outside workflow
 	activityCancelChildTestFn := func(useRunID bool) error {
-		cwo := newChildWorkflowOptions(domain, wfTypeCancellationExternal+"-child-outside")
+		cwo := newChildWorkflowOptions(namespace, wfTypeCancellationExternal+"-child-outside")
 		childCtx := workflow.WithChildOptions(ctx, cwo)
 		childFuture := workflow.ExecuteChildWorkflow(childCtx, wfTypeCancellationExternal, workflow.Now(ctx).UnixNano(), sleepDuration)
 		childExecution := &workflow.Execution{}
@@ -125,7 +125,7 @@ func cancellationWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain
 		if !useRunID {
 			workflowIDSuffix = "-without-run-ID"
 		}
-		cwo = newChildWorkflowOptions(domain, wfTypeCancellationExternal+workflowIDSuffix)
+		cwo = newChildWorkflowOptions(namespace, wfTypeCancellationExternal+workflowIDSuffix)
 		childCtx = workflow.WithChildOptions(ctx, cwo)
 		childFuture = workflow.ExecuteChildWorkflow(childCtx, wfTypeCancellationExternal, workflow.Now(ctx).UnixNano(), sleepDuration)
 		childExecution := &workflow.Execution{}

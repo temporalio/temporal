@@ -29,7 +29,7 @@ import (
 )
 
 type testStruct struct {
-	Domain     string
+	Namespace  string
 	WorkflowID string
 	RunID      string
 	StartTime  int64
@@ -38,14 +38,14 @@ type testStruct struct {
 func TestGobEncoder(t *testing.T) {
 	encoder := NewGobEncoder()
 
-	domain := "test-domain"
+	namespace := "test-namespace"
 	wid := uuid.New()
 	rid := uuid.New()
 	startTime := time.Now().UnixNano()
 
 	// test encode and decode 1 object
 	msg := &testStruct{
-		Domain:     domain,
+		Namespace:  namespace,
 		WorkflowID: wid,
 		RunID:      rid,
 		StartTime:  startTime,

@@ -37,30 +37,30 @@ import (
 func verifyTaskVersion(
 	shard ShardContext,
 	logger log.Logger,
-	domainID []byte,
+	namespaceID []byte,
 	version int64,
 	taskVersion int64,
 	task interface{},
 ) (bool, error) {
 
-	if !shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() {
+	if !shard.GetService().GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		return true, nil
 	}
 
 	// the first return value is whether this task is valid for further processing
-	domainEntry, err := shard.GetDomainCache().GetDomainByID(primitives.UUIDString(domainID))
+	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(primitives.UUIDString(namespaceID))
 	if err != nil {
-		logger.Debug("Cannot find domainID", tag.WorkflowDomainIDBytes(domainID), tag.Error(err))
+		logger.Debug("Cannot find namespaceID", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Error(err))
 		return false, err
 	}
-	if !domainEntry.IsGlobalDomain() {
-		logger.Debug("DomainID is not active, task version check pass", tag.WorkflowDomainIDBytes(domainID), tag.Task(task))
+	if !namespaceEntry.IsGlobalNamespace() {
+		logger.Debug("NamespaceID is not active, task version check pass", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Task(task))
 		return true, nil
 	} else if version != taskVersion {
-		logger.Debug("DomainID is active, task version != target version", tag.WorkflowDomainIDBytes(domainID), tag.Task(task), tag.TaskVersion(version))
+		logger.Debug("NamespaceID is active, task version != target version", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Task(task), tag.TaskVersion(version))
 		return false, nil
 	}
-	logger.Debug("DomainID is active, task version == target version", tag.WorkflowDomainIDBytes(domainID), tag.Task(task), tag.TaskVersion(version))
+	logger.Debug("NamespaceID is active, task version == target version", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Task(task), tag.TaskVersion(version))
 	return true, nil
 }
 
@@ -165,7 +165,7 @@ func initializeLoggerForTask(
 		tag.TaskID(task.GetTaskID()),
 		tag.FailoverVersion(task.GetVersion()),
 		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowDomainIDBytes(task.GetDomainID()),
+		tag.WorkflowNamespaceIDBytes(task.GetNamespaceID()),
 		tag.WorkflowID(task.GetWorkflowID()),
 		tag.WorkflowRunIDBytes(task.GetRunID()),
 	)

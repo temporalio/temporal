@@ -56,10 +56,10 @@ type (
 
 	// ArchiveRequest is the request signal sent to the archival workflow
 	ArchiveRequest struct {
-		DomainID   string
-		DomainName string
-		WorkflowID string
-		RunID      string
+		NamespaceID string
+		Namespace   string
+		WorkflowID  string
+		RunID       string
 
 		// history archival
 		ShardID              int
@@ -210,8 +210,8 @@ func (c *client) archiveHistoryInline(ctx context.Context, request *ClientReques
 
 	err = historyArchiver.Archive(ctx, URI, &carchiver.ArchiveHistoryRequest{
 		ShardID:              request.ArchiveRequest.ShardID,
-		DomainID:             request.ArchiveRequest.DomainID,
-		DomainName:           request.ArchiveRequest.DomainName,
+		NamespaceID:          request.ArchiveRequest.NamespaceID,
+		Namespace:            request.ArchiveRequest.Namespace,
 		WorkflowID:           request.ArchiveRequest.WorkflowID,
 		RunID:                request.ArchiveRequest.RunID,
 		BranchToken:          request.ArchiveRequest.BranchToken,
@@ -243,8 +243,8 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 	}
 
 	err = visibilityArchiver.Archive(ctx, URI, &archiverproto.ArchiveVisibilityRequest{
-		DomainID:           request.ArchiveRequest.DomainID,
-		DomainName:         request.ArchiveRequest.DomainName,
+		NamespaceID:        request.ArchiveRequest.NamespaceID,
+		Namespace:          request.ArchiveRequest.Namespace,
 		WorkflowID:         request.ArchiveRequest.WorkflowID,
 		RunID:              request.ArchiveRequest.RunID,
 		WorkflowTypeName:   request.ArchiveRequest.WorkflowTypeName,
@@ -280,8 +280,8 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	_, err := c.cadenceClient.SignalWithStartWorkflow(signalCtx, workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
 	if err != nil {
 		taggedLogger = taggedLogger.WithTags(
-			tag.ArchivalRequestDomainID(request.DomainID),
-			tag.ArchivalRequestDomainName(request.DomainName),
+			tag.ArchivalRequestNamespaceID(request.NamespaceID),
+			tag.ArchivalRequestNamespace(request.Namespace),
 			tag.ArchivalRequestWorkflowID(request.WorkflowID),
 			tag.ArchivalRequestRunID(request.RunID),
 			tag.WorkflowID(workflowID),

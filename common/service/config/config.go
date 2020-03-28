@@ -64,8 +64,8 @@ type (
 		// DynamicConfigClient is the config for setting up the file based dynamic config client
 		// Filepath should be relative to the root directory
 		DynamicConfigClient dynamicconfig.FileBasedClientConfig `yaml:"dynamicConfigClient"`
-		// DomainDefaults is the default config for every domain
-		DomainDefaults DomainDefaults `yaml:"domainDefaults"`
+		// NamespaceDefaults is the default config for every namespace
+		NamespaceDefaults NamespaceDefaults `yaml:"namespaceDefaults"`
 	}
 
 	// Service contains the service specific config items
@@ -161,11 +161,11 @@ type (
 		// EnableReadFromClosedExecutionV2 read closed from v2 table
 		EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn `yaml:"-" json:"-"`
 		// VisibilityOpenMaxQPS max QPS for record open workflows
-		VisibilityOpenMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter `yaml:"-" json:"-"`
+		VisibilityOpenMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
 		// VisibilityClosedMaxQPS max QPS for record closed workflows
-		VisibilityClosedMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter `yaml:"-" json:"-"`
+		VisibilityClosedMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
 		// VisibilityListMaxQPS max QPS for list workflow
-		VisibilityListMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter `yaml:"-" json:"-"`
+		VisibilityListMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
 		// ESIndexMaxResultWindow ElasticSearch index setting max_result_window
 		ESIndexMaxResultWindow dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 		// MaxQPS is overall max QPS
@@ -246,13 +246,13 @@ type (
 
 	// ClusterMetadata contains the all cluster which participated in cross DC
 	ClusterMetadata struct {
-		EnableGlobalDomain bool `yaml:"enableGlobalDomain"`
+		EnableGlobalNamespace bool `yaml:"enableGlobalNamespace"`
 		// ReplicationConsumerConfig determines how we consume replication tasks.
 		ReplicationConsumer *ReplicationConsumerConfig `yaml:"replicationConsumer"`
 		// FailoverVersionIncrement is the increment of each cluster version when failover happens
 		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
-		// MasterClusterName is the master cluster name, only the master cluster can register / update domain
-		// all clusters can do domain failover
+		// MasterClusterName is the master cluster name, only the master cluster can register / update namespace
+		// all clusters can do namespace failover
 		MasterClusterName string `yaml:"masterClusterName"`
 		// CurrentClusterName is the name of the current cluster
 		CurrentClusterName string `yaml:"currentClusterName"`
@@ -388,33 +388,33 @@ type (
 		RefreshInterval time.Duration `yaml:"RefreshInterval"`
 	}
 
-	// DomainDefaults is the default config for each domain
-	DomainDefaults struct {
-		// Archival is the default archival config for each domain
-		Archival ArchivalDomainDefaults `yaml:"archival"`
+	// NamespaceDefaults is the default config for each namespace
+	NamespaceDefaults struct {
+		// Archival is the default archival config for each namespace
+		Archival ArchivalNamespaceDefaults `yaml:"archival"`
 	}
 
-	// ArchivalDomainDefaults is the default archival config for each domain
-	ArchivalDomainDefaults struct {
-		// History is the domain default history archival config for each domain
-		History HistoryArchivalDomainDefaults `yaml:"history"`
-		// Visibility is the domain default visibility archival config for each domain
-		Visibility VisibilityArchivalDomainDefaults `yaml:"visibility"`
+	// ArchivalNamespaceDefaults is the default archival config for each namespace
+	ArchivalNamespaceDefaults struct {
+		// History is the namespace default history archival config for each namespace
+		History HistoryArchivalNamespaceDefaults `yaml:"history"`
+		// Visibility is the namespace default visibility archival config for each namespace
+		Visibility VisibilityArchivalNamespaceDefaults `yaml:"visibility"`
 	}
 
-	// HistoryArchivalDomainDefaults is the default history archival config for each domain
-	HistoryArchivalDomainDefaults struct {
-		// Status is the domain default status of history archival: enabled or disabled
+	// HistoryArchivalNamespaceDefaults is the default history archival config for each namespace
+	HistoryArchivalNamespaceDefaults struct {
+		// Status is the namespace default status of history archival: enabled or disabled
 		Status string `yaml:"status"`
-		// URI is the domain default URI for history archiver
+		// URI is the namespace default URI for history archiver
 		URI string `yaml:"URI"`
 	}
 
-	// VisibilityArchivalDomainDefaults is the default visibility archival config for each domain
-	VisibilityArchivalDomainDefaults struct {
-		// Status is the domain default status of visibility archival: enabled or disabled
+	// VisibilityArchivalNamespaceDefaults is the default visibility archival config for each namespace
+	VisibilityArchivalNamespaceDefaults struct {
+		// Status is the namespace default status of visibility archival: enabled or disabled
 		Status string `yaml:"status"`
-		// URI is the domain default URI for visibility archiver
+		// URI is the namespace default URI for visibility archiver
 		URI string `yaml:"URI"`
 	}
 )
@@ -424,7 +424,7 @@ func (c *Config) Validate() error {
 	if err := c.Persistence.Validate(); err != nil {
 		return err
 	}
-	return c.Archival.Validate(&c.DomainDefaults.Archival)
+	return c.Archival.Validate(&c.NamespaceDefaults.Archival)
 }
 
 // String converts the config object into a string

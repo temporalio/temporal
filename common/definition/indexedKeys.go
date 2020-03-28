@@ -26,7 +26,7 @@ import (
 
 // valid indexed fields on ES
 const (
-	DomainID        = "DomainID"
+	NamespaceID     = "NamespaceID"
 	WorkflowID      = "WorkflowID"
 	RunID           = "RunID"
 	WorkflowType    = "WorkflowType"
@@ -83,7 +83,7 @@ func GetDefaultIndexedKeys() map[string]interface{} {
 
 // systemIndexedKeys is Cadence created visibility keys
 var systemIndexedKeys = map[string]interface{}{
-	DomainID:      enums.IndexedValueTypeKeyword,
+	NamespaceID:   enums.IndexedValueTypeKeyword,
 	WorkflowID:    enums.IndexedValueTypeKeyword,
 	RunID:         enums.IndexedValueTypeKeyword,
 	WorkflowType:  enums.IndexedValueTypeKeyword,

@@ -57,7 +57,7 @@ type (
 	}
 
 	queryVisibilityRequest struct {
-		domainID      string
+		namespaceID   string
 		pageSize      int
 		nextPageToken []byte
 		parsedQuery   *parsedQuery
@@ -110,7 +110,7 @@ func (v *visibilityArchiver) Archive(
 		return err
 	}
 
-	dirPath := path.Join(URI.Path(), request.DomainID)
+	dirPath := path.Join(URI.Path(), request.NamespaceID)
 	if err = mkdirAll(dirPath, v.dirMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errMakeDirectory), tag.Error(err))
 		return err
@@ -156,7 +156,7 @@ func (v *visibilityArchiver) Query(
 	}
 
 	return v.query(ctx, URI, &queryVisibilityRequest{
-		domainID:      request.DomainID,
+		namespaceID:   request.NamespaceID,
 		pageSize:      request.PageSize,
 		nextPageToken: request.NextPageToken,
 		parsedQuery:   parsedQuery,
@@ -177,7 +177,7 @@ func (v *visibilityArchiver) query(
 		}
 	}
 
-	dirPath := path.Join(URI.Path(), request.domainID)
+	dirPath := path.Join(URI.Path(), request.namespaceID)
 	exists, err := directoryExists(dirPath)
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())

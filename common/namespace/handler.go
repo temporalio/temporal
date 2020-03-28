@@ -20,7 +20,7 @@
 
 //go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination handler_mock.go
 
-package domain
+package namespace
 
 import (
 	"context"
@@ -45,95 +45,95 @@ import (
 )
 
 type (
-	// Handler is the domain operation handler
+	// Handler is the namespace operation handler
 	Handler interface {
-		DeprecateDomain(
+		DeprecateNamespace(
 			ctx context.Context,
-			deprecateRequest *workflowservice.DeprecateDomainRequest,
-		) (*workflowservice.DeprecateDomainResponse, error)
-		DescribeDomain(
+			deprecateRequest *workflowservice.DeprecateNamespaceRequest,
+		) (*workflowservice.DeprecateNamespaceResponse, error)
+		DescribeNamespace(
 			ctx context.Context,
-			describeRequest *workflowservice.DescribeDomainRequest,
-		) (*workflowservice.DescribeDomainResponse, error)
-		ListDomains(
+			describeRequest *workflowservice.DescribeNamespaceRequest,
+		) (*workflowservice.DescribeNamespaceResponse, error)
+		ListNamespaces(
 			ctx context.Context,
-			listRequest *workflowservice.ListDomainsRequest,
-		) (*workflowservice.ListDomainsResponse, error)
-		RegisterDomain(
+			listRequest *workflowservice.ListNamespacesRequest,
+		) (*workflowservice.ListNamespacesResponse, error)
+		RegisterNamespace(
 			ctx context.Context,
-			registerRequest *workflowservice.RegisterDomainRequest,
-		) (*workflowservice.RegisterDomainResponse, error)
-		UpdateDomain(
+			registerRequest *workflowservice.RegisterNamespaceRequest,
+		) (*workflowservice.RegisterNamespaceResponse, error)
+		UpdateNamespace(
 			ctx context.Context,
-			updateRequest *workflowservice.UpdateDomainRequest,
-		) (*workflowservice.UpdateDomainResponse, error)
+			updateRequest *workflowservice.UpdateNamespaceRequest,
+		) (*workflowservice.UpdateNamespaceResponse, error)
 	}
 
-	// HandlerImpl is the domain operation handler implementation
+	// HandlerImpl is the namespace operation handler implementation
 	HandlerImpl struct {
-		maxBadBinaryCount   dynamicconfig.IntPropertyFnWithDomainFilter
-		logger              log.Logger
-		metadataMgr         persistence.MetadataManager
-		clusterMetadata     cluster.Metadata
-		domainReplicator    Replicator
-		domainAttrValidator *AttrValidatorImpl
-		archivalMetadata    archiver.ArchivalMetadata
-		archiverProvider    provider.ArchiverProvider
+		maxBadBinaryCount      dynamicconfig.IntPropertyFnWithNamespaceFilter
+		logger                 log.Logger
+		metadataMgr            persistence.MetadataManager
+		clusterMetadata        cluster.Metadata
+		namespaceReplicator    Replicator
+		namespaceAttrValidator *AttrValidatorImpl
+		archivalMetadata       archiver.ArchivalMetadata
+		archiverProvider       provider.ArchiverProvider
 	}
 )
 
 var _ Handler = (*HandlerImpl)(nil)
 
-// NewHandler create a new domain handler
+// NewHandler create a new namespace handler
 func NewHandler(
 	minRetentionDays int,
-	maxBadBinaryCount dynamicconfig.IntPropertyFnWithDomainFilter,
+	maxBadBinaryCount dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
-	domainReplicator Replicator,
+	namespaceReplicator Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
 ) *HandlerImpl {
 	return &HandlerImpl{
-		maxBadBinaryCount:   maxBadBinaryCount,
-		logger:              logger,
-		metadataMgr:         metadataMgr,
-		clusterMetadata:     clusterMetadata,
-		domainReplicator:    domainReplicator,
-		domainAttrValidator: newAttrValidator(clusterMetadata, int32(minRetentionDays)),
-		archivalMetadata:    archivalMetadata,
-		archiverProvider:    archiverProvider,
+		maxBadBinaryCount:      maxBadBinaryCount,
+		logger:                 logger,
+		metadataMgr:            metadataMgr,
+		clusterMetadata:        clusterMetadata,
+		namespaceReplicator:    namespaceReplicator,
+		namespaceAttrValidator: newAttrValidator(clusterMetadata, int32(minRetentionDays)),
+		archivalMetadata:       archivalMetadata,
+		archiverProvider:       archiverProvider,
 	}
 }
 
-// RegisterDomain register a new domain
-func (d *HandlerImpl) RegisterDomain(
+// RegisterNamespace register a new namespace
+func (d *HandlerImpl) RegisterNamespace(
 	_ context.Context,
-	registerRequest *workflowservice.RegisterDomainRequest,
-) (*workflowservice.RegisterDomainResponse, error) {
+	registerRequest *workflowservice.RegisterNamespaceRequest,
+) (*workflowservice.RegisterNamespaceResponse, error) {
 
-	if !d.clusterMetadata.IsGlobalDomainEnabled() {
-		if registerRequest.GetIsGlobalDomain() {
-			return nil, serviceerror.NewInvalidArgument("Cannot register global domain when not enabled")
+	if !d.clusterMetadata.IsGlobalNamespaceEnabled() {
+		if registerRequest.GetIsGlobalNamespace() {
+			return nil, serviceerror.NewInvalidArgument("Cannot register global namespace when not enabled")
 		}
 
-		registerRequest.IsGlobalDomain = false
+		registerRequest.IsGlobalNamespace = false
 	} else {
-		// cluster global domain enabled
-		if !d.clusterMetadata.IsMasterCluster() && registerRequest.GetIsGlobalDomain() {
+		// cluster global namespace enabled
+		if !d.clusterMetadata.IsMasterCluster() && registerRequest.GetIsGlobalNamespace() {
 			return nil, errNotMasterCluster
 		}
 	}
 
-	// first check if the name is already registered as the local domain
-	_, err := d.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: registerRequest.GetName()})
+	// first check if the name is already registered as the local namespace
+	_, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: registerRequest.GetName()})
 	switch err.(type) {
 	case nil:
-		// domain already exists, cannot proceed
-		return nil, serviceerror.NewDomainAlreadyExists("Domain already exists.")
+		// namespace already exists, cannot proceed
+		return nil, serviceerror.NewNamespaceAlreadyExists("Namespace already exists.")
 	case *serviceerror.NotFound:
-		// domain does not exists, proceeds
+		// namespace does not exists, proceeds
 	default:
 		// other err
 		return nil, err
@@ -160,8 +160,8 @@ func (d *HandlerImpl) RegisterDomain(
 		archivalEvent, err := d.toArchivalRegisterEvent(
 			registerRequest.HistoryArchivalStatus,
 			registerRequest.GetHistoryArchivalURI(),
-			clusterHistoryArchivalConfig.GetDomainDefaultStatus(),
-			clusterHistoryArchivalConfig.GetDomainDefaultURI(),
+			clusterHistoryArchivalConfig.GetNamespaceDefaultStatus(),
+			clusterHistoryArchivalConfig.GetNamespaceDefaultURI(),
 		)
 		if err != nil {
 			return nil, err
@@ -180,8 +180,8 @@ func (d *HandlerImpl) RegisterDomain(
 		archivalEvent, err := d.toArchivalRegisterEvent(
 			registerRequest.VisibilityArchivalStatus,
 			registerRequest.GetVisibilityArchivalURI(),
-			clusterVisibilityArchivalConfig.GetDomainDefaultStatus(),
-			clusterVisibilityArchivalConfig.GetDomainDefaultURI(),
+			clusterVisibilityArchivalConfig.GetNamespaceDefaultStatus(),
+			clusterVisibilityArchivalConfig.GetNamespaceDefaultURI(),
 		)
 		if err != nil {
 			return nil, err
@@ -193,15 +193,15 @@ func (d *HandlerImpl) RegisterDomain(
 		}
 	}
 
-	info := &persistence.DomainInfo{
+	info := &persistence.NamespaceInfo{
 		ID:          uuid.New(),
 		Name:        registerRequest.GetName(),
-		Status:      persistence.DomainStatusRegistered,
+		Status:      persistence.NamespaceStatusRegistered,
 		OwnerEmail:  registerRequest.GetOwnerEmail(),
 		Description: registerRequest.GetDescription(),
 		Data:        registerRequest.Data,
 	}
-	config := &persistence.DomainConfig{
+	config := &persistence.NamespaceConfig{
 		Retention:                registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:               registerRequest.GetEmitMetric(),
 		HistoryArchivalStatus:    nextHistoryArchivalState.Status,
@@ -210,23 +210,23 @@ func (d *HandlerImpl) RegisterDomain(
 		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
 		BadBinaries:              commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 	}
-	replicationConfig := &persistence.DomainReplicationConfig{
+	replicationConfig := &persistence.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
 		Clusters:          clusters,
 	}
-	isGlobalDomain := registerRequest.GetIsGlobalDomain()
+	isGlobalNamespace := registerRequest.GetIsGlobalNamespace()
 
-	if err := d.domainAttrValidator.validateDomainConfig(config); err != nil {
+	if err := d.namespaceAttrValidator.validateNamespaceConfig(config); err != nil {
 		return nil, err
 	}
-	if isGlobalDomain {
-		if err := d.domainAttrValidator.validateDomainReplicationConfigForGlobalDomain(
+	if isGlobalNamespace {
+		if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigForGlobalNamespace(
 			replicationConfig,
 		); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := d.domainAttrValidator.validateDomainReplicationConfigForLocalDomain(
+		if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigForLocalNamespace(
 			replicationConfig,
 		); err != nil {
 			return nil, err
@@ -234,59 +234,59 @@ func (d *HandlerImpl) RegisterDomain(
 	}
 
 	failoverVersion := common.EmptyVersion
-	if registerRequest.GetIsGlobalDomain() {
+	if registerRequest.GetIsGlobalNamespace() {
 		failoverVersion = d.clusterMetadata.GetNextFailoverVersion(activeClusterName, 0)
 	}
 
-	domainRequest := &persistence.CreateDomainRequest{
+	namespaceRequest := &persistence.CreateNamespaceRequest{
 		Info:              info,
 		Config:            config,
 		ReplicationConfig: replicationConfig,
-		IsGlobalDomain:    isGlobalDomain,
+		IsGlobalNamespace: isGlobalNamespace,
 		ConfigVersion:     0,
 		FailoverVersion:   failoverVersion,
 	}
 
-	domainResponse, err := d.metadataMgr.CreateDomain(domainRequest)
+	namespaceResponse, err := d.metadataMgr.CreateNamespace(namespaceRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	if domainRequest.IsGlobalDomain {
-		err = d.domainReplicator.HandleTransmissionTask(
-			enums.DomainOperationCreate,
-			domainRequest.Info,
-			domainRequest.Config,
-			domainRequest.ReplicationConfig,
-			domainRequest.ConfigVersion,
-			domainRequest.FailoverVersion,
-			domainRequest.IsGlobalDomain,
+	if namespaceRequest.IsGlobalNamespace {
+		err = d.namespaceReplicator.HandleTransmissionTask(
+			enums.NamespaceOperationCreate,
+			namespaceRequest.Info,
+			namespaceRequest.Config,
+			namespaceRequest.ReplicationConfig,
+			namespaceRequest.ConfigVersion,
+			namespaceRequest.FailoverVersion,
+			namespaceRequest.IsGlobalNamespace,
 		)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	d.logger.Info("Register domain succeeded",
-		tag.WorkflowDomainName(registerRequest.GetName()),
-		tag.WorkflowDomainID(domainResponse.ID),
+	d.logger.Info("Register namespace succeeded",
+		tag.WorkflowNamespace(registerRequest.GetName()),
+		tag.WorkflowNamespaceID(namespaceResponse.ID),
 	)
 
 	return nil, nil
 }
 
-// ListDomains list all domains
-func (d *HandlerImpl) ListDomains(
+// ListNamespaces list all namespaces
+func (d *HandlerImpl) ListNamespaces(
 	ctx context.Context,
-	listRequest *workflowservice.ListDomainsRequest,
-) (*workflowservice.ListDomainsResponse, error) {
+	listRequest *workflowservice.ListNamespacesRequest,
+) (*workflowservice.ListNamespacesResponse, error) {
 
 	pageSize := 100
 	if listRequest.GetPageSize() != 0 {
 		pageSize = int(listRequest.GetPageSize())
 	}
 
-	resp, err := d.metadataMgr.ListDomains(&persistence.ListDomainsRequest{
+	resp, err := d.metadataMgr.ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      pageSize,
 		NextPageToken: listRequest.NextPageToken,
 	})
@@ -295,64 +295,64 @@ func (d *HandlerImpl) ListDomains(
 		return nil, err
 	}
 
-	var domains []*workflowservice.DescribeDomainResponse
-	for _, domain := range resp.Domains {
-		desc := &workflowservice.DescribeDomainResponse{
-			IsGlobalDomain:  domain.IsGlobalDomain,
-			FailoverVersion: domain.FailoverVersion,
+	var namespaces []*workflowservice.DescribeNamespaceResponse
+	for _, namespace := range resp.Namespaces {
+		desc := &workflowservice.DescribeNamespaceResponse{
+			IsGlobalNamespace: namespace.IsGlobalNamespace,
+			FailoverVersion:   namespace.FailoverVersion,
 		}
-		desc.DomainInfo, desc.Configuration, desc.ReplicationConfiguration = d.createResponse(ctx, domain.Info, domain.Config, domain.ReplicationConfig)
-		domains = append(domains, desc)
+		desc.NamespaceInfo, desc.Configuration, desc.ReplicationConfiguration = d.createResponse(ctx, namespace.Info, namespace.Config, namespace.ReplicationConfig)
+		namespaces = append(namespaces, desc)
 	}
 
-	response := &workflowservice.ListDomainsResponse{
-		Domains:       domains,
+	response := &workflowservice.ListNamespacesResponse{
+		Namespaces:    namespaces,
 		NextPageToken: resp.NextPageToken,
 	}
 
 	return response, nil
 }
 
-// DescribeDomain describe the domain
-func (d *HandlerImpl) DescribeDomain(
+// DescribeNamespace describe the namespace
+func (d *HandlerImpl) DescribeNamespace(
 	ctx context.Context,
-	describeRequest *workflowservice.DescribeDomainRequest,
-) (*workflowservice.DescribeDomainResponse, error) {
+	describeRequest *workflowservice.DescribeNamespaceRequest,
+) (*workflowservice.DescribeNamespaceResponse, error) {
 
-	// TODO, we should migrate the non global domain to new table, see #773
-	req := &persistence.GetDomainRequest{
+	// TODO, we should migrate the non global namespace to new table, see #773
+	req := &persistence.GetNamespaceRequest{
 		Name: describeRequest.GetName(),
 		ID:   describeRequest.GetUuid(),
 	}
-	resp, err := d.metadataMgr.GetDomain(req)
+	resp, err := d.metadataMgr.GetNamespace(req)
 	if err != nil {
 		return nil, err
 	}
 
-	response := &workflowservice.DescribeDomainResponse{
-		IsGlobalDomain:  resp.IsGlobalDomain,
-		FailoverVersion: resp.FailoverVersion,
+	response := &workflowservice.DescribeNamespaceResponse{
+		IsGlobalNamespace: resp.IsGlobalNamespace,
+		FailoverVersion:   resp.FailoverVersion,
 	}
-	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(ctx, resp.Info, resp.Config, resp.ReplicationConfig)
+	response.NamespaceInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(ctx, resp.Info, resp.Config, resp.ReplicationConfig)
 	return response, nil
 }
 
-// UpdateDomain update the domain
-func (d *HandlerImpl) UpdateDomain(
+// UpdateNamespace update the namespace
+func (d *HandlerImpl) UpdateNamespace(
 	ctx context.Context,
-	updateRequest *workflowservice.UpdateDomainRequest,
-) (*workflowservice.UpdateDomainResponse, error) {
+	updateRequest *workflowservice.UpdateNamespaceRequest,
+) (*workflowservice.UpdateNamespaceResponse, error) {
 
 	// must get the metadata (notificationVersion) first
-	// this version can be regarded as the lock on the v2 domain table
-	// and since we do not know which table will return the domain afterwards
+	// this version can be regarded as the lock on the v2 namespace table
+	// and since we do not know which table will return the namespace afterwards
 	// this call has to be made
 	metadata, err := d.metadataMgr.GetMetadata()
 	if err != nil {
 		return nil, err
 	}
 	notificationVersion := metadata.NotificationVersion
-	getResponse, err := d.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: updateRequest.GetName()})
+	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: updateRequest.GetName()})
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +363,7 @@ func (d *HandlerImpl) UpdateDomain(
 	configVersion := getResponse.ConfigVersion
 	failoverVersion := getResponse.FailoverVersion
 	failoverNotificationVersion := getResponse.FailoverNotificationVersion
-	isGlobalDomain := getResponse.IsGlobalDomain
+	isGlobalNamespace := getResponse.IsGlobalNamespace
 
 	currentHistoryArchivalState := &ArchivalState{
 		Status: config.HistoryArchivalStatus,
@@ -374,7 +374,7 @@ func (d *HandlerImpl) UpdateDomain(
 	clusterHistoryArchivalConfig := d.archivalMetadata.GetHistoryConfig()
 	if updateRequest.Configuration != nil && clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
 		cfg := updateRequest.GetConfiguration()
-		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalStatus, cfg.GetHistoryArchivalURI(), clusterHistoryArchivalConfig.GetDomainDefaultURI())
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalStatus, cfg.GetHistoryArchivalURI(), clusterHistoryArchivalConfig.GetNamespaceDefaultURI())
 		if err != nil {
 			return nil, err
 		}
@@ -393,7 +393,7 @@ func (d *HandlerImpl) UpdateDomain(
 	clusterVisibilityArchivalConfig := d.archivalMetadata.GetVisibilityConfig()
 	if updateRequest.Configuration != nil && clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
 		cfg := updateRequest.GetConfiguration()
-		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalStatus, cfg.GetVisibilityArchivalURI(), clusterVisibilityArchivalConfig.GetDomainDefaultURI())
+		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalStatus, cfg.GetVisibilityArchivalURI(), clusterVisibilityArchivalConfig.GetNamespaceDefaultURI())
 		if err != nil {
 			return nil, err
 		}
@@ -421,7 +421,7 @@ func (d *HandlerImpl) UpdateDomain(
 		if updatedInfo.Data != nil {
 			configurationChanged = true
 			// only do merging
-			info.Data = d.mergeDomainData(info.Data, updatedInfo.Data)
+			info.Data = d.mergeNamespaceData(info.Data, updatedInfo.Data)
 		}
 	}
 	if updateRequest.Configuration != nil {
@@ -475,7 +475,7 @@ func (d *HandlerImpl) UpdateDomain(
 				})
 			}
 
-			if err := d.domainAttrValidator.validateDomainReplicationConfigClustersDoesNotRemove(
+			if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigClustersDoesNotRemove(
 				replicationConfig.Clusters,
 				clustersNew,
 			); err != nil {
@@ -490,27 +490,27 @@ func (d *HandlerImpl) UpdateDomain(
 		}
 	}
 
-	if err := d.domainAttrValidator.validateDomainConfig(config); err != nil {
+	if err := d.namespaceAttrValidator.validateNamespaceConfig(config); err != nil {
 		return nil, err
 	}
-	if isGlobalDomain {
-		if err := d.domainAttrValidator.validateDomainReplicationConfigForGlobalDomain(
+	if isGlobalNamespace {
+		if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigForGlobalNamespace(
 			replicationConfig,
 		); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := d.domainAttrValidator.validateDomainReplicationConfigForLocalDomain(
+		if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigForLocalNamespace(
 			replicationConfig,
 		); err != nil {
 			return nil, err
 		}
 	}
 
-	if configurationChanged && activeClusterChanged && isGlobalDomain {
-		return nil, errCannotDoDomainFailoverAndUpdate
+	if configurationChanged && activeClusterChanged && isGlobalNamespace {
+		return nil, errCannotDoNamespaceFailoverAndUpdate
 	} else if configurationChanged || activeClusterChanged {
-		if configurationChanged && isGlobalDomain && !d.clusterMetadata.IsMasterCluster() {
+		if configurationChanged && isGlobalNamespace && !d.clusterMetadata.IsMasterCluster() {
 			return nil, errNotMasterCluster
 		}
 
@@ -518,7 +518,7 @@ func (d *HandlerImpl) UpdateDomain(
 		if configurationChanged {
 			configVersion++
 		}
-		if activeClusterChanged && isGlobalDomain {
+		if activeClusterChanged && isGlobalNamespace {
 			failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
 				replicationConfig.ActiveClusterName,
 				failoverVersion,
@@ -526,7 +526,7 @@ func (d *HandlerImpl) UpdateDomain(
 			failoverNotificationVersion = notificationVersion
 		}
 
-		updateReq := &persistence.UpdateDomainRequest{
+		updateReq := &persistence.UpdateNamespaceRequest{
 			Info:                        info,
 			Config:                      config,
 			ReplicationConfig:           replicationConfig,
@@ -535,66 +535,66 @@ func (d *HandlerImpl) UpdateDomain(
 			FailoverNotificationVersion: failoverNotificationVersion,
 			NotificationVersion:         notificationVersion,
 		}
-		err = d.metadataMgr.UpdateDomain(updateReq)
+		err = d.metadataMgr.UpdateNamespace(updateReq)
 		if err != nil {
 			return nil, err
 		}
-	} else if isGlobalDomain && !d.clusterMetadata.IsMasterCluster() {
+	} else if isGlobalNamespace && !d.clusterMetadata.IsMasterCluster() {
 		// although there is no attr updated, just prevent customer to use the non master cluster
-		// for update domain, ever (except if customer want to do a domain failover)
+		// for update namespace, ever (except if customer want to do a namespace failover)
 		return nil, errNotMasterCluster
 	}
 
-	if isGlobalDomain {
-		err = d.domainReplicator.HandleTransmissionTask(enums.DomainOperationUpdate,
-			info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
+	if isGlobalNamespace {
+		err = d.namespaceReplicator.HandleTransmissionTask(enums.NamespaceOperationUpdate,
+			info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	response := &workflowservice.UpdateDomainResponse{
-		IsGlobalDomain:  isGlobalDomain,
-		FailoverVersion: failoverVersion,
+	response := &workflowservice.UpdateNamespaceResponse{
+		IsGlobalNamespace: isGlobalNamespace,
+		FailoverVersion:   failoverVersion,
 	}
-	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(ctx, info, config, replicationConfig)
+	response.NamespaceInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(ctx, info, config, replicationConfig)
 
-	d.logger.Info("Update domain succeeded",
-		tag.WorkflowDomainName(info.Name),
-		tag.WorkflowDomainID(info.ID),
+	d.logger.Info("Update namespace succeeded",
+		tag.WorkflowNamespace(info.Name),
+		tag.WorkflowNamespaceID(info.ID),
 	)
 	return response, nil
 }
 
-// DeprecateDomain deprecates a domain
-func (d *HandlerImpl) DeprecateDomain(
+// DeprecateNamespace deprecates a namespace
+func (d *HandlerImpl) DeprecateNamespace(
 	ctx context.Context,
-	deprecateRequest *workflowservice.DeprecateDomainRequest,
-) (*workflowservice.DeprecateDomainResponse, error) {
+	deprecateRequest *workflowservice.DeprecateNamespaceRequest,
+) (*workflowservice.DeprecateNamespaceResponse, error) {
 
 	clusterMetadata := d.clusterMetadata
-	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
-	if clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
+	// TODO remove the IsGlobalNamespaceEnabled check once cross DC is public
+	if clusterMetadata.IsGlobalNamespaceEnabled() && !clusterMetadata.IsMasterCluster() {
 		return nil, errNotMasterCluster
 	}
 
 	// must get the metadata (notificationVersion) first
-	// this version can be regarded as the lock on the v2 domain table
-	// and since we do not know which table will return the domain afterwards
+	// this version can be regarded as the lock on the v2 namespace table
+	// and since we do not know which table will return the namespace afterwards
 	// this call has to be made
 	metadata, err := d.metadataMgr.GetMetadata()
 	if err != nil {
 		return nil, err
 	}
 	notificationVersion := metadata.NotificationVersion
-	getResponse, err := d.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: deprecateRequest.GetName()})
+	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: deprecateRequest.GetName()})
 	if err != nil {
 		return nil, err
 	}
 
 	getResponse.ConfigVersion = getResponse.ConfigVersion + 1
-	getResponse.Info.Status = persistence.DomainStatusDeprecated
-	updateReq := &persistence.UpdateDomainRequest{
+	getResponse.Info.Status = persistence.NamespaceStatusDeprecated
+	updateReq := &persistence.UpdateNamespaceRequest{
 		Info:                        getResponse.Info,
 		Config:                      getResponse.Config,
 		ReplicationConfig:           getResponse.ReplicationConfig,
@@ -603,7 +603,7 @@ func (d *HandlerImpl) DeprecateDomain(
 		FailoverNotificationVersion: getResponse.FailoverNotificationVersion,
 		NotificationVersion:         notificationVersion,
 	}
-	err = d.metadataMgr.UpdateDomain(updateReq)
+	err = d.metadataMgr.UpdateNamespace(updateReq)
 	if err != nil {
 		return nil, err
 	}
@@ -612,21 +612,21 @@ func (d *HandlerImpl) DeprecateDomain(
 
 func (d *HandlerImpl) createResponse(
 	ctx context.Context,
-	info *persistence.DomainInfo,
-	config *persistence.DomainConfig,
-	replicationConfig *persistence.DomainReplicationConfig,
-) (*commonproto.DomainInfo, *commonproto.DomainConfiguration, *commonproto.DomainReplicationConfiguration) {
+	info *persistence.NamespaceInfo,
+	config *persistence.NamespaceConfig,
+	replicationConfig *persistence.NamespaceReplicationConfig,
+) (*commonproto.NamespaceInfo, *commonproto.NamespaceConfiguration, *commonproto.NamespaceReplicationConfiguration) {
 
-	infoResult := &commonproto.DomainInfo{
+	infoResult := &commonproto.NamespaceInfo{
 		Name:        info.Name,
-		Status:      getDomainStatus(info),
+		Status:      getNamespaceStatus(info),
 		Description: info.Description,
 		OwnerEmail:  info.OwnerEmail,
 		Data:        info.Data,
 		Uuid:        info.ID,
 	}
 
-	configResult := &commonproto.DomainConfiguration{
+	configResult := &commonproto.NamespaceConfiguration{
 		EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 		WorkflowExecutionRetentionPeriodInDays: config.Retention,
 		HistoryArchivalStatus:                  config.HistoryArchivalStatus,
@@ -643,7 +643,7 @@ func (d *HandlerImpl) createResponse(
 		})
 	}
 
-	replicationConfigResult := &commonproto.DomainReplicationConfiguration{
+	replicationConfigResult := &commonproto.NamespaceReplicationConfiguration{
 		ActiveClusterName: replicationConfig.ActiveClusterName,
 		Clusters:          clusters,
 	}
@@ -669,7 +669,7 @@ func (d *HandlerImpl) mergeBadBinaries(
 	}
 }
 
-func (d *HandlerImpl) mergeDomainData(
+func (d *HandlerImpl) mergeNamespaceData(
 	old map[string]string,
 	new map[string]string,
 ) map[string]string {
@@ -749,16 +749,16 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 	return archiver.ValidateURI(URI)
 }
 
-func getDomainStatus(info *persistence.DomainInfo) enums.DomainStatus {
+func getNamespaceStatus(info *persistence.NamespaceInfo) enums.NamespaceStatus {
 	switch info.Status {
-	case persistence.DomainStatusRegistered:
-		return enums.DomainStatusRegistered
-	case persistence.DomainStatusDeprecated:
-		return enums.DomainStatusDeprecated
-	case persistence.DomainStatusDeleted:
-		return enums.DomainStatusDeleted
+	case persistence.NamespaceStatusRegistered:
+		return enums.NamespaceStatusRegistered
+	case persistence.NamespaceStatusDeprecated:
+		return enums.NamespaceStatusDeprecated
+	case persistence.NamespaceStatusDeleted:
+		return enums.NamespaceStatusDeleted
 	}
 
 	// TODO: panic, log, ...?
-	return enums.DomainStatusRegistered
+	return enums.NamespaceStatusRegistered
 }

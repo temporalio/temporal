@@ -711,85 +711,85 @@ func (p *metadataPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *metadataPersistenceClient) CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceCreateDomainScope, metrics.PersistenceRequests)
+func (p *metadataPersistenceClient) CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceCreateNamespaceScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceCreateDomainScope, metrics.PersistenceLatency)
-	response, err := p.persistence.CreateDomain(request)
+	sw := p.metricClient.StartTimer(metrics.PersistenceCreateNamespaceScope, metrics.PersistenceLatency)
+	response, err := p.persistence.CreateNamespace(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCreateDomainScope, err)
+		p.updateErrorMetric(metrics.PersistenceCreateNamespaceScope, err)
 	}
 
 	return response, err
 }
 
-func (p *metadataPersistenceClient) GetDomain(request *GetDomainRequest) (*GetDomainResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetDomainScope, metrics.PersistenceRequests)
+func (p *metadataPersistenceClient) GetNamespace(request *GetNamespaceRequest) (*GetNamespaceResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetNamespaceScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetDomainScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetDomain(request)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetNamespaceScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetNamespace(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetDomainScope, err)
+		p.updateErrorMetric(metrics.PersistenceGetNamespaceScope, err)
 	}
 
 	return response, err
 }
 
-func (p *metadataPersistenceClient) UpdateDomain(request *UpdateDomainRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceUpdateDomainScope, metrics.PersistenceRequests)
+func (p *metadataPersistenceClient) UpdateNamespace(request *UpdateNamespaceRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceUpdateNamespaceScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateDomainScope, metrics.PersistenceLatency)
-	err := p.persistence.UpdateDomain(request)
+	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateNamespaceScope, metrics.PersistenceLatency)
+	err := p.persistence.UpdateNamespace(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceUpdateDomainScope, err)
+		p.updateErrorMetric(metrics.PersistenceUpdateNamespaceScope, err)
 	}
 
 	return err
 }
 
-func (p *metadataPersistenceClient) DeleteDomain(request *DeleteDomainRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceDeleteDomainScope, metrics.PersistenceRequests)
+func (p *metadataPersistenceClient) DeleteNamespace(request *DeleteNamespaceRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceDeleteNamespaceScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteDomainScope, metrics.PersistenceLatency)
-	err := p.persistence.DeleteDomain(request)
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteNamespaceScope, metrics.PersistenceLatency)
+	err := p.persistence.DeleteNamespace(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceDeleteDomainScope, err)
+		p.updateErrorMetric(metrics.PersistenceDeleteNamespaceScope, err)
 	}
 
 	return err
 }
 
-func (p *metadataPersistenceClient) DeleteDomainByName(request *DeleteDomainByNameRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceDeleteDomainByNameScope, metrics.PersistenceRequests)
+func (p *metadataPersistenceClient) DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceDeleteNamespaceByNameScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteDomainByNameScope, metrics.PersistenceLatency)
-	err := p.persistence.DeleteDomainByName(request)
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteNamespaceByNameScope, metrics.PersistenceLatency)
+	err := p.persistence.DeleteNamespaceByName(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceDeleteDomainByNameScope, err)
+		p.updateErrorMetric(metrics.PersistenceDeleteNamespaceByNameScope, err)
 	}
 
 	return err
 }
 
-func (p *metadataPersistenceClient) ListDomains(request *ListDomainsRequest) (*ListDomainsResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceListDomainScope, metrics.PersistenceRequests)
+func (p *metadataPersistenceClient) ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceListNamespaceScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceListDomainScope, metrics.PersistenceLatency)
-	response, err := p.persistence.ListDomains(request)
+	sw := p.metricClient.StartTimer(metrics.PersistenceListNamespaceScope, metrics.PersistenceLatency)
+	response, err := p.persistence.ListNamespaces(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceListDomainScope, err)
+		p.updateErrorMetric(metrics.PersistenceListNamespaceScope, err)
 	}
 
 	return response, err
@@ -815,8 +815,8 @@ func (p *metadataPersistenceClient) Close() {
 
 func (p *metadataPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
-	case *serviceerror.DomainAlreadyExists:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrDomainAlreadyExistsCounter)
+	case *serviceerror.NamespaceAlreadyExists:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrNamespaceAlreadyExistsCounter)
 	case *serviceerror.NotFound:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
 	case *serviceerror.InvalidArgument:

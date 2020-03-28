@@ -124,7 +124,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, activityInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, activityInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -169,7 +169,7 @@ func (t *transferQueueStandbyTaskExecutor) processDecisionTask(
 		workflowTimeout := executionInfo.WorkflowTimeout
 		decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, decisionInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, decisionInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -235,7 +235,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, lastWriteVersion, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, lastWriteVersion, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -243,7 +243,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		// DO NOT REPLY TO PARENT
 		// since event replication should be done by active cluster
 		return nil, t.recordWorkflowClosed(
-			primitives.UUIDString(transferTask.DomainID),
+			primitives.UUIDString(transferTask.NamespaceID),
 			transferTask.WorkflowID,
 			primitives.UUIDString(transferTask.RunID),
 			workflowTypeName,
@@ -278,7 +278,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, requestCancelInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, requestCancelInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -313,7 +313,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, signalInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, signalInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -348,7 +348,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, childWorkflowInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, childWorkflowInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -418,7 +418,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 		if err != nil {
 			return err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, startVersion, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, startVersion, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return err
 		}
@@ -438,7 +438,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 
 	if isRecordStart {
 		return t.recordWorkflowStarted(
-			primitives.UUIDString(transferTask.DomainID),
+			primitives.UUIDString(transferTask.NamespaceID),
 			transferTask.WorkflowID,
 			primitives.UUIDString(transferTask.RunID),
 			wfTypeName,
@@ -451,7 +451,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 		)
 	}
 	return t.upsertWorkflowExecution(
-		primitives.UUIDString(transferTask.DomainID),
+		primitives.UUIDString(transferTask.NamespaceID),
 		transferTask.WorkflowID,
 		primitives.UUIDString(transferTask.RunID),
 		wfTypeName,
@@ -474,7 +474,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 
 	transferTask := taskInfo.(*persistenceblobs.TransferTaskInfo)
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getDomainIDAndWorkflowExecution(transferTask),
+		t.getNamespaceIDAndWorkflowExecution(transferTask),
 	)
 	if err != nil {
 		return err
@@ -563,7 +563,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			primitives.UUIDString(transferTask.DomainID),
+			primitives.UUIDString(transferTask.NamespaceID),
 			transferTask.WorkflowID,
 			primitives.UUIDString(transferTask.RunID),
 			resendInfo.lastEventID,
@@ -573,7 +573,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			primitives.UUIDString(transferTask.DomainID),
+			primitives.UUIDString(transferTask.NamespaceID),
 			transferTask.WorkflowID,
 			primitives.UUIDString(transferTask.RunID),
 			*resendInfo.nextEventID,
@@ -589,7 +589,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowDomainIDBytes(transferTask.DomainID),
+			tag.WorkflowNamespaceIDBytes(transferTask.NamespaceID),
 			tag.WorkflowID(transferTask.WorkflowID),
 			tag.WorkflowRunIDBytes(transferTask.RunID),
 			tag.SourceCluster(t.clusterName))

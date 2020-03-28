@@ -6,7 +6,7 @@ system.enableReadVisibilityFromES:
   - value: true
 frontend.validSearchAttributes:
   - value:
-      DomainID: 1
+      NamespaceID: 1
       WorkflowID: 1
       RunID: 1
       WorkflowType: 1
@@ -27,7 +27,7 @@ frontend.validSearchAttributes:
       addon: 1
       addon-type: 1
       user: 1
-      CustomDomain: 1
+      CustomNamespace: 1
       Operator: 1
       RolloutID: 1
       CadenceChangeVersion: 1

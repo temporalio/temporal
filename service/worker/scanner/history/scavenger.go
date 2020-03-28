@@ -61,11 +61,11 @@ type (
 	}
 
 	taskDetail struct {
-		domainID   string
-		workflowID string
-		runID      string
-		treeID     string
-		branchID   string
+		namespaceID string
+		workflowID  string
+		runID       string
+		treeID      string
+		branchID    string
 
 		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
 		hbd ScavengerHeartbeatDetails
@@ -144,7 +144,7 @@ func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) 
 				continue
 			}
 
-			domainID, wid, rid, err := persistence.SplitHistoryGarbageCleanupInfo(br.Info)
+			namespaceID, wid, rid, err := persistence.SplitHistoryGarbageCleanupInfo(br.Info)
 			if err != nil {
 				batchCount--
 				errorsOnSplitting++
@@ -154,11 +154,11 @@ func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) 
 			}
 
 			taskCh <- taskDetail{
-				domainID:   domainID,
-				workflowID: wid,
-				runID:      rid,
-				treeID:     br.TreeID,
-				branchID:   br.BranchID,
+				namespaceID: namespaceID,
+				workflowID:  wid,
+				runID:       rid,
+				treeID:      br.TreeID,
+				branchID:    br.BranchID,
 
 				hbd: s.hbd,
 			}
@@ -233,7 +233,7 @@ func (s *Scavenger) startTaskProcessor(
 			// this checks if the mutableState still exists
 			// if not then the history branch is garbage, we need to delete the history branch
 			_, err = s.client.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
-				DomainUUID: task.domainID,
+				NamespaceUUID: task.namespaceID,
 				Execution: &commonproto.WorkflowExecution{
 					WorkflowId: task.workflowID,
 					RunId:      task.runID,
@@ -289,7 +289,7 @@ func getTaskLoggingTags(err error, task taskDetail) []tag.Tag {
 	if err != nil {
 		return []tag.Tag{
 			tag.Error(err),
-			tag.WorkflowDomainID(task.domainID),
+			tag.WorkflowNamespaceID(task.namespaceID),
 			tag.WorkflowID(task.workflowID),
 			tag.WorkflowRunID(task.runID),
 			tag.WorkflowTreeID(task.treeID),
@@ -297,7 +297,7 @@ func getTaskLoggingTags(err error, task taskDetail) []tag.Tag {
 		}
 	}
 	return []tag.Tag{
-		tag.WorkflowDomainID(task.domainID),
+		tag.WorkflowNamespaceID(task.namespaceID),
 		tag.WorkflowID(task.workflowID),
 		tag.WorkflowRunID(task.runID),
 		tag.WorkflowTreeID(task.treeID),

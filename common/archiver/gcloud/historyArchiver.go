@@ -103,7 +103,7 @@ func newHistoryArchiver(container *archiver.HistoryBootstrapContainer, historyIt
 // between retry attempts.
 // This method will be invoked after a workflow passes its retention period.
 func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiver.ArchiveHistoryRequest, opts ...archiver.ArchiveOption) (err error) {
-	scope := h.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.DomainTag(request.DomainName))
+	scope := h.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
@@ -169,7 +169,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 			return errUploadNonRetriable
 		}
 
-		filename := constructHistoryFilenameMultipart(request.DomainID, request.WorkflowID, request.RunID, request.CloseFailoverVersion, part)
+		filename := constructHistoryFilenameMultipart(request.NamespaceID, request.WorkflowID, request.RunID, request.CloseFailoverVersion, part)
 		if exist, _ := h.gcloudStorage.Exist(ctx, URI, filename); !exist {
 			if err := h.gcloudStorage.Upload(ctx, URI, filename, encodedHistoryPart); err != nil {
 				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
@@ -230,7 +230,7 @@ func (h *historyArchiver) Get(ctx context.Context, URI archiver.URI, request *ar
 outer:
 	for token.CurrentPart <= token.HighestPart {
 
-		filename := constructHistoryFilenameMultipart(request.DomainID, request.WorkflowID, request.RunID, token.CloseFailoverVersion, token.CurrentPart)
+		filename := constructHistoryFilenameMultipart(request.NamespaceID, request.WorkflowID, request.RunID, token.CloseFailoverVersion, token.CurrentPart)
 		encodedHistoryBatches, err := h.gcloudStorage.Get(ctx, URI, filename)
 
 		if err != nil {
@@ -337,7 +337,7 @@ func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*c
 
 func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.URI, request *archiver.GetHistoryRequest) (*int64, *int, *int, error) {
 
-	filenames, err := h.gcloudStorage.Query(ctx, URI, constructHistoryFilenamePrefix(request.DomainID, request.WorkflowID, request.RunID))
+	filenames, err := h.gcloudStorage.Query(ctx, URI, constructHistoryFilenamePrefix(request.NamespaceID, request.WorkflowID, request.RunID))
 
 	if err != nil {
 		return nil, nil, nil, err

@@ -161,14 +161,14 @@ func AdminMergeDLQMessages(c *cli.Context) {
 
 func toQueueType(dlqType string) enums.DLQType {
 	switch dlqType {
-	case "domain":
-		return enums.DLQTypeDomain
+	case "namespace":
+		return enums.DLQTypeNamespace
 	case "history":
 		return enums.DLQTypeReplication
 	default:
 		ErrorAndExit("The queue type is not supported.", fmt.Errorf("the queue type is not supported. Type: %v", dlqType))
 	}
-	return enums.DLQTypeDomain
+	return enums.DLQTypeNamespace
 }
 
 func confirmOrExit(message string) {

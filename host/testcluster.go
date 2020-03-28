@@ -34,12 +34,12 @@ import (
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/persistence"
 	pes "github.com/temporalio/temporal/common/persistence/elasticsearch"
 	persistencetests "github.com/temporalio/temporal/common/persistence/persistence-tests"
@@ -105,13 +105,13 @@ const (
 func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
 
 	clusterMetadata := cluster.GetTestClusterMetadata(
-		options.ClusterMetadata.EnableGlobalDomain,
+		options.ClusterMetadata.EnableGlobalNamespace,
 		options.IsMasterCluster,
 	)
 	if !options.IsMasterCluster && options.ClusterMetadata.MasterClusterName != "" { // xdc cluster metadata setup
 		clusterMetadata = cluster.NewMetadata(
 			logger,
-			dynamicconfig.GetBoolPropertyFn(options.ClusterMetadata.EnableGlobalDomain),
+			dynamicconfig.GetBoolPropertyFn(options.ClusterMetadata.EnableGlobalNamespace),
 			options.ClusterMetadata.FailoverVersionIncrement,
 			options.ClusterMetadata.MasterClusterName,
 			options.ClusterMetadata.CurrentClusterName,
@@ -158,7 +158,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			return nil, err
 		}
 		visConfig := &config.VisibilityConfig{
-			VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByDomain(2000),
+			VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(2000),
 			ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(defaultTestValueOfESIndexMaxResultWindow),
 			ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
 		}
@@ -166,32 +166,32 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, logger)
 	}
 	visibilityMgr := persistence.NewVisibilityManagerWrapper(testBase.VisibilityMgr, esVisibilityMgr,
-		dynamicconfig.GetBoolPropertyFnFilteredByDomain(options.WorkerConfig.EnableIndexer), advancedVisibilityWritingMode)
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.WorkerConfig.EnableIndexer), advancedVisibilityWritingMode)
 
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
 	cadenceParams := &CadenceParams{
-		ClusterMetadata:               clusterMetadata,
-		PersistenceConfig:             pConfig,
-		MessagingClient:               messagingClient,
-		MetadataMgr:                   testBase.MetadataManager,
-		ShardMgr:                      testBase.ShardMgr,
-		HistoryV2Mgr:                  testBase.HistoryV2Mgr,
-		ExecutionMgrFactory:           testBase.ExecutionMgrFactory,
-		DomainReplicationQueue:        testBase.DomainReplicationQueue,
-		TaskMgr:                       testBase.TaskMgr,
-		VisibilityMgr:                 visibilityMgr,
-		Logger:                        logger,
-		ClusterNo:                     options.ClusterNo,
-		EnableNDC:                     options.EnableNDC,
-		ESConfig:                      options.ESConfig,
-		ESClient:                      esClient,
-		ArchiverMetadata:              archiverBase.metadata,
-		ArchiverProvider:              archiverBase.provider,
-		HistoryConfig:                 options.HistoryConfig,
-		WorkerConfig:                  options.WorkerConfig,
-		MockAdminClient:               options.MockAdminClient,
-		DomainReplicationTaskExecutor: domain.NewReplicationTaskExecutor(testBase.MetadataManager, logger),
+		ClusterMetadata:                  clusterMetadata,
+		PersistenceConfig:                pConfig,
+		MessagingClient:                  messagingClient,
+		MetadataMgr:                      testBase.MetadataManager,
+		ShardMgr:                         testBase.ShardMgr,
+		HistoryV2Mgr:                     testBase.HistoryV2Mgr,
+		ExecutionMgrFactory:              testBase.ExecutionMgrFactory,
+		NamespaceReplicationQueue:        testBase.NamespaceReplicationQueue,
+		TaskMgr:                          testBase.TaskMgr,
+		VisibilityMgr:                    visibilityMgr,
+		Logger:                           logger,
+		ClusterNo:                        options.ClusterNo,
+		EnableNDC:                        options.EnableNDC,
+		ESConfig:                         options.ESConfig,
+		ESClient:                         esClient,
+		ArchiverMetadata:                 archiverBase.metadata,
+		ArchiverProvider:                 archiverBase.provider,
+		HistoryConfig:                    options.HistoryConfig,
+		WorkerConfig:                     options.WorkerConfig,
+		MockAdminClient:                  options.MockAdminClient,
+		NamespaceReplicationTaskExecutor: namespace.NewReplicationTaskExecutor(testBase.MetadataManager, logger),
 	}
 
 	err := newPProfInitializerImpl(logger, pprofTestPort).Start()
@@ -230,7 +230,7 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 	dcCollection := dynamicconfig.NewNopCollection()
 	if !enabled {
 		return &ArchiverBase{
-			metadata: archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalDomainDefaults{}),
+			metadata: archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
 			provider: provider.NewArchiverProvider(nil, nil),
 		}
 	}
@@ -256,12 +256,12 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 		},
 	)
 	return &ArchiverBase{
-		metadata: archiver.NewArchivalMetadata(dcCollection, "enabled", true, "enabled", true, &config.ArchivalDomainDefaults{
-			History: config.HistoryArchivalDomainDefaults{
+		metadata: archiver.NewArchivalMetadata(dcCollection, "enabled", true, "enabled", true, &config.ArchivalNamespaceDefaults{
+			History: config.HistoryArchivalNamespaceDefaults{
 				Status: "enabled",
 				URI:    "testScheme://test/history/archive/path",
 			},
-			Visibility: config.VisibilityArchivalDomainDefaults{
+			Visibility: config.VisibilityArchivalNamespaceDefaults{
 				Status: "enabled",
 				URI:    "testScheme://test/visibility/archive/path",
 			},

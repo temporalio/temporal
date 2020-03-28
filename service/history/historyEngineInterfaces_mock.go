@@ -143,18 +143,18 @@ func (mr *MockqueueTaskInfoMockRecorder) GetRunID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunID", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetRunID))
 }
 
-// GetDomainID mocks base method
-func (m *MockqueueTaskInfo) GetDomainID() []byte {
+// GetNamespaceID mocks base method
+func (m *MockqueueTaskInfo) GetNamespaceID() []byte {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDomainID")
+	ret := m.ctrl.Call(m, "GetNamespaceID")
 	ret0, _ := ret[0].([]byte)
 	return ret0
 }
 
-// GetDomainID indicates an expected call of GetDomainID
-func (mr *MockqueueTaskInfoMockRecorder) GetDomainID() *gomock.Call {
+// GetNamespaceID indicates an expected call of GetNamespaceID
+func (mr *MockqueueTaskInfoMockRecorder) GetNamespaceID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDomainID", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetDomainID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceID", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetNamespaceID))
 }
 
 // MockqueueTask is a mock of queueTask interface
@@ -370,18 +370,18 @@ func (mr *MockqueueTaskMockRecorder) GetRunID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunID", reflect.TypeOf((*MockqueueTask)(nil).GetRunID))
 }
 
-// GetDomainID mocks base method
-func (m *MockqueueTask) GetDomainID() []byte {
+// GetNamespaceID mocks base method
+func (m *MockqueueTask) GetNamespaceID() []byte {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDomainID")
+	ret := m.ctrl.Call(m, "GetNamespaceID")
 	ret0, _ := ret[0].([]byte)
 	return ret0
 }
 
-// GetDomainID indicates an expected call of GetDomainID
-func (mr *MockqueueTaskMockRecorder) GetDomainID() *gomock.Call {
+// GetNamespaceID indicates an expected call of GetNamespaceID
+func (mr *MockqueueTaskMockRecorder) GetNamespaceID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDomainID", reflect.TypeOf((*MockqueueTask)(nil).GetDomainID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceID", reflect.TypeOf((*MockqueueTask)(nil).GetNamespaceID))
 }
 
 // GetQueueType mocks base method

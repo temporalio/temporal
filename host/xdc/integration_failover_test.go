@@ -66,7 +66,7 @@ type (
 )
 
 const (
-	cacheRefreshInterval = cache.DomainCacheRefreshInterval + 5*time.Second
+	cacheRefreshInterval = cache.NamespaceCacheRefreshInterval + 5*time.Second
 )
 
 var (
@@ -124,51 +124,51 @@ func (s *integrationClustersTestSuite) TearDownSuite() {
 	s.cluster2.TearDownCluster()
 }
 
-func (s *integrationClustersTestSuite) TestDomainFailover() {
-	domainName := "test-domain-for-fail-over-" + common.GenerateRandomString(5)
+func (s *integrationClustersTestSuite) TestNamespaceFailover() {
+	namespace := "test-namespace-for-fail-over-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 7,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
-	resp2, err := client2.DescribeDomain(host.NewContext(), descReq)
+	resp2, err := client2.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.Equal(resp, resp2)
 
-	// update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
 	updated := false
-	var resp3 *workflowservice.DescribeDomainResponse
+	var resp3 *workflowservice.DescribeNamespaceResponse
 	for i := 0; i < 30; i++ {
-		resp3, err = client2.DescribeDomain(host.NewContext(), descReq)
+		resp3, err = client2.DescribeNamespace(host.NewContext(), descReq)
 		s.NoError(err)
 		if resp3.ReplicationConfiguration.GetActiveClusterName() == clusterName[1] {
 			updated = true
@@ -181,15 +181,15 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 	s.Equal(int64(1), resp3.GetFailoverVersion())
 
 	// start workflow in new cluster
-	id := "integration-domain-failover-test"
-	wt := "integration-domain-failover-test-type"
-	tl := "integration-domain-failover-test-tasklist"
+	id := "integration-namespace-failover-test"
+	wt := "integration-namespace-failover-test-type"
+	tl := "integration-namespace-failover-test-tasklist"
 	identity := "worker1"
 	workflowType := &commonproto.WorkflowType{Name: wt}
 	taskList := &commonproto.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -211,29 +211,29 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
-	domainName := "test-simple-workflow-failover-" + common.GenerateRandomString(5)
+	namespace := "test-simple-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
-	time.Sleep(cache.DomainCacheRefreshInterval)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cache.NamespaceCacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
-	resp2, err := client2.DescribeDomain(host.NewContext(), descReq)
+	resp2, err := client2.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.Equal(resp, resp2)
@@ -247,7 +247,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	taskList := &commonproto.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -317,7 +317,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	poller := host.TaskPoller{
 		Engine:          client1,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -329,7 +329,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	poller2 := host.TaskPoller{
 		Engine:          client2,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -351,7 +351,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(client workflowservice.WorkflowServiceClient, queryType string) {
 		queryResp, err := client.QueryWorkflow(host.NewContext(), &workflowservice.QueryWorkflowRequest{
-			Domain: domainName,
+			Namespace: namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -406,14 +406,14 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	queryResultString = string(queryResult.Resp.QueryResult)
 	s.Equal("query-result", queryResultString)
 
-	// update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -424,7 +424,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	// check history matched
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      rid,
@@ -510,25 +510,25 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
-	domainName := "test-sticky-decision-workflow-failover-" + common.GenerateRandomString(5)
+	namespace := "test-sticky-decision-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
@@ -549,7 +549,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	stickyTaskTimeout := 100
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -590,7 +590,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 
 	poller1 := &host.TaskPoller{
 		Engine:                              client1,
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		TaskList:                            taskList,
 		StickyTaskList:                      stickyTaskList1,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyTaskTimeout),
@@ -602,7 +602,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 
 	poller2 := &host.TaskPoller{
 		Engine:                              client2,
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		TaskList:                            taskList,
 		StickyTaskList:                      stickyTaskList2,
 		StickyScheduleToStartTimeoutSeconds: int32(stickyTaskTimeout),
@@ -621,7 +621,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
@@ -632,20 +632,20 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	})
 	s.NoError(err)
 
-	// Update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// Update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	_, err = poller2.PollAndProcessDecisionTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
@@ -654,7 +654,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	s.True(secondDecisionMade)
 
 	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
@@ -665,14 +665,14 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	})
 	s.NoError(err)
 
-	// Update domain to fail over back
-	updateReq = &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// Update namespace to fail over back
+	updateReq = &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[0],
 		},
 	}
-	updateResp, err = client2.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err = client2.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[0], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -685,29 +685,29 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDReusePolicy() {
-	domainName := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
+	namespace := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
-	time.Sleep(cache.DomainCacheRefreshInterval)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cache.NamespaceCacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
-	resp2, err := client2.DescribeDomain(host.NewContext(), descReq)
+	resp2, err := client2.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.Equal(resp, resp2)
@@ -721,7 +721,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	taskList := &commonproto.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -751,7 +751,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 	poller := host.TaskPoller{
 		Engine:          client1,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -762,7 +762,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 	poller2 := host.TaskPoller{
 		Engine:          client2,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -777,14 +777,14 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.NoError(err)
 	s.Equal(1, workflowCompleteTimes)
 
-	// update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -822,25 +822,25 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 }
 
 func (s *integrationClustersTestSuite) TestTerminateFailover() {
-	domainName := "test-terminate-workflow-failover-" + common.GenerateRandomString(5)
+	namespace := "test-terminate-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
@@ -854,7 +854,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	taskList := &commonproto.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -908,7 +908,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 
 	poller := &host.TaskPoller{
 		Engine:          client1,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -922,14 +922,14 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
-	// update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -942,7 +942,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	terminateReason := "terminate reason"
 	terminateDetails := []byte("terminate details")
 	_, err = client2.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -955,7 +955,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	// check terminate done
 	executionTerminated := false
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -1007,25 +1007,25 @@ GetHistoryLoop2:
 }
 
 func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
-	domainName := "test-continueAsNew-workflow-failover-" + common.GenerateRandomString(5)
+	namespace := "test-continueAsNew-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
@@ -1039,7 +1039,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	taskList := &commonproto.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1089,7 +1089,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 
 	poller := &host.TaskPoller{
 		Engine:          client1,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1099,7 +1099,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 
 	poller2 := host.TaskPoller{
 		Engine:          client2,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1114,14 +1114,14 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		s.NoError(err, strconv.Itoa(i))
 	}
 
-	// update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -1145,25 +1145,25 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestSignalFailover() {
-	domainName := "test-signal-workflow-failover-" + common.GenerateRandomString(5)
+	namespace := "test-signal-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
@@ -1177,7 +1177,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	taskList := &commonproto.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1214,7 +1214,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 
 	poller := &host.TaskPoller{
 		Engine:          client1,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1224,7 +1224,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 
 	poller2 := &host.TaskPoller{
 		Engine:          client2,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1236,7 +1236,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
@@ -1254,25 +1254,25 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	s.NoError(err)
 	s.True(eventSignaled)
 
-	// Update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// Update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	// check history matched
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -1294,7 +1294,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	signalName2 := "my signal 2"
 	signalInput2 := []byte("my signal input 2")
 	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -1326,25 +1326,25 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestUserTimerFailover() {
-	domainName := "test-user-timer-workflow-failover-" + common.GenerateRandomString(5)
+	namespace := "test-user-timer-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
@@ -1358,7 +1358,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	taskList := &commonproto.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1393,7 +1393,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 			signalName := "my signal"
 			signalInput := []byte("my signal input")
 			_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-				Domain: domainName,
+				Namespace: namespace,
 				WorkflowExecution: &commonproto.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
@@ -1414,7 +1414,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 
 		if !timerFired {
 			resp, err := client2.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Domain: domainName,
+				Namespace: namespace,
 				Execution: &commonproto.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
@@ -1442,7 +1442,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 
 	poller1 := &host.TaskPoller{
 		Engine:          client1,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1452,7 +1452,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 
 	poller2 := &host.TaskPoller{
 		Engine:          client2,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1472,20 +1472,20 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	}
 	s.True(timerCreated)
 
-	// Update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// Update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	for i := 1; i < 20; i++ {
@@ -1498,25 +1498,25 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
-	domainName := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
+	namespace := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
@@ -1531,7 +1531,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	taskList := &commonproto.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1612,7 +1612,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	poller1 := &host.TaskPoller{
 		Engine:          client1,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity1,
 		DecisionHandler: dtHandler,
@@ -1623,7 +1623,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	poller2 := &host.TaskPoller{
 		Engine:          client2,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity2,
 		DecisionHandler: dtHandler,
@@ -1634,7 +1634,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	describeWorkflowExecution := func(client workflowservice.WorkflowServiceClient) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return client.DescribeWorkflowExecution(host.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Domain: domainName,
+			Namespace: namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -1647,20 +1647,20 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	err = poller1.PollAndProcessActivityTask(false)
 	s.IsType(&serviceerror.NotFound{}, err)
 
-	// Update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// Update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
@@ -1688,7 +1688,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.True(activity2Called)
 
 	historyResponse, err := client2.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -1708,25 +1708,25 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
-	domainName := "test-transient-decision-workflow-failover-" + common.GenerateRandomString(5)
+	namespace := "test-transient-decision-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
@@ -1740,7 +1740,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	taskList := &commonproto.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1782,7 +1782,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 
 	poller1 := &host.TaskPoller{
 		Engine:          client1,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1792,7 +1792,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 
 	poller2 := &host.TaskPoller{
 		Engine:          client2,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1804,20 +1804,20 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	_, err = poller1.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
 
-	// Update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// Update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	// for failover transient decision, it is guaranteed that the transient decision
@@ -1829,25 +1829,25 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
-	domainName := "test-cron-workflow-failover-" + common.GenerateRandomString(5)
+	namespace := "test-cron-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
@@ -1861,7 +1861,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	taskList := &commonproto.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1888,7 +1888,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 
 	poller2 := host.TaskPoller{
 		Engine:          client2,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1897,20 +1897,20 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	}
 
 	// Failover during backoff
-	// Update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// Update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	// Run twice to make sure cron schedule is passed to standby.
@@ -1920,7 +1920,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	}
 
 	_, err = client2.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -1929,25 +1929,25 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
-	domainName := "test-workflow-retry-failover-" + common.GenerateRandomString(5)
+	namespace := "test-workflow-retry-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         true,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      true,
 		Clusters:                               clusterReplicationConfig,
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
@@ -1961,7 +1961,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	taskList := &commonproto.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1998,7 +1998,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 
 	poller2 := host.TaskPoller{
 		Engine:          client2,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -2006,47 +2006,47 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 		T:               s.T(),
 	}
 
-	// Update domain to fail over
-	updateReq := &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	// Update namespace to fail over
+	updateReq := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
+	updateResp, err := client1.UpdateNamespace(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	// First attempt
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
-	events := s.getHistory(client2, domainName, executions[0])
+	events := s.getHistory(client2, namespace, executions[0])
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// second attempt
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
-	events = s.getHistory(client2, domainName, executions[1])
+	events = s.getHistory(client2, namespace, executions[1])
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// third attempt. Still failing, should stop retry.
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
-	events = s.getHistory(client2, domainName, executions[2])
+	events = s.getHistory(client2, namespace, executions[2])
 	s.Equal(enums.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
-func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, domain string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
+func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, namespace string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
 	historyResponse, err := client.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain:          domain,
+		Namespace:       namespace,
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
 	})
@@ -2055,7 +2055,7 @@ func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, do
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
 		historyResponse, err = client.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain:        domain,
+			Namespace:     namespace,
 			Execution:     execution,
 			NextPageToken: historyResponse.NextPageToken,
 		})

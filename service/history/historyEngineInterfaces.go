@@ -74,7 +74,7 @@ type (
 		GetVisibilityTimestamp() *types.Timestamp
 		GetWorkflowID() string
 		GetRunID() []byte
-		GetDomainID() []byte
+		GetNamespaceID() []byte
 	}
 
 	queueTask interface {

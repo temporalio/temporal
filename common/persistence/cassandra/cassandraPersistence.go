@@ -46,36 +46,36 @@ import (
 // Guidelines for creating new special UUID constants
 // Each UUID should be of the form: E0000000-R000-f000-f000-00000000000x
 // Where x is any hexadecimal value, E represents the entity type valid values are:
-// E = {DomainID = 1, WorkflowID = 2, RunID = 3}
+// E = {NamespaceID = 1, WorkflowID = 2, RunID = 3}
 // R represents row type in executions table, valid values are:
 // R = {Shard = 1, Execution = 2, Transfer = 3, Timer = 4, Replication = 5}
 const (
 	cassandraProtoVersion = 4
 	defaultSessionTimeout = 10 * time.Second
-	// Special Domains related constants
-	emptyDomainID = "10000000-0000-f000-f000-000000000000"
+	// Special Namespaces related constants
+	emptyNamespaceID = "10000000-0000-f000-f000-000000000000"
 	// Special Run IDs
 	emptyRunID     = "30000000-0000-f000-f000-000000000000"
 	permanentRunID = "30000000-0000-f000-f000-000000000001"
 	// Row Constants for Shard Row
-	rowTypeShardDomainID   = "10000000-1000-f000-f000-000000000000"
-	rowTypeShardWorkflowID = "20000000-1000-f000-f000-000000000000"
-	rowTypeShardRunID      = "30000000-1000-f000-f000-000000000000"
+	rowTypeShardNamespaceID = "10000000-1000-f000-f000-000000000000"
+	rowTypeShardWorkflowID  = "20000000-1000-f000-f000-000000000000"
+	rowTypeShardRunID       = "30000000-1000-f000-f000-000000000000"
 	// Row Constants for Transfer Task Row
-	rowTypeTransferDomainID   = "10000000-3000-f000-f000-000000000000"
-	rowTypeTransferWorkflowID = "20000000-3000-f000-f000-000000000000"
-	rowTypeTransferRunID      = "30000000-3000-f000-f000-000000000000"
+	rowTypeTransferNamespaceID = "10000000-3000-f000-f000-000000000000"
+	rowTypeTransferWorkflowID  = "20000000-3000-f000-f000-000000000000"
+	rowTypeTransferRunID       = "30000000-3000-f000-f000-000000000000"
 	// Row Constants for Timer Task Row
-	rowTypeTimerDomainID   = "10000000-4000-f000-f000-000000000000"
-	rowTypeTimerWorkflowID = "20000000-4000-f000-f000-000000000000"
-	rowTypeTimerRunID      = "30000000-4000-f000-f000-000000000000"
+	rowTypeTimerNamespaceID = "10000000-4000-f000-f000-000000000000"
+	rowTypeTimerWorkflowID  = "20000000-4000-f000-f000-000000000000"
+	rowTypeTimerRunID       = "30000000-4000-f000-f000-000000000000"
 	// Row Constants for Replication Task Row
-	rowTypeReplicationDomainID   = "10000000-5000-f000-f000-000000000000"
-	rowTypeReplicationWorkflowID = "20000000-5000-f000-f000-000000000000"
-	rowTypeReplicationRunID      = "30000000-5000-f000-f000-000000000000"
+	rowTypeReplicationNamespaceID = "10000000-5000-f000-f000-000000000000"
+	rowTypeReplicationWorkflowID  = "20000000-5000-f000-f000-000000000000"
+	rowTypeReplicationRunID       = "30000000-5000-f000-f000-000000000000"
 	// Row Constants for Replication Task DLQ Row. Source cluster name will be used as WorkflowID.
-	rowTypeDLQDomainID = "10000000-6000-f000-f000-000000000000"
-	rowTypeDLQRunID    = "30000000-6000-f000-f000-000000000000"
+	rowTypeDLQNamespaceID = "10000000-6000-f000-f000-000000000000"
+	rowTypeDLQRunID       = "30000000-6000-f000-f000-000000000000"
 	// Special TaskId constants
 	rowTypeExecutionTaskID = int64(-10)
 	rowTypeShardTaskID     = int64(-11)
@@ -107,10 +107,10 @@ const (
 
 const (
 	templateWorkflowExecutionType = `{` +
-		`domain_id: ?, ` +
+		`namespace_id: ?, ` +
 		`workflow_id: ?, ` +
 		`run_id: ?, ` +
-		`parent_domain_id: ?, ` +
+		`parent_namespace_id: ?, ` +
 		`parent_workflow_id: ?, ` +
 		`parent_run_id: ?, ` +
 		`initiated_id: ?, ` +
@@ -222,20 +222,20 @@ const (
 		`started_event: ?, ` +
 		`create_request_id: ?, ` +
 		`event_data_encoding: ?, ` +
-		`domain_name: ?, ` +
+		`namespace: ?, ` +
 		`workflow_type_name: ?, ` +
 		`parent_close_policy: ?` +
 		`}`
 
 	templateCreateShardQuery = `INSERT INTO executions (` +
-		`shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, shard, shard_encoding, range_id)` +
+		`shard_id, type, namespace_id, workflow_id, run_id, visibility_ts, task_id, shard, shard_encoding, range_id)` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
 	templateGetShardQuery = `SELECT shard, shard_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -245,7 +245,7 @@ const (
 		`SET shard = ?, shard_encoding = ?, range_id = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -260,7 +260,7 @@ workflow_last_write_version = ?,
 workflow_state = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -272,45 +272,45 @@ workflow_state = ? ` +
 		`and workflow_state = ? `
 
 	templateCreateCurrentWorkflowExecutionQuery = `INSERT INTO executions (` +
-		`shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution_state, execution_state_encoding, replication_state, workflow_last_write_version, workflow_state) ` +
+		`shard_id, type, namespace_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution_state, execution_state_encoding, replication_state, workflow_last_write_version, workflow_state) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, {start_version: ?, last_write_version: ?}, ?, ?) IF NOT EXISTS USING TTL 0 `
 
 	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
-		`shard_id, domain_id, workflow_id, run_id, type, ` +
+		`shard_id, namespace_id, workflow_id, run_id, type, ` +
 		`execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, ` +
 		`visibility_ts, task_id, checksum, checksum_encoding) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS `
 
 	templateCreateWorkflowExecutionWithReplicationQuery = `INSERT INTO executions (` +
-		`shard_id, domain_id, workflow_id, run_id, type, ` +
+		`shard_id, namespace_id, workflow_id, run_id, type, ` +
 		`execution, execution_encoding, execution_state, execution_state_encoding, replication_state, ` +
 		`next_event_id, visibility_ts, task_id, checksum, checksum_encoding) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ` + templateReplicationStateType +
 		`, ?, ?, ?, ?, ?) IF NOT EXISTS `
 
 	templateCreateWorkflowExecutionWithVersionHistoriesQuery = `INSERT INTO executions (` +
-		`shard_id, domain_id, workflow_id, run_id, type, ` +
+		`shard_id, namespace_id, workflow_id, run_id, type, ` +
 		`execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, ` +
 		`visibility_ts, task_id, version_histories, version_histories_encoding, checksum, checksum_encoding) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS `
 
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
-		`shard_id, type, domain_id, workflow_id, run_id, transfer, transfer_encoding, visibility_ts, task_id) ` +
+		`shard_id, type, namespace_id, workflow_id, run_id, transfer, transfer_encoding, visibility_ts, task_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateReplicationTaskQuery = `INSERT INTO executions (` +
-		`shard_id, type, domain_id, workflow_id, run_id, replication, replication_encoding, visibility_ts, task_id) ` +
+		`shard_id, type, namespace_id, workflow_id, run_id, replication, replication_encoding, visibility_ts, task_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateTimerTaskQuery = `INSERT INTO executions (` +
-		`shard_id, type, domain_id, workflow_id, run_id, timer, timer_encoding, visibility_ts, task_id) ` +
+		`shard_id, type, namespace_id, workflow_id, run_id, timer, timer_encoding, visibility_ts, task_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateUpdateLeaseQuery = `UPDATE executions ` +
 		`SET range_id = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -323,7 +323,7 @@ workflow_state = ? ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -333,7 +333,7 @@ workflow_state = ? ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -343,7 +343,7 @@ workflow_state = ? ` +
 		`SET next_event_id = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -360,7 +360,7 @@ workflow_state = ? ` +
 		`, checksum_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -378,7 +378,7 @@ workflow_state = ? ` +
 		`, checksum_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -397,7 +397,7 @@ workflow_state = ? ` +
 		`, checksum_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -408,7 +408,7 @@ workflow_state = ? ` +
 		`SET activity_map[ ? ] = ?, activity_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -418,7 +418,7 @@ workflow_state = ? ` +
 		`SET activity_map = ?, activity_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -428,7 +428,7 @@ workflow_state = ? ` +
 		`SET timer_map[ ? ] = ?, timer_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -438,7 +438,7 @@ workflow_state = ? ` +
 		`SET timer_map = ?, timer_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -448,7 +448,7 @@ workflow_state = ? ` +
 		`SET child_executions_map[ ? ] = ?, child_executions_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -458,7 +458,7 @@ workflow_state = ? ` +
 		`SET child_executions_map = ?, child_executions_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -468,7 +468,7 @@ workflow_state = ? ` +
 		`SET request_cancel_map[ ? ] = ?, request_cancel_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -478,7 +478,7 @@ workflow_state = ? ` +
 		`SET request_cancel_map = ?, request_cancel_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -488,7 +488,7 @@ workflow_state = ? ` +
 		`SET signal_map[ ? ] = ?, signal_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -498,7 +498,7 @@ workflow_state = ? ` +
 		`SET signal_map = ?, signal_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -508,7 +508,7 @@ workflow_state = ? ` +
 		`SET signal_requested = signal_requested + ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -518,7 +518,7 @@ workflow_state = ? ` +
 		`SET signal_requested = ?` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -528,7 +528,7 @@ workflow_state = ? ` +
 		`SET buffered_events_list = buffered_events_list + ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -538,7 +538,7 @@ workflow_state = ? ` +
 		`SET buffered_events_list = [] ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -548,7 +548,7 @@ workflow_state = ? ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -558,7 +558,7 @@ workflow_state = ? ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -568,7 +568,7 @@ workflow_state = ? ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -578,7 +578,7 @@ workflow_state = ? ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -588,7 +588,7 @@ workflow_state = ? ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -597,7 +597,7 @@ workflow_state = ? ` +
 	templateDeleteWorkflowExecutionMutableStateQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -609,7 +609,7 @@ workflow_state = ? ` +
 		`SET signal_requested = signal_requested - ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -619,7 +619,7 @@ workflow_state = ? ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -630,7 +630,7 @@ workflow_state = ? ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -640,7 +640,7 @@ workflow_state = ? ` +
 	templateCompleteTransferTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -649,7 +649,7 @@ workflow_state = ? ` +
 	templateRangeCompleteTransferTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -659,7 +659,7 @@ workflow_state = ? ` +
 	templateCompleteReplicationTaskBeforeQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
@@ -673,7 +673,7 @@ workflow_state = ? ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ?` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ?` +
 		`and run_id = ?` +
 		`and visibility_ts >= ? ` +
@@ -682,7 +682,7 @@ workflow_state = ? ` +
 	templateCompleteTimerTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ?` +
 		`and run_id = ?` +
 		`and visibility_ts = ? ` +
@@ -691,23 +691,23 @@ workflow_state = ? ` +
 	templateRangeCompleteTimerTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
-		`and domain_id = ? ` +
+		`and namespace_id = ? ` +
 		`and workflow_id = ?` +
 		`and run_id = ?` +
 		`and visibility_ts >= ? ` +
 		`and visibility_ts < ?`
 
 	templateCreateTaskQuery = `INSERT INTO tasks (` +
-		`domain_id, task_list_name, task_list_type, type, task_id, task, task_encoding) ` +
+		`namespace_id, task_list_name, task_list_type, type, task_id, task, task_encoding) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateTaskWithTTLQuery = `INSERT INTO tasks (` +
-		`domain_id, task_list_name, task_list_type, type, task_id, task, task_encoding) ` +
+		`namespace_id, task_list_name, task_list_type, type, task_id, task, task_encoding) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?) USING TTL ?`
 
 	templateGetTasksQuery = `SELECT task_id, task, task_encoding ` +
 		`FROM tasks ` +
-		`WHERE domain_id = ? ` +
+		`WHERE namespace_id = ? ` +
 		`and task_list_name = ? ` +
 		`and task_list_type = ? ` +
 		`and type = ? ` +
@@ -715,14 +715,14 @@ workflow_state = ? ` +
 		`and task_id <= ?`
 
 	templateCompleteTaskQuery = `DELETE FROM tasks ` +
-		`WHERE domain_id = ? ` +
+		`WHERE namespace_id = ? ` +
 		`and task_list_name = ? ` +
 		`and task_list_type = ? ` +
 		`and type = ? ` +
 		`and task_id = ?`
 
 	templateCompleteTasksLessThanQuery = `DELETE FROM tasks ` +
-		`WHERE domain_id = ? ` +
+		`WHERE namespace_id = ? ` +
 		`AND task_list_name = ? ` +
 		`AND task_list_type = ? ` +
 		`AND type = ? ` +
@@ -733,14 +733,14 @@ workflow_state = ? ` +
 		`task_list, ` +
 		`task_list_encoding ` +
 		`FROM tasks ` +
-		`WHERE domain_id = ? ` +
+		`WHERE namespace_id = ? ` +
 		`and task_list_name = ? ` +
 		`and task_list_type = ? ` +
 		`and type = ? ` +
 		`and task_id = ?`
 
 	templateInsertTaskListQuery = `INSERT INTO tasks (` +
-		`domain_id, ` +
+		`namespace_id, ` +
 		`task_list_name, ` +
 		`task_list_type, ` +
 		`type, ` +
@@ -754,7 +754,7 @@ workflow_state = ? ` +
 		`range_id = ?, ` +
 		`task_list = ?, ` +
 		`task_list_encoding = ? ` +
-		`WHERE domain_id = ? ` +
+		`WHERE namespace_id = ? ` +
 		`and task_list_name = ? ` +
 		`and task_list_type = ? ` +
 		`and type = ? ` +
@@ -762,7 +762,7 @@ workflow_state = ? ` +
 		`IF range_id = ?`
 
 	templateUpdateTaskListQueryWithTTL = `INSERT INTO tasks (` +
-		`domain_id, ` +
+		`namespace_id, ` +
 		`task_list_name, ` +
 		`task_list_type, ` +
 		`type, ` +
@@ -773,7 +773,7 @@ workflow_state = ? ` +
 		`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) USING TTL ?`
 
 	templateDeleteTaskListQuery = `DELETE FROM tasks ` +
-		`WHERE domain_id = ? ` +
+		`WHERE namespace_id = ? ` +
 		`AND task_list_name = ? ` +
 		`AND task_list_type = ? ` +
 		`AND type = ? ` +
@@ -872,7 +872,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 	query := d.session.Query(templateCreateShardQuery,
 		shardInfo.ShardID,
 		rowTypeShard,
-		rowTypeShardDomainID,
+		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
@@ -906,7 +906,7 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 	query := d.session.Query(templateGetShardQuery,
 		shardID,
 		rowTypeShard,
-		rowTypeShardDomainID,
+		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
@@ -942,7 +942,7 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 		shardInfo.RangeID,
 		shardInfo.ShardID, // Where
 		rowTypeShard,
-		rowTypeShardDomainID,
+		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
@@ -981,7 +981,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 	executionInfo := newWorkflow.ExecutionInfo
 	startVersion := newWorkflow.StartVersion
 	lastWriteVersion := newWorkflow.LastWriteVersion
-	domainID := executionInfo.DomainID
+	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
 	runID := executionInfo.RunID
 
@@ -1000,7 +1000,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 		if err := createOrUpdateCurrentExecution(batch,
 			request.Mode,
 			d.shardID,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			executionInfo.State,
@@ -1026,7 +1026,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 		request.RangeID,
 		d.shardID,
 		rowTypeShard,
-		rowTypeShardDomainID,
+		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
@@ -1172,7 +1172,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	query := d.session.Query(templateGetWorkflowExecutionQuery,
 		d.shardID,
 		rowTypeExecution,
-		request.DomainID,
+		request.NamespaceID,
 		execution.WorkflowId,
 		execution.RunId,
 		defaultVisibilityTimestamp,
@@ -1357,7 +1357,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	newWorkflow := request.NewWorkflowSnapshot
 
 	executionInfo := updateWorkflow.ExecutionInfo
-	domainID := executionInfo.DomainID
+	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
 	runID := executionInfo.RunID
 	shardID := d.shardID
@@ -1373,7 +1373,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	switch request.Mode {
 	case p.UpdateWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
-			domainID,
+			namespaceID,
 			workflowID,
 			runID); err != nil {
 			return err
@@ -1384,18 +1384,18 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			newExecutionInfo := newWorkflow.ExecutionInfo
 			newStartVersion := newWorkflow.StartVersion
 			newLastWriteVersion := newWorkflow.LastWriteVersion
-			newDomainID := newExecutionInfo.DomainID
+			newNamespaceID := newExecutionInfo.NamespaceID
 			newWorkflowID := newExecutionInfo.WorkflowID
 			newRunID := newExecutionInfo.RunID
 
-			if domainID != newDomainID {
-				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another domain"))
+			if namespaceID != newNamespaceID {
+				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
 			}
 
 			if err := createOrUpdateCurrentExecution(batch,
 				p.CreateWorkflowModeContinueAsNew,
 				d.shardID,
-				newDomainID,
+				newNamespaceID,
 				newWorkflowID,
 				newRunID,
 				newExecutionInfo.State,
@@ -1434,7 +1434,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				executionInfo.State,
 				d.shardID,
 				rowTypeExecution,
-				domainID,
+				namespaceID,
 				workflowID,
 				permanentRunID,
 				defaultVisibilityTimestamp,
@@ -1464,7 +1464,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 		request.RangeID,
 		d.shardID,
 		rowTypeShard,
-		rowTypeShardDomainID,
+		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
@@ -1504,7 +1504,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 
 	shardID := d.shardID
 
-	domainID := request.NewWorkflowSnapshot.ExecutionInfo.DomainID
+	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceID
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowID
 
 	baseRunID := request.BaseRunID
@@ -1539,7 +1539,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 		newExecutionInfo.State,
 		d.shardID,
 		rowTypeExecution,
-		newExecutionInfo.DomainID,
+		newExecutionInfo.NamespaceID,
 		newExecutionInfo.WorkflowID,
 		permanentRunID,
 		defaultVisibilityTimestamp,
@@ -1555,7 +1555,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 			baseRunNextEventID,
 			d.shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			request.BaseRunID,
 			defaultVisibilityTimestamp,
@@ -1574,7 +1574,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 			currentRunNextEventID,
 			d.shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			currentRunID,
 			defaultVisibilityTimestamp,
@@ -1592,7 +1592,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 		request.RangeID,
 		d.shardID,
 		rowTypeShard,
-		rowTypeShardDomainID,
+		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
@@ -1635,7 +1635,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 
 	shardID := d.shardID
 
-	domainID := resetWorkflow.ExecutionInfo.DomainID
+	namespaceID := resetWorkflow.ExecutionInfo.NamespaceID
 	workflowID := resetWorkflow.ExecutionInfo.WorkflowID
 
 	if err := p.ValidateConflictResolveWorkflowModeState(
@@ -1652,7 +1652,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
-			domainID,
+			namespaceID,
 			workflowID,
 			resetWorkflow.ExecutionInfo.RunID); err != nil {
 			return err
@@ -1698,7 +1698,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 				state,
 				shardID,
 				rowTypeExecution,
-				domainID,
+				namespaceID,
 				workflowID,
 				permanentRunID,
 				defaultVisibilityTimestamp,
@@ -1720,7 +1720,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 				state,
 				shardID,
 				rowTypeExecution,
-				domainID,
+				namespaceID,
 				workflowID,
 				permanentRunID,
 				defaultVisibilityTimestamp,
@@ -1741,7 +1741,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 				state,
 				shardID,
 				rowTypeExecution,
-				domainID,
+				namespaceID,
 				workflowID,
 				permanentRunID,
 				defaultVisibilityTimestamp,
@@ -1776,7 +1776,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		request.RangeID,
 		d.shardID,
 		rowTypeShard,
-		rowTypeShardDomainID,
+		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
@@ -1895,14 +1895,14 @@ GetFailureReasonLoop:
 }
 
 func (d *cassandraPersistence) assertNotCurrentExecution(
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
 
 	if resp, err := d.GetCurrentExecution(&p.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	}); err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			// allow bypassing no current record
@@ -1919,20 +1919,20 @@ func (d *cassandraPersistence) assertNotCurrentExecution(
 }
 
 func (d *cassandraPersistence) DeleteTask(request *p.DeleteTaskRequest) error {
-	var domainID, workflowID, runID string
+	var namespaceID, workflowID, runID string
 	switch request.Type {
 	case rowTypeTransferTask:
-		domainID = rowTypeTransferDomainID
+		namespaceID = rowTypeTransferNamespaceID
 		workflowID = rowTypeTransferWorkflowID
 		runID = rowTypeTransferRunID
 
 	case rowTypeTimerTask:
-		domainID = rowTypeTimerDomainID
+		namespaceID = rowTypeTimerNamespaceID
 		workflowID = rowTypeTimerWorkflowID
 		runID = rowTypeTimerRunID
 
 	case rowTypeReplicationTask:
-		domainID = rowTypeReplicationDomainID
+		namespaceID = rowTypeReplicationNamespaceID
 		workflowID = rowTypeReplicationWorkflowID
 		runID = rowTypeReplicationRunID
 
@@ -1944,7 +1944,7 @@ func (d *cassandraPersistence) DeleteTask(request *p.DeleteTaskRequest) error {
 	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
 		request.ShardID,
 		request.Type,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		defaultVisibilityTimestamp,
@@ -1965,7 +1965,7 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *p.DeleteWorkflow
 	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
 		d.shardID,
 		rowTypeExecution,
-		request.DomainID,
+		request.NamespaceID,
 		request.WorkflowID,
 		request.RunID,
 		defaultVisibilityTimestamp,
@@ -1986,7 +1986,7 @@ func (d *cassandraPersistence) DeleteCurrentWorkflowExecution(request *p.DeleteC
 	query := d.session.Query(templateDeleteWorkflowExecutionCurrentRowQuery,
 		d.shardID,
 		rowTypeExecution,
-		request.DomainID,
+		request.NamespaceID,
 		request.WorkflowID,
 		permanentRunID,
 		defaultVisibilityTimestamp,
@@ -2009,7 +2009,7 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 	query := d.session.Query(templateGetCurrentExecutionQuery,
 		d.shardID,
 		rowTypeExecution,
-		request.DomainID,
+		request.NamespaceID,
 		request.WorkflowID,
 		permanentRunID,
 		defaultVisibilityTimestamp,
@@ -2047,7 +2047,7 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 	query := d.session.Query(templateGetTransferTasksQuery,
 		d.shardID,
 		rowTypeTransferTask,
-		rowTypeTransferDomainID,
+		rowTypeTransferNamespaceID,
 		rowTypeTransferWorkflowID,
 		rowTypeTransferRunID,
 		defaultVisibilityTimestamp,
@@ -2091,7 +2091,7 @@ func (d *cassandraPersistence) GetReplicationTasks(
 	query := d.session.Query(templateGetReplicationTasksQuery,
 		d.shardID,
 		rowTypeReplicationTask,
-		rowTypeReplicationDomainID,
+		rowTypeReplicationNamespaceID,
 		rowTypeReplicationWorkflowID,
 		rowTypeReplicationRunID,
 		defaultVisibilityTimestamp,
@@ -2138,7 +2138,7 @@ func (d *cassandraPersistence) CompleteTransferTask(request *p.CompleteTransferT
 	query := d.session.Query(templateCompleteTransferTaskQuery,
 		d.shardID,
 		rowTypeTransferTask,
-		rowTypeTransferDomainID,
+		rowTypeTransferNamespaceID,
 		rowTypeTransferWorkflowID,
 		rowTypeTransferRunID,
 		defaultVisibilityTimestamp,
@@ -2159,7 +2159,7 @@ func (d *cassandraPersistence) RangeCompleteTransferTask(request *p.RangeComplet
 	query := d.session.Query(templateRangeCompleteTransferTaskQuery,
 		d.shardID,
 		rowTypeTransferTask,
-		rowTypeTransferDomainID,
+		rowTypeTransferNamespaceID,
 		rowTypeTransferWorkflowID,
 		rowTypeTransferRunID,
 		defaultVisibilityTimestamp,
@@ -2182,7 +2182,7 @@ func (d *cassandraPersistence) CompleteReplicationTask(request *p.CompleteReplic
 	query := d.session.Query(templateCompleteReplicationTaskQuery,
 		d.shardID,
 		rowTypeReplicationTask,
-		rowTypeReplicationDomainID,
+		rowTypeReplicationNamespaceID,
 		rowTypeReplicationWorkflowID,
 		rowTypeReplicationRunID,
 		defaultVisibilityTimestamp,
@@ -2206,7 +2206,7 @@ func (d *cassandraPersistence) RangeCompleteReplicationTask(
 	query := d.session.Query(templateCompleteReplicationTaskBeforeQuery,
 		d.shardID,
 		rowTypeReplicationTask,
-		rowTypeReplicationDomainID,
+		rowTypeReplicationNamespaceID,
 		rowTypeReplicationWorkflowID,
 		rowTypeReplicationRunID,
 		defaultVisibilityTimestamp,
@@ -2229,7 +2229,7 @@ func (d *cassandraPersistence) CompleteTimerTask(request *p.CompleteTimerTaskReq
 	query := d.session.Query(templateCompleteTimerTaskQuery,
 		d.shardID,
 		rowTypeTimerTask,
-		rowTypeTimerDomainID,
+		rowTypeTimerNamespaceID,
 		rowTypeTimerWorkflowID,
 		rowTypeTimerRunID,
 		ts,
@@ -2252,7 +2252,7 @@ func (d *cassandraPersistence) RangeCompleteTimerTask(request *p.RangeCompleteTi
 	query := d.session.Query(templateRangeCompleteTimerTaskQuery,
 		d.shardID,
 		rowTypeTimerTask,
-		rowTypeTimerDomainID,
+		rowTypeTimerNamespaceID,
 		rowTypeTimerWorkflowID,
 		rowTypeTimerRunID,
 		start,
@@ -2277,7 +2277,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 	}
 	now := types.TimestampNow()
 	query := d.session.Query(templateGetTaskList,
-		request.DomainID.Downcast(),
+		request.NamespaceID.Downcast(),
 		request.TaskList,
 		request.TaskType,
 		rowTypeTaskList,
@@ -2292,7 +2292,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 		if err == gocql.ErrNotFound { // First time task list is used
 			tl = &p.PersistedTaskListInfo{
 				Data: &persistenceblobs.TaskListInfo{
-					DomainID:    request.DomainID,
+					NamespaceID: request.NamespaceID,
 					Name:        request.TaskList,
 					TaskType:    request.TaskType,
 					Kind:        request.TaskListKind,
@@ -2309,7 +2309,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 			}
 
 			query = d.session.Query(templateInsertTaskListQuery,
-				request.DomainID.Downcast(),
+				request.NamespaceID.Downcast(),
 				request.TaskList,
 				request.TaskType,
 				rowTypeTaskList,
@@ -2354,7 +2354,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 			rangeID+1,
 			datablob.Data,
 			datablob.Encoding,
-			request.DomainID.Downcast(),
+			request.NamespaceID.Downcast(),
 			&request.TaskList,
 			request.TaskType,
 			rowTypeTaskList,
@@ -2395,7 +2395,7 @@ func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) 
 		}
 
 		query := d.session.Query(templateUpdateTaskListQueryWithTTL,
-			tli.DomainID,
+			tli.NamespaceID,
 			&tli.Name,
 			tli.TaskType,
 			rowTypeTaskList,
@@ -2423,7 +2423,7 @@ func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) 
 		request.RangeID,
 		datablob.Data,
 		datablob.Encoding,
-		tli.DomainID,
+		tli.NamespaceID,
 		&tli.Name,
 		tli.TaskType,
 		rowTypeTaskList,
@@ -2461,7 +2461,7 @@ func (d *cassandraPersistence) ListTaskList(request *p.ListTaskListRequest) (*p.
 
 func (d *cassandraPersistence) DeleteTaskList(request *p.DeleteTaskListRequest) error {
 	query := d.session.Query(templateDeleteTaskListQuery,
-		request.TaskList.DomainID.Downcast(), request.TaskList.Name, request.TaskList.TaskType, rowTypeTaskList, taskListTaskID, request.RangeID)
+		request.TaskList.NamespaceID.Downcast(), request.TaskList.Name, request.TaskList.TaskType, rowTypeTaskList, taskListTaskID, request.RangeID)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
@@ -2488,7 +2488,7 @@ func MintAllocatedTaskInfo(taskID *int64, info *persistenceblobs.TaskInfo) *pers
 // From TaskManager interface
 func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.CreateTasksResponse, error) {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	domainID := request.TaskListInfo.Data.DomainID
+	namespaceID := request.TaskListInfo.Data.NamespaceID
 	taskList := request.TaskListInfo.Data.Name
 	taskListType := request.TaskListInfo.Data.TaskType
 
@@ -2501,7 +2501,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 
 		if ttl <= 0 {
 			batch.Query(templateCreateTaskQuery,
-				domainID,
+				namespaceID,
 				taskList,
 				taskListType,
 				rowTypeTask,
@@ -2514,7 +2514,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 			}
 
 			batch.Query(templateCreateTaskWithTTLQuery,
-				domainID,
+				namespaceID,
 				taskList,
 				taskListType,
 				rowTypeTask,
@@ -2538,7 +2538,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 		request.TaskListInfo.RangeID,
 		datablob.Data,
 		datablob.Encoding,
-		domainID,
+		namespaceID,
 		taskList,
 		taskListType,
 		rowTypeTaskList,
@@ -2588,7 +2588,7 @@ func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasks
 
 	// Reading tasklist tasks need to be quorum level consistent, otherwise we could loose task
 	query := d.session.Query(templateGetTasksQuery,
-		request.DomainID.Downcast(),
+		request.NamespaceID.Downcast(),
 		request.TaskList,
 		request.TaskType,
 		rowTypeTask,
@@ -2654,7 +2654,7 @@ PopulateTasks:
 func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) error {
 	tli := request.TaskList
 	query := d.session.Query(templateCompleteTaskQuery,
-		tli.DomainID.Downcast(),
+		tli.NamespaceID.Downcast(),
 		tli.Name,
 		tli.TaskType,
 		rowTypeTask,
@@ -2676,7 +2676,7 @@ func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) erro
 // be returned to the caller
 func (d *cassandraPersistence) CompleteTasksLessThan(request *p.CompleteTasksLessThanRequest) (int, error) {
 	query := d.session.Query(templateCompleteTasksLessThanQuery,
-		request.DomainID.Downcast(), request.TaskListName, request.TaskType, rowTypeTask, request.TaskID)
+		request.NamespaceID.Downcast(), request.TaskListName, request.TaskType, rowTypeTask, request.TaskID)
 	err := query.Exec()
 	if err != nil {
 		if isThrottlingError(err) {
@@ -2695,7 +2695,7 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 	query := d.session.Query(templateGetTimerTasksQuery,
 		d.shardID,
 		rowTypeTimerTask,
-		rowTypeTimerDomainID,
+		rowTypeTimerNamespaceID,
 		rowTypeTimerWorkflowID,
 		rowTypeTimerRunID,
 		minTimestamp,
@@ -2742,7 +2742,7 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplication
 	query := d.session.Query(templateCreateReplicationTaskQuery,
 		d.shardID,
 		rowTypeDLQ,
-		rowTypeDLQDomainID,
+		rowTypeDLQNamespaceID,
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		datablob.Data,
@@ -2765,7 +2765,7 @@ func (d *cassandraPersistence) GetReplicationTasksFromDLQ(
 	query := d.session.Query(templateGetReplicationTasksQuery,
 		d.shardID,
 		rowTypeDLQ,
-		rowTypeDLQDomainID,
+		rowTypeDLQNamespaceID,
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		defaultVisibilityTimestamp,
@@ -2783,7 +2783,7 @@ func (d *cassandraPersistence) DeleteReplicationTaskFromDLQ(
 	query := d.session.Query(templateCompleteReplicationTaskQuery,
 		d.shardID,
 		rowTypeDLQ,
-		rowTypeDLQDomainID,
+		rowTypeDLQNamespaceID,
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		defaultVisibilityTimestamp,
@@ -2807,7 +2807,7 @@ func (d *cassandraPersistence) RangeDeleteReplicationTaskFromDLQ(
 	query := d.session.Query(templateRangeCompleteReplicationTaskQuery,
 		d.shardID,
 		rowTypeDLQ,
-		rowTypeDLQDomainID,
+		rowTypeDLQNamespaceID,
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		defaultVisibilityTimestamp,

@@ -27,42 +27,42 @@ import (
 )
 
 const (
-	executionsColumns = `shard_id, domain_id, workflow_id, run_id, next_event_id, last_write_version, data, data_encoding, state, state_encoding`
+	executionsColumns = `shard_id, namespace_id, workflow_id, run_id, next_event_id, last_write_version, data, data_encoding, state, state_encoding`
 
 	createExecutionQuery = `INSERT INTO executions(` + executionsColumns + `)
- VALUES(:shard_id, :domain_id, :workflow_id, :run_id, :next_event_id, :last_write_version, :data, :data_encoding, :state, :state_encoding)`
+ VALUES(:shard_id, :namespace_id, :workflow_id, :run_id, :next_event_id, :last_write_version, :data, :data_encoding, :state, :state_encoding)`
 
 	updateExecutionQuery = `UPDATE executions SET
  next_event_id = :next_event_id, last_write_version = :last_write_version, data = :data, data_encoding = :data_encoding, state = :state, state_encoding = :state_encoding
- WHERE shard_id = :shard_id AND domain_id = :domain_id AND workflow_id = :workflow_id AND run_id = :run_id`
+ WHERE shard_id = :shard_id AND namespace_id = :namespace_id AND workflow_id = :workflow_id AND run_id = :run_id`
 
 	getExecutionQuery = `SELECT ` + executionsColumns + ` FROM executions
- WHERE shard_id = $1 AND domain_id = $2 AND workflow_id = $3 AND run_id = $4`
+ WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4`
 
 	deleteExecutionQuery = `DELETE FROM executions 
- WHERE shard_id = $1 AND domain_id = $2 AND workflow_id = $3 AND run_id = $4`
+ WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4`
 
 	lockExecutionQueryBase = `SELECT next_event_id FROM executions 
- WHERE shard_id = $1 AND domain_id = $2 AND workflow_id = $3 AND run_id = $4`
+ WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4`
 
 	writeLockExecutionQuery = lockExecutionQueryBase + ` FOR UPDATE`
 	readLockExecutionQuery  = lockExecutionQueryBase + ` FOR SHARE`
 
 	createCurrentExecutionQuery = `INSERT INTO current_executions
-(shard_id, domain_id, workflow_id, run_id, create_request_id, state, close_status, start_version, last_write_version) VALUES
-(:shard_id, :domain_id, :workflow_id, :run_id, :create_request_id, :state, :close_status, :start_version, :last_write_version)`
+(shard_id, namespace_id, workflow_id, run_id, create_request_id, state, close_status, start_version, last_write_version) VALUES
+(:shard_id, :namespace_id, :workflow_id, :run_id, :create_request_id, :state, :close_status, :start_version, :last_write_version)`
 
-	deleteCurrentExecutionQuery = "DELETE FROM current_executions WHERE shard_id = $1 AND domain_id = $2 AND workflow_id = $3 AND run_id = $4"
+	deleteCurrentExecutionQuery = "DELETE FROM current_executions WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4"
 
 	getCurrentExecutionQuery = `SELECT
-shard_id, domain_id, workflow_id, run_id, create_request_id, state, close_status, start_version, last_write_version
-FROM current_executions WHERE shard_id = $1 AND domain_id = $2 AND workflow_id = $3`
+shard_id, namespace_id, workflow_id, run_id, create_request_id, state, close_status, start_version, last_write_version
+FROM current_executions WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3`
 
 	lockCurrentExecutionJoinExecutionsQuery = `SELECT
-ce.shard_id, ce.domain_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.close_status, ce.start_version, e.last_write_version
+ce.shard_id, ce.namespace_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.close_status, ce.start_version, e.last_write_version
 FROM current_executions ce
-INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.domain_id = ce.domain_id AND e.workflow_id = ce.workflow_id AND e.run_id = ce.run_id
-WHERE ce.shard_id = $1 AND ce.domain_id = $2 AND ce.workflow_id = $3 FOR UPDATE`
+INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.namespace_id = ce.namespace_id AND e.workflow_id = ce.workflow_id AND e.run_id = ce.run_id
+WHERE ce.shard_id = $1 AND ce.namespace_id = $2 AND ce.workflow_id = $3 FOR UPDATE`
 
 	lockCurrentExecutionQuery = getCurrentExecutionQuery + ` FOR UPDATE`
 
@@ -75,7 +75,7 @@ start_version = :start_version,
 last_write_version = :last_write_version
 WHERE
 shard_id = :shard_id AND
-domain_id = :domain_id AND
+namespace_id = :namespace_id AND
 workflow_id = :workflow_id
 `
 
@@ -119,12 +119,12 @@ task_id > $3 AND
 task_id <= $4
 ORDER BY task_id LIMIT $5`
 
-	bufferedEventsColumns     = `shard_id, domain_id, workflow_id, run_id, data, data_encoding`
+	bufferedEventsColumns     = `shard_id, namespace_id, workflow_id, run_id, data, data_encoding`
 	createBufferedEventsQuery = `INSERT INTO buffered_events(` + bufferedEventsColumns + `)
-VALUES (:shard_id, :domain_id, :workflow_id, :run_id, :data, :data_encoding)`
+VALUES (:shard_id, :namespace_id, :workflow_id, :run_id, :data, :data_encoding)`
 
-	deleteBufferedEventsQuery = `DELETE FROM buffered_events WHERE shard_id = $1 AND domain_id = $2 AND workflow_id = $3 AND run_id = $4`
-	getBufferedEventsQuery    = `SELECT data, data_encoding FROM buffered_events WHERE shard_id = $1 AND domain_id = $2 AND workflow_id = $3 AND run_id = $4`
+	deleteBufferedEventsQuery = `DELETE FROM buffered_events WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4`
+	getBufferedEventsQuery    = `SELECT data, data_encoding FROM buffered_events WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4`
 
 	insertReplicationTaskDLQQuery = `
 INSERT INTO replication_tasks_dlq 
@@ -166,7 +166,7 @@ func (pdb *db) UpdateExecutions(row *sqlplugin.ExecutionsRow) (sql.Result, error
 // SelectFromExecutions reads a single row from executions table
 func (pdb *db) SelectFromExecutions(filter *sqlplugin.ExecutionsFilter) (*sqlplugin.ExecutionsRow, error) {
 	var row sqlplugin.ExecutionsRow
-	err := pdb.conn.Get(&row, getExecutionQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	err := pdb.conn.Get(&row, getExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	if err != nil {
 		return nil, err
 	}
@@ -175,20 +175,20 @@ func (pdb *db) SelectFromExecutions(filter *sqlplugin.ExecutionsFilter) (*sqlplu
 
 // DeleteFromExecutions deletes a single row from executions table
 func (pdb *db) DeleteFromExecutions(filter *sqlplugin.ExecutionsFilter) (sql.Result, error) {
-	return pdb.conn.Exec(deleteExecutionQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	return pdb.conn.Exec(deleteExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 
 // ReadLockExecutions acquires a write lock on a single row in executions table
 func (pdb *db) ReadLockExecutions(filter *sqlplugin.ExecutionsFilter) (int, error) {
 	var nextEventID int
-	err := pdb.conn.Get(&nextEventID, readLockExecutionQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	err := pdb.conn.Get(&nextEventID, readLockExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	return nextEventID, err
 }
 
 // WriteLockExecutions acquires a write lock on a single row in executions table
 func (pdb *db) WriteLockExecutions(filter *sqlplugin.ExecutionsFilter) (int, error) {
 	var nextEventID int
-	err := pdb.conn.Get(&nextEventID, writeLockExecutionQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	err := pdb.conn.Get(&nextEventID, writeLockExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	return nextEventID, err
 }
 
@@ -205,19 +205,19 @@ func (pdb *db) UpdateCurrentExecutions(row *sqlplugin.CurrentExecutionsRow) (sql
 // SelectFromCurrentExecutions reads one or more rows from current_executions table
 func (pdb *db) SelectFromCurrentExecutions(filter *sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
-	err := pdb.conn.Get(&row, getCurrentExecutionQuery, filter.ShardID, filter.DomainID, filter.WorkflowID)
+	err := pdb.conn.Get(&row, getCurrentExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID)
 	return &row, err
 }
 
 // DeleteFromCurrentExecutions deletes a single row in current_executions table
 func (pdb *db) DeleteFromCurrentExecutions(filter *sqlplugin.CurrentExecutionsFilter) (sql.Result, error) {
-	return pdb.conn.Exec(deleteCurrentExecutionQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	return pdb.conn.Exec(deleteCurrentExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 
 // LockCurrentExecutions acquires a write lock on a single row in current_executions table
 func (pdb *db) LockCurrentExecutions(filter *sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
-	err := pdb.conn.Get(&row, lockCurrentExecutionQuery, filter.ShardID, filter.DomainID, filter.WorkflowID)
+	err := pdb.conn.Get(&row, lockCurrentExecutionQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID)
 	return &row, err
 }
 
@@ -225,7 +225,7 @@ func (pdb *db) LockCurrentExecutions(filter *sqlplugin.CurrentExecutionsFilter) 
 // write lock on the result
 func (pdb *db) LockCurrentExecutionsJoinExecutions(filter *sqlplugin.CurrentExecutionsFilter) ([]sqlplugin.CurrentExecutionsRow, error) {
 	var rows []sqlplugin.CurrentExecutionsRow
-	err := pdb.conn.Select(&rows, lockCurrentExecutionJoinExecutionsQuery, filter.ShardID, filter.DomainID, filter.WorkflowID)
+	err := pdb.conn.Select(&rows, lockCurrentExecutionJoinExecutionsQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID)
 	return rows, err
 }
 
@@ -295,9 +295,9 @@ func (pdb *db) InsertIntoBufferedEvents(rows []sqlplugin.BufferedEventsRow) (sql
 // SelectFromBufferedEvents reads one or more rows from buffered_events table
 func (pdb *db) SelectFromBufferedEvents(filter *sqlplugin.BufferedEventsFilter) ([]sqlplugin.BufferedEventsRow, error) {
 	var rows []sqlplugin.BufferedEventsRow
-	err := pdb.conn.Select(&rows, getBufferedEventsQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	err := pdb.conn.Select(&rows, getBufferedEventsQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
-		rows[i].DomainID = filter.DomainID
+		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
 		rows[i].ShardID = filter.ShardID
@@ -307,7 +307,7 @@ func (pdb *db) SelectFromBufferedEvents(filter *sqlplugin.BufferedEventsFilter) 
 
 // DeleteFromBufferedEvents deletes one or more rows from buffered_events table
 func (pdb *db) DeleteFromBufferedEvents(filter *sqlplugin.BufferedEventsFilter) (sql.Result, error) {
-	return pdb.conn.Exec(deleteBufferedEventsQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	return pdb.conn.Exec(deleteBufferedEventsQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 
 // InsertIntoReplicationTasks inserts one or more rows into replication_tasks table

@@ -87,7 +87,7 @@ func createTestCQLFileContent() string {
 -- test cql file content
 
 CREATE TABLE events (
-  domain_id      uuid,
+  namespace_id      uuid,
   workflow_id    text,
   run_id         uuid,
   -- We insert a batch of events with each append transaction.
@@ -98,12 +98,12 @@ CREATE TABLE events (
   data           blob, -- Batch of workflow execution history events as a blob
   data_encoding  text, -- Protocol used for history serialization
   data_version   int,  -- history blob version
-  PRIMARY KEY ((domain_id, workflow_id, run_id), first_event_id)
+  PRIMARY KEY ((namespace_id, workflow_id, run_id), first_event_id)
 );
 
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
-  domain_id        uuid,
+  namespace_id        uuid,
   task_list_name   text,
   task_list_type   int, -- enum TaskListType {ActivityTask, DecisionTask}
   type             int, -- enum rowType {Task, TaskList}
@@ -111,7 +111,7 @@ CREATE TABLE tasks (
   range_id         bigint static, -- Used to ensure that only one process can write to the table
   task             text,
   task_list        text,
-  PRIMARY KEY ((domain_id, task_list_name, task_list_type), type, task_id)
+  PRIMARY KEY ((namespace_id, task_list_name, task_list_type), type, task_id)
 );
 
 `

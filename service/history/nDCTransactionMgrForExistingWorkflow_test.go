@@ -105,7 +105,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 
@@ -119,11 +119,11 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(targetRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(targetRunID, nil).Times(1)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.Error(err)
@@ -133,7 +133,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -171,12 +171,12 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentWorkflowPolicy := transactionPolicyPassive
@@ -207,7 +207,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -245,12 +245,12 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentWorkflowPolicy := transactionPolicyPassive
@@ -281,7 +281,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	newRunID := "some random new run ID"
@@ -315,18 +315,18 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      newRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       newRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, domainID, workflowID, newRunID).Return(false, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(false, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
@@ -352,7 +352,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	newRunID := "some random new run ID"
@@ -386,18 +386,18 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      newRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       newRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, domainID, workflowID, newRunID).Return(true, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(true, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
@@ -423,7 +423,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 
@@ -449,11 +449,11 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	newWorkflow.EXPECT().getReleaseFn().Return(newReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(targetRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(targetRunID, nil).Times(1)
 
 	targetContext.EXPECT().conflictResolveWorkflowExecution(
 		now,
@@ -477,7 +477,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -514,12 +514,12 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentWorkflowPolicy := transactionPolicyActive
@@ -550,7 +550,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	newRunID := "some random new run ID"
@@ -583,18 +583,18 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      newRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       newRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, domainID, workflowID, newRunID).Return(false, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(false, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
@@ -623,7 +623,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	newRunID := "some random new run ID"
@@ -656,18 +656,18 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      newRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       newRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, domainID, workflowID, newRunID).Return(true, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(true, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)

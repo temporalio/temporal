@@ -56,7 +56,7 @@ type (
 		logger log.Logger
 
 		branchIndex int
-		domainID    string
+		namespaceID string
 		workflowID  string
 		runID       string
 
@@ -93,7 +93,7 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.domainID = uuid.New()
+	s.namespaceID = uuid.New()
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
 	s.branchIndex = 0
@@ -129,9 +129,9 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   s.domainID,
-		WorkflowID: s.workflowID,
-		RunID:      s.runID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
 	}).AnyTimes()
 
 	shardId := s.mockShard.GetShardID()
@@ -262,9 +262,9 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEv
 	s.NoError(err)
 
 	execution := &persistence.WorkflowExecutionInfo{
-		DomainID:   s.domainID,
-		WorkflowID: s.workflowID,
-		RunID:      s.runID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
@@ -303,9 +303,9 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   s.domainID,
-		WorkflowID: s.workflowID,
-		RunID:      s.runID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
 	}).AnyTimes()
 
 	shardId := s.mockShard.GetShardID()
@@ -356,9 +356,9 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 	})
 
 	execution := &persistence.WorkflowExecutionInfo{
-		DomainID:   s.domainID,
-		WorkflowID: s.workflowID,
-		RunID:      s.runID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()

@@ -1,7 +1,7 @@
 - persistence:
     dbname: integration_active
   clustermetadata:
-    enableGlobalDomain: true
+    enableGlobalNamespace: true
     replicationConsumer:
       type: rpc
       fetcher:
@@ -76,7 +76,7 @@
 - persistence:
     dbname: integration_standby
   clustermetadata:
-    enableGlobalDomain: true
+    enableGlobalNamespace: true
     replicationConsumer:
       type: rpc
       fetcher:
@@ -151,7 +151,7 @@
 - persistence:
     dbname: integration_other
   clustermetadata:
-    enableGlobalDomain: true
+    enableGlobalNamespace: true
     replicationConsumer:
       type: rpc
       fetcher:

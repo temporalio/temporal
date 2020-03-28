@@ -205,19 +205,19 @@ func (c *metricClient) GetReplicationMessages(
 	return resp, err
 }
 
-func (c *metricClient) GetDomainReplicationMessages(
+func (c *metricClient) GetNamespaceReplicationMessages(
 	ctx context.Context,
-	request *adminservice.GetDomainReplicationMessagesRequest,
+	request *adminservice.GetNamespaceReplicationMessagesRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.GetDomainReplicationMessagesResponse, error) {
-	c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.ClientRequests)
+) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
+	c.metricsClient.IncCounter(metrics.FrontendClientGetNamespaceReplicationTasksScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.ClientLatency)
-	resp, err := c.client.GetDomainReplicationMessages(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetNamespaceReplicationTasksScope, metrics.ClientLatency)
+	resp, err := c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientGetNamespaceReplicationTasksScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

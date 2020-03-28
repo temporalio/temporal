@@ -26,7 +26,7 @@ import (
 
 // All legal fields allowed in elastic search index
 const (
-	DomainID      = "DomainID"
+	NamespaceID   = "NamespaceID"
 	WorkflowID    = "WorkflowID"
 	RunID         = "RunID"
 	WorkflowType  = "WorkflowType"

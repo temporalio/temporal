@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package domain
+package namespace
 
 import (
 	"context"
@@ -49,17 +49,17 @@ import (
 )
 
 type (
-	domainHandlerCommonSuite struct {
+	namespaceHandlerCommonSuite struct {
 		suite.Suite
 		persistencetests.TestBase
 
-		minRetentionDays     int
-		maxBadBinaryCount    int
-		metadataMgr          persistence.MetadataManager
-		mockProducer         *mocks.KafkaProducer
-		mockDomainReplicator Replicator
-		archivalMetadata     archiver.ArchivalMetadata
-		mockArchiverProvider *provider.MockArchiverProvider
+		minRetentionDays        int
+		maxBadBinaryCount       int
+		metadataMgr             persistence.MetadataManager
+		mockProducer            *mocks.KafkaProducer
+		mockNamespaceReplicator Replicator
+		archivalMetadata        archiver.ArchivalMetadata
+		mockArchiverProvider    *provider.MockArchiverProvider
 
 		handler *HandlerImpl
 	}
@@ -67,12 +67,12 @@ type (
 
 var nowInt64 = time.Now().UnixNano()
 
-func TestDomainHandlerCommonSuite(t *testing.T) {
-	s := new(domainHandlerCommonSuite)
+func TestNamespaceHandlerCommonSuite(t *testing.T) {
+	s := new(namespaceHandlerCommonSuite)
 	suite.Run(t, s)
 }
 
-func (s *domainHandlerCommonSuite) SetupSuite() {
+func (s *namespaceHandlerCommonSuite) SetupSuite() {
 	if testing.Verbose() {
 		log.SetOutput(os.Stdout)
 	}
@@ -83,46 +83,46 @@ func (s *domainHandlerCommonSuite) SetupSuite() {
 	s.TestBase.Setup()
 }
 
-func (s *domainHandlerCommonSuite) TearDownSuite() {
+func (s *namespaceHandlerCommonSuite) TearDownSuite() {
 	s.TestBase.TearDownWorkflowStore()
 }
 
-func (s *domainHandlerCommonSuite) SetupTest() {
+func (s *namespaceHandlerCommonSuite) SetupTest() {
 	logger := loggerimpl.NewNopLogger()
 	dcCollection := dc.NewCollection(dc.NewNopClient(), logger)
 	s.minRetentionDays = 1
 	s.maxBadBinaryCount = 10
 	s.metadataMgr = s.TestBase.MetadataManager
 	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockDomainReplicator = NewDomainReplicator(s.mockProducer, logger)
+	s.mockNamespaceReplicator = NewNamespaceReplicator(s.mockProducer, logger)
 	s.archivalMetadata = archiver.NewArchivalMetadata(
 		dcCollection,
 		"",
 		false,
 		"",
 		false,
-		&config.ArchivalDomainDefaults{},
+		&config.ArchivalNamespaceDefaults{},
 	)
 	s.mockArchiverProvider = &provider.MockArchiverProvider{}
 	s.handler = NewHandler(
 		s.minRetentionDays,
-		dc.GetIntPropertyFilteredByDomain(s.maxBadBinaryCount),
+		dc.GetIntPropertyFilteredByNamespace(s.maxBadBinaryCount),
 		logger,
 		s.metadataMgr,
 		s.ClusterMetadata,
-		s.mockDomainReplicator,
+		s.mockNamespaceReplicator,
 		s.archivalMetadata,
 		s.mockArchiverProvider,
 	)
 }
 
-func (s *domainHandlerCommonSuite) TearDownTest() {
+func (s *namespaceHandlerCommonSuite) TearDownTest() {
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockArchiverProvider.AssertExpectations(s.T())
 }
 
-func (s *domainHandlerCommonSuite) TestMergeDomainData_Overriding() {
-	out := s.handler.mergeDomainData(
+func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Overriding() {
+	out := s.handler.mergeNamespaceData(
 		map[string]string{
 			"k0": "v0",
 		},
@@ -136,8 +136,8 @@ func (s *domainHandlerCommonSuite) TestMergeDomainData_Overriding() {
 	}, out)
 }
 
-func (s *domainHandlerCommonSuite) TestMergeDomainData_Adding() {
-	out := s.handler.mergeDomainData(
+func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Adding() {
+	out := s.handler.mergeNamespaceData(
 		map[string]string{
 			"k0": "v0",
 		},
@@ -152,8 +152,8 @@ func (s *domainHandlerCommonSuite) TestMergeDomainData_Adding() {
 	}, out)
 }
 
-func (s *domainHandlerCommonSuite) TestMergeDomainData_Merging() {
-	out := s.handler.mergeDomainData(
+func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Merging() {
+	out := s.handler.mergeNamespaceData(
 		map[string]string{
 			"k0": "v0",
 		},
@@ -169,8 +169,8 @@ func (s *domainHandlerCommonSuite) TestMergeDomainData_Merging() {
 	}, out)
 }
 
-func (s *domainHandlerCommonSuite) TestMergeDomainData_Nil() {
-	out := s.handler.mergeDomainData(
+func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Nil() {
+	out := s.handler.mergeNamespaceData(
 		nil,
 		map[string]string{
 			"k0": "v1",
@@ -185,7 +185,7 @@ func (s *domainHandlerCommonSuite) TestMergeDomainData_Nil() {
 }
 
 // test merging bad binaries
-func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Overriding() {
+func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Overriding() {
 	out := s.handler.mergeBadBinaries(
 		map[string]*commonproto.BadBinaryInfo{
 			"k0": {Reason: "reason0"},
@@ -202,7 +202,7 @@ func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Overriding() {
 	}))
 }
 
-func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Adding() {
+func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Adding() {
 	out := s.handler.mergeBadBinaries(
 		map[string]*commonproto.BadBinaryInfo{
 			"k0": {Reason: "reason0"},
@@ -221,7 +221,7 @@ func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Adding() {
 	assert.Equal(s.T(), out.String(), expected.String())
 }
 
-func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Merging() {
+func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Merging() {
 	out := s.handler.mergeBadBinaries(
 		map[string]*commonproto.BadBinaryInfo{
 			"k0": {Reason: "reason0"},
@@ -240,7 +240,7 @@ func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Merging() {
 	}))
 }
 
-func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Nil() {
+func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Nil() {
 	out := s.handler.mergeBadBinaries(
 		nil,
 		map[string]*commonproto.BadBinaryInfo{
@@ -257,14 +257,14 @@ func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Nil() {
 	}))
 }
 
-func (s *domainHandlerCommonSuite) TestListDomain() {
-	domainName1 := s.getRandomDomainName()
+func (s *namespaceHandlerCommonSuite) TestListNamespace() {
+	namespace1 := s.getRandomNamespace()
 	description1 := "some random description 1"
 	email1 := "some random email 1"
 	retention1 := int32(1)
 	emitMetric1 := true
 	data1 := map[string]string{"some random key 1": "some random value 1"}
-	isGlobalDomain1 := false
+	isGlobalNamespace1 := false
 	activeClusterName1 := s.ClusterMetadata.GetCurrentClusterName()
 	var cluster1 []*commonproto.ClusterReplicationConfiguration
 	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
@@ -272,25 +272,25 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 			ClusterName: replicationConfig.ClusterName,
 		})
 	}
-	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName1,
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace1,
 		Description:                            description1,
 		OwnerEmail:                             email1,
 		WorkflowExecutionRetentionPeriodInDays: retention1,
 		EmitMetric:                             emitMetric1,
 		Data:                                   data1,
-		IsGlobalDomain:                         isGlobalDomain1,
+		IsGlobalNamespace:                      isGlobalNamespace1,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
 
-	domainName2 := s.getRandomDomainName()
+	namespace2 := s.getRandomNamespace()
 	description2 := "some random description 2"
 	email2 := "some random email 2"
 	retention2 := int32(2)
 	emitMetric2 := false
 	data2 := map[string]string{"some random key 2": "some random value 2"}
-	isGlobalDomain2 := true
+	isGlobalNamespace2 := true
 	activeClusterName2 := ""
 	var cluster2 []*commonproto.ClusterReplicationConfiguration
 	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
@@ -302,8 +302,8 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 		})
 	}
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
-	registerResp, err = s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName2,
+	registerResp, err = s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace2,
 		Description:                            description2,
 		OwnerEmail:                             email2,
 		WorkflowExecutionRetentionPeriodInDays: retention2,
@@ -311,40 +311,40 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 		Clusters:                               cluster2,
 		ActiveClusterName:                      activeClusterName2,
 		Data:                                   data2,
-		IsGlobalDomain:                         isGlobalDomain2,
+		IsGlobalNamespace:                      isGlobalNamespace2,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
 
-	domains := map[string]*workflowservice.DescribeDomainResponse{}
+	namespaces := map[string]*workflowservice.DescribeNamespaceResponse{}
 	pagesize := int32(1)
 	var token []byte
 	for doPaging := true; doPaging; doPaging = len(token) > 0 {
-		resp, err := s.handler.ListDomains(context.Background(), &workflowservice.ListDomainsRequest{
+		resp, err := s.handler.ListNamespaces(context.Background(), &workflowservice.ListNamespacesRequest{
 			PageSize:      pagesize,
 			NextPageToken: token,
 		})
 		s.NoError(err)
 		token = resp.NextPageToken
-		s.True(len(resp.Domains) <= int(pagesize))
-		if len(resp.Domains) > 0 {
-			s.NotEmpty(resp.Domains[0].DomainInfo.GetUuid())
-			resp.Domains[0].DomainInfo.Uuid = ""
-			domains[resp.Domains[0].DomainInfo.GetName()] = resp.Domains[0]
+		s.True(len(resp.Namespaces) <= int(pagesize))
+		if len(resp.Namespaces) > 0 {
+			s.NotEmpty(resp.Namespaces[0].NamespaceInfo.GetUuid())
+			resp.Namespaces[0].NamespaceInfo.Uuid = ""
+			namespaces[resp.Namespaces[0].NamespaceInfo.GetName()] = resp.Namespaces[0]
 		}
 	}
-	delete(domains, common.SystemLocalDomainName)
-	s.Equal(map[string]*workflowservice.DescribeDomainResponse{
-		domainName1: &workflowservice.DescribeDomainResponse{
-			DomainInfo: &commonproto.DomainInfo{
-				Name:        domainName1,
-				Status:      enums.DomainStatusRegistered,
+	delete(namespaces, common.SystemLocalNamespace)
+	s.Equal(map[string]*workflowservice.DescribeNamespaceResponse{
+		namespace1: &workflowservice.DescribeNamespaceResponse{
+			NamespaceInfo: &commonproto.NamespaceInfo{
+				Name:        namespace1,
+				Status:      enums.NamespaceStatusRegistered,
 				Description: description1,
 				OwnerEmail:  email1,
 				Data:        data1,
 				Uuid:        "",
 			},
-			Configuration: &commonproto.DomainConfiguration{
+			Configuration: &commonproto.NamespaceConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention1,
 				EmitMetric:                             &types.BoolValue{Value: emitMetric1},
 				HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -353,23 +353,23 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 				VisibilityArchivalURI:                  "",
 				BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 			},
-			ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+			ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 				ActiveClusterName: activeClusterName1,
 				Clusters:          cluster1,
 			},
-			FailoverVersion: common.EmptyVersion,
-			IsGlobalDomain:  isGlobalDomain1,
+			FailoverVersion:   common.EmptyVersion,
+			IsGlobalNamespace: isGlobalNamespace1,
 		},
-		domainName2: &workflowservice.DescribeDomainResponse{
-			DomainInfo: &commonproto.DomainInfo{
-				Name:        domainName2,
-				Status:      enums.DomainStatusRegistered,
+		namespace2: &workflowservice.DescribeNamespaceResponse{
+			NamespaceInfo: &commonproto.NamespaceInfo{
+				Name:        namespace2,
+				Status:      enums.NamespaceStatusRegistered,
 				Description: description2,
 				OwnerEmail:  email2,
 				Data:        data2,
 				Uuid:        "",
 			},
-			Configuration: &commonproto.DomainConfiguration{
+			Configuration: &commonproto.NamespaceConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention2,
 				EmitMetric:                             &types.BoolValue{Value: emitMetric2},
 				HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -378,51 +378,51 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 				VisibilityArchivalURI:                  "",
 				BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 			},
-			ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+			ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 				ActiveClusterName: activeClusterName2,
 				Clusters:          cluster2,
 			},
-			FailoverVersion: s.ClusterMetadata.GetNextFailoverVersion(activeClusterName2, 0),
-			IsGlobalDomain:  isGlobalDomain2,
+			FailoverVersion:   s.ClusterMetadata.GetNextFailoverVersion(activeClusterName2, 0),
+			IsGlobalNamespace: isGlobalNamespace2,
 		},
-	}, domains)
+	}, namespaces)
 }
 
-func (s *domainHandlerCommonSuite) TestRegisterDomain_InvalidRetentionPeriod() {
-	registerRequest := &workflowservice.RegisterDomainRequest{
-		Name:                                   "random domain name",
-		Description:                            "random domain name",
+func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeriod() {
+	registerRequest := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   "random namespace name",
+		Description:                            "random namespace name",
 		WorkflowExecutionRetentionPeriodInDays: int32(0),
-		IsGlobalDomain:                         false,
+		IsGlobalNamespace:                      false,
 	}
-	resp, err := s.handler.RegisterDomain(context.Background(), registerRequest)
+	resp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 	s.Equal(errInvalidRetentionPeriod, err)
 	s.Nil(resp)
 }
 
-func (s *domainHandlerCommonSuite) TestUpdateDomain_InvalidRetentionPeriod() {
-	domain := "random domain name"
-	registerRequest := &workflowservice.RegisterDomainRequest{
-		Name:                                   domain,
-		Description:                            domain,
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod() {
+	namespace := "random namespace name"
+	registerRequest := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		Description:                            namespace,
 		WorkflowExecutionRetentionPeriodInDays: int32(10),
-		IsGlobalDomain:                         false,
+		IsGlobalNamespace:                      false,
 	}
-	registerResp, err := s.handler.RegisterDomain(context.Background(), registerRequest)
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 	s.NoError(err)
 	s.Nil(registerResp)
 
-	updateRequest := &workflowservice.UpdateDomainRequest{
-		Name: domain,
-		Configuration: &commonproto.DomainConfiguration{
+	updateRequest := &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		Configuration: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: int32(-1),
 		},
 	}
-	resp, err := s.handler.UpdateDomain(context.Background(), updateRequest)
+	resp, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
 	s.Equal(errInvalidRetentionPeriod, err)
 	s.Nil(resp)
 }
 
-func (s *domainHandlerCommonSuite) getRandomDomainName() string {
-	return "domain" + uuid.New()
+func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {
+	return "namespace" + uuid.New()
 }

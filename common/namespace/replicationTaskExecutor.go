@@ -20,7 +20,7 @@
 
 //go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskHandler_mock.go
 
-package domain
+package namespace
 
 import (
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -33,80 +33,80 @@ import (
 )
 
 var (
-	// ErrEmptyDomainReplicationTask is the error to indicate empty replication task
-	ErrEmptyDomainReplicationTask = serviceerror.NewInvalidArgument("empty domain replication task")
-	// ErrInvalidDomainOperation is the error to indicate empty domain operation attribute
-	ErrInvalidDomainOperation = serviceerror.NewInvalidArgument("invalid domain operation attribute")
-	// ErrInvalidDomainID is the error to indicate empty rID attribute
-	ErrInvalidDomainID = serviceerror.NewInvalidArgument("invalid domain ID attribute")
-	// ErrInvalidDomainInfo is the error to indicate empty info attribute
-	ErrInvalidDomainInfo = serviceerror.NewInvalidArgument("invalid domain info attribute")
-	// ErrInvalidDomainConfig is the error to indicate empty config attribute
-	ErrInvalidDomainConfig = serviceerror.NewInvalidArgument("invalid domain config attribute")
-	// ErrInvalidDomainReplicationConfig is the error to indicate empty replication config attribute
-	ErrInvalidDomainReplicationConfig = serviceerror.NewInvalidArgument("invalid domain replication config attribute")
-	// ErrInvalidDomainConfigVersion is the error to indicate empty config version attribute
-	ErrInvalidDomainConfigVersion = serviceerror.NewInvalidArgument("invalid domain config version attribute")
-	// ErrInvalidDomainFailoverVersion is the error to indicate empty failover version attribute
-	ErrInvalidDomainFailoverVersion = serviceerror.NewInvalidArgument("invalid domain failover version attribute")
-	// ErrInvalidDomainStatus is the error to indicate invalid domain status
-	ErrInvalidDomainStatus = serviceerror.NewInvalidArgument("invalid domain status attribute")
-	// ErrNameUUIDCollision is the error to indicate domain name / UUID collision
-	ErrNameUUIDCollision = serviceerror.NewInvalidArgument("domain replication encounter name / UUID collision")
+	// ErrEmptyNamespaceReplicationTask is the error to indicate empty replication task
+	ErrEmptyNamespaceReplicationTask = serviceerror.NewInvalidArgument("empty namespace replication task")
+	// ErrInvalidNamespaceOperation is the error to indicate empty namespace operation attribute
+	ErrInvalidNamespaceOperation = serviceerror.NewInvalidArgument("invalid namespace operation attribute")
+	// ErrInvalidNamespaceID is the error to indicate empty rID attribute
+	ErrInvalidNamespaceID = serviceerror.NewInvalidArgument("invalid namespace ID attribute")
+	// ErrInvalidNamespaceInfo is the error to indicate empty info attribute
+	ErrInvalidNamespaceInfo = serviceerror.NewInvalidArgument("invalid namespace info attribute")
+	// ErrInvalidNamespaceConfig is the error to indicate empty config attribute
+	ErrInvalidNamespaceConfig = serviceerror.NewInvalidArgument("invalid namespace config attribute")
+	// ErrInvalidNamespaceReplicationConfig is the error to indicate empty replication config attribute
+	ErrInvalidNamespaceReplicationConfig = serviceerror.NewInvalidArgument("invalid namespace replication config attribute")
+	// ErrInvalidNamespaceConfigVersion is the error to indicate empty config version attribute
+	ErrInvalidNamespaceConfigVersion = serviceerror.NewInvalidArgument("invalid namespace config version attribute")
+	// ErrInvalidNamespaceFailoverVersion is the error to indicate empty failover version attribute
+	ErrInvalidNamespaceFailoverVersion = serviceerror.NewInvalidArgument("invalid namespace failover version attribute")
+	// ErrInvalidNamespaceStatus is the error to indicate invalid namespace status
+	ErrInvalidNamespaceStatus = serviceerror.NewInvalidArgument("invalid namespace status attribute")
+	// ErrNameUUIDCollision is the error to indicate namespace name / UUID collision
+	ErrNameUUIDCollision = serviceerror.NewInvalidArgument("namespace replication encounter name / UUID collision")
 )
 
-// NOTE: the counterpart of domain replication transmission logic is in service/fropntend package
+// NOTE: the counterpart of namespace replication transmission logic is in service/fropntend package
 
 type (
-	// ReplicationTaskExecutor is the interface which is to execute domain replication task
+	// ReplicationTaskExecutor is the interface which is to execute namespace replication task
 	ReplicationTaskExecutor interface {
-		Execute(task *replication.DomainTaskAttributes) error
+		Execute(task *replication.NamespaceTaskAttributes) error
 	}
 
-	domainReplicationTaskExecutorImpl struct {
+	namespaceReplicationTaskExecutorImpl struct {
 		metadataManagerV2 persistence.MetadataManager
 		logger            log.Logger
 	}
 )
 
-// NewReplicationTaskExecutor create a new instance of domain replicator
+// NewReplicationTaskExecutor create a new instance of namespace replicator
 func NewReplicationTaskExecutor(
 	metadataManagerV2 persistence.MetadataManager,
 	logger log.Logger,
 ) ReplicationTaskExecutor {
 
-	return &domainReplicationTaskExecutorImpl{
+	return &namespaceReplicationTaskExecutorImpl{
 		metadataManagerV2: metadataManagerV2,
 		logger:            logger,
 	}
 }
 
-// Execute handles receiving of the domain replication task
-func (h *domainReplicationTaskExecutorImpl) Execute(task *replication.DomainTaskAttributes) error {
-	if err := h.validateDomainReplicationTask(task); err != nil {
+// Execute handles receiving of the namespace replication task
+func (h *namespaceReplicationTaskExecutorImpl) Execute(task *replication.NamespaceTaskAttributes) error {
+	if err := h.validateNamespaceReplicationTask(task); err != nil {
 		return err
 	}
 
-	switch task.GetDomainOperation() {
-	case enums.DomainOperationCreate:
-		return h.handleDomainCreationReplicationTask(task)
-	case enums.DomainOperationUpdate:
-		return h.handleDomainUpdateReplicationTask(task)
+	switch task.GetNamespaceOperation() {
+	case enums.NamespaceOperationCreate:
+		return h.handleNamespaceCreationReplicationTask(task)
+	case enums.NamespaceOperationUpdate:
+		return h.handleNamespaceUpdateReplicationTask(task)
 	default:
-		return ErrInvalidDomainOperation
+		return ErrInvalidNamespaceOperation
 	}
 }
 
-// handleDomainCreationReplicationTask handles the domain creation replication task
-func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(task *replication.DomainTaskAttributes) error {
+// handleNamespaceCreationReplicationTask handles the namespace creation replication task
+func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicationTask(task *replication.NamespaceTaskAttributes) error {
 	// task already validated
-	status, err := h.convertDomainStatusFromProto(task.Info.Status)
+	status, err := h.convertNamespaceStatusFromProto(task.Info.Status)
 	if err != nil {
 		return err
 	}
 
-	request := &persistence.CreateDomainRequest{
-		Info: &persistence.DomainInfo{
+	request := &persistence.CreateNamespaceRequest{
+		Info: &persistence.NamespaceInfo{
 			ID:          task.GetId(),
 			Name:        task.Info.GetName(),
 			Status:      status,
@@ -114,7 +114,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(
 			OwnerEmail:  task.Info.GetOwnerEmail(),
 			Data:        task.Info.Data,
 		},
-		Config: &persistence.DomainConfig{
+		Config: &persistence.NamespaceConfig{
 			Retention:                task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 			EmitMetric:               task.Config.GetEmitMetric().GetValue(),
 			HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
@@ -122,23 +122,23 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(
 			VisibilityArchivalStatus: task.Config.GetVisibilityArchivalStatus(),
 			VisibilityArchivalURI:    task.Config.GetVisibilityArchivalURI(),
 		},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
+		ReplicationConfig: &persistence.NamespaceReplicationConfig{
 			ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
 			Clusters:          h.convertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
 		},
-		IsGlobalDomain:  true, // local domain will not be replicated
-		ConfigVersion:   task.GetConfigVersion(),
-		FailoverVersion: task.GetFailoverVersion(),
+		IsGlobalNamespace: true, // local namespace will not be replicated
+		ConfigVersion:     task.GetConfigVersion(),
+		FailoverVersion:   task.GetFailoverVersion(),
 	}
 
-	_, err = h.metadataManagerV2.CreateDomain(request)
+	_, err = h.metadataManagerV2.CreateNamespace(request)
 	if err != nil {
-		// SQL and Cassandra handle domain UUID collision differently
-		// here, whenever seeing a error replicating a domain
+		// SQL and Cassandra handle namespace UUID collision differently
+		// here, whenever seeing a error replicating a namespace
 		// do a check if there is a name / UUID collision
 
 		recordExists := true
-		resp, getErr := h.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
+		resp, getErr := h.metadataManagerV2.GetNamespace(&persistence.GetNamespaceRequest{
 			Name: task.Info.GetName(),
 		})
 		switch getErr.(type) {
@@ -154,7 +154,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(
 			return err
 		}
 
-		resp, getErr = h.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
+		resp, getErr = h.metadataManagerV2.GetNamespace(&persistence.GetNamespaceRequest{
 			ID: task.GetId(),
 		})
 		switch getErr.(type) {
@@ -180,10 +180,10 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(
 	return err
 }
 
-// handleDomainUpdateReplicationTask handles the domain update replication task
-func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(task *replication.DomainTaskAttributes) error {
+// handleNamespaceUpdateReplicationTask handles the namespace update replication task
+func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationTask(task *replication.NamespaceTaskAttributes) error {
 	// task already validated
-	status, err := h.convertDomainStatusFromProto(task.Info.Status)
+	status, err := h.convertNamespaceStatusFromProto(task.Info.Status)
 	if err != nil {
 		return err
 	}
@@ -197,20 +197,20 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(ta
 
 	// plus, we need to check whether the config version is <= the config version set in the input
 	// plus, we need to check whether the failover version is <= the failover version set in the input
-	resp, err := h.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
+	resp, err := h.metadataManagerV2.GetNamespace(&persistence.GetNamespaceRequest{
 		Name: task.Info.GetName(),
 	})
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
-			// this can happen if the create domain replication task is to processed.
+			// this can happen if the create namespace replication task is to processed.
 			// e.g. new cluster which does not have anything
-			return h.handleDomainCreationReplicationTask(task)
+			return h.handleNamespaceCreationReplicationTask(task)
 		}
 		return err
 	}
 
 	recordUpdated := false
-	request := &persistence.UpdateDomainRequest{
+	request := &persistence.UpdateNamespaceRequest{
 		Info:                        resp.Info,
 		Config:                      resp.Config,
 		ReplicationConfig:           resp.ReplicationConfig,
@@ -222,7 +222,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(ta
 
 	if resp.ConfigVersion < task.GetConfigVersion() {
 		recordUpdated = true
-		request.Info = &persistence.DomainInfo{
+		request.Info = &persistence.NamespaceInfo{
 			ID:          task.GetId(),
 			Name:        task.Info.GetName(),
 			Status:      status,
@@ -230,7 +230,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(ta
 			OwnerEmail:  task.Info.GetOwnerEmail(),
 			Data:        task.Info.Data,
 		}
-		request.Config = &persistence.DomainConfig{
+		request.Config = &persistence.NamespaceConfig{
 			Retention:                task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 			EmitMetric:               task.Config.GetEmitMetric().GetValue(),
 			HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
@@ -255,27 +255,27 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(ta
 		return nil
 	}
 
-	return h.metadataManagerV2.UpdateDomain(request)
+	return h.metadataManagerV2.UpdateNamespace(request)
 }
 
-func (h *domainReplicationTaskExecutorImpl) validateDomainReplicationTask(task *replication.DomainTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(task *replication.NamespaceTaskAttributes) error {
 	if task == nil {
-		return ErrEmptyDomainReplicationTask
+		return ErrEmptyNamespaceReplicationTask
 	}
 
 	if task.Id == "" {
-		return ErrInvalidDomainID
+		return ErrInvalidNamespaceID
 	} else if task.Info == nil {
-		return ErrInvalidDomainInfo
+		return ErrInvalidNamespaceInfo
 	} else if task.Config == nil {
-		return ErrInvalidDomainConfig
+		return ErrInvalidNamespaceConfig
 	} else if task.ReplicationConfig == nil {
-		return ErrInvalidDomainReplicationConfig
+		return ErrInvalidNamespaceReplicationConfig
 	}
 	return nil
 }
 
-func (h *domainReplicationTaskExecutorImpl) convertClusterReplicationConfigFromProto(
+func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFromProto(
 	input []*commonproto.ClusterReplicationConfiguration) []*persistence.ClusterReplicationConfig {
 	output := []*persistence.ClusterReplicationConfig{}
 	for _, cluster := range input {
@@ -285,13 +285,13 @@ func (h *domainReplicationTaskExecutorImpl) convertClusterReplicationConfigFromP
 	return output
 }
 
-func (h *domainReplicationTaskExecutorImpl) convertDomainStatusFromProto(input enums.DomainStatus) (int, error) {
+func (h *namespaceReplicationTaskExecutorImpl) convertNamespaceStatusFromProto(input enums.NamespaceStatus) (int, error) {
 	switch input {
-	case enums.DomainStatusRegistered:
-		return persistence.DomainStatusRegistered, nil
-	case enums.DomainStatusDeprecated:
-		return persistence.DomainStatusDeprecated, nil
+	case enums.NamespaceStatusRegistered:
+		return persistence.NamespaceStatusRegistered, nil
+	case enums.NamespaceStatusDeprecated:
+		return persistence.NamespaceStatusDeprecated, nil
 	default:
-		return 0, ErrInvalidDomainStatus
+		return 0, ErrInvalidNamespaceStatus
 	}
 }

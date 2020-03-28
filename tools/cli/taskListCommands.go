@@ -68,14 +68,14 @@ func DescribeTaskList(c *cli.Context) {
 // ListTaskListPartitions gets all the tasklist partition and host information.
 func ListTaskListPartitions(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
-	domain := getRequiredGlobalOption(c, FlagDomain)
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	taskList := getRequiredOption(c, FlagTaskList)
 
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &workflowservice.ListTaskListPartitionsRequest{
-		Domain:   domain,
-		TaskList: &commonproto.TaskList{Name: taskList},
+		Namespace: namespace,
+		TaskList:  &commonproto.TaskList{Name: taskList},
 	}
 
 	response, err := frontendClient.ListTaskListPartitions(ctx, request)

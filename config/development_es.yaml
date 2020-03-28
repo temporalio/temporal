@@ -68,7 +68,7 @@ services:
         prefix: "temporal"
 
 clusterMetadata:
-  enableGlobalDomain: false
+  enableGlobalNamespace: false
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "active"
@@ -99,7 +99,7 @@ archival:
         fileMode: "0666"
         dirMode: "0766"
 
-domainDefaults:
+namespaceDefaults:
   archival:
     history:
       status: "enabled"

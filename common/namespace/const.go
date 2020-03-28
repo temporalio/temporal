@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,18 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package domain
+package namespace
 
-import (
-	"go.temporal.io/temporal-proto/serviceerror"
-)
+const (
+	// MinRetentionDays is the minimal retention days for any namespace
+	MinRetentionDays = 1
 
-var (
-	// err indicating that this cluster is not the master, so cannot do domain registration or update
-	errNotMasterCluster                = serviceerror.NewInvalidArgument("Cluster is not master cluster, cannot do domain registration or domain update.")
-	errCannotRemoveClustersFromDomain  = serviceerror.NewInvalidArgument("Cannot remove existing replicated clusters from a domain.")
-	errActiveClusterNotInClusters      = serviceerror.NewInvalidArgument("Active cluster is not contained in all clusters.")
-	errCannotDoDomainFailoverAndUpdate = serviceerror.NewInvalidArgument("Cannot set active cluster to current cluster when other parameters are set.")
-	errInvalidRetentionPeriod          = serviceerror.NewInvalidArgument("A valid retention period is not set on request.")
-	errInvalidArchivalConfig           = serviceerror.NewInvalidArgument("Invalid to enable archival without specifying a uri.")
+	// MaxBadBinaries is the maximal number of bad client binaries stored in a namespace
+	MaxBadBinaries = 10
 )

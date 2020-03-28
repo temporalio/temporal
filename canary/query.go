@@ -43,7 +43,7 @@ func registerQuery(r registrar) {
 }
 
 // queryWorkflow is the workflow implementation to test for querying workflow status
-func queryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func queryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	status := queryStatusStarted
 	err := workflow.SetQueryHandler(ctx, queryType, func() (string, error) {
 		return status, nil

@@ -34,12 +34,12 @@ import (
 type (
 	// Metadata provides information about clusters
 	Metadata interface {
-		// IsGlobalDomainEnabled whether the global domain is enabled,
+		// IsGlobalNamespaceEnabled whether the global namespace is enabled,
 		// this attr should be discarded when cross DC is made public
-		IsGlobalDomainEnabled() bool
+		IsGlobalNamespaceEnabled() bool
 		// IsMasterCluster whether current cluster is master cluster
 		IsMasterCluster() bool
-		// GetNextFailoverVersion return the next failover version for domain failover
+		// GetNextFailoverVersion return the next failover version for namespace failover
 		GetNextFailoverVersion(string, int64) int64
 		// IsVersionFromSameCluster return true if 2 version are used for the same cluster
 		IsVersionFromSameCluster(version1 int64, version2 int64) bool
@@ -57,13 +57,13 @@ type (
 
 	metadataImpl struct {
 		logger log.Logger
-		// EnableGlobalDomain whether the global domain is enabled,
+		// EnableGlobalNamespace whether the global namespace is enabled,
 		// this attr should be discarded when cross DC is made public
-		enableGlobalDomain dynamicconfig.BoolPropertyFn
+		enableGlobalNamespace dynamicconfig.BoolPropertyFn
 		// failoverVersionIncrement is the increment of each cluster's version when failover happen
 		failoverVersionIncrement int64
-		// masterClusterName is the name of the master cluster, only the master cluster can register / update domain
-		// all clusters can do domain failover
+		// masterClusterName is the name of the master cluster, only the master cluster can register / update namespace
+		// all clusters can do namespace failover
 		masterClusterName string
 		// currentClusterName is the name of the current cluster
 		currentClusterName string
@@ -79,7 +79,7 @@ type (
 // NewMetadata create a new instance of Metadata
 func NewMetadata(
 	logger log.Logger,
-	enableGlobalDomain dynamicconfig.BoolPropertyFn,
+	enableGlobalNamespace dynamicconfig.BoolPropertyFn,
 	failoverVersionIncrement int64,
 	masterClusterName string,
 	currentClusterName string,
@@ -128,7 +128,7 @@ func NewMetadata(
 
 	return &metadataImpl{
 		logger:                   logger,
-		enableGlobalDomain:       enableGlobalDomain,
+		enableGlobalNamespace:    enableGlobalNamespace,
 		replicationConsumer:      replicationConsumer,
 		failoverVersionIncrement: failoverVersionIncrement,
 		masterClusterName:        masterClusterName,
@@ -138,10 +138,10 @@ func NewMetadata(
 	}
 }
 
-// IsGlobalDomainEnabled whether the global domain is enabled,
+// IsGlobalNamespaceEnabled whether the global namespace is enabled,
 // this attr should be discarded when cross DC is made public
-func (metadata *metadataImpl) IsGlobalDomainEnabled() bool {
-	return metadata.enableGlobalDomain()
+func (metadata *metadataImpl) IsGlobalNamespaceEnabled() bool {
+	return metadata.enableGlobalNamespace()
 }
 
 // GetNextFailoverVersion return the next failover version based on input

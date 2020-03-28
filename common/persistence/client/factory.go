@@ -52,8 +52,8 @@ type (
 		NewExecutionManager(shardID int) (p.ExecutionManager, error)
 		// NewVisibilityManager returns a new visibility manager
 		NewVisibilityManager() (p.VisibilityManager, error)
-		// NewDomainReplicationQueue returns a new queue for domain replication
-		NewDomainReplicationQueue() (p.DomainReplicationQueue, error)
+		// NewNamespaceReplicationQueue returns a new queue for namespace replication
+		NewNamespaceReplicationQueue() (p.NamespaceReplicationQueue, error)
 		// NewClusterMetadata returns a new manager for cluster specific metadata
 		NewClusterMetadataManager() (p.ClusterMetadataManager, error)
 	}
@@ -283,9 +283,9 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 	return result, nil
 }
 
-func (f *factoryImpl) NewDomainReplicationQueue() (p.DomainReplicationQueue, error) {
+func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueue, error) {
 	ds := f.datastores[storeTypeQueue]
-	result, err := ds.factory.NewQueue(p.DomainReplicationQueueType)
+	result, err := ds.factory.NewQueue(p.NamespaceReplicationQueueType)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +296,7 @@ func (f *factoryImpl) NewDomainReplicationQueue() (p.DomainReplicationQueue, err
 		result = p.NewQueuePersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
 
-	return p.NewDomainReplicationQueue(result, f.clusterName, f.metricsClient, f.logger), nil
+	return p.NewNamespaceReplicationQueue(result, f.clusterName, f.metricsClient, f.logger), nil
 }
 
 // Close closes this factory

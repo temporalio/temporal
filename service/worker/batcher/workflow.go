@@ -99,8 +99,8 @@ type (
 
 	// BatchParams is the parameters for batch operation workflow
 	BatchParams struct {
-		// Target domain to execute batch operation
-		DomainName string
+		// Target namespace to execute batch operation
+		Namespace string
 		// To get the target workflows for processing
 		Query string
 		// Reason for the operation
@@ -182,9 +182,9 @@ func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDeta
 func validateParams(params BatchParams) error {
 	if params.BatchType == "" ||
 		params.Reason == "" ||
-		params.DomainName == "" ||
+		params.Namespace == "" ||
 		params.Query == "" {
-		return fmt.Errorf("must provide required parameters: BatchType/Reason/DomainName/Query")
+		return fmt.Errorf("must provide required parameters: BatchType/Reason/Namespace/Query")
 	}
 	switch params.BatchType {
 	case BatchTypeSignal:
@@ -245,8 +245,8 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 
 	if startOver {
 		resp, err := client.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-			Domain: batchParams.DomainName,
-			Query:  batchParams.Query,
+			Namespace: batchParams.Namespace,
+			Query:     batchParams.Query,
 		})
 		if err != nil {
 			return HeartBeatDetails{}, err
@@ -265,7 +265,7 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 		//  Need to improve scan concurrency because it will hold an ES resource until the workflow finishes.
 		//  And we can't use list API because terminate / reset will mutate the result.
 		resp, err := client.ScanWorkflowExecutions(ctx, &workflowservice.ScanWorkflowExecutionsRequest{
-			Domain:        batchParams.DomainName,
+			Namespace:     batchParams.Namespace,
 			PageSize:      int32(pageSize),
 			NextPageToken: hbd.PageToken,
 			Query:         batchParams.Query,
@@ -347,7 +347,7 @@ func startTaskProcessor(
 					batchParams.TerminateParams.TerminateChildren,
 					func(workflowID, runID string) error {
 						_, err := client.TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-							Domain: batchParams.DomainName,
+							Namespace: batchParams.Namespace,
 							WorkflowExecution: &commonproto.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -362,7 +362,7 @@ func startTaskProcessor(
 					batchParams.CancelParams.CancelChildren,
 					func(workflowID, runID string) error {
 						_, err := client.RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
-							Domain: batchParams.DomainName,
+							Namespace: batchParams.Namespace,
 							WorkflowExecution: &commonproto.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -376,7 +376,7 @@ func startTaskProcessor(
 				err = processTask(ctx, limiter, task, batchParams, client, common.BoolPtr(false),
 					func(workflowID, runID string) error {
 						_, err := client.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-							Domain: batchParams.DomainName,
+							Namespace: batchParams.Namespace,
 							WorkflowExecution: &commonproto.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -437,7 +437,7 @@ func processTask(
 		}
 		wfs = wfs[1:]
 		resp, err := client.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Domain: batchParams.DomainName,
+			Namespace: batchParams.Namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: wf.GetWorkflowId(),
 				RunId:      wf.GetRunId(),
@@ -482,6 +482,6 @@ func getActivityLogger(ctx context.Context) log.Logger {
 	return batcher.logger.WithTags(
 		tag.WorkflowID(wfInfo.WorkflowExecution.ID),
 		tag.WorkflowRunID(wfInfo.WorkflowExecution.RunID),
-		tag.WorkflowDomainName(wfInfo.WorkflowDomain),
+		tag.WorkflowNamespace(wfInfo.WorkflowNamespace),
 	)
 }

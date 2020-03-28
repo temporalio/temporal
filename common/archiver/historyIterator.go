@@ -127,8 +127,8 @@ func (i *historyIterator) Next() (*archiver.HistoryBlob, error) {
 		eventCount += int64(len(batch.Events))
 	}
 	header := &archiver.HistoryBlobHeader{
-		DomainName:           i.request.DomainName,
-		DomainID:             i.request.DomainID,
+		Namespace:            i.request.Namespace,
+		NamespaceID:          i.request.NamespaceID,
 		WorkflowID:           i.request.WorkflowID,
 		RunID:                i.request.RunID,
 		IsLast:               i.FinishedIteration,

@@ -59,7 +59,7 @@ type (
 
 		// other common resources
 
-		GetDomainCache() cache.DomainCache
+		GetNamespaceCache() cache.NamespaceCache
 		GetTimeSource() clock.TimeSource
 		GetPayloadSerializer() persistence.PayloadSerializer
 		GetMetricsClient() metrics.Client
@@ -92,7 +92,7 @@ type (
 		GetMetadataManager() persistence.MetadataManager
 		GetTaskManager() persistence.TaskManager
 		GetVisibilityManager() persistence.VisibilityManager
-		GetDomainReplicationQueue() persistence.DomainReplicationQueue
+		GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue
 		GetShardManager() persistence.ShardManager
 		GetHistoryManager() persistence.HistoryManager
 		GetExecutionManager(int) (persistence.ExecutionManager, error)

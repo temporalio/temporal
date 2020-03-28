@@ -31,11 +31,11 @@ import (
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/rpc"
 )
@@ -49,56 +49,56 @@ const (
 	taskProcessorErrorRetryMaxAttampts        = 5
 )
 
-func newDomainReplicationMessageProcessor(
+func newNamespaceReplicationMessageProcessor(
 	sourceCluster string,
 	logger log.Logger,
 	remotePeer admin.Client,
 	metricsClient metrics.Client,
-	taskExecutor domain.ReplicationTaskExecutor,
+	taskExecutor namespace.ReplicationTaskExecutor,
 	hostInfo *membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
-	domainReplicationQueue persistence.DomainReplicationQueue,
-) *domainReplicationMessageProcessor {
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
+) *namespaceReplicationMessageProcessor {
 	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait)
 	retryPolicy.SetBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient)
 	retryPolicy.SetMaximumAttempts(taskProcessorErrorRetryMaxAttampts)
 
-	return &domainReplicationMessageProcessor{
-		hostInfo:               hostInfo,
-		serviceResolver:        serviceResolver,
-		status:                 common.DaemonStatusInitialized,
-		sourceCluster:          sourceCluster,
-		logger:                 logger,
-		remotePeer:             remotePeer,
-		taskExecutor:           taskExecutor,
-		metricsClient:          metricsClient,
-		retryPolicy:            retryPolicy,
-		lastProcessedMessageID: -1,
-		lastRetrievedMessageID: -1,
-		done:                   make(chan struct{}),
-		domainReplicationQueue: domainReplicationQueue,
+	return &namespaceReplicationMessageProcessor{
+		hostInfo:                  hostInfo,
+		serviceResolver:           serviceResolver,
+		status:                    common.DaemonStatusInitialized,
+		sourceCluster:             sourceCluster,
+		logger:                    logger,
+		remotePeer:                remotePeer,
+		taskExecutor:              taskExecutor,
+		metricsClient:             metricsClient,
+		retryPolicy:               retryPolicy,
+		lastProcessedMessageID:    -1,
+		lastRetrievedMessageID:    -1,
+		done:                      make(chan struct{}),
+		namespaceReplicationQueue: namespaceReplicationQueue,
 	}
 }
 
 type (
-	domainReplicationMessageProcessor struct {
-		hostInfo               *membership.HostInfo
-		serviceResolver        membership.ServiceResolver
-		status                 int32
-		sourceCluster          string
-		logger                 log.Logger
-		remotePeer             admin.Client
-		taskExecutor           domain.ReplicationTaskExecutor
-		metricsClient          metrics.Client
-		retryPolicy            backoff.RetryPolicy
-		lastProcessedMessageID int64
-		lastRetrievedMessageID int64
-		done                   chan struct{}
-		domainReplicationQueue persistence.DomainReplicationQueue
+	namespaceReplicationMessageProcessor struct {
+		hostInfo                  *membership.HostInfo
+		serviceResolver           membership.ServiceResolver
+		status                    int32
+		sourceCluster             string
+		logger                    log.Logger
+		remotePeer                admin.Client
+		taskExecutor              namespace.ReplicationTaskExecutor
+		metricsClient             metrics.Client
+		retryPolicy               backoff.RetryPolicy
+		lastProcessedMessageID    int64
+		lastRetrievedMessageID    int64
+		done                      chan struct{}
+		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 	}
 )
 
-func (p *domainReplicationMessageProcessor) Start() {
+func (p *namespaceReplicationMessageProcessor) Start() {
 	if !atomic.CompareAndSwapInt32(&p.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
@@ -106,13 +106,13 @@ func (p *domainReplicationMessageProcessor) Start() {
 	go p.processorLoop()
 }
 
-func (p *domainReplicationMessageProcessor) processorLoop() {
+func (p *namespaceReplicationMessageProcessor) processorLoop() {
 	timer := time.NewTimer(getWaitDuration())
 
 	for {
 		select {
 		case <-timer.C:
-			p.getAndHandleDomainReplicationTasks()
+			p.getAndHandleNamespaceReplicationTasks()
 			timer.Reset(getWaitDuration())
 		case <-p.done:
 			timer.Stop()
@@ -121,11 +121,11 @@ func (p *domainReplicationMessageProcessor) processorLoop() {
 	}
 }
 
-func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks() {
+func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationTasks() {
 	// The following is a best effort to make sure only one worker is processing tasks for a
 	// particular source cluster. When the ring is under reconfiguration, it is possible that
 	// for a small period of time two or more workers think they are the owner and try to execute
-	// the processing logic. This will not result in correctness issue as domain replication task
+	// the processing logic. This will not result in correctness issue as namespace replication task
 	// processing will be protected by version check.
 	info, err := p.serviceResolver.Lookup(p.sourceCluster)
 	if err != nil {
@@ -139,11 +139,11 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 	}
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(fetchTaskRequestTimeout)
-	request := &adminservice.GetDomainReplicationMessagesRequest{
+	request := &adminservice.GetNamespaceReplicationMessagesRequest{
 		LastRetrievedMessageId: p.lastRetrievedMessageID,
 		LastProcessedMessageId: p.lastProcessedMessageID,
 	}
-	response, err := p.remotePeer.GetDomainReplicationMessages(ctx, request)
+	response, err := p.remotePeer.GetNamespaceReplicationMessages(ctx, request)
 	defer cancel()
 
 	if err != nil {
@@ -151,24 +151,24 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 		return
 	}
 
-	p.logger.Debug("Successfully fetched domain replication tasks", tag.Counter(len(response.Messages.ReplicationTasks)))
+	p.logger.Debug("Successfully fetched namespace replication tasks", tag.Counter(len(response.Messages.ReplicationTasks)))
 
 	for taskIndex := range response.Messages.ReplicationTasks {
 		task := response.Messages.ReplicationTasks[taskIndex]
 		err := backoff.Retry(func() error {
-			return p.handleDomainReplicationTask(task)
+			return p.handleNamespaceReplicationTask(task)
 		}, p.retryPolicy, isTransientRetryableError)
 
 		if err != nil {
-			p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorFailures)
-			p.logger.Error("Failed to apply domain replication tasks", tag.Error(err))
+			p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorFailures)
+			p.logger.Error("Failed to apply namespace replication tasks", tag.Error(err))
 
 			dlqErr := backoff.Retry(func() error {
-				return p.putDomainReplicationTaskToDLQ(task)
+				return p.putNamespaceReplicationTaskToDLQ(task)
 			}, p.retryPolicy, isTransientRetryableError)
 			if dlqErr != nil {
 				p.logger.Error("Failed to put replication tasks to DLQ", tag.Error(dlqErr))
-				p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorDLQFailures)
+				p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorDLQFailures)
 				return
 			}
 		}
@@ -178,34 +178,34 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 	p.lastRetrievedMessageID = response.Messages.GetLastRetrievedMessageId()
 }
 
-func (p *domainReplicationMessageProcessor) putDomainReplicationTaskToDLQ(
+func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 	task *replication.ReplicationTask,
 ) error {
 
-	domainAttribute := task.GetDomainTaskAttributes()
-	if domainAttribute == nil {
+	namespaceAttribute := task.GetNamespaceTaskAttributes()
+	if namespaceAttribute == nil {
 		return &serviceerror.Internal{
-			Message: "Domain replication task does not set domain task attribute",
+			Message: "Namespace replication task does not set namespace task attribute",
 		}
 	}
 	p.metricsClient.Scope(
-		metrics.DomainReplicationTaskScope,
-		metrics.DomainTag(domainAttribute.GetInfo().GetName()),
-	).IncCounter(metrics.DomainReplicationEnqueueDLQCount)
-	return p.domainReplicationQueue.PublishToDLQ(task)
+		metrics.NamespaceReplicationTaskScope,
+		metrics.NamespaceTag(namespaceAttribute.GetInfo().GetName()),
+	).IncCounter(metrics.NamespaceReplicationEnqueueDLQCount)
+	return p.namespaceReplicationQueue.PublishToDLQ(task)
 }
 
-func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(
+func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 	task *replication.ReplicationTask,
 ) error {
-	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
-	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
+	p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorMessages)
+	sw := p.metricsClient.StartTimer(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
-	return p.taskExecutor.Execute(task.GetDomainTaskAttributes())
+	return p.taskExecutor.Execute(task.GetNamespaceTaskAttributes())
 }
 
-func (p *domainReplicationMessageProcessor) Stop() {
+func (p *namespaceReplicationMessageProcessor) Stop() {
 	close(p.done)
 }
 

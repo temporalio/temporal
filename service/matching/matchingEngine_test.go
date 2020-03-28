@@ -64,9 +64,9 @@ import (
 type (
 	matchingEngineSuite struct {
 		suite.Suite
-		controller        *gomock.Controller
-		mockHistoryClient *historyservicemock.MockHistoryServiceClient
-		mockDomainCache   *cache.MockDomainCache
+		controller         *gomock.Controller
+		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
+		mockNamespaceCache *cache.MockNamespaceCache
 
 		matchingEngine       *matchingEngineImpl
 		taskManager          *testTaskManager
@@ -117,8 +117,8 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.taskManager = newTestTaskManager(s.logger)
-	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(cache.CreateDomainCacheEntry("domainName"), nil).AnyTimes()
+	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.CreateNamespaceCacheEntry("namespace"), nil).AnyTimes()
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
@@ -133,12 +133,12 @@ func (s *matchingEngineSuite) TearDownTest() {
 func (s *matchingEngineSuite) newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager,
 ) *matchingEngineImpl {
-	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockDomainCache)
+	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache)
 }
 
 func newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager, mockHistoryClient history.Client,
-	logger log.Logger, mockDomainCache cache.DomainCache,
+	logger log.Logger, mockNamespaceCache cache.NamespaceCache,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:     taskMgr,
@@ -148,7 +148,7 @@ func newMatchingEngine(
 		metricsClient:   metrics.NewClient(tally.NoopScope, metrics.Matching),
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		config:          config,
-		domainCache:     mockDomainCache,
+		namespaceCache:  mockNamespaceCache,
 	}
 }
 
@@ -230,7 +230,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasks() {
 }
 
 func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
 	stickyTl := "makeStickyToast"
 	stickyTlKind := enums.TaskListKindSticky
@@ -265,7 +265,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 		}).AnyTimes()
 
 	addRequest := matchingservice.AddDecisionTaskRequest{
-		DomainUUID:                    domainID.String(),
+		NamespaceUUID:                 namespaceID.String(),
 		Execution:                     execution,
 		ScheduleId:                    scheduleID,
 		TaskList:                      stickyTaskList,
@@ -276,7 +276,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 	s.NoError(err)
 
 	resp, err := s.matchingEngine.PollForDecisionTask(s.callContext, &matchingservice.PollForDecisionTaskRequest{
-		DomainUUID: domainID.String(),
+		NamespaceUUID: namespaceID.String(),
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
 			TaskList: stickyTaskList,
 			Identity: identity},
@@ -315,19 +315,19 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 		s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(10 * time.Millisecond)
 	}
 
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
 	identity := "selfDrivingToaster"
 
 	taskList := &commonproto.TaskList{Name: tl}
 	var taskListType enums.TaskListType
-	tlID := newTestTaskListID(domainID.String(), tl, taskType)
+	tlID := newTestTaskListID(namespaceID.String(), tl, taskType)
 	// const rangeID = 123
 	const pollCount = 10
 	for i := 0; i < pollCount; i++ {
 		if taskType == persistence.TaskListTypeActivity {
 			pollResp, err := s.matchingEngine.PollForActivityTask(callContext, &matchingservice.PollForActivityTaskRequest{
-				DomainUUID: domainID.String(),
+				NamespaceUUID: namespaceID.String(),
 				PollRequest: &workflowservice.PollForActivityTaskRequest{
 					TaskList: taskList,
 					Identity: identity,
@@ -339,7 +339,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 			taskListType = enums.TaskListTypeActivity
 		} else {
 			resp, err := s.matchingEngine.PollForDecisionTask(callContext, &matchingservice.PollForDecisionTaskRequest{
-				DomainUUID: domainID.String(),
+				NamespaceUUID: namespaceID.String(),
 				PollRequest: &workflowservice.PollForDecisionTaskRequest{
 					TaskList: taskList,
 					Identity: identity},
@@ -356,7 +356,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 		}
 		// check the poller information
 		descResp, err := s.matchingEngine.DescribeTaskList(s.callContext, &matchingservice.DescribeTaskListRequest{
-			DomainUUID: domainID.String(),
+			NamespaceUUID: namespaceID.String(),
 			DescRequest: &workflowservice.DescribeTaskListRequest{
 				TaskList:              taskList,
 				TaskListType:          taskListType,
@@ -387,7 +387,7 @@ func (s *matchingEngineSuite) TestAddDecisionTasksForwarded() {
 func (s *matchingEngineSuite) AddTasksTest(taskType int32, isForwarded bool) {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
 	forwardedFrom := "/__cadence_sys/makeToast/1"
 
@@ -404,8 +404,8 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int32, isForwarded bool) {
 		var err error
 		if taskType == persistence.TaskListTypeActivity {
 			addRequest := matchingservice.AddActivityTaskRequest{
-				SourceDomainUUID:              domainID.String(),
-				DomainUUID:                    domainID.String(),
+				SourceNamespaceUUID:           namespaceID.String(),
+				NamespaceUUID:                 namespaceID.String(),
 				Execution:                     execution,
 				ScheduleId:                    scheduleID,
 				TaskList:                      taskList,
@@ -417,7 +417,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int32, isForwarded bool) {
 			_, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		} else {
 			addRequest := matchingservice.AddDecisionTaskRequest{
-				DomainUUID:                    domainID.String(),
+				NamespaceUUID:                 namespaceID.String(),
 				Execution:                     execution,
 				ScheduleId:                    scheduleID,
 				TaskList:                      taskList,
@@ -439,16 +439,16 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int32, isForwarded bool) {
 
 	switch isForwarded {
 	case false:
-		s.EqualValues(taskCount, s.taskManager.getTaskCount(newTestTaskListID(domainID.String(), tl, taskType)))
+		s.EqualValues(taskCount, s.taskManager.getTaskCount(newTestTaskListID(namespaceID.String(), tl, taskType)))
 	case true:
-		s.EqualValues(0, s.taskManager.getTaskCount(newTestTaskListID(domainID.String(), tl, taskType)))
+		s.EqualValues(0, s.taskManager.getTaskCount(newTestTaskListID(namespaceID.String(), tl, taskType)))
 	}
 }
 
 func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
 
 	taskList := &commonproto.TaskList{Name: tl}
@@ -457,14 +457,14 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	workflowID := "workflow1"
 	execution := &commonproto.WorkflowExecution{RunId: runID.String(), WorkflowId: workflowID}
 
-	tlID := newTestTaskListID(domainID.String(), tl, persistence.TaskListTypeActivity)
+	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
 	tlKind := enums.TaskListKindNormal
 	tlm, err := s.matchingEngine.getTaskListManager(tlID, tlKind)
 	s.Nil(err)
 
 	addRequest := matchingservice.AddActivityTaskRequest{
-		SourceDomainUUID:              domainID.String(),
-		DomainUUID:                    domainID.String(),
+		SourceNamespaceUUID:           namespaceID.String(),
+		NamespaceUUID:                 namespaceID.String(),
 		Execution:                     execution,
 		TaskList:                      taskList,
 		ScheduleToStartTimeoutSeconds: 1,
@@ -499,9 +499,9 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	// TODO: Understand why publish is low when rangeSize is 3
 	const rangeSize = 30
 
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
-	tlID := newTestTaskListID(domainID.String(), tl, persistence.TaskListTypeActivity)
+	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -510,8 +510,8 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	for i := int64(0); i < taskCount; i++ {
 		scheduleID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceDomainUUID:              domainID.String(),
-			DomainUUID:                    domainID.String(),
+			SourceNamespaceUUID:           namespaceID.String(),
+			NamespaceUUID:                 namespaceID.String(),
 			Execution:                     workflowExecution,
 			ScheduleId:                    scheduleID,
 			TaskList:                      taskList,
@@ -555,7 +555,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		scheduleID := i * 3
 
 		result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
-			DomainUUID: domainID.String(),
+			NamespaceUUID: namespaceID.String(),
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
 				TaskList: taskList,
 				Identity: identity},
@@ -577,7 +577,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.Equal(int32(50), result.StartToCloseTimeoutSeconds)
 		s.Equal(int32(10), result.HeartbeatTimeoutSeconds)
 		taskToken := &token.Task{
-			DomainId:     domainID,
+			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
 			ScheduleId:   scheduleID,
@@ -611,9 +611,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	// TODO: Understand why publish is low when rangeSize is 3
 	const rangeSize = 30
 
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
-	tlID := newTestTaskListID(domainID.String(), tl, persistence.TaskListTypeActivity)
+	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
 	tlKind := enums.TaskListKindNormal
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	// So we can get snapshots
@@ -663,7 +663,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	pollFunc := func(maxDispatch float64) (*matchingservice.PollForActivityTaskResponse, error) {
 		return s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
-			DomainUUID: domainID.String(),
+			NamespaceUUID: namespaceID.String(),
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
 				TaskList:         taskList,
 				Identity:         identity,
@@ -690,8 +690,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		time.Sleep(20 * time.Millisecond) // Necessary for sync match to happen
 
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceDomainUUID:              domainID.String(),
-			DomainUUID:                    domainID.String(),
+			SourceNamespaceUUID:           namespaceID.String(),
+			NamespaceUUID:                 namespaceID.String(),
 			Execution:                     workflowExecution,
 			ScheduleId:                    scheduleID,
 			TaskList:                      taskList,
@@ -726,7 +726,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
 		taskToken := &token.Task{
-			DomainId:     domainID,
+			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
 			ScheduleId:   scheduleID,
@@ -741,7 +741,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	}
 
 	time.Sleep(20 * time.Millisecond) // So any buffer tasks from 0 rps get picked up
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+domain=domainName,operation=TaskListMgr"]
+	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace=namespace,operation=TaskListMgr"]
 	s.Equal(1, int(syncCtr.Value()))                         // Check times zero rps is set = throttle counter
 	s.EqualValues(1, s.taskManager.getCreateTaskCount(tlID)) // Check times zero rps is set = Tasks stored in persistence
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -755,7 +755,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	// check the poller information
 	tlType := enums.TaskListTypeActivity
 	descResp, err := s.matchingEngine.DescribeTaskList(s.callContext, &matchingservice.DescribeTaskListRequest{
-		DomainUUID: domainID.String(),
+		NamespaceUUID: namespaceID.String(),
 		DescRequest: &workflowservice.DescribeTaskListRequest{
 			TaskList:              taskList,
 			TaskListType:          tlType,
@@ -811,9 +811,9 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	const initialRangeID = 0
 	const rangeSize = 3
 	var scheduleID int64 = 123
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
-	tlID := newTestTaskListID(domainID.String(), tl, persistence.TaskListTypeActivity)
+	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
 	tlKind := enums.TaskListKindNormal
 	dispatchTTL := time.Nanosecond
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
@@ -837,8 +837,8 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			defer wg.Done()
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddActivityTaskRequest{
-					SourceDomainUUID:              domainID.String(),
-					DomainUUID:                    domainID.String(),
+					SourceNamespaceUUID:           namespaceID.String(),
+					NamespaceUUID:                 namespaceID.String(),
 					Execution:                     workflowExecution,
 					ScheduleId:                    scheduleID,
 					TaskList:                      taskList,
@@ -890,7 +890,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			for i := int64(0); i < taskCount; {
 				maxDispatch := dispatchLimitFn(wNum, i)
 				result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
-					DomainUUID: domainID.String(),
+					NamespaceUUID: namespaceID.String(),
 					PollRequest: &workflowservice.PollForActivityTaskRequest{
 						TaskList:         taskList,
 						Identity:         identity,
@@ -909,7 +909,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				s.EqualValues(activityHeader, result.Header)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &token.Task{
-					DomainId:     domainID,
+					NamespaceId:  namespaceID,
 					WorkflowId:   workflowID,
 					RunId:        runID,
 					ScheduleId:   scheduleID,
@@ -938,8 +938,8 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+domain=domainName,operation=TaskListMgr"]
-	bufCtr := scope.Snapshot().Counters()["test.buffer_throttle_count+domain=domainName,operation=TaskListMgr"]
+	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace=namespace,operation=TaskListMgr"]
+	bufCtr := scope.Snapshot().Counters()["test.buffer_throttle_count+namespace=namespace,operation=TaskListMgr"]
 	total := int64(0)
 	if syncCtr != nil {
 		total += syncCtr.Value()
@@ -962,9 +962,9 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	var scheduleID int64 = 123
 	var startedEventID int64 = 1412
 
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
-	tlID := newTestTaskListID(domainID.String(), tl, persistence.TaskListTypeDecision)
+	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeDecision)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -977,7 +977,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 		go func() {
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddDecisionTaskRequest{
-					DomainUUID:                    domainID.String(),
+					NamespaceUUID:                 namespaceID.String(),
 					Execution:                     workflowExecution,
 					ScheduleId:                    scheduleID,
 					TaskList:                      taskList,
@@ -1012,7 +1012,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 		go func() {
 			for i := int64(0); i < taskCount; {
 				result, err := s.matchingEngine.PollForDecisionTask(s.callContext, &matchingservice.PollForDecisionTaskRequest{
-					DomainUUID: domainID.String(),
+					NamespaceUUID: namespaceID.String(),
 					PollRequest: &workflowservice.PollForDecisionTaskRequest{
 						TaskList: taskList,
 						Identity: identity},
@@ -1030,10 +1030,10 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &token.Task{
-					DomainId:   domainID,
-					WorkflowId: workflowID,
-					RunId:      runID,
-					ScheduleId: scheduleID,
+					NamespaceId: namespaceID,
+					WorkflowId:  workflowID,
+					RunId:       runID,
+					ScheduleId:  scheduleID,
 				}
 				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
@@ -1063,7 +1063,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 
 func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	identity := "nobody"
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
 
 	taskList := &commonproto.TaskList{Name: tl}
@@ -1072,7 +1072,7 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	cancel()
 	_, err := s.matchingEngine.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
-		DomainUUID: domainID.String(),
+		NamespaceUUID: namespaceID.String(),
 		PollRequest: &workflowservice.PollForActivityTaskRequest{
 			TaskList: taskList,
 			Identity: identity},
@@ -1084,7 +1084,7 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	resp, err := s.matchingEngine.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
-		DomainUUID: domainID.String(),
+		NamespaceUUID: namespaceID.String(),
 		PollRequest: &workflowservice.PollForActivityTaskRequest{
 			TaskList: taskList,
 			Identity: identity},
@@ -1105,9 +1105,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	const rangeSize = 10
 	var scheduleID int64 = 123
 
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
-	tlID := newTestTaskListID(domainID.String(), tl, persistence.TaskListTypeActivity)
+	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -1127,8 +1127,8 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddActivityTaskRequest{
-					SourceDomainUUID:              domainID.String(),
-					DomainUUID:                    domainID.String(),
+					SourceNamespaceUUID:           namespaceID.String(),
+					NamespaceUUID:                 namespaceID.String(),
 					Execution:                     workflowExecution,
 					ScheduleId:                    scheduleID,
 					TaskList:                      taskList,
@@ -1187,7 +1187,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
 				result, err := engine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
-					DomainUUID: domainID.String(),
+					NamespaceUUID: namespaceID.String(),
 					PollRequest: &workflowservice.PollForActivityTaskRequest{
 						TaskList: taskList,
 						Identity: identity},
@@ -1205,7 +1205,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &token.Task{
-					DomainId:     domainID,
+					NamespaceId:  namespaceID,
 					WorkflowId:   workflowID,
 					RunId:        runID,
 					ScheduleId:   scheduleID,
@@ -1254,9 +1254,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	const rangeSize = 10
 	var scheduleID int64 = 123
 
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
-	tlID := newTestTaskListID(domainID.String(), tl, persistence.TaskListTypeDecision)
+	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeDecision)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -1276,7 +1276,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddDecisionTaskRequest{
-					DomainUUID:                    domainID.String(),
+					NamespaceUUID:                 namespaceID.String(),
 					Execution:                     workflowExecution,
 					ScheduleId:                    scheduleID,
 					TaskList:                      taskList,
@@ -1324,7 +1324,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
 				result, err := engine.PollForDecisionTask(s.callContext, &matchingservice.PollForDecisionTaskRequest{
-					DomainUUID: domainID.String(),
+					NamespaceUUID: namespaceID.String(),
 					PollRequest: &workflowservice.PollForDecisionTaskRequest{
 						TaskList: taskList,
 						Identity: identity},
@@ -1342,10 +1342,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &token.Task{
-					DomainId:   domainID,
-					WorkflowId: workflowID,
-					RunId:      runID,
-					ScheduleId: scheduleID,
+					NamespaceId: namespaceID,
+					WorkflowId:  workflowID,
+					RunId:       runID,
+					ScheduleId:  scheduleID,
 				}
 				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
@@ -1383,17 +1383,17 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	workflowID := "workflow1"
 	workflowExecution := &commonproto.WorkflowExecution{RunId: runID.String(), WorkflowId: workflowID}
 
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
-	tlID := newTestTaskListID(domainID.String(), tl, persistence.TaskListTypeActivity)
+	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
 	tlKind := enums.TaskListKindNormal
 
 	taskList := &commonproto.TaskList{Name: tl}
 
 	scheduleID := int64(0)
 	addRequest := matchingservice.AddActivityTaskRequest{
-		SourceDomainUUID:              domainID.String(),
-		DomainUUID:                    domainID.String(),
+		SourceNamespaceUUID:           namespaceID.String(),
+		NamespaceUUID:                 namespaceID.String(),
 		Execution:                     workflowExecution,
 		ScheduleId:                    scheduleID,
 		TaskList:                      taskList,
@@ -1426,9 +1426,9 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	workflowID := "workflow1"
 	workflowExecution := &commonproto.WorkflowExecution{RunId: runID.String(), WorkflowId: workflowID}
 
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
-	tlID := newTestTaskListID(domainID.String(), tl, persistence.TaskListTypeActivity)
+	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
 
 	taskList := &commonproto.TaskList{Name: tl}
 
@@ -1440,8 +1440,8 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	for i := int64(0); i < taskCount; i++ {
 		scheduleID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceDomainUUID:              domainID.String(),
-			DomainUUID:                    domainID.String(),
+			SourceNamespaceUUID:           namespaceID.String(),
+			NamespaceUUID:                 namespaceID.String(),
 			Execution:                     workflowExecution,
 			ScheduleId:                    scheduleID,
 			TaskList:                      taskList,
@@ -1496,7 +1496,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	for i := int64(0); i < rangeSize; i++ {
 		identity := "nobody"
 		result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
-			DomainUUID: domainID.String(),
+			NamespaceUUID: namespaceID.String(),
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
 				TaskList: taskList,
 				Identity: identity},
@@ -1519,9 +1519,9 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 }
 
 func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch_ReadBatchDone() {
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
-	tlID := newTestTaskListID(domainID.String(), tl, persistence.TaskListTypeActivity)
+	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
 	tlNormal := enums.TaskListKindNormal
 
 	const rangeSize = 10
@@ -1555,9 +1555,9 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	workflowID := uuid.New()
 	workflowExecution := &commonproto.WorkflowExecution{RunId: runID.String(), WorkflowId: workflowID}
 
-	domainID := primitives.UUID(uuid.NewRandom())
+	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "task-expiry-completion-tl0"
-	tlID := newTestTaskListID(domainID.String(), tl, persistence.TaskListTypeActivity)
+	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
 
 	taskList := &commonproto.TaskList{Name: tl}
 
@@ -1581,8 +1581,8 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		for i := int64(0); i < taskCount; i++ {
 			scheduleID := i * 3
 			addRequest := matchingservice.AddActivityTaskRequest{
-				SourceDomainUUID:              domainID.String(),
-				DomainUUID:                    domainID.String(),
+				SourceNamespaceUUID:           namespaceID.String(),
+				NamespaceUUID:                 namespaceID.String(),
 				Execution:                     workflowExecution,
 				ScheduleId:                    scheduleID,
 				TaskList:                      taskList,
@@ -1610,8 +1610,8 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		s.setupRecordActivityTaskStartedMock(tl)
 
 		pollReq := &matchingservice.PollForActivityTaskRequest{
-			DomainUUID:  domainID.String(),
-			PollRequest: &workflowservice.PollForActivityTaskRequest{TaskList: taskList, Identity: "test"},
+			NamespaceUUID: namespaceID.String(),
+			PollRequest:   &workflowservice.PollForActivityTaskRequest{TaskList: taskList, Identity: "test"},
 		}
 
 		remaining := taskCount
@@ -1753,8 +1753,8 @@ func newTestTaskListManager() *testTaskListManager {
 	return &testTaskListManager{tasks: treemap.NewWith(Int64Comparator)}
 }
 
-func newTestTaskListID(domainID string, name string, taskType int32) *taskListID {
-	result, err := newTaskListID(domainID, name, taskType)
+func newTestTaskListID(namespaceID string, name string, taskType int32) *taskListID {
+	result, err := newTaskListID(namespaceID, name, taskType)
 	if err != nil {
 		panic(fmt.Sprintf("newTaskListID failed with error %v", err))
 	}
@@ -1763,7 +1763,7 @@ func newTestTaskListID(domainID string, name string, taskType int32) *taskListID
 
 // LeaseTaskList provides a mock function with given fields: request
 func (m *testTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest) (*persistence.LeaseTaskListResponse, error) {
-	tlm := m.getTaskListManager(newTestTaskListID(request.DomainID.String(), request.TaskList, request.TaskType))
+	tlm := m.getTaskListManager(newTestTaskListID(request.NamespaceID.String(), request.TaskList, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
 	tlm.rangeID++
@@ -1772,11 +1772,11 @@ func (m *testTaskManager) LeaseTaskList(request *persistence.LeaseTaskListReques
 	return &persistence.LeaseTaskListResponse{
 		TaskListInfo: &persistence.PersistedTaskListInfo{
 			Data: &persistenceblobs.TaskListInfo{
-				AckLevel: tlm.ackLevel,
-				DomainID: request.DomainID,
-				Name:     request.TaskList,
-				TaskType: request.TaskType,
-				Kind:     request.TaskListKind,
+				AckLevel:    tlm.ackLevel,
+				NamespaceID: request.NamespaceID,
+				Name:        request.TaskList,
+				TaskType:    request.TaskType,
+				Kind:        request.TaskListKind,
 			},
 			RangeID: tlm.rangeID,
 		},
@@ -1788,7 +1788,7 @@ func (m *testTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequ
 	m.logger.Debug("UpdateTaskList", tag.TaskListInfo(request.TaskListInfo), tag.AckLevel(request.TaskListInfo.AckLevel))
 
 	tli := request.TaskListInfo
-	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(tli.DomainID), tli.Name, tli.TaskType))
+	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(tli.NamespaceID), tli.Name, tli.TaskType))
 
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -1809,7 +1809,7 @@ func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest)
 	}
 
 	tli := request.TaskList
-	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(tli.DomainID), tli.Name, tli.TaskType))
+	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(tli.NamespaceID), tli.Name, tli.TaskType))
 
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -1819,7 +1819,7 @@ func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest)
 }
 
 func (m *testTaskManager) CompleteTasksLessThan(request *persistence.CompleteTasksLessThanRequest) (int, error) {
-	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(request.DomainID), request.TaskListName, request.TaskType))
+	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(request.NamespaceID), request.TaskListName, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
 	keys := tlm.tasks.Keys()
@@ -1840,19 +1840,19 @@ func (m *testTaskManager) ListTaskList(
 func (m *testTaskManager) DeleteTaskList(request *persistence.DeleteTaskListRequest) error {
 	m.Lock()
 	defer m.Unlock()
-	key := newTestTaskListID(request.TaskList.DomainID.String(), request.TaskList.Name, request.TaskList.TaskType)
+	key := newTestTaskListID(request.TaskList.NamespaceID.String(), request.TaskList.Name, request.TaskList.TaskType)
 	delete(m.taskLists, *key)
 	return nil
 }
 
 // CreateTask provides a mock function with given fields: request
 func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
-	domainID := request.TaskListInfo.Data.DomainID
+	namespaceID := request.TaskListInfo.Data.NamespaceID
 	taskList := request.TaskListInfo.Data.Name
 	taskType := request.TaskListInfo.Data.TaskType
 	rangeID := request.TaskListInfo.RangeID
 
-	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(domainID), taskList, taskType))
+	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(namespaceID), taskList, taskType))
 	tlm.Lock()
 	defer tlm.Unlock()
 
@@ -1898,7 +1898,7 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 		m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.ReadLevel))
 	}
 
-	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(request.DomainID), request.TaskList, request.TaskType))
+	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(request.NamespaceID), request.TaskList, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
 	var tasks []*persistenceblobs.AllocatedTaskInfo

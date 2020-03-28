@@ -72,13 +72,13 @@ func (r *canaryRunner) Run() error {
 	}
 
 	var wg sync.WaitGroup
-	for _, d := range r.config.Domains {
+	for _, d := range r.config.Namespaces {
 		canary, err := newCanary(d, r.RuntimeContext)
 		if err != nil {
 			return err
 		}
 
-		r.logger.Info("starting canary", zap.String("domain", d))
+		r.logger.Info("starting canary", zap.String("namespace", d))
 		r.execute(canary, &wg)
 	}
 	wg.Wait()

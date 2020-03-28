@@ -6,8 +6,8 @@ DB="${DB:-cassandra}"
 ENABLE_ES="${ENABLE_ES:-false}"
 ES_PORT="${ES_PORT:-9200}"
 RF=${RF:-1}
-DEFAULT_DOMAIN_NAME="${DEFAULT_DOMAIN_NAME:-default}"
-DEFAULT_DOMAIN_RETENTION=${DEFAULT_DOMAIN_RETENTION:-1}
+DEFAULT_NAMESPACE="${DEFAULT_NAMESPACE:-default}"
+DEFAULT_NAMESPACE_RETENTION=${DEFAULT_NAMESPACE_RETENTION:-1}
 
 # tctl env
 export TEMPORAL_CLI_ADDRESS="${BIND_ON_IP}:7233"
@@ -139,16 +139,16 @@ wait_for_db() {
     fi
 }
 
-register_default_domain() {
+register_default_namespace() {
     echo "Temporal CLI Address: $TEMPORAL_CLI_ADDRESS"
     sleep 5
-    echo "Registering default domain: $DEFAULT_DOMAIN_NAME"
-    until tctl --do $DEFAULT_DOMAIN_NAME domain describe < /dev/null; do
-        echo "Default domain $DEFAULT_DOMAIN_NAME not found.  Creating..."
+    echo "Registering default namespace: $DEFAULT_NAMESPACE"
+    until tctl --do $DEFAULT_NAMESPACE namespace describe < /dev/null; do
+        echo "Default namespace $DEFAULT_NAMESPACE not found.  Creating..."
         sleep 1
-        tctl --do $DEFAULT_DOMAIN_NAME domain register --rd $DEFAULT_DOMAIN_RETENTION --desc "Default domain for Temporal Server"
+        tctl --do $DEFAULT_NAMESPACE namespace register --rd $DEFAULT_NAMESPACE_RETENTION --desc "Default namespace for Temporal Server"
     done
-    echo "Default domain registration complete."
+    echo "Default namespace registration complete."
 }
 
 wait_for_db
@@ -156,8 +156,8 @@ if [ "$SKIP_SCHEMA_SETUP" != true ]; then
     setup_schema
 fi
 
-if [ "$SKIP_DEFAULT_DOMAIN_CREATION" != true ]; then
-    register_default_domain &
+if [ "$SKIP_DEFAULT_NAMESPACE_CREATION" != true ]; then
+    register_default_namespace &
 fi
 
 bash /start-temporal.sh

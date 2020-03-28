@@ -60,7 +60,7 @@ type (
 	}
 
 	queryVisibilityRequest struct {
-		domainID      string
+		namespaceID   string
 		pageSize      int
 		nextPageToken []byte
 		parsedQuery   *parsedQuery
@@ -87,7 +87,7 @@ func NewVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, con
 // Please make sure your implementation is lossless. If any in-memory batching mechanism is used, then those batched records will be lost during server restarts.
 // This method will be invoked when workflow closes. Note that because of conflict resolution, it is possible for a workflow to through the closing process multiple times, which means that this method can be invoked more than once after a workflow closes.
 func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverproto.ArchiveVisibilityRequest, opts ...archiver.ArchiveOption) (err error) {
-	scope := v.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.DomainTag(request.DomainName))
+	scope := v.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
@@ -128,13 +128,13 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
-	filename := constructVisibilityFilename(request.DomainID, request.WorkflowTypeName, request.WorkflowID, request.RunID, indexKeyCloseTimeout, request.CloseTimestamp)
+	filename := constructVisibilityFilename(request.NamespaceID, request.WorkflowTypeName, request.WorkflowID, request.RunID, indexKeyCloseTimeout, request.CloseTimestamp)
 	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetriable
 	}
 
-	filename = constructVisibilityFilename(request.DomainID, request.WorkflowTypeName, request.WorkflowID, request.RunID, indexKeyStartTimeout, request.StartTimestamp)
+	filename = constructVisibilityFilename(request.NamespaceID, request.WorkflowTypeName, request.WorkflowID, request.RunID, indexKeyStartTimeout, request.StartTimestamp)
 	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetriable
@@ -168,7 +168,7 @@ func (v *visibilityArchiver) Query(ctx context.Context, URI archiver.URI, reques
 	}
 
 	return v.query(ctx, URI, &queryVisibilityRequest{
-		domainID:      request.DomainID,
+		namespaceID:   request.NamespaceID,
 		pageSize:      request.PageSize,
 		nextPageToken: request.NextPageToken,
 		parsedQuery:   parsedQuery,
@@ -185,12 +185,12 @@ func (v *visibilityArchiver) query(ctx context.Context, URI archiver.URI, reques
 		}
 	}
 
-	var prefix = constructVisibilityFilenamePrefix(request.domainID, indexKeyCloseTimeout)
+	var prefix = constructVisibilityFilenamePrefix(request.namespaceID, indexKeyCloseTimeout)
 	if request.parsedQuery.closeTime != 0 {
-		prefix = constructTimeBasedSearchKey(request.domainID, indexKeyCloseTimeout, request.parsedQuery.closeTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(request.namespaceID, indexKeyCloseTimeout, request.parsedQuery.closeTime, *request.parsedQuery.searchPrecision)
 	}
 	if request.parsedQuery.startTime != 0 {
-		prefix = constructTimeBasedSearchKey(request.domainID, indexKeyStartTimeout, request.parsedQuery.startTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(request.namespaceID, indexKeyStartTimeout, request.parsedQuery.startTime, *request.parsedQuery.searchPrecision)
 	}
 
 	filters := make([]connector.Precondition, 0)
@@ -213,7 +213,7 @@ func (v *visibilityArchiver) query(ctx context.Context, URI archiver.URI, reques
 
 	response := &archiver.QueryVisibilityResponse{}
 	for _, file := range filenames {
-		encodedRecord, err := v.gcloudStorage.Get(ctx, URI, fmt.Sprintf("%s/%s", request.domainID, filepath.Base(file)))
+		encodedRecord, err := v.gcloudStorage.Get(ctx, URI, fmt.Sprintf("%s/%s", request.namespaceID, filepath.Base(file)))
 		if err != nil {
 			return nil, &serviceerror.InvalidArgument{Message: err.Error()}
 		}
