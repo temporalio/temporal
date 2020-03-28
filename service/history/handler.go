@@ -518,7 +518,7 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 
 	if failedRequest != nil && failedRequest.GetCause() == enums.DecisionTaskFailedCauseUnhandledDecision {
 		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunIDBytes(token.GetRunId()))
-		namespace, err := h.GetNamespaceCache().GetNamespace(primitives.UUIDString(token.GetNamespaceId()))
+		namespace, err := h.GetNamespaceCache().GetNamespaceName(primitives.UUIDString(token.GetNamespaceId()))
 		var namespaceTag metrics.Tag
 
 		if err == nil {

@@ -30,8 +30,8 @@ import "common/history.proto";
 
 
 message HistoryBlobHeader {
-    string DomainName = 1;
-    string DomainID = 2;
+    string Namespace = 1;
+    string NamespaceID = 2;
     string WorkflowID = 3;
     string RunID = 4;
     bool IsLast = 5;
@@ -50,8 +50,8 @@ message HistoryBlob  {
 
 // ArchiveVisibilityRequest is request to Archive single workflow visibility record
 message ArchiveVisibilityRequest {
-    string DomainID = 1;
-    string DomainName = 2;
+    string NamespaceID = 1;
+    string Namespace = 2;
     string WorkflowID = 3;
     string RunID = 4;
     string WorkflowTypeName = 5;

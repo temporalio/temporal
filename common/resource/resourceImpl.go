@@ -230,7 +230,7 @@ func New(
 		common.IsWhitelistServiceTransientError,
 	)
 
-	matchingRawClient, err := clientBean.GetMatchingClient(namespaceCache.GetNamespace)
+	matchingRawClient, err := clientBean.GetMatchingClient(namespaceCache.GetNamespaceName)
 	if err != nil {
 		return nil, err
 	}

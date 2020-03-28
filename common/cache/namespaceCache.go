@@ -91,7 +91,7 @@ type (
 		GetNamespace(name string) (*NamespaceCacheEntry, error)
 		GetNamespaceByID(id string) (*NamespaceCacheEntry, error)
 		GetNamespaceID(name string) (string, error)
-		GetNamespace(id string) (string, error)
+		GetNamespaceName(id string) (string, error)
 		GetAllNamespace() map[string]*NamespaceCacheEntry
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
 	}
@@ -370,8 +370,8 @@ func (c *namespaceCache) GetNamespaceID(
 	return entry.info.ID, nil
 }
 
-// GetNamespace returns namespace name given the namespace id
-func (c *namespaceCache) GetNamespace(
+// GetNamespaceName returns namespace name given the namespace id
+func (c *namespaceCache) GetNamespaceName(
 	id string,
 ) (string, error) {
 

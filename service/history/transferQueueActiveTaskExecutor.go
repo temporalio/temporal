@@ -292,13 +292,8 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if replyToParentWorkflow {
 		ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 		defer cancel()
-<<<<<<< Updated upstream
-		_, err = t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
-			DomainUUID: parentDomainID,
-=======
 		_, err = t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
 			NamespaceUUID: parentNamespaceID,
->>>>>>> Stashed changes
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: parentWorkflowID,
 				RunId:      parentRunID,
@@ -506,13 +501,8 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	// remove signalRequestedID from target commonproto, after Signal detail is removed from source commonproto
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
-<<<<<<< Updated upstream
-	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
-		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
-=======
 	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
 		NamespaceUUID: primitives.UUID(task.TargetNamespaceID).String(),
->>>>>>> Stashed changes
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: task.TargetWorkflowID,
 			RunId:      primitives.UUID(task.TargetRunID).String(),
@@ -903,13 +893,8 @@ func (t *transferQueueActiveTaskExecutor) createFirstDecisionTask(
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
-<<<<<<< Updated upstream
-	_, err := t.historyClient.ScheduleDecisionTask(ctx, &historyservice.ScheduleDecisionTaskRequest{
-		DomainUUID:        domainID,
-=======
 	_, err := t.historyClient.ScheduleDecisionTask(ctx, &historyservice.ScheduleDecisionTaskRequest{
 		NamespaceUUID:     namespaceID,
->>>>>>> Stashed changes
 		WorkflowExecution: execution,
 		IsFirstDecision:   true,
 	})
@@ -1113,13 +1098,8 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 	requestCancelInfo *persistenceblobs.RequestCancelInfo,
 ) error {
 
-<<<<<<< Updated upstream
-	request := &historyservice.RequestCancelWorkflowExecutionRequest{
-		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
-=======
 	request := &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceUUID: primitives.UUID(task.TargetNamespaceID).String(),
->>>>>>> Stashed changes
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			Namespace: targetNamespace,
 			WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1162,13 +1142,8 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 	signalInfo *persistenceblobs.SignalInfo,
 ) error {
 
-<<<<<<< Updated upstream
-	request := &historyservice.SignalWorkflowExecutionRequest{
-		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
-=======
 	request := &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceUUID: primitives.UUID(task.TargetNamespaceID).String(),
->>>>>>> Stashed changes
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: targetNamespace,
 			WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1208,13 +1183,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 ) (string, error) {
 
 	now := t.shard.GetTimeSource().Now()
-<<<<<<< Updated upstream
-	request := &historyservice.StartWorkflowExecutionRequest{
-		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
-=======
 	request := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceUUID: primitives.UUID(task.TargetNamespaceID).String(),
->>>>>>> Stashed changes
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           targetNamespace,
 			WorkflowId:                          attributes.WorkflowId,
@@ -1432,13 +1402,8 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return nil
 
 	case enums.ParentClosePolicyTerminate:
-<<<<<<< Updated upstream
-		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
-			DomainUUID: domainID,
-=======
 		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 			NamespaceUUID: namespaceID,
->>>>>>> Stashed changes
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: namespace,
 				WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1452,13 +1417,8 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	case enums.ParentClosePolicyRequestCancel:
-<<<<<<< Updated upstream
-		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
-			DomainUUID: domainID,
-=======
 		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 			NamespaceUUID: namespaceID,
->>>>>>> Stashed changes
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				Namespace: namespace,
 				WorkflowExecution: &commonproto.WorkflowExecution{

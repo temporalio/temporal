@@ -28,7 +28,7 @@ import "common/common.proto";
 import "common/history.proto";
 import "common/decision.proto";
 import "common/workflow_execution.proto";
-import "common/domain.proto";
+import "common/namespace.proto";
 import "replication/replication.proto";
 
 // TODO: remove these dependencies
@@ -36,7 +36,7 @@ import "workflowservice/request_response.proto";
 import "adminservice/request_response.proto";
 
 message StartWorkflowExecutionRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.StartWorkflowExecutionRequest startRequest = 2;
     common.ParentExecutionInfo parentExecutionInfo = 3;
     int32 attempt = 4;
@@ -53,7 +53,7 @@ message StartWorkflowExecutionResponse {
 }
 
 message GetMutableStateRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution execution = 2;
     int64 expectedNextEventId = 3;
     bytes currentBranchToken = 4;
@@ -86,7 +86,7 @@ message GetMutableStateResponse {
 }
 
 message PollMutableStateRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution execution = 2;
     int64 expectedNextEventId = 3;
     bytes currentBranchToken = 4;
@@ -115,7 +115,7 @@ message PollMutableStateResponse {
 }
 
 message ResetStickyTaskListRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution execution = 2;
 }
 
@@ -123,7 +123,7 @@ message ResetStickyTaskListResponse {
 }
 
 message RecordDecisionTaskStartedRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution workflowExecution = 2;
     int64 scheduleId = 3;
     int64 taskId = 4;
@@ -150,7 +150,7 @@ message RecordDecisionTaskStartedResponse {
 }
 
 message RecordActivityTaskStartedRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution workflowExecution = 2;
     int64 scheduleId = 3;
     int64 taskId = 4;
@@ -166,11 +166,11 @@ message RecordActivityTaskStartedResponse {
     int64 scheduledTimestampOfThisAttempt = 4;
     bytes heartbeatDetails = 5;
     common.WorkflowType workflowType = 6;
-    string workflowDomain = 7;
+    string workflowNamespace = 7;
 }
 
 message RespondDecisionTaskCompletedRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.RespondDecisionTaskCompletedRequest completeRequest = 2;
 }
 
@@ -179,7 +179,7 @@ message RespondDecisionTaskCompletedResponse {
 }
 
 message RespondDecisionTaskFailedRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.RespondDecisionTaskFailedRequest failedRequest = 2;
 }
 
@@ -187,7 +187,7 @@ message RespondDecisionTaskFailedResponse {
 }
 
 message RecordActivityTaskHeartbeatRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.RecordActivityTaskHeartbeatRequest heartbeatRequest = 2;
 }
 
@@ -196,7 +196,7 @@ message RecordActivityTaskHeartbeatResponse {
 }
 
 message RespondActivityTaskCompletedRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.RespondActivityTaskCompletedRequest completeRequest = 2;
 }
 
@@ -204,7 +204,7 @@ message RespondActivityTaskCompletedResponse {
 }
 
 message RespondActivityTaskFailedRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.RespondActivityTaskFailedRequest failedRequest = 2;
 }
 
@@ -212,7 +212,7 @@ message RespondActivityTaskFailedResponse {
 }
 
 message RespondActivityTaskCanceledRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.RespondActivityTaskCanceledRequest cancelRequest = 2;
 }
 
@@ -220,7 +220,7 @@ message RespondActivityTaskCanceledResponse {
 }
 
 message SignalWorkflowExecutionRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.SignalWorkflowExecutionRequest signalRequest = 2;
     common.WorkflowExecution externalWorkflowExecution = 3;
     bool childWorkflowOnly = 4;
@@ -230,7 +230,7 @@ message SignalWorkflowExecutionResponse {
 }
 
 message SignalWithStartWorkflowExecutionRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.SignalWithStartWorkflowExecutionRequest signalWithStartRequest = 2;
 }
 
@@ -239,7 +239,7 @@ message SignalWithStartWorkflowExecutionResponse {
 }
 
 message RemoveSignalMutableStateRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution workflowExecution = 2;
     string requestId = 3;
 }
@@ -248,7 +248,7 @@ message RemoveSignalMutableStateResponse {
 }
 
 message TerminateWorkflowExecutionRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.TerminateWorkflowExecutionRequest terminateRequest = 2;
 }
 
@@ -256,7 +256,7 @@ message TerminateWorkflowExecutionResponse {
 }
 
 message ResetWorkflowExecutionRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.ResetWorkflowExecutionRequest resetRequest = 2;
 }
 
@@ -265,7 +265,7 @@ message ResetWorkflowExecutionResponse {
 }
 
 message RequestCancelWorkflowExecutionRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.RequestCancelWorkflowExecutionRequest cancelRequest = 2;
     int64 externalInitiatedEventId = 3;
     common.WorkflowExecution externalWorkflowExecution = 4;
@@ -276,7 +276,7 @@ message RequestCancelWorkflowExecutionResponse {
 }
 
 message ScheduleDecisionTaskRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution workflowExecution = 2;
     bool isFirstDecision = 3;
 }
@@ -292,7 +292,7 @@ message ScheduleDecisionTaskResponse {
 * child creates multiple runs through ContinueAsNew before finally completing.
 **/
 message RecordChildExecutionCompletedRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution workflowExecution = 2;
     int64 initiatedId = 3;
     common.WorkflowExecution completedExecution = 4;
@@ -303,7 +303,7 @@ message RecordChildExecutionCompletedResponse {
 }
 
 message DescribeWorkflowExecutionRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.DescribeWorkflowExecutionRequest request = 2;
 }
 
@@ -316,7 +316,7 @@ message DescribeWorkflowExecutionResponse {
 
 message ReplicateEventsRequest {
     string sourceCluster = 1;
-    string domainUUID = 2;
+    string namespaceUUID = 2;
     common.WorkflowExecution workflowExecution = 3;
     int64 firstEventId = 4;
     int64 nextEventId = 5;
@@ -336,7 +336,7 @@ message ReplicateEventsResponse {
 }
 
 message ReplicateRawEventsRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution workflowExecution = 2;
     map<string, replication.ReplicationInfo> replicationInfo = 3;
     common.DataBlob history = 4;
@@ -349,7 +349,7 @@ message ReplicateRawEventsResponse {
 }
 
 message ReplicateEventsV2Request {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution workflowExecution = 2;
     repeated common.VersionHistoryItem versionHistoryItems = 3;
     common.DataBlob events = 4;
@@ -370,7 +370,7 @@ message SyncShardStatusResponse {
 }
 
 message SyncActivityRequest {
-    string domainId = 1;
+    string namespaceId = 1;
     string workflowId = 2;
     string runId = 3;
     int64 version = 4;
@@ -391,7 +391,7 @@ message SyncActivityResponse {
 }
 
 message DescribeMutableStateRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     common.WorkflowExecution execution = 2;
 }
 
@@ -412,7 +412,7 @@ message DescribeHistoryHostResponse {
     int32 numberOfShards = 1;
     repeated int32
     shardIDs = 2;
-    common.DomainCacheInfo domainCache = 3;
+    common.NamespaceCacheInfo namespaceCache = 3;
     string shardControllerStatus = 4;
     string address = 5;
 }
@@ -451,7 +451,7 @@ message GetDLQReplicationMessagesResponse {
 }
 
 message QueryWorkflowRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     workflowservice.QueryWorkflowRequest request = 2;
 }
 
@@ -460,7 +460,7 @@ message QueryWorkflowResponse {
 }
 
 message ReapplyEventsRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     adminservice.ReapplyEventsRequest request = 2;
 }
 
@@ -506,7 +506,7 @@ message MergeDLQMessagesResponse {
 }
 
 message RefreshWorkflowTasksRequest {
-    string domainUUID = 1;
+    string namespaceUUID = 1;
     adminservice.RefreshWorkflowTasksRequest request = 2;
 }
 
