@@ -144,7 +144,7 @@ func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
 	err = d.registerNamespace(ctx, request)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); !ok {
-			ErrorAndExit("Register Namespace operation failed.", err)
+			ErrorAndExit("Register namespace operation failed.", err)
 		} else {
 			ErrorAndExit(fmt.Sprintf("Namespace %s already registered.", namespace), err)
 		}

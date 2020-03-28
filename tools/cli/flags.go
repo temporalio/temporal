@@ -35,7 +35,7 @@ const (
 	FlagHistoryAddressWithAlias           = FlagHistoryAddress + ", had"
 	FlagNamespaceID                       = "namespace_id"
 	FlagNamespace                         = "namespace"
-	FlagNamespaceWithAlias                = FlagNamespace + ", do"
+	FlagNamespaceWithAlias                = FlagNamespace + ", ns"
 	FlagShardID                           = "shard_id"
 	FlagShardIDWithAlias                  = FlagShardID + ", sid"
 	FlagWorkflowID                        = "workflow_id"

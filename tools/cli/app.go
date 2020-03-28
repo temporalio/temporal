@@ -38,21 +38,21 @@ func SetFactory(factory ClientFactory) {
 // NewCliApp instantiates a new instance of the CLI application.
 func NewCliApp() *cli.App {
 	app := cli.NewApp()
-	app.Name = "temporal"
-	app.Usage = "A command-line tool for temporal users"
+	app.Name = "tctl"
+	app.Usage = "A command-line tool for Temporal users"
 	app.Version = Version
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   FlagAddressWithAlias,
 			Value:  "",
-			Usage:  "host:port for temporal frontend service",
+			Usage:  "host:port for Temporal frontend service",
 			EnvVar: "TEMPORAL_CLI_ADDRESS",
 		},
 		cli.StringFlag{
 			Name:   FlagNamespaceWithAlias,
 			Value:  "default",
-			Usage:  "temporal workflow namespace",
-			EnvVar: "TEMPORAL_CLI_DOMAIN",
+			Usage:  "Temporal workflow namespace",
+			EnvVar: "TEMPORAL_CLI_NAMESPACE",
 		},
 		cli.IntFlag{
 			Name:   FlagContextTimeoutWithAlias,
@@ -64,20 +64,20 @@ func NewCliApp() *cli.App {
 	app.Commands = []cli.Command{
 		{
 			Name:        "namespace",
-			Aliases:     []string{"d"},
-			Usage:       "Operate temporal namespace",
+			Aliases:     []string{"n"},
+			Usage:       "Operate Temporal namespace",
 			Subcommands: newNamespaceCommands(),
 		},
 		{
 			Name:        "workflow",
 			Aliases:     []string{"wf"},
-			Usage:       "Operate temporal workflow",
+			Usage:       "Operate Temporal workflow",
 			Subcommands: newWorkflowCommands(),
 		},
 		{
 			Name:        "tasklist",
 			Aliases:     []string{"tl"},
-			Usage:       "Operate temporal tasklist",
+			Usage:       "Operate Temporal task list",
 			Subcommands: newTaskListCommands(),
 		},
 		{
@@ -144,7 +144,7 @@ func NewCliApp() *cli.App {
 		{
 			Name:        "cluster",
 			Aliases:     []string{"cl"},
-			Usage:       "Operate temporal cluster",
+			Usage:       "Operate Temporal cluster",
 			Subcommands: newClusterCommands(),
 		},
 	}
