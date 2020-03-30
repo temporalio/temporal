@@ -196,24 +196,6 @@ CREATE TABLE signal_info_maps (
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, initiated_id)
 );
 
-CREATE TABLE buffered_replication_task_maps (
-  shard_id INT NOT NULL,
-  namespace_id BINARY(16) NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
-  run_id BINARY(16) NOT NULL,
-  first_event_id BIGINT NOT NULL,
---
-  version BIGINT NOT NULL,
-  next_event_id BIGINT NOT NULL,
-  history MEDIUMBLOB,
-  history_encoding VARCHAR(16) NOT NULL,
-  new_run_history BLOB,
-  new_run_history_encoding VARCHAR(16) NOT NULL DEFAULT 'json',
-  event_store_version          INT NOT NULL, -- indiciates which version of event store to query
-  new_run_event_store_version  INT NOT NULL, -- indiciates which version of event store to query for new run(continueAsNew)
-  PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, first_event_id)
-);
-
 CREATE TABLE signals_requested_sets (
   shard_id INT NOT NULL,
   namespace_id BINARY(16) NOT NULL,
