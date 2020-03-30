@@ -436,13 +436,28 @@ func CreateHistoryStartWorkflowRequest(
 
 // CheckEventBlobSizeLimit checks if a blob data exceeds limits. It logs a warning if it exceeds warnLimit,
 // and return ErrBlobSizeExceedsLimit if it exceeds errorLimit.
-func CheckEventBlobSizeLimit(actualSize, warnLimit, errorLimit int, domainID, workflowID, runID string, scope metrics.Scope, logger log.Logger) error {
+func CheckEventBlobSizeLimit(
+	actualSize int,
+	warnLimit int,
+	errorLimit int,
+	domainID string,
+	workflowID string,
+	runID string,
+	scope metrics.Scope,
+	logger log.Logger,
+	blobSizeViolationOperationTag tag.Tag,
+) error {
+
 	scope.RecordTimer(metrics.EventBlobSize, time.Duration(actualSize))
 
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob size exceeds limit.",
-				tag.WorkflowDomainID(domainID), tag.WorkflowID(workflowID), tag.WorkflowRunID(runID), tag.WorkflowSize(int64(actualSize)))
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(runID),
+				tag.WorkflowSize(int64(actualSize)),
+				blobSizeViolationOperationTag)
 		}
 
 		if actualSize > errorLimit {
