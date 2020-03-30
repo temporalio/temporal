@@ -87,8 +87,8 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          0,
-				RangeID:          1,
+				ShardId:          0,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
@@ -125,11 +125,11 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	taskID := int64(1444)
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
-		TaskID:      taskID,
-		NamespaceID: primitives.MustParseUUID(namespaceID),
-		WorkflowID:  workflowID,
-		RunID:       primitives.MustParseUUID(runID),
-		ScheduledID: scheduleID,
+		TaskId:      taskID,
+		NamespaceId: primitives.MustParseUUID(namespaceID),
+		WorkflowId:  workflowID,
+		RunId:       primitives.MustParseUUID(runID),
+		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
@@ -168,11 +168,11 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
-		TaskID:      taskID,
-		NamespaceID: primitives.MustParseUUID(namespaceID),
-		WorkflowID:  workflowID,
-		RunID:       primitives.MustParseUUID(runID),
-		ScheduledID: scheduleID,
+		TaskId:      taskID,
+		NamespaceId: primitives.MustParseUUID(namespaceID),
+		WorkflowId:  workflowID,
+		RunId:       primitives.MustParseUUID(runID),
+		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
@@ -216,11 +216,11 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
-		TaskID:      taskID,
-		NamespaceID: primitives.MustParseUUID(namespaceID),
-		WorkflowID:  workflowID,
-		RunID:       primitives.MustParseUUID(runID),
-		ScheduledID: scheduleID,
+		TaskId:      taskID,
+		NamespaceId: primitives.MustParseUUID(namespaceID),
+		WorkflowId:  workflowID,
+		RunId:       primitives.MustParseUUID(runID),
+		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
@@ -266,11 +266,11 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
-		TaskID:      taskID,
-		NamespaceID: primitives.MustParseUUID(namespaceID),
-		WorkflowID:  workflowID,
-		RunID:       primitives.MustParseUUID(runID),
-		ScheduledID: scheduleID,
+		TaskId:      taskID,
+		NamespaceId: primitives.MustParseUUID(namespaceID),
+		WorkflowId:  workflowID,
+		RunId:       primitives.MustParseUUID(runID),
+		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
@@ -379,11 +379,11 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
-		TaskID:      taskID,
-		NamespaceID: primitives.MustParseUUID(namespaceID),
-		WorkflowID:  workflowID,
-		RunID:       primitives.MustParseUUID(runID),
-		ScheduledID: scheduleID,
+		TaskId:      taskID,
+		NamespaceId: primitives.MustParseUUID(namespaceID),
+		WorkflowId:  workflowID,
+		RunId:       primitives.MustParseUUID(runID),
+		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 

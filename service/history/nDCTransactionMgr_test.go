@@ -81,8 +81,8 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          10,
-				RangeID:          1,
+				ShardId:          10,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
@@ -209,8 +209,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}).AnyTimes()
-	mutableState.EXPECT().GetNextEventId().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetPreviousStartedEventId().Return(lastDecisionTaskStartedEventID).Times(1)
+	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastDecisionTaskStartedEventID).Times(1)
 	mutableState.EXPECT().GetVersionHistories().Return(histories).Times(1)
 
 	s.mockWorkflowResetter.EXPECT().resetWorkflow(

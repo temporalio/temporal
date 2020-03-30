@@ -95,8 +95,8 @@ func (s *conflictResolverSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          10,
-				RangeID:          1,
+				ShardId:          10,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
@@ -168,7 +168,7 @@ func (s *conflictResolverSuite) TestReset() {
 		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{}}}
 
 	historySize := int64(1234567)
-	shardId := s.mockShard.GetShardId()
+	shardId := s.mockShard.GetShardID()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    common.FirstEventID,
@@ -227,7 +227,7 @@ func (s *conflictResolverSuite) TestReset() {
 		input.ResetWorkflowSnapshot.TransferTasks = nil
 
 		s.Equal(&persistence.ConflictResolveWorkflowExecutionRequest{
-			RangeID: s.mockShard.shardInfo.RangeID,
+			RangeID: s.mockShard.shardInfo.GetRangeId(),
 			CurrentWorkflowCAS: &persistence.CurrentWorkflowCAS{
 				PrevRunID:            prevRunID,
 				PrevLastWriteVersion: prevLastWriteVersion,

@@ -86,7 +86,7 @@ func (s *replicationTaskFetcherSuite) TearDownTest() {
 func (s *replicationTaskFetcherSuite) TestGetMessages() {
 	requestByShard := make(map[int32]*request)
 	token := &replication.ReplicationToken{
-		ShardID:                0,
+		ShardId:                0,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
 	}
@@ -113,7 +113,7 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
 	requestByShard := make(map[int32]*request)
 	token := &replication.ReplicationToken{
-		ShardID:                0,
+		ShardId:                0,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
 	}

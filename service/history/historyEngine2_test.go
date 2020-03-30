@@ -104,8 +104,8 @@ func (s *engine2Suite) SetupTest() {
 		s.controller,
 		&p.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          0,
-				RangeID:          1,
+				ShardId:          0,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		s.config,
@@ -208,7 +208,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	expectedResponse.ScheduledEventId = di.ScheduleID
 	expectedResponse.StartedEventId = di.ScheduleID + 1
 	expectedResponse.StickyExecutionEnabled = false
-	expectedResponse.NextEventId = msBuilder.GetNextEventId() + 1
+	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt
 	expectedResponse.WorkflowExecutionTaskList = &commonproto.TaskList{
 		Name: executionInfo.TaskList,
@@ -277,7 +277,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	expectedResponse.ScheduledEventId = di.ScheduleID
 	expectedResponse.StartedEventId = di.ScheduleID + 1
 	expectedResponse.StickyExecutionEnabled = true
-	expectedResponse.NextEventId = msBuilder.GetNextEventId() + 1
+	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt
 	expectedResponse.WorkflowExecutionTaskList = &commonproto.TaskList{
 		Name: executionInfo.TaskList,
@@ -781,7 +781,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(namespaceID, workflowExecution)
-	s.Equal(int64(4), executionBuilder.GetNextEventId())
+	s.Equal(int64(4), executionBuilder.GetNextEventID())
 }
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {

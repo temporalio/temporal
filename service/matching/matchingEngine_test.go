@@ -1412,10 +1412,10 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	ctx2, err := s.matchingEngine.getTask(context.Background(), tlID, nil, tlKind)
 	s.NoError(err)
 
-	s.NotEqual(ctx.event.TaskID, ctx2.event.TaskID)
-	s.Equal(ctx.event.Data.WorkflowID, ctx2.event.Data.WorkflowID)
-	s.Equal(ctx.event.Data.RunID, ctx2.event.Data.RunID)
-	s.Equal(ctx.event.Data.ScheduleID, ctx2.event.Data.ScheduleID)
+	s.NotEqual(ctx.event.GetTaskId(), ctx2.event.GetTaskId())
+	s.Equal(ctx.event.Data.GetWorkflowId(), ctx2.event.Data.GetWorkflowId())
+	s.Equal(ctx.event.Data.GetRunId(), ctx2.event.Data.GetRunId())
+	s.Equal(ctx.event.Data.GetScheduleId(), ctx2.event.Data.GetScheduleId())
 
 	ctx2.finish(nil)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -1773,7 +1773,7 @@ func (m *testTaskManager) LeaseTaskList(request *persistence.LeaseTaskListReques
 		TaskListInfo: &persistence.PersistedTaskListInfo{
 			Data: &persistenceblobs.TaskListInfo{
 				AckLevel:    tlm.ackLevel,
-				NamespaceID: request.NamespaceID,
+				NamespaceId: request.NamespaceID,
 				Name:        request.TaskList,
 				TaskType:    request.TaskType,
 				Kind:        request.TaskListKind,
@@ -1788,7 +1788,7 @@ func (m *testTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequ
 	m.logger.Debug("UpdateTaskList", tag.TaskListInfo(request.TaskListInfo), tag.AckLevel(request.TaskListInfo.AckLevel))
 
 	tli := request.TaskListInfo
-	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(tli.NamespaceID), tli.Name, tli.TaskType))
+	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(tli.GetNamespaceId()), tli.Name, tli.TaskType))
 
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -1847,7 +1847,7 @@ func (m *testTaskManager) DeleteTaskList(request *persistence.DeleteTaskListRequ
 
 // CreateTask provides a mock function with given fields: request
 func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
-	namespaceID := request.TaskListInfo.Data.NamespaceID
+	namespaceID := request.TaskListInfo.Data.GetNamespaceId()
 	taskList := request.TaskListInfo.Data.Name
 	taskType := request.TaskListInfo.Data.TaskType
 	rangeID := request.TaskListInfo.RangeID
@@ -1858,31 +1858,31 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 
 	// First validate the entire batch
 	for _, task := range request.Tasks {
-		m.logger.Debug("testTaskManager.CreateTask", tag.TaskID(task.TaskID), tag.ShardRangeID(rangeID))
-		if task.TaskID <= 0 {
-			panic(fmt.Errorf("Invalid taskID=%v", task.TaskID))
+		m.logger.Debug("testTaskManager.CreateTask", tag.TaskID(task.GetTaskId()), tag.ShardRangeID(rangeID))
+		if task.GetTaskId() <= 0 {
+			panic(fmt.Errorf("Invalid taskID=%v", task.GetTaskId()))
 		}
 
 		if tlm.rangeID != rangeID {
 			m.logger.Debug("testTaskManager.CreateTask ConditionFailedError",
-				tag.TaskID(task.TaskID), tag.ShardRangeID(rangeID), tag.ShardRangeID(tlm.rangeID))
+				tag.TaskID(task.GetTaskId()), tag.ShardRangeID(rangeID), tag.ShardRangeID(tlm.rangeID))
 
 			return nil, &persistence.ConditionFailedError{
 				Msg: fmt.Sprintf("testTaskManager.CreateTask failed. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
 					taskList, taskType, rangeID, tlm.rangeID),
 			}
 		}
-		_, ok := tlm.tasks.Get(task.TaskID)
+		_, ok := tlm.tasks.Get(task.GetTaskId())
 		if ok {
-			panic(fmt.Sprintf("Duplicated TaskID %v", task.TaskID))
+			panic(fmt.Sprintf("Duplicated TaskID %v", task.GetTaskId()))
 		}
 	}
 
 	// Then insert all tasks if no errors
 	for _, task := range request.Tasks {
-		tlm.tasks.Put(task.TaskID, &persistenceblobs.AllocatedTaskInfo{
+		tlm.tasks.Put(task.GetTaskId(), &persistenceblobs.AllocatedTaskInfo{
 			Data:   task.Data,
-			TaskID: task.TaskID,
+			TaskId: task.GetTaskId(),
 		})
 		tlm.createTaskCount++
 	}

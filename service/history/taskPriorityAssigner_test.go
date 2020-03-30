@@ -153,7 +153,7 @@ func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask() {
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(transferQueueType).Times(1)
-	mockTask.EXPECT().GetNamespaceId().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
 	mockTask.EXPECT().SetPriority(getTaskPriority(taskLowPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -165,7 +165,7 @@ func (s *taskPriorityAssignerSuite) TestAssign_TransferTask() {
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(transferQueueType).AnyTimes()
-	mockTask.EXPECT().GetNamespaceId().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
 	mockTask.EXPECT().SetPriority(getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -177,7 +177,7 @@ func (s *taskPriorityAssignerSuite) TestAssign_TimerTask() {
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(timerQueueType).AnyTimes()
-	mockTask.EXPECT().GetNamespaceId().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
 	mockTask.EXPECT().SetPriority(getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -190,7 +190,7 @@ func (s *taskPriorityAssignerSuite) TestAssign_ThrottledTask() {
 	for i := 0; i != s.testTaskProcessRPS*2; i++ {
 		mockTask := NewMockqueueTask(s.controller)
 		mockTask.EXPECT().GetQueueType().Return(timerQueueType).AnyTimes()
-		mockTask.EXPECT().GetNamespaceId().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
+		mockTask.EXPECT().GetNamespaceID().Return(primitives.MustParseUUID(testNamespaceID)).Times(1)
 		if i < s.testTaskProcessRPS {
 			mockTask.EXPECT().SetPriority(getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass)).Times(1)
 		} else {

@@ -108,8 +108,8 @@ func (s *historyReplicatorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          testShardID,
-				RangeID:          1,
+				ShardId:          testShardID,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
@@ -234,7 +234,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}).AnyTimes()
-	msBuilderCurrent.EXPECT().GetNextEventId().Return(currentNextEventID).AnyTimes()
+	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
@@ -302,7 +302,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}).AnyTimes()
-	msBuilderCurrent.EXPECT().GetNextEventId().Return(currentNextEventID).AnyTimes()
+	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
@@ -395,7 +395,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		DecisionScheduleID:           common.EmptyEventID,
 		DecisionStartedID:            common.EmptyEventID,
 	}).AnyTimes()
-	msBuilderCurrent.EXPECT().GetNextEventId().Return(currentNextEventID).AnyTimes()
+	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
@@ -623,7 +623,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		DecisionStartedID:  common.EmptyEventID,
 	}).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
-	msBuilderCurrent.EXPECT().GetNextEventId().Return(currentNextEventID).AnyTimes()
+	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes() // this is used to update the version on mutable state
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 
@@ -1400,7 +1400,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		return mockConflictResolver
 	}
 	msBuilderMid := NewMockmutableState(s.controller)
-	msBuilderMid.EXPECT().GetNextEventId().Return(int64(12345)).AnyTimes() // this is used by log
+	msBuilderMid.EXPECT().GetNextEventID().Return(int64(12345)).AnyTimes() // this is used by log
 	mockConflictResolver.EXPECT().reset(
 		runID, currentLastWriteVersion, currentState, gomock.Any(), currentReplicationInfoLastEventID, exeInfo, updateCondition,
 	).Return(msBuilderMid, nil).Times(1)
@@ -1471,7 +1471,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		return mockConflictResolver
 	}
 	msBuilderMid := NewMockmutableState(s.controller)
-	msBuilderMid.EXPECT().GetNextEventId().Return(int64(12345)).AnyTimes() // this is used by log
+	msBuilderMid.EXPECT().GetNextEventID().Return(int64(12345)).AnyTimes() // this is used by log
 	mockConflictResolver.EXPECT().reset(
 		runID, currentLastWriteVersion, currentState, gomock.Any(), currentReplicationInfoLastEventID, exeInfo, updateCondition,
 	).Return(msBuilderMid, nil).Times(1)
@@ -1568,7 +1568,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		return mockConflictResolver
 	}
 	msBuilderMid := NewMockmutableState(s.controller)
-	msBuilderMid.EXPECT().GetNextEventId().Return(int64(12345)).AnyTimes() // this is used by log
+	msBuilderMid.EXPECT().GetNextEventID().Return(int64(12345)).AnyTimes() // this is used by log
 	mockConflictResolver.EXPECT().reset(
 		runID, currentLastWriteVersion, currentState, gomock.Any(), incomingReplicationInfoLastEventID, exeInfo, updateCondition,
 	).Return(msBuilderMid, nil).Times(1)
@@ -1745,7 +1745,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		return mockConflictResolver
 	}
 	msBuilderMid := NewMockmutableState(s.controller)
-	msBuilderMid.EXPECT().GetNextEventId().Return(int64(12345)).AnyTimes() // this is used by log
+	msBuilderMid.EXPECT().GetNextEventID().Return(int64(12345)).AnyTimes() // this is used by log
 	mockConflictResolver.EXPECT().reset(
 		runID, currentLastWriteVersion, currentState, gomock.Any(), incomingReplicationInfoLastEventID, exeInfo, updateCondition,
 	).Return(msBuilderMid, nil).Times(1)
@@ -1765,7 +1765,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingLessThanCurrent() 
 		FirstEventId: incomingFirstEventID,
 		History:      &commonproto.History{},
 	}
-	msBuilder.EXPECT().GetNextEventId().Return(currentNextEventID).AnyTimes()
+	msBuilder.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilder.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes() // logger will use this
 
 	err := s.historyReplicator.ApplyOtherEvents(context.Background(), weContext, msBuilder, request, s.logger)
@@ -1805,7 +1805,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 		History:       &commonproto.History{},
 	}
 
-	msBuilder.EXPECT().GetNextEventId().Return(currentNextEventID).AnyTimes()
+	msBuilder.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilder.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
 	err := s.historyReplicator.ApplyOtherEvents(context.Background(), weContext, msBuilder, request, s.logger)
@@ -3265,7 +3265,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}).AnyTimes()
-	msBuilderCurrent.EXPECT().GetNextEventId().Return(currentNextEventID).AnyTimes()
+	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
@@ -3421,7 +3421,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}).AnyTimes()
-	msBuilderCurrent.EXPECT().GetNextEventId().Return(currentNextEventID).AnyTimes()
+	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
@@ -3611,7 +3611,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(namespaceID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
 
-	msBuilderCurrent.EXPECT().GetNextEventId().Return(currentNextEventID).AnyTimes()
+	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes() // this is used to update the version on mutable state
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
@@ -3742,7 +3742,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	currentCluster := cluster.TestCurrentClusterName
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(currentCluster).AnyTimes()
 
-	msBuilderCurrent.EXPECT().GetNextEventId().Return(currentNextEventID).AnyTimes()
+	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes() // this is used to update the version on mutable state
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)

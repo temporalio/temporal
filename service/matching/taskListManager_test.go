@@ -108,14 +108,14 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
 				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
-			TaskID: 11,
+			TaskId: 11,
 		},
 		{
 			Data: &persistenceblobs.TaskInfo{
 				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
 				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
-			TaskID: 12,
+			TaskId: 12,
 		},
 	}
 
@@ -130,14 +130,14 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
 				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
-			TaskID: 13,
+			TaskId: 13,
 		},
 		{
 			Data: &persistenceblobs.TaskInfo{
 				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
 				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
-			TaskID: 14,
+			TaskId: 14,
 		},
 	}, time.Now(), time.NewTimer(time.Minute)))
 	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
@@ -212,7 +212,7 @@ func TestDescribeTaskList(t *testing.T) {
 	require.Equal(t, taskCount, taskListStatus.GetBacklogCountHint())
 	require.True(t, taskListStatus.GetRatePerSecond() > (_defaultTaskDispatchRPS-1))
 	require.True(t, taskListStatus.GetRatePerSecond() < (_defaultTaskDispatchRPS+1))
-	taskIDBlock := taskListStatus.GetTaskIDBlock()
+	taskIDBlock := taskListStatus.GetTaskIdBlock()
 	require.Equal(t, int64(1), taskIDBlock.GetStartId())
 	require.Equal(t, tlm.config.RangeSize, taskIDBlock.GetEndId())
 

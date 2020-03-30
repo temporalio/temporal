@@ -98,8 +98,8 @@ func (s *engine3Suite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&p.ShardInfoWithFailover{ShardInfo: &pblobs.ShardInfo{
-			ShardID:          0,
-			RangeID:          1,
+			ShardId:          0,
+			RangeId:          1,
 			TransferAckLevel: 0,
 		}},
 		s.config,
@@ -206,7 +206,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	expectedResponse.ScheduledEventId = di.ScheduleID
 	expectedResponse.StartedEventId = di.ScheduleID + 1
 	expectedResponse.StickyExecutionEnabled = true
-	expectedResponse.NextEventId = msBuilder.GetNextEventId() + 1
+	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt
 	expectedResponse.WorkflowExecutionTaskList = &commonproto.TaskList{
 		Name: executionInfo.TaskList,

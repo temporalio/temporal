@@ -75,7 +75,7 @@ var (
 	testCloseStatus  = enums.WorkflowExecutionCloseStatusFailed
 
 	testRequest = &p.ListWorkflowExecutionsRequest{
-		NamespaceId:       testNamespaceID,
+		NamespaceID:       testNamespaceID,
 		Namespace:         testNamespace,
 		PageSize:          testPageSize,
 		EarliestStartTime: testEarliestTime,
@@ -374,7 +374,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 		return true
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
-		NamespaceId: testNamespaceID,
+		NamespaceID: testNamespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 			RunId:      testRunID,
@@ -400,7 +400,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
 		return true
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
-		NamespaceId: testNamespaceID,
+		NamespaceID: testNamespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 		},
@@ -675,7 +675,7 @@ func (s *ESVisibilitySuite) TestShouldSearchAfter() {
 //nolint
 func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	request := &p.ListWorkflowExecutionsRequestV2{
-		NamespaceId: testNamespaceID,
+		NamespaceID: testNamespaceID,
 		PageSize:    10,
 	}
 	token := &esVisibilityPageToken{}
@@ -778,7 +778,7 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {
 	request := &p.ListWorkflowExecutionsRequestV2{
-		NamespaceId: testNamespaceID,
+		NamespaceID: testNamespaceID,
 		PageSize:    10,
 	}
 
@@ -805,7 +805,7 @@ func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForCount() {
 	request := &p.CountWorkflowExecutionsRequest{
-		NamespaceId: testNamespaceID,
+		NamespaceID: testNamespaceID,
 	}
 
 	// empty query
@@ -847,7 +847,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	})).Return(testSearchResult, nil).Once()
 
 	request := &p.ListWorkflowExecutionsRequestV2{
-		NamespaceId: testNamespaceID,
+		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		PageSize:    10,
 		Query:       `CloseStatus = 5`,
@@ -878,7 +878,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	})).Return(testSearchResult, nil, nil).Once()
 
 	request := &p.ListWorkflowExecutionsRequestV2{
-		NamespaceId: testNamespaceID,
+		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		PageSize:    10,
 		Query:       `CloseStatus = 5`,
@@ -929,7 +929,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	})).Return(int64(1), nil).Once()
 
 	request := &p.CountWorkflowExecutionsRequest{
-		NamespaceId: testNamespaceID,
+		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		Query:       `CloseStatus = 5`,
 	}

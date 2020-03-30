@@ -89,8 +89,8 @@ func (s *stateBuilderSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          0,
-				RangeID:          1,
+				ShardId:          0,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
@@ -921,9 +921,9 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {
 	expiryTime, _ := types.TimestampProto(time.Unix(0, event.GetTimestamp()).Add(time.Duration(timeoutSecond) * time.Second))
 	ti := &persistenceblobs.TimerInfo{
 		Version:    event.GetVersion(),
-		TimerID:    timerID,
+		TimerId:    timerID,
 		ExpiryTime: expiryTime,
-		StartedID:  event.GetEventId(),
+		StartedId:  event.GetEventId(),
 		TaskStatus: timerTaskStatusNone,
 	}
 	s.mockMutableState.EXPECT().ReplicateTimerStartedEvent(event).Return(ti, nil).Times(1)
@@ -1551,8 +1551,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 	}
 	rci := &persistenceblobs.RequestCancelInfo{
 		Version:         event.GetVersion(),
-		InitiatedID:     event.GetEventId(),
-		CancelRequestID: cancellationRequestID,
+		InitiatedId:     event.GetEventId(),
+		CancelRequestId: cancellationRequestID,
 	}
 
 	// the cancellation request ID is generated inside, cannot assert equal
@@ -1689,8 +1689,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	}
 	si := &persistenceblobs.SignalInfo{
 		Version:     event.GetVersion(),
-		InitiatedID: event.GetEventId(),
-		RequestID:   signalRequestID,
+		InitiatedId: event.GetEventId(),
+		RequestId:   signalRequestID,
 		Name:        signalName,
 		Input:       signalInput,
 		Control:     control,

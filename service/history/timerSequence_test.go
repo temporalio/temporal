@@ -81,12 +81,12 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_AlreadyCreated() {
 	timer1Expiry := addDurationToGogoTime(now, 100)
 	timerInfo := &persistenceblobs.TimerInfo{
 		Version:    123,
-		TimerID:    "some random timer ID",
-		StartedID:  456,
+		TimerId:    "some random timer ID",
+		StartedId:  456,
 		ExpiryTime: timer1Expiry,
 		TaskStatus: timerTaskStatusCreated,
 	}
-	timerInfos := map[string]*persistenceblobs.TimerInfo{timerInfo.TimerID: timerInfo}
+	timerInfos := map[string]*persistenceblobs.TimerInfo{timerInfo.TimerId: timerInfo}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
 
 	modified, err := s.timerSequence.createNextUserTimer()
@@ -104,14 +104,14 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated() {
 	currentVersion := int64(999)
 	timerInfo := &persistenceblobs.TimerInfo{
 		Version:    123,
-		TimerID:    "some random timer ID",
-		StartedID:  456,
+		TimerId:    "some random timer ID",
+		StartedId:  456,
 		ExpiryTime: now,
 		TaskStatus: timerTaskStatusNone,
 	}
-	timerInfos := map[string]*persistenceblobs.TimerInfo{timerInfo.TimerID: timerInfo}
+	timerInfos := map[string]*persistenceblobs.TimerInfo{timerInfo.TimerId: timerInfo}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
-	s.mockMutableState.EXPECT().GetUserTimerInfoByEventID(timerInfo.StartedID).Return(timerInfo, true).Times(1)
+	s.mockMutableState.EXPECT().GetUserTimerInfoByEventID(timerInfo.StartedId).Return(timerInfo, true).Times(1)
 
 	var timerInfoUpdated = *timerInfo // make a copy
 	timerInfoUpdated.TaskStatus = timerTaskStatusCreated
@@ -120,7 +120,7 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated() {
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.UserTimerTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: time.Unix(now.Seconds, int64(now.Nanos)).UTC(),
-		EventID:             timerInfo.StartedID,
+		EventID:             timerInfo.GetStartedId(),
 		Version:             currentVersion,
 	}).Times(1)
 
@@ -254,17 +254,17 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_One() {
 	timer1Expiry := addDurationToGogoTime(now, 100)
 	timerInfo := &persistenceblobs.TimerInfo{
 		Version:    123,
-		TimerID:    "some random timer ID",
-		StartedID:  456,
+		TimerId:    "some random timer ID",
+		StartedId:  456,
 		ExpiryTime: timer1Expiry,
 		TaskStatus: timerTaskStatusCreated,
 	}
-	timerInfos := map[string]*persistenceblobs.TimerInfo{timerInfo.TimerID: timerInfo}
+	timerInfos := map[string]*persistenceblobs.TimerInfo{timerInfo.TimerId: timerInfo}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortUserTimers()
 	s.Equal([]timerSequenceID{{
-		eventID:      timerInfo.StartedID,
+		eventID:      timerInfo.GetStartedId(),
 		timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
 		timerType:    timerTypeStartToClose,
 		timerCreated: true,
@@ -278,35 +278,35 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_Multiple() {
 	timer2Expiry := addDurationToGogoTime(now, 200)
 	timerInfo1 := &persistenceblobs.TimerInfo{
 		Version:    123,
-		TimerID:    "some random timer ID",
-		StartedID:  456,
+		TimerId:    "some random timer ID",
+		StartedId:  456,
 		ExpiryTime: timer1Expiry,
 		TaskStatus: timerTaskStatusCreated,
 	}
 	timerInfo2 := &persistenceblobs.TimerInfo{
 		Version:    1234,
-		TimerID:    "other random timer ID",
-		StartedID:  4567,
+		TimerId:    "other random timer ID",
+		StartedId:  4567,
 		ExpiryTime: addDurationToGogoTime(now, 200),
 		TaskStatus: timerTaskStatusNone,
 	}
 	timerInfos := map[string]*persistenceblobs.TimerInfo{
-		timerInfo1.TimerID: timerInfo1,
-		timerInfo2.TimerID: timerInfo2,
+		timerInfo1.TimerId: timerInfo1,
+		timerInfo2.TimerId: timerInfo2,
 	}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortUserTimers()
 	s.Equal([]timerSequenceID{
 		{
-			eventID:      timerInfo1.StartedID,
+			eventID:      timerInfo1.GetStartedId(),
 			timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
 			timerType:    timerTypeStartToClose,
 			timerCreated: true,
 			attempt:      0,
 		},
 		{
-			eventID:      timerInfo2.StartedID,
+			eventID:      timerInfo2.GetStartedId(),
 			timestamp:    time.Unix(timer2Expiry.Seconds, int64(timer2Expiry.Nanos)).UTC(),
 			timerType:    timerTypeStartToClose,
 			timerCreated: false,
@@ -662,14 +662,14 @@ func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 	timer1Expiry := addDurationToGogoTime(now, 100)
 	timerInfo := &persistenceblobs.TimerInfo{
 		Version:    123,
-		TimerID:    "some random timer ID",
-		StartedID:  456,
+		TimerId:    "some random timer ID",
+		StartedId:  456,
 		ExpiryTime: timer1Expiry,
 		TaskStatus: timerTaskStatusCreated,
 	}
 
 	expectedTimerSequence := &timerSequenceID{
-		eventID:      timerInfo.StartedID,
+		eventID:      timerInfo.StartedId,
 		timestamp:    time.Unix(timer1Expiry.Seconds, int64(timer1Expiry.Nanos)).UTC(),
 		timerType:    timerTypeStartToClose,
 		timerCreated: true,

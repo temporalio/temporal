@@ -200,7 +200,7 @@ func (s *engineSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				RangeID:          1,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		s.config,
@@ -5303,28 +5303,28 @@ func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.Activit
 
 func copyTimerInfo(sourceInfo *persistenceblobs.TimerInfo) *persistenceblobs.TimerInfo {
 	return &persistenceblobs.TimerInfo{
-		Version:    sourceInfo.Version,
-		TimerID:    sourceInfo.TimerID,
-		StartedID:  sourceInfo.StartedID,
-		ExpiryTime: sourceInfo.ExpiryTime,
-		TaskStatus: sourceInfo.TaskStatus,
+		Version:    sourceInfo.GetVersion(),
+		TimerId:    sourceInfo.GetTimerId(),
+		StartedId:  sourceInfo.GetStartedId(),
+		ExpiryTime: sourceInfo.GetExpiryTime(),
+		TaskStatus: sourceInfo.GetTaskStatus(),
 	}
 }
 
 func copyCancellationInfo(sourceInfo *persistenceblobs.RequestCancelInfo) *persistenceblobs.RequestCancelInfo {
 	return &persistenceblobs.RequestCancelInfo{
 		Version:         sourceInfo.Version,
-		InitiatedID:     sourceInfo.InitiatedID,
-		CancelRequestID: sourceInfo.CancelRequestID,
+		InitiatedId:     sourceInfo.GetInitiatedId(),
+		CancelRequestId: sourceInfo.GetCancelRequestId(),
 	}
 }
 
 func copySignalInfo(sourceInfo *persistenceblobs.SignalInfo) *persistenceblobs.SignalInfo {
 	result := &persistenceblobs.SignalInfo{
-		Version:     sourceInfo.Version,
-		InitiatedID: sourceInfo.InitiatedID,
-		RequestID:   sourceInfo.RequestID,
-		Name:        sourceInfo.Name,
+		Version:     sourceInfo.GetVersion(),
+		InitiatedId: sourceInfo.GetInitiatedId(),
+		RequestId:   sourceInfo.GetRequestId(),
+		Name:        sourceInfo.GetName(),
 	}
 	result.Input = make([]byte, len(sourceInfo.Input))
 	copy(result.Input, sourceInfo.Input)

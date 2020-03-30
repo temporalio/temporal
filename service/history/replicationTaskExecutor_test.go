@@ -106,8 +106,8 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 		shardID:  0,
 		Resource: s.mockResource,
 		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{
-			ShardID:                0,
-			RangeID:                1,
+			ShardId:                0,
+			RangeId:                1,
 			ReplicationAckLevel:    0,
 			ReplicationDLQAckLevel: map[string]int64{"test": -1},
 		}},

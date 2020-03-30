@@ -80,8 +80,8 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          10,
-				RangeID:          1,
+				ShardId:          10,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
@@ -134,7 +134,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 		RunID:       s.runID,
 	}).AnyTimes()
 
-	shardId := s.mockShard.GetShardId()
+	shardId := s.mockShard.GetShardID()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
 		s.Equal(&persistence.ForkHistoryBranchRequest{
@@ -308,7 +308,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 		RunID:       s.runID,
 	}).AnyTimes()
 
-	shardId := s.mockShard.GetShardId()
+	shardId := s.mockShard.GetShardID()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
 		s.Equal(&persistence.ForkHistoryBranchRequest{

@@ -121,11 +121,11 @@ func (s *temporalSerializerSuite) TestSerializer() {
 				BranchToken: []byte{1},
 				Items: []*commonproto.VersionHistoryItem{
 					{
-						EventID: 1,
+						EventId: 1,
 						Version: 0,
 					},
 					{
-						EventID: 2,
+						EventId: 2,
 						Version: 1,
 					},
 				},
@@ -134,11 +134,11 @@ func (s *temporalSerializerSuite) TestSerializer() {
 				BranchToken: []byte{2},
 				Items: []*commonproto.VersionHistoryItem{
 					{
-						EventID: 2,
+						EventId: 2,
 						Version: 0,
 					},
 					{
-						EventID: 3,
+						EventId: 3,
 						Version: 1,
 					},
 				},

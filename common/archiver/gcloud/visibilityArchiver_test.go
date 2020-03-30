@@ -57,10 +57,10 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	}
 	s.expectedVisibilityRecords = []*archiverproto.ArchiveVisibilityRequest{
 		{
-			NamespaceID:      testNamespaceID,
+			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
-			WorkflowID:       testWorkflowID,
-			RunID:            testRunID,
+			WorkflowId:       testWorkflowID,
+			RunId:            testRunID,
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1580896574804475000,
 			CloseTimestamp:   1580896575946478000,
@@ -134,10 +134,10 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidVisibilityURI() {
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
 	request := &archiverproto.ArchiveVisibilityRequest{
-		NamespaceID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Namespace:   testNamespace,
-		WorkflowID:  testWorkflowID,
-		RunID:       testRunID,
+		WorkflowId:  testWorkflowID,
+		RunId:       testRunID,
 	}
 
 	err = visibilityArchiver.Archive(ctx, URI, request)
@@ -180,9 +180,9 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 
 	request := &archiverproto.ArchiveVisibilityRequest{
 		Namespace:          testNamespace,
-		NamespaceID:        testNamespaceID,
-		WorkflowID:         testWorkflowID,
-		RunID:              testRunID,
+		NamespaceId:        testNamespaceID,
+		WorkflowId:         testWorkflowID,
+		RunId:              testRunID,
 		WorkflowTypeName:   testWorkflowTypeName,
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff

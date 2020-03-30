@@ -100,7 +100,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockShard = &shardContextImpl{
 		shardID:                   0,
 		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{RangeID: 1, TransferAckLevel: 0}},
+		shardInfo:                 &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{RangeId: 1, TransferAckLevel: 0}},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
@@ -174,9 +174,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		SourceClusterName: "standby",
 		TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-			NamespaceID: namespaceID,
-			WorkflowID:  workflowID,
-			RunID:       runID,
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
 			TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 		},
 	}
@@ -200,9 +200,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		SourceClusterName: "standby",
 		TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-			NamespaceID: namespaceID,
-			WorkflowID:  workflowID,
-			RunID:       runID,
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
 			TaskType:    persistence.ReplicationTaskTypeHistory,
 		},
 	}
@@ -239,12 +239,12 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		SourceClusterName: "standby",
 		TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-			NamespaceID:  namespaceID,
-			WorkflowID:   workflowID,
-			RunID:        runID,
+			NamespaceId:  namespaceID,
+			WorkflowId:   workflowID,
+			RunId:        runID,
 			TaskType:     persistence.ReplicationTaskTypeHistory,
-			FirstEventID: 1,
-			NextEventID:  1,
+			FirstEventId: 1,
+			NextEventId:  1,
 			Version:      1,
 		},
 	}

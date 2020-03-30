@@ -123,9 +123,9 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	s.NoError(err)
 	request := &archiverproto.ArchiveVisibilityRequest{
 		Namespace:          testNamespace,
-		NamespaceID:        testNamespaceID,
-		WorkflowID:         testWorkflowID,
-		RunID:              testRunID,
+		NamespaceId:        testNamespaceID,
+		WorkflowId:         testWorkflowID,
+		RunId:              testRunID,
 		WorkflowTypeName:   testWorkflowTypeName,
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
@@ -163,10 +163,10 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	closeTimestamp := time.Now()
 	request := &archiverproto.ArchiveVisibilityRequest{
-		NamespaceID:        testNamespaceID,
+		NamespaceId:        testNamespaceID,
 		Namespace:          testNamespace,
-		WorkflowID:         testWorkflowID,
-		RunID:              testRunID,
+		WorkflowId:         testWorkflowID,
+		RunId:              testRunID,
 		WorkflowTypeName:   testWorkflowTypeName,
 		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
@@ -246,8 +246,8 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp:   int64(12345),
-				WorkflowID:       "random workflowID",
-				RunID:            "random runID",
+				WorkflowId:       "random workflowID",
+				RunId:            "random runID",
 				WorkflowTypeName: "random type name",
 			},
 			shouldMatch: true,
@@ -505,10 +505,10 @@ func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchive
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 	s.visibilityRecords = []*archiverproto.ArchiveVisibilityRequest{
 		{
-			NamespaceID:      testNamespaceID,
+			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
-			WorkflowID:       testWorkflowID,
-			RunID:            testRunID,
+			WorkflowId:       testWorkflowID,
+			RunId:            testRunID,
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   10000,
@@ -516,10 +516,10 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			HistoryLength:    101,
 		},
 		{
-			NamespaceID:        testNamespaceID,
+			NamespaceId:        testNamespaceID,
 			Namespace:          testNamespace,
-			WorkflowID:         "some random workflow ID",
-			RunID:              "some random run ID",
+			WorkflowId:         "some random workflow ID",
+			RunId:              "some random run ID",
 			WorkflowTypeName:   testWorkflowTypeName,
 			StartTimestamp:     2,
 			ExecutionTimestamp: 0,
@@ -528,10 +528,10 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			HistoryLength:      123,
 		},
 		{
-			NamespaceID:        testNamespaceID,
+			NamespaceId:        testNamespaceID,
 			Namespace:          testNamespace,
-			WorkflowID:         "another workflow ID",
-			RunID:              "another run ID",
+			WorkflowId:         "another workflow ID",
+			RunId:              "another run ID",
 			WorkflowTypeName:   testWorkflowTypeName,
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
@@ -540,10 +540,10 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			HistoryLength:      456,
 		},
 		{
-			NamespaceID:        testNamespaceID,
+			NamespaceId:        testNamespaceID,
 			Namespace:          testNamespace,
-			WorkflowID:         "and another workflow ID",
-			RunID:              "and another run ID",
+			WorkflowId:         "and another workflow ID",
+			RunId:              "and another run ID",
 			WorkflowTypeName:   testWorkflowTypeName,
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
@@ -552,10 +552,10 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			HistoryLength:      456,
 		},
 		{
-			NamespaceID:        "some random namespace ID",
+			NamespaceId:        "some random namespace ID",
 			Namespace:          "some random namespace name",
-			WorkflowID:         "another workflow ID",
-			RunID:              "another run ID",
+			WorkflowId:         "another workflow ID",
+			RunId:              "another run ID",
 			WorkflowTypeName:   testWorkflowTypeName,
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
@@ -573,9 +573,9 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(record *archiverproto.ArchiveVisibilityRequest) {
 	data, err := encode(record)
 	s.Require().NoError(err)
-	filename := constructVisibilityFilename(record.CloseTimestamp, record.RunID)
-	s.Require().NoError(os.MkdirAll(path.Join(s.testQueryDirectory, record.NamespaceID), testDirMode))
-	err = writeFile(path.Join(s.testQueryDirectory, record.NamespaceID, filename), data, testFileMode)
+	filename := constructVisibilityFilename(record.CloseTimestamp, record.GetRunId())
+	s.Require().NoError(os.MkdirAll(path.Join(s.testQueryDirectory, record.GetNamespaceId()), testDirMode))
+	err = writeFile(path.Join(s.testQueryDirectory, record.GetNamespaceId(), filename), data, testFileMode)
 	s.Require().NoError(err)
 }
 

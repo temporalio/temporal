@@ -96,8 +96,8 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 		shardID:  0,
 		Resource: s.mockResource,
 		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{
-			ShardID:                0,
-			RangeID:                1,
+			ShardId:                0,
+			RangeId:                1,
 			ReplicationDLQAckLevel: map[string]int64{"test": -1},
 		}},
 		transferSequenceNumber:    1,
@@ -133,10 +133,10 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
 		Tasks: []*pblobs.ReplicationTaskInfo{
 			&pblobs.ReplicationTaskInfo{
-				NamespaceID: primitives.MustParseUUID(uuid.New()),
-				WorkflowID:  uuid.New(),
-				RunID:       primitives.MustParseUUID(uuid.New()),
-				TaskID:      0,
+				NamespaceId: primitives.MustParseUUID(uuid.New()),
+				WorkflowId:  uuid.New(),
+				RunId:       primitives.MustParseUUID(uuid.New()),
+				TaskId:      0,
 				TaskType:    1,
 			},
 		},
@@ -187,10 +187,10 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
 		Tasks: []*pblobs.ReplicationTaskInfo{
 			&pblobs.ReplicationTaskInfo{
-				NamespaceID: primitives.MustParseUUID(uuid.New()),
-				WorkflowID:  uuid.New(),
-				RunID:       primitives.MustParseUUID(uuid.New()),
-				TaskID:      0,
+				NamespaceId: primitives.MustParseUUID(uuid.New()),
+				WorkflowId:  uuid.New(),
+				RunId:       primitives.MustParseUUID(uuid.New()),
+				TaskId:      0,
 				TaskType:    1,
 			},
 		},
