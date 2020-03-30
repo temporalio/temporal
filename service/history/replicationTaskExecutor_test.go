@@ -255,7 +255,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 		},
 	}
 	request := &historyservice.ReplicateEventsRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -289,7 +289,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 		},
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

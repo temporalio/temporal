@@ -75,7 +75,7 @@ var (
 	testCloseStatus  = enums.WorkflowExecutionCloseStatusFailed
 
 	testRequest = &p.ListWorkflowExecutionsRequest{
-		NamespaceUUID:     testNamespaceID,
+		NamespaceId:       testNamespaceID,
 		Namespace:         testNamespace,
 		PageSize:          testPageSize,
 		EarliestStartTime: testEarliestTime,
@@ -121,7 +121,7 @@ func (s *ESVisibilitySuite) TearDownTest() {
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	// test non-empty request fields match
 	request := &p.InternalRecordWorkflowExecutionStartedRequest{}
-	request.NamespaceUUID = "namespaceID"
+	request.NamespaceID = "namespaceID"
 	request.WorkflowID = "wid"
 	request.RunID = "rid"
 	request.WorkflowTypeName = "wfType"
@@ -132,9 +132,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeThriftRW)
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
 		fields := input.Fields
-		s.Equal(request.NamespaceUUID, input.GetNamespaceID())
-		s.Equal(request.WorkflowID, input.GetWorkflowID())
-		s.Equal(request.RunID, input.GetRunID())
+		s.Equal(request.NamespaceID, input.GetNamespaceId())
+		s.Equal(request.WorkflowID, input.GetWorkflowId())
+		s.Equal(request.RunID, input.GetRunId())
 		s.Equal(request.TaskID, input.GetVersion())
 		s.Equal(request.WorkflowTypeName, fields[es.WorkflowType].GetStringData())
 		s.Equal(request.StartTimestamp, fields[es.StartTime].GetIntData())
@@ -167,7 +167,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	// test non-empty request fields match
 	request := &p.InternalRecordWorkflowExecutionClosedRequest{}
-	request.NamespaceUUID = "namespaceID"
+	request.NamespaceID = "namespaceID"
 	request.WorkflowID = "wid"
 	request.RunID = "rid"
 	request.WorkflowTypeName = "wfType"
@@ -181,9 +181,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	request.HistoryLength = int64(20)
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
 		fields := input.Fields
-		s.Equal(request.NamespaceUUID, input.GetNamespaceID())
-		s.Equal(request.WorkflowID, input.GetWorkflowID())
-		s.Equal(request.RunID, input.GetRunID())
+		s.Equal(request.NamespaceID, input.GetNamespaceId())
+		s.Equal(request.WorkflowID, input.GetWorkflowId())
+		s.Equal(request.RunID, input.GetRunId())
 		s.Equal(request.TaskID, input.GetVersion())
 		s.Equal(request.WorkflowTypeName, fields[es.WorkflowType].GetStringData())
 		s.Equal(request.StartTimestamp, fields[es.StartTime].GetIntData())
@@ -374,7 +374,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 		return true
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 			RunId:      testRunID,
@@ -400,7 +400,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
 		return true
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 		},
@@ -432,7 +432,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	from := 1
 	token := &esVisibilityPageToken{From: from}
 
-	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceUUID)
+	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
 	existClosedStatusQuery := elastic.NewExistsQuery(es.CloseStatus)
 	tieBreakerSorter := elastic.NewFieldSort(es.RunID).Desc()
 
@@ -675,8 +675,8 @@ func (s *ESVisibilitySuite) TestShouldSearchAfter() {
 //nolint
 func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	request := &p.ListWorkflowExecutionsRequestV2{
-		NamespaceUUID: testNamespaceID,
-		PageSize:      10,
+		NamespaceId: testNamespaceID,
+		PageSize:    10,
 	}
 	token := &esVisibilityPageToken{}
 
@@ -778,8 +778,8 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {
 	request := &p.ListWorkflowExecutionsRequestV2{
-		NamespaceUUID: testNamespaceID,
-		PageSize:      10,
+		NamespaceId: testNamespaceID,
+		PageSize:    10,
 	}
 
 	request.Query = `WorkflowID = 'wid' order by StartTime desc`
@@ -805,7 +805,7 @@ func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForCount() {
 	request := &p.CountWorkflowExecutionsRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 	}
 
 	// empty query
@@ -847,10 +847,10 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	})).Return(testSearchResult, nil).Once()
 
 	request := &p.ListWorkflowExecutionsRequestV2{
-		NamespaceUUID: testNamespaceID,
-		Namespace:     testNamespace,
-		PageSize:      10,
-		Query:         `CloseStatus = 5`,
+		NamespaceId: testNamespaceID,
+		Namespace:   testNamespace,
+		PageSize:    10,
+		Query:       `CloseStatus = 5`,
 	}
 	_, err := s.visibilityStore.ListWorkflowExecutions(request)
 	s.NoError(err)
@@ -878,10 +878,10 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	})).Return(testSearchResult, nil, nil).Once()
 
 	request := &p.ListWorkflowExecutionsRequestV2{
-		NamespaceUUID: testNamespaceID,
-		Namespace:     testNamespace,
-		PageSize:      10,
-		Query:         `CloseStatus = 5`,
+		NamespaceId: testNamespaceID,
+		Namespace:   testNamespace,
+		PageSize:    10,
+		Query:       `CloseStatus = 5`,
 	}
 	_, err := s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
@@ -929,9 +929,9 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	})).Return(int64(1), nil).Once()
 
 	request := &p.CountWorkflowExecutionsRequest{
-		NamespaceUUID: testNamespaceID,
-		Namespace:     testNamespace,
-		Query:         `CloseStatus = 5`,
+		NamespaceId: testNamespaceID,
+		Namespace:   testNamespace,
+		Query:       `CloseStatus = 5`,
 	}
 	resp, err := s.visibilityStore.CountWorkflowExecutions(request)
 	s.NoError(err)

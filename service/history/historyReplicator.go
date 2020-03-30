@@ -178,7 +178,7 @@ func (r *historyReplicator) ApplyRawEvents(
 
 	requestOut := &historyservice.ReplicateEventsRequest{
 		SourceCluster:     sourceCluster,
-		NamespaceUUID:     requestIn.NamespaceUUID,
+		NamespaceId:       requestIn.GetNamespaceId(),
 		WorkflowExecution: requestIn.WorkflowExecution,
 		FirstEventId:      firstEventID,
 		NextEventId:       nextEventID,
@@ -242,7 +242,7 @@ func (r *historyReplicator) ApplyEvents(
 		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.EmptyReplicationEventsCounter)
 		return nil
 	}
-	namespaceID, err := validateNamespaceUUID(request.NamespaceUUID)
+	namespaceID, err := validateNamespaceUUID(request.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -573,7 +573,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 		return nil
 	}
 
-	namespaceID, err := validateNamespaceUUID(request.NamespaceUUID)
+	namespaceID, err := validateNamespaceUUID(request.GetNamespaceId())
 	if err != nil {
 		return err
 	}

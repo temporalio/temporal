@@ -242,7 +242,7 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 	expiryTime, _ := types.TimestampFromProto(timerInfo.ExpiryTime)
 
 	return &timerSequenceID{
-		eventID:      timerInfo.StartedID,
+		eventID:      timerInfo.GetStartedId(),
 		timestamp:    expiryTime,
 		timerType:    timerTypeStartToClose,
 		timerCreated: timerInfo.TaskStatus == timerTaskStatusCreated,

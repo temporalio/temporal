@@ -200,8 +200,8 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 
 	historyAddr := historyHost.GetAddress()
 	resp2, err := adh.GetHistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: namespaceID,
-		Execution:     request.Execution,
+		NamespaceId: namespaceID,
+		Execution:   request.Execution,
 	})
 
 	if err != nil {
@@ -226,9 +226,9 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.R
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 	_, err := adh.GetHistoryClient().RemoveTask(ctx, &historyservice.RemoveTaskRequest{
-		ShardID: request.GetShardID(),
+		ShardId: request.GetShardId(),
 		Type:    request.GetType(),
-		TaskID:  request.GetTaskID(),
+		TaskId:  request.GetTaskId(),
 	})
 	return &adminservice.RemoveTaskResponse{}, err
 }
@@ -243,7 +243,7 @@ func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.C
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-	_, err := adh.GetHistoryClient().CloseShard(ctx, &historyservice.CloseShardRequest{ShardID: request.GetShardID()})
+	_, err := adh.GetHistoryClient().CloseShard(ctx, &historyservice.CloseShardRequest{ShardId: request.GetShardId()})
 	return &adminservice.CloseShardResponse{}, err
 }
 
@@ -276,7 +276,7 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 
 	return &adminservice.DescribeHistoryHostResponse{
 		NumberOfShards:        resp.GetNumberOfShards(),
-		ShardIDs:              resp.GetShardIDs(),
+		ShardIds:              resp.GetShardIds(),
 		NamespaceCache:        resp.GetNamespaceCache(),
 		ShardControllerStatus: resp.GetShardControllerStatus(),
 		Address:               resp.GetAddress(),
@@ -349,8 +349,8 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		}
 
 		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-			NamespaceUUID: namespaceID,
-			Execution:     execution,
+			NamespaceId: namespaceID,
+			Execution:   execution,
 		})
 		if err != nil {
 			return nil, err
@@ -461,8 +461,8 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	var targetVersionHistory *persistence.VersionHistory
 	if request.NextPageToken == nil {
 		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-			NamespaceUUID: namespaceID,
-			Execution:     execution,
+			NamespaceId: namespaceID,
+			Execution:   execution,
 		})
 		if err != nil {
 			return nil, adh.error(err, scope)
@@ -747,8 +747,8 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	}
 
 	_, err = adh.GetHistoryClient().ReapplyEvents(ctx, &historyservice.ReapplyEventsRequest{
-		NamespaceUUID: namespaceEntry.GetInfo().ID,
-		Request:       request,
+		NamespaceId: namespaceEntry.GetInfo().ID,
+		Request:     request,
 	})
 	if err != nil {
 		return nil, adh.error(err, scope)
@@ -774,8 +774,8 @@ func (adh *AdminHandler) ReadDLQMessages(
 		request.MaximumPageSize = common.ReadDLQMessagesPageSize
 	}
 
-	if request.InclusiveEndMessageID <= 0 {
-		request.InclusiveEndMessageID = common.EndMessageID
+	if request.GetInclusiveEndMessageId() <= 0 {
+		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
 	var tasks []*replication.ReplicationTask
@@ -785,9 +785,9 @@ func (adh *AdminHandler) ReadDLQMessages(
 	case enums.DLQTypeReplication:
 		resp, err := adh.GetHistoryClient().ReadDLQMessages(ctx, &historyservice.ReadDLQMessagesRequest{
 			Type:                  request.GetType(),
-			ShardID:               request.GetShardID(),
+			ShardId:               request.GetShardId(),
 			SourceCluster:         request.GetSourceCluster(),
-			InclusiveEndMessageID: request.GetInclusiveEndMessageID(),
+			InclusiveEndMessageId: request.GetInclusiveEndMessageId(),
 			MaximumPageSize:       request.GetMaximumPageSize(),
 			NextPageToken:         request.GetNextPageToken(),
 		})
@@ -809,7 +809,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 			default:
 				var err error
 				tasks, token, err = adh.namespaceDLQHandler.Read(
-					int(request.GetInclusiveEndMessageID()),
+					int(request.GetInclusiveEndMessageId()),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken())
 				return err
@@ -843,8 +843,8 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 
-	if request.InclusiveEndMessageID <= 0 {
-		request.InclusiveEndMessageID = common.EndMessageID
+	if request.GetInclusiveEndMessageId() <= 0 {
+		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
 	var op func() error
@@ -852,9 +852,9 @@ func (adh *AdminHandler) PurgeDLQMessages(
 	case enums.DLQTypeReplication:
 		resp, err := adh.GetHistoryClient().PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
 			Type:                  request.GetType(),
-			ShardID:               request.GetShardID(),
+			ShardId:               request.GetShardId(),
 			SourceCluster:         request.GetSourceCluster(),
-			InclusiveEndMessageID: request.GetInclusiveEndMessageID(),
+			InclusiveEndMessageId: request.GetInclusiveEndMessageId(),
 		})
 
 		if resp == nil {
@@ -868,7 +868,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
-				return adh.namespaceDLQHandler.Purge(int(request.GetInclusiveEndMessageID()))
+				return adh.namespaceDLQHandler.Purge(int(request.GetInclusiveEndMessageId()))
 			}
 		}
 	default:
@@ -896,8 +896,8 @@ func (adh *AdminHandler) MergeDLQMessages(
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 
-	if request.InclusiveEndMessageID <= 0 {
-		request.InclusiveEndMessageID = common.EndMessageID
+	if request.GetInclusiveEndMessageId() <= 0 {
+		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
 	var token []byte
@@ -906,9 +906,9 @@ func (adh *AdminHandler) MergeDLQMessages(
 	case enums.DLQTypeReplication:
 		resp, err := adh.GetHistoryClient().MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
 			Type:                  request.GetType(),
-			ShardID:               request.GetShardID(),
+			ShardId:               request.GetShardId(),
 			SourceCluster:         request.GetSourceCluster(),
-			InclusiveEndMessageID: request.GetInclusiveEndMessageID(),
+			InclusiveEndMessageId: request.GetInclusiveEndMessageId(),
 			MaximumPageSize:       request.GetMaximumPageSize(),
 			NextPageToken:         request.GetNextPageToken(),
 		})
@@ -928,7 +928,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 			default:
 				var err error
 				token, err = adh.namespaceDLQHandler.Merge(
-					int(request.GetInclusiveEndMessageID()),
+					int(request.GetInclusiveEndMessageId()),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken(),
 				)
@@ -969,8 +969,8 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	}
 
 	_, err = adh.GetHistoryClient().RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
-		NamespaceUUID: namespaceEntry.GetInfo().ID,
-		Request:       request,
+		NamespaceId: namespaceEntry.GetInfo().ID,
+		Request:     request,
 	})
 	if err != nil {
 		return nil, adh.error(err, scope)

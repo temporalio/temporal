@@ -325,18 +325,18 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(
 	return client.RecordActivityTaskHeartbeat(ctx, request, opts...)
 }
 
-func (c *clientImpl) RecordActivityTaskHeartbeatByID(
+func (c *clientImpl) RecordActivityTaskHeartbeatById(
 	ctx context.Context,
-	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
+	request *workflowservice.RecordActivityTaskHeartbeatByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RecordActivityTaskHeartbeatByIDResponse, error) {
+) (*workflowservice.RecordActivityTaskHeartbeatByIdResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RecordActivityTaskHeartbeatByID(ctx, request, opts...)
+	return client.RecordActivityTaskHeartbeatById(ctx, request, opts...)
 }
 
 func (c *clientImpl) RegisterNamespace(
@@ -410,18 +410,18 @@ func (c *clientImpl) RespondActivityTaskCanceled(
 	return client.RespondActivityTaskCanceled(ctx, request, opts...)
 }
 
-func (c *clientImpl) RespondActivityTaskCanceledByID(
+func (c *clientImpl) RespondActivityTaskCanceledById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
+	request *workflowservice.RespondActivityTaskCanceledByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCanceledByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskCanceledByIdResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RespondActivityTaskCanceledByID(ctx, request, opts...)
+	return client.RespondActivityTaskCanceledById(ctx, request, opts...)
 }
 
 func (c *clientImpl) RespondActivityTaskCompleted(
@@ -438,18 +438,18 @@ func (c *clientImpl) RespondActivityTaskCompleted(
 	return client.RespondActivityTaskCompleted(ctx, request, opts...)
 }
 
-func (c *clientImpl) RespondActivityTaskCompletedByID(
+func (c *clientImpl) RespondActivityTaskCompletedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
+	request *workflowservice.RespondActivityTaskCompletedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCompletedByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskCompletedByIdResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RespondActivityTaskCompletedByID(ctx, request, opts...)
+	return client.RespondActivityTaskCompletedById(ctx, request, opts...)
 }
 
 func (c *clientImpl) RespondActivityTaskFailed(
@@ -466,18 +466,18 @@ func (c *clientImpl) RespondActivityTaskFailed(
 	return client.RespondActivityTaskFailed(ctx, request, opts...)
 }
 
-func (c *clientImpl) RespondActivityTaskFailedByID(
+func (c *clientImpl) RespondActivityTaskFailedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskFailedByIDRequest,
+	request *workflowservice.RespondActivityTaskFailedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskFailedByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskFailedByIdResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RespondActivityTaskFailedByID(ctx, request, opts...)
+	return client.RespondActivityTaskFailedById(ctx, request, opts...)
 }
 
 func (c *clientImpl) RespondDecisionTaskCompleted(

@@ -322,7 +322,7 @@ func (d *HandlerImpl) DescribeNamespace(
 	// TODO, we should migrate the non global namespace to new table, see #773
 	req := &persistence.GetNamespaceRequest{
 		Name: describeRequest.GetName(),
-		ID:   describeRequest.GetUuid(),
+		ID:   describeRequest.GetId(),
 	}
 	resp, err := d.metadataMgr.GetNamespace(req)
 	if err != nil {
@@ -623,7 +623,7 @@ func (d *HandlerImpl) createResponse(
 		Description: info.Description,
 		OwnerEmail:  info.OwnerEmail,
 		Data:        info.Data,
-		Uuid:        info.ID,
+		Id:          info.ID,
 	}
 
 	configResult := &commonproto.NamespaceConfiguration{

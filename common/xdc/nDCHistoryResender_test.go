@@ -203,7 +203,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	s.mockHistoryClient.EXPECT().ReplicateEventsV2(
 		gomock.Any(),
 		&historyservice.ReplicateEventsV2Request{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -240,7 +240,7 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 	}
 
 	s.Equal(&historyservice.ReplicateEventsV2Request{
-		NamespaceUUID: s.namespaceID,
+		NamespaceId: s.namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -263,7 +263,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 		Version: 1,
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceUUID: s.namespaceID,
+		NamespaceId: s.namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -288,7 +288,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 		Version: 1,
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceUUID: s.namespaceID,
+		NamespaceId: s.namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

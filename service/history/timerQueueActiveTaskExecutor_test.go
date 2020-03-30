@@ -190,7 +190,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -262,7 +262,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Noop() {
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -325,7 +325,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -403,7 +403,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -480,7 +480,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -573,7 +573,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -659,7 +659,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -745,7 +745,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -831,7 +831,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestDecisionTimeout_Fire() {
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -887,7 +887,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestDecisionTimeout_Noop() {
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -935,7 +935,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 	event, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -988,7 +988,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Noop() {
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -1038,7 +1038,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -1100,9 +1100,9 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 	s.mockMatchingClient.EXPECT().AddActivityTask(
 		gomock.Any(),
 		&matchingservice.AddActivityTaskRequest{
-			NamespaceUUID:       activityInfo.NamespaceID,
-			SourceNamespaceUUID: activityInfo.NamespaceID,
-			Execution:           &execution,
+			NamespaceId:       activityInfo.NamespaceID,
+			SourceNamespaceId: activityInfo.NamespaceID,
+			Execution:         &execution,
 			TaskList: &commonproto.TaskList{
 				Name: activityInfo.TaskList,
 			},
@@ -1128,7 +1128,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Noop() {
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -1207,7 +1207,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Fire() {
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -1261,7 +1261,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},
@@ -1325,7 +1325,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cr
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 				TaskList:                            &commonproto.TaskList{Name: taskListName},

@@ -284,8 +284,8 @@ func (s *engineSuite) TestGetMutableStateSync() {
 
 	// test get the next event ID instantly
 	response, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceUUID: testNamespaceID,
-		Execution:     &execution,
+		NamespaceId: testNamespaceID,
+		Execution:   &execution,
 	})
 	s.Nil(err)
 	s.Equal(int64(4), response.GetNextEventId())
@@ -300,8 +300,8 @@ func (s *engineSuite) TestGetMutableState_IntestRunID() {
 	}
 
 	_, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceUUID: testNamespaceID,
-		Execution:     &execution,
+		NamespaceId: testNamespaceID,
+		Execution:   &execution,
 	})
 	s.Equal(errRunIDNotValid, err)
 }
@@ -316,8 +316,8 @@ func (s *engineSuite) TestGetMutableState_EmptyRunID() {
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	_, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceUUID: testNamespaceID,
-		Execution:     &execution,
+		NamespaceId: testNamespaceID,
+		Execution:   &execution,
 	})
 	s.Equal(&serviceerror.NotFound{}, err)
 }
@@ -359,7 +359,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 
 		<-timer.C
 		_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-			NamespaceUUID: testNamespaceID,
+			NamespaceId: testNamespaceID,
 			CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 				TaskToken: taskToken,
 				Identity:  identity,
@@ -372,7 +372,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 
 	// return immediately, since the expected next event ID appears
 	response, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceUUID:       testNamespaceID,
+		NamespaceId:         testNamespaceID,
 		Execution:           &execution,
 		ExpectedNextEventId: 3,
 	})
@@ -383,7 +383,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	go asycWorkflowUpdate(time.Second * 2)
 	start := time.Now()
 	pollResponse, err := s.mockHistoryEngine.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
-		NamespaceUUID:       testNamespaceID,
+		NamespaceId:         testNamespaceID,
 		Execution:           &execution,
 		ExpectedNextEventId: 4,
 	})
@@ -437,7 +437,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 
 	// return immediately, since the expected next event ID appears
 	response0, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceUUID:       testNamespaceID,
+		NamespaceId:         testNamespaceID,
 		Execution:           &execution,
 		ExpectedNextEventId: 3,
 	})
@@ -448,7 +448,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 	go asyncBranchTokenUpdate(time.Second * 2)
 	start := time.Now()
 	response1, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceUUID:       testNamespaceID,
+		NamespaceId:         testNamespaceID,
 		Execution:           &execution,
 		ExpectedNextEventId: 10,
 	})
@@ -479,7 +479,7 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 
 	// long poll, no event happen after long poll timeout
 	response, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceUUID:       testNamespaceID,
+		NamespaceId:         testNamespaceID,
 		Execution:           &execution,
 		ExpectedNextEventId: 4,
 	})
@@ -490,7 +490,7 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 func (s *engineSuite) TestQueryWorkflow_RejectBasedOnNotEnabled() {
 	s.mockHistoryEngine.config.EnableConsistentQueryByNamespace = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 	request := &historyservice.QueryWorkflowRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			QueryConsistencyLevel: enums.QueryConsistencyLevelStrong,
 		},
@@ -526,7 +526,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
 
 	request := &historyservice.QueryWorkflowRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:            &execution,
 			Query:                &commonproto.WorkflowQuery{},
@@ -560,7 +560,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
 
 	request := &historyservice.QueryWorkflowRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:            &execution,
 			Query:                &commonproto.WorkflowQuery{},
@@ -574,7 +574,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	s.EqualValues(enums.WorkflowExecutionCloseStatusFailed, resp.GetResponse().GetQueryRejected().CloseStatus)
 
 	request = &historyservice.QueryWorkflowRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:            &execution,
 			Query:                &commonproto.WorkflowQuery{},
@@ -605,7 +605,7 @@ func (s *engineSuite) TestQueryWorkflow_FirstDecisionNotCompleted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
 
 	request := &historyservice.QueryWorkflowRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution: &execution,
 			Query:     &commonproto.WorkflowQuery{},
@@ -638,7 +638,7 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(&matchingservice.QueryWorkflowResponse{QueryResult: []byte{1, 2, 3}}, nil)
 	s.mockHistoryEngine.matchingClient = s.mockMatchingClient
 	request := &historyservice.QueryWorkflowRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution: &execution,
 			Query:     &commonproto.WorkflowQuery{},
@@ -673,7 +673,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Timeout() {
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
 	request := &historyservice.QueryWorkflowRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution: &execution,
 			Query:     &commonproto.WorkflowQuery{},
@@ -739,7 +739,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	release(nil)
 
 	request := &historyservice.QueryWorkflowRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:             &execution,
 			Query:                 &commonproto.WorkflowQuery{},
@@ -797,7 +797,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 	}
 
 	request := &historyservice.QueryWorkflowRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:             &execution,
 			Query:                 &commonproto.WorkflowQuery{},
@@ -856,7 +856,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Unblocked() {
 	}
 
 	request := &historyservice.QueryWorkflowRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:             &execution,
 			Query:                 &commonproto.WorkflowQuery{},
@@ -884,7 +884,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
 	identity := "testIdentity"
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        invalidToken,
 			Decisions:        nil,
@@ -910,7 +910,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -933,7 +933,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, errors.New("FAILED")).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -973,7 +973,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -1011,7 +1011,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -1047,7 +1047,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken: taskToken,
 		},
@@ -1135,7 +1135,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -1229,7 +1229,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	}
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -1304,7 +1304,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -1390,7 +1390,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -1463,7 +1463,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 	).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -1577,7 +1577,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 		_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-			NamespaceUUID: testNamespaceID,
+			NamespaceId: testNamespaceID,
 			CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 				TaskToken:        taskToken,
 				Decisions:        decisions,
@@ -1657,7 +1657,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -1720,7 +1720,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -1781,7 +1781,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatTimeout(
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			ForceCreateNewDecisionTask: true,
 			TaskToken:                  taskToken,
@@ -1826,7 +1826,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			ForceCreateNewDecisionTask: true,
 			TaskToken:                  taskToken,
@@ -1871,7 +1871,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			ForceCreateNewDecisionTask: true,
 			TaskToken:                  taskToken,
@@ -1921,7 +1921,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -1978,7 +1978,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -2038,7 +2038,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -2096,7 +2096,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithAban
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -2162,7 +2162,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -2222,7 +2222,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 	}}
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			Task:        taskToken,
 			Decisions:        decisions,
@@ -2279,7 +2279,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 	).Times(1)
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -2297,7 +2297,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 	identity := "testIdentity"
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: invalidToken,
 			Result:    nil,
@@ -2322,7 +2322,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -2344,7 +2344,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -2367,7 +2367,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, errors.New("FAILED")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -2402,7 +2402,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -2438,7 +2438,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -2486,7 +2486,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Result:    activityResult,
@@ -2535,7 +2535,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Result:    activityResult,
@@ -2581,7 +2581,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Result:    activityResult,
@@ -2643,7 +2643,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Result:    activity1Result,
@@ -2704,7 +2704,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 	}
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Result:    activityResult,
@@ -2752,7 +2752,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Result:    activityResult,
@@ -2814,7 +2814,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
 			TaskToken: taskToken,
 			Result:    activityResult,
@@ -2841,7 +2841,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 	identity := "testIdentity"
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: invalidToken,
 			Identity:  identity,
@@ -2866,7 +2866,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 		serviceerror.NewNotFound("")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -2889,7 +2889,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 		serviceerror.NewNotFound("")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -2913,7 +2913,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 		errors.New("FAILED")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -2948,7 +2948,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -2984,7 +2984,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3031,7 +3031,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3080,7 +3080,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Reason:    failReason,
@@ -3126,7 +3126,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3193,7 +3193,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Reason:    failReason,
@@ -3254,7 +3254,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 	}
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3302,7 +3302,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Reason:    failReason,
@@ -3324,7 +3324,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
 
-func (s *engineSuite) TestRespondActivityTaskFailedByIDSuccess() {
+func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 
 	we := commonproto.WorkflowExecution{
 		WorkflowId: "wId",
@@ -3366,7 +3366,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIDSuccess() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
 			Reason:    failReason,
@@ -3426,7 +3426,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	detais := []byte("details")
 
 	_, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3475,7 +3475,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	detais := []byte("details")
 
 	_, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3529,7 +3529,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 	detais := []byte("details")
 
 	_, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3573,7 +3573,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &historyservice.RespondActivityTaskCanceledRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3623,7 +3623,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	err = s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &historyservice.RespondActivityTaskCanceledRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3644,7 +3644,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
 
-func (s *engineSuite) TestRespondActivityTaskCanceledByID_Started() {
+func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 
 	we := commonproto.WorkflowExecution{
 		WorkflowId: "wId",
@@ -3685,7 +3685,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledByID_Started() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	err = s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &historyservice.RespondActivityTaskCanceledRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3718,7 +3718,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &historyservice.RespondActivityTaskCanceledRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3747,7 +3747,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &historyservice.RespondActivityTaskCanceledRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3776,7 +3776,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &historyservice.RespondActivityTaskCanceledRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
@@ -3822,7 +3822,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -3883,7 +3883,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -3950,7 +3950,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -4020,7 +4020,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -4083,7 +4083,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -4110,7 +4110,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	activityTaskToken, _ := att.Marshal()
 
 	hbResponse, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
@@ -4126,7 +4126,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	err = s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &historyservice.RespondActivityTaskCanceledRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
@@ -4188,7 +4188,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -4215,7 +4215,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	activityTaskToken, _ := att.Marshal()
 
 	hbResponse, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
@@ -4231,7 +4231,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	err = s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &historyservice.RespondActivityTaskCanceledRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
@@ -4316,7 +4316,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 		id2: result2,
 	}
 	_, err = s.mockHistoryEngine.RespondDecisionTaskCompleted(s.constructCallContext(headers.SupportedGoSDKVersion), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -4360,7 +4360,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	activityTaskToken, _ := att.Marshal()
 
 	hbResponse, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
@@ -4376,7 +4376,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	err = s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &historyservice.RespondActivityTaskCanceledRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
@@ -4435,7 +4435,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -4473,7 +4473,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err = s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken2,
 			Decisions:        decisions,
@@ -4537,7 +4537,7 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -4592,7 +4592,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -4660,7 +4660,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 	})).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err = s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
 			Decisions:        decisions,
@@ -4692,7 +4692,7 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 	signalName := "my signal name"
 	input := []byte("test input")
 	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         testNamespaceID,
 			WorkflowExecution: &we,
@@ -4734,7 +4734,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	input := []byte("test input 2")
 	requestID := uuid.New()
 	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         testNamespaceID,
 			WorkflowExecution: &we,
@@ -4777,7 +4777,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 	signalName := "my signal name"
 	input := []byte("test input")
 	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceUUID: testNamespaceID,
+		NamespaceId: testNamespaceID,
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         testNamespaceID,
 			WorkflowExecution: we,
@@ -4814,7 +4814,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	identity := "testIdentity"
 	requestID := uuid.New()
 	removeRequest = &historyservice.RemoveSignalMutableStateRequest{
-		NamespaceUUID:     testNamespaceID,
+		NamespaceId:       testNamespaceID,
 		WorkflowExecution: &execution,
 		RequestId:         requestID,
 	}
@@ -4871,7 +4871,7 @@ func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowEx
 	event, _ := builder.AddWorkflowExecutionStartedEvent(
 		workflowExecution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID:       testNamespaceID,
+			NamespaceId:         testNamespaceID,
 			StartRequest:        startRequest,
 			ParentExecutionInfo: parentInfo,
 		},

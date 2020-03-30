@@ -51,10 +51,10 @@ func newShardPersistence(db sqlplugin.DB, currentClusterName string, log log.Log
 
 func (m *sqlShardManager) CreateShard(request *persistence.CreateShardRequest) error {
 	if _, err := m.GetShard(&persistence.GetShardRequest{
-		ShardID: request.ShardInfo.ShardID,
+		ShardID: request.ShardInfo.GetShardId(),
 	}); err == nil {
 		return &persistence.ShardAlreadyExistError{
-			Msg: fmt.Sprintf("CreateShard operaiton failed. Shard with ID %v already exists.", request.ShardInfo.ShardID),
+			Msg: fmt.Sprintf("CreateShard operaiton failed. Shard with ID %v already exists.", request.ShardInfo.GetShardId()),
 		}
 	}
 
@@ -95,7 +95,7 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 		return serviceerror.NewInternal(fmt.Sprintf("UpdateShard operation failed. Error: %v", err))
 	}
 	return m.txExecute("UpdateShard", func(tx sqlplugin.Tx) error {
-		if err := lockShard(tx, int(request.ShardInfo.ShardID), request.PreviousRangeID); err != nil {
+		if err := lockShard(tx, int(request.ShardInfo.GetShardId()), request.PreviousRangeID); err != nil {
 			return err
 		}
 		result, err := tx.UpdateShards(row)
@@ -104,7 +104,7 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 		}
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
-			return fmt.Errorf("rowsAffected returned error for shardID %v: %v", request.ShardInfo.ShardID, err)
+			return fmt.Errorf("rowsAffected returned error for shardID %v: %v", request.ShardInfo.GetShardId(), err)
 		}
 		if rowsAffected != 1 {
 			return fmt.Errorf("rowsAffected returned %v shards instead of one", rowsAffected)
@@ -158,8 +158,8 @@ func shardInfoToShardsRow(s persistenceblobs.ShardInfo) (*sqlplugin.ShardsRow, e
 		return nil, err
 	}
 	return &sqlplugin.ShardsRow{
-		ShardID:      int64(s.ShardID),
-		RangeID:      s.RangeID,
+		ShardID:      int64(s.GetShardId()),
+		RangeID:      s.GetRangeId(),
 		Data:         blob.Data,
 		DataEncoding: string(blob.Encoding),
 	}, nil

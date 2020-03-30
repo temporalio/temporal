@@ -213,8 +213,8 @@ func TestDescribeTaskList(t *testing.T) {
 	require.True(t, taskListStatus.GetRatePerSecond() > (_defaultTaskDispatchRPS-1))
 	require.True(t, taskListStatus.GetRatePerSecond() < (_defaultTaskDispatchRPS+1))
 	taskIDBlock := taskListStatus.GetTaskIDBlock()
-	require.Equal(t, int64(1), taskIDBlock.GetStartID())
-	require.Equal(t, tlm.config.RangeSize, taskIDBlock.GetEndID())
+	require.Equal(t, int64(1), taskIDBlock.GetStartId())
+	require.Equal(t, tlm.config.RangeSize, taskIDBlock.GetEndId())
 
 	// Add a poller and complete all tasks
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), nil)

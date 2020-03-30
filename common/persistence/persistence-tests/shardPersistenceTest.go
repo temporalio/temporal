@@ -84,9 +84,9 @@ func (s *ShardPersistenceSuite) TestGetShard() {
 	shardInfo, err1 := s.GetShard(shardID)
 	s.Nil(err1)
 	s.NotNil(shardInfo)
-	s.Equal(shardID, shardInfo.ShardID)
+	s.Equal(shardID, shardInfo.GetShardId())
 	s.Equal(owner, shardInfo.Owner)
-	s.Equal(rangeID, shardInfo.RangeID)
+	s.Equal(rangeID, shardInfo.GetRangeId())
 	s.Equal(int32(0), shardInfo.StolenSinceRenew)
 
 	_, err2 := s.GetShard(4766)
@@ -106,9 +106,9 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	shardInfo, err1 := s.GetShard(shardID)
 	s.Nil(err1)
 	s.NotNil(shardInfo)
-	s.Equal(shardID, shardInfo.ShardID)
+	s.Equal(shardID, shardInfo.GetShardId())
 	s.Equal(owner, shardInfo.Owner)
-	s.Equal(rangeID, shardInfo.RangeID)
+	s.Equal(rangeID, shardInfo.GetRangeId())
 	s.Equal(int32(0), shardInfo.StolenSinceRenew)
 
 	updatedOwner := "updatedOwner"
@@ -118,20 +118,20 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	updatedStolenSinceRenew := int32(10)
 	updatedInfo := copyShardInfo(shardInfo)
 	updatedInfo.Owner = updatedOwner
-	updatedInfo.RangeID = updatedRangeID
+	updatedInfo.RangeId = updatedRangeID
 	updatedInfo.TransferAckLevel = updatedTransferAckLevel
 	updatedInfo.ReplicationAckLevel = updatedReplicationAckLevel
 	updatedInfo.StolenSinceRenew = updatedStolenSinceRenew
 	updatedTimerAckLevel := time.Now()
 	updatedInfo.TimerAckLevel, _ = types.TimestampProto(updatedTimerAckLevel)
-	err2 := s.UpdateShard(updatedInfo, shardInfo.RangeID)
+	err2 := s.UpdateShard(updatedInfo, shardInfo.GetRangeId())
 	s.Nil(err2)
 
 	info1, err3 := s.GetShard(shardID)
 	s.Nil(err3)
 	s.NotNil(info1)
 	s.Equal(updatedOwner, info1.Owner)
-	s.Equal(updatedRangeID, info1.RangeID)
+	s.Equal(updatedRangeID, info1.GetRangeId())
 	s.Equal(updatedTransferAckLevel, info1.TransferAckLevel)
 	s.Equal(updatedReplicationAckLevel, info1.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info1.StolenSinceRenew)
@@ -142,7 +142,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	failedUpdateInfo.Owner = "failed_owner"
 	failedUpdateInfo.TransferAckLevel = int64(4000)
 	failedUpdateInfo.ReplicationAckLevel = int64(5000)
-	err4 := s.UpdateShard(failedUpdateInfo, shardInfo.RangeID)
+	err4 := s.UpdateShard(failedUpdateInfo, shardInfo.GetRangeId())
 	s.NotNil(err4)
 	s.IsType(&p.ShardOwnershipLostError{}, err4)
 	log.Infof("Update shard failed with error: %v", err4)
@@ -151,7 +151,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.Nil(err5)
 	s.NotNil(info2)
 	s.Equal(updatedOwner, info2.Owner)
-	s.Equal(updatedRangeID, info2.RangeID)
+	s.Equal(updatedRangeID, info2.GetRangeId())
 	s.Equal(updatedTransferAckLevel, info2.TransferAckLevel)
 	s.Equal(updatedReplicationAckLevel, info2.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info2.StolenSinceRenew)
@@ -162,9 +162,9 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 
 func copyShardInfo(sourceInfo *pblobs.ShardInfo) *pblobs.ShardInfo {
 	return &pblobs.ShardInfo{
-		ShardID:             sourceInfo.ShardID,
+		ShardId:             sourceInfo.GetShardId(),
 		Owner:               sourceInfo.Owner,
-		RangeID:             sourceInfo.RangeID,
+		RangeId:             sourceInfo.GetRangeId(),
 		TransferAckLevel:    sourceInfo.TransferAckLevel,
 		ReplicationAckLevel: sourceInfo.ReplicationAckLevel,
 		StolenSinceRenew:    sourceInfo.StolenSinceRenew,

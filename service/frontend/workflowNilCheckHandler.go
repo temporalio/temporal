@@ -189,15 +189,15 @@ func (wh *WorkflowNilCheckHandler) RecordActivityTaskHeartbeat(ctx context.Conte
 	return resp, err
 }
 
-// RecordActivityTaskHeartbeatByID is called by application worker while it is processing an ActivityTask.  If worker fails
+// RecordActivityTaskHeartbeatById is called by application worker while it is processing an ActivityTask.  If worker fails
 // to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and
-// 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeatByID' will
+// 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeatById' will
 // fail with 'EntityNotExistsError' in such situations.  Instead of using 'taskToken' like in RecordActivityTaskHeartbeat,
 // use Namespace, WorkflowID and ActivityID
-func (wh *WorkflowNilCheckHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIDRequest) (_ *workflowservice.RecordActivityTaskHeartbeatByIDResponse, retError error) {
-	resp, err := wh.parentHandler.RecordActivityTaskHeartbeatByID(ctx, request)
+func (wh *WorkflowNilCheckHandler) RecordActivityTaskHeartbeatById(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIdRequest) (_ *workflowservice.RecordActivityTaskHeartbeatByIdResponse, retError error) {
+	resp, err := wh.parentHandler.RecordActivityTaskHeartbeatById(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.RecordActivityTaskHeartbeatByIDResponse{}
+		resp = &workflowservice.RecordActivityTaskHeartbeatByIdResponse{}
 	}
 	return resp, err
 }
@@ -215,15 +215,15 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompleted(ctx context.Cont
 	return resp, err
 }
 
-// RespondActivityTaskCompletedByID is called by application worker when it is done processing an ActivityTask.
+// RespondActivityTaskCompletedById is called by application worker when it is done processing an ActivityTask.
 // It will result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask
 // created for the workflow so new decisions could be made.  Similar to RespondActivityTaskCompleted but use Namespace,
 // WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
-func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompletedByID(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIDRequest) (_ *workflowservice.RespondActivityTaskCompletedByIDResponse, retError error) {
-	resp, err := wh.parentHandler.RespondActivityTaskCompletedByID(ctx, request)
+func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompletedById(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIdRequest) (_ *workflowservice.RespondActivityTaskCompletedByIdResponse, retError error) {
+	resp, err := wh.parentHandler.RespondActivityTaskCompletedById(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.RespondActivityTaskCompletedByIDResponse{}
+		resp = &workflowservice.RespondActivityTaskCompletedByIdResponse{}
 	}
 	return resp, err
 }
@@ -241,15 +241,15 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailed(ctx context.Context
 	return resp, err
 }
 
-// RespondActivityTaskFailedByID is called by application worker when it is done processing an ActivityTask.
+// RespondActivityTaskFailedById is called by application worker when it is done processing an ActivityTask.
 // It will result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask
 // created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskFailed but use
 // Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
-func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailedByID(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIDRequest) (_ *workflowservice.RespondActivityTaskFailedByIDResponse, retError error) {
-	resp, err := wh.parentHandler.RespondActivityTaskFailedByID(ctx, request)
+func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailedById(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIdRequest) (_ *workflowservice.RespondActivityTaskFailedByIdResponse, retError error) {
+	resp, err := wh.parentHandler.RespondActivityTaskFailedById(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.RespondActivityTaskFailedByIDResponse{}
+		resp = &workflowservice.RespondActivityTaskFailedByIdResponse{}
 	}
 	return resp, err
 }
@@ -267,15 +267,15 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceled(ctx context.Conte
 	return resp, err
 }
 
-// RespondActivityTaskCanceledByID is called by application worker when it is successfully canceled an ActivityTask.
+// RespondActivityTaskCanceledById is called by application worker when it is successfully canceled an ActivityTask.
 // It will result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
 // created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskCanceled but use
 // Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
-func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceledByID(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIDRequest) (_ *workflowservice.RespondActivityTaskCanceledByIDResponse, retError error) {
-	resp, err := wh.parentHandler.RespondActivityTaskCanceledByID(ctx, request)
+func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceledById(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIdRequest) (_ *workflowservice.RespondActivityTaskCanceledByIdResponse, retError error) {
+	resp, err := wh.parentHandler.RespondActivityTaskCanceledById(ctx, request)
 	if resp == nil && err == nil {
-		resp = &workflowservice.RespondActivityTaskCanceledByIDResponse{}
+		resp = &workflowservice.RespondActivityTaskCanceledByIdResponse{}
 	}
 	return resp, err
 }

@@ -220,7 +220,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	lastEventID := int64(2)
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
-	s.mockMutableState.EXPECT().GetNextEventID().Return(lastEventID + 1).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventId().Return(lastEventID + 1).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		NamespaceID:     s.namespaceID,

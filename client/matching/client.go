@@ -67,7 +67,7 @@ func (c *clientImpl) AddActivityTask(
 	request *matchingservice.AddActivityTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
-		request.GetNamespaceUUID(),
+		request.GetNamespaceId(),
 		*request.GetTaskList(),
 		persistence.TaskListTypeActivity,
 		request.GetForwardedFrom(),
@@ -87,7 +87,7 @@ func (c *clientImpl) AddDecisionTask(
 	request *matchingservice.AddDecisionTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddDecisionTaskResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
-		request.GetNamespaceUUID(),
+		request.GetNamespaceId(),
 		*request.GetTaskList(),
 		persistence.TaskListTypeDecision,
 		request.GetForwardedFrom(),
@@ -107,7 +107,7 @@ func (c *clientImpl) PollForActivityTask(
 	request *matchingservice.PollForActivityTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.PollForActivityTaskResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
-		request.GetNamespaceUUID(),
+		request.GetNamespaceId(),
 		*request.PollRequest.GetTaskList(),
 		persistence.TaskListTypeActivity,
 		request.GetForwardedFrom(),
@@ -127,7 +127,7 @@ func (c *clientImpl) PollForDecisionTask(
 	request *matchingservice.PollForDecisionTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.PollForDecisionTaskResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
-		request.GetNamespaceUUID(),
+		request.GetNamespaceId(),
 		*request.PollRequest.GetTaskList(),
 		persistence.TaskListTypeDecision,
 		request.GetForwardedFrom(),
@@ -144,7 +144,7 @@ func (c *clientImpl) PollForDecisionTask(
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
-		request.GetNamespaceUUID(),
+		request.GetNamespaceId(),
 		*request.GetTaskList(),
 		persistence.TaskListTypeDecision,
 		request.GetForwardedFrom(),

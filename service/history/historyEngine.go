@@ -529,7 +529,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(startRequest.GetNamespaceUUID())
+	namespaceEntry, err := e.getActiveNamespaceEntry(startRequest.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -667,7 +667,7 @@ func (e *historyEngineImpl) PollMutableState(
 ) (*historyservice.PollMutableStateResponse, error) {
 
 	response, err := e.getMutableStateOrPolling(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceUUID:       request.NamespaceUUID,
+		NamespaceId:         request.GetNamespaceId(),
 		Execution:           request.Execution,
 		ExpectedNextEventId: request.ExpectedNextEventId,
 		CurrentBranchToken:  request.CurrentBranchToken})
@@ -700,7 +700,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 	request *historyservice.GetMutableStateRequest,
 ) (*historyservice.GetMutableStateResponse, error) {
 
-	namespaceID, err := validateNamespaceUUID(request.NamespaceUUID)
+	namespaceID, err := validateNamespaceUUID(request.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -792,7 +792,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, ErrConsistentQueryNotEnabled
 	}
 
-	mutableStateResp, err := e.getMutableState(ctx, request.GetNamespaceUUID(), *request.GetRequest().GetExecution())
+	mutableStateResp, err := e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
 	if err != nil {
 		return nil, err
 	}
@@ -817,7 +817,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
 	for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
 		<-time.After(queryFirstDecisionTaskCheckInterval)
-		mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceUUID(), *request.GetRequest().GetExecution())
+		mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
 		if err != nil {
 			return nil, err
 		}
@@ -828,12 +828,12 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, ErrQueryWorkflowBeforeFirstDecision
 	}
 
-	de, err := e.shard.GetNamespaceCache().GetNamespaceByID(request.GetNamespaceUUID())
+	de, err := e.shard.GetNamespaceCache().GetNamespaceByID(request.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
 
-	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, request.GetNamespaceUUID(), *request.GetRequest().GetExecution())
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
 	if err != nil {
 		return nil, err
 	}
@@ -860,12 +860,12 @@ func (e *historyEngineImpl) QueryWorkflow(
 		(!mutableState.HasPendingDecision() && !mutableState.HasInFlightDecision())
 	if safeToDispatchDirectly {
 		release(nil)
-		msResp, err := e.getMutableState(ctx, request.GetNamespaceUUID(), *request.GetRequest().GetExecution())
+		msResp, err := e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
 		if err != nil {
 			return nil, err
 		}
 		req.Execution.RunId = msResp.Execution.RunId
-		return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceUUID(), req, scope)
+		return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceId(), req, scope)
 	}
 
 	// If we get here it means query could not be dispatched through matching directly, so it must block
@@ -904,12 +904,12 @@ func (e *historyEngineImpl) QueryWorkflow(
 				return nil, ErrQueryEnteredInvalidState
 			}
 		case queryTerminationTypeUnblocked:
-			msResp, err := e.getMutableState(ctx, request.GetNamespaceUUID(), *request.GetRequest().GetExecution())
+			msResp, err := e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
 			if err != nil {
 				return nil, err
 			}
 			req.Execution.RunId = msResp.Execution.RunId
-			return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceUUID(), req, scope)
+			return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceId(), req, scope)
 		case queryTerminationTypeFailed:
 			return nil, state.failure
 		default:
@@ -938,9 +938,9 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		e.config.EnableStickyQuery(queryRequest.GetNamespace()) {
 
 		stickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
-			NamespaceUUID: namespaceID,
-			QueryRequest:  queryRequest,
-			TaskList:      msResp.GetStickyTaskList(),
+			NamespaceId:  namespaceID,
+			QueryRequest: queryRequest,
+			TaskList:     msResp.GetStickyTaskList(),
 		}
 
 		// using a clean new context in case customer provide a context which has
@@ -976,8 +976,8 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 			resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			clearStickinessStopWatch := scope.StartTimer(metrics.DirectQueryDispatchClearStickinessLatency)
 			_, err := e.ResetStickyTaskList(resetContext, &historyservice.ResetStickyTaskListRequest{
-				NamespaceUUID: namespaceID,
-				Execution:     queryRequest.GetExecution(),
+				NamespaceId: namespaceID,
+				Execution:   queryRequest.GetExecution(),
 			})
 			clearStickinessStopWatch.Stop()
 			cancel()
@@ -1007,9 +1007,9 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		tag.WorkflowNextEventID(msResp.GetNextEventId()))
 
 	nonStickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
-		NamespaceUUID: namespaceID,
-		QueryRequest:  queryRequest,
-		TaskList:      msResp.TaskList,
+		NamespaceId:  namespaceID,
+		QueryRequest: queryRequest,
+		TaskList:     msResp.TaskList,
 	}
 
 	nonStickyStopWatch := scope.StartTimer(metrics.DirectQueryDispatchNonStickyLatency)
@@ -1097,7 +1097,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 	request *historyservice.DescribeMutableStateRequest,
 ) (response *historyservice.DescribeMutableStateResponse, retError error) {
 
-	namespaceID, err := validateNamespaceUUID(request.NamespaceUUID)
+	namespaceID, err := validateNamespaceUUID(request.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -1159,7 +1159,7 @@ func (e *historyEngineImpl) ResetStickyTaskList(
 	resetRequest *historyservice.ResetStickyTaskListRequest,
 ) (*historyservice.ResetStickyTaskListResponse, error) {
 
-	namespaceID, err := validateNamespaceUUID(resetRequest.NamespaceUUID)
+	namespaceID, err := validateNamespaceUUID(resetRequest.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -1186,7 +1186,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	request *historyservice.DescribeWorkflowExecutionRequest,
 ) (retResp *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 
-	namespaceID, err := validateNamespaceUUID(request.NamespaceUUID)
+	namespaceID, err := validateNamespaceUUID(request.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -1255,7 +1255,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	if len(mutableState.GetPendingActivityInfos()) > 0 {
 		for _, ai := range mutableState.GetPendingActivityInfos() {
 			p := &commonproto.PendingActivityInfo{
-				ActivityID: ai.ActivityID,
+				ActivityId: ai.ActivityID,
 			}
 			if ai.CancelRequested {
 				p.State = enums.PendingActivityStateCancelRequested
@@ -1301,10 +1301,10 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	if len(mutableState.GetPendingChildExecutionInfos()) > 0 {
 		for _, ch := range mutableState.GetPendingChildExecutionInfos() {
 			p := &commonproto.PendingChildExecutionInfo{
-				WorkflowID:        ch.StartedWorkflowID,
-				RunID:             ch.StartedRunID,
+				WorkflowId:        ch.StartedWorkflowID,
+				RunId:             ch.StartedRunID,
 				WorkflowTypName:   ch.WorkflowTypeName,
-				InitiatedID:       ch.InitiatedID,
+				InitiatedId:       ch.InitiatedID,
 				ParentClosePolicy: enums.ParentClosePolicy(ch.ParentClosePolicy),
 			}
 			result.PendingChildren = append(result.PendingChildren, p)
@@ -1319,7 +1319,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	request *historyservice.RecordActivityTaskStartedRequest,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(request.NamespaceUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(request.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -1443,7 +1443,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	req *historyservice.RespondActivityTaskCompletedRequest,
 ) error {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(req.NamespaceUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(req.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -1517,7 +1517,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	req *historyservice.RespondActivityTaskFailedRequest,
 ) error {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(req.NamespaceUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(req.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -1601,7 +1601,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	req *historyservice.RespondActivityTaskCanceledRequest,
 ) error {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(req.NamespaceUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(req.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -1684,7 +1684,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	req *historyservice.RecordActivityTaskHeartbeatRequest,
 ) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(req.NamespaceUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(req.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -1754,7 +1754,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	req *historyservice.RequestCancelWorkflowExecutionRequest,
 ) error {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(req.NamespaceUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(req.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -1811,7 +1811,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 	signalRequest *historyservice.SignalWorkflowExecutionRequest,
 ) error {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(signalRequest.NamespaceUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(signalRequest.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -1886,7 +1886,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	signalWithStartRequest *historyservice.SignalWithStartWorkflowExecutionRequest,
 ) (retResp *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(signalWithStartRequest.NamespaceUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(signalWithStartRequest.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -2096,7 +2096,7 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 	request *historyservice.RemoveSignalMutableStateRequest,
 ) error {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(request.NamespaceUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(request.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -2124,7 +2124,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	terminateRequest *historyservice.TerminateWorkflowExecutionRequest,
 ) error {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(terminateRequest.NamespaceUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(terminateRequest.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -2162,7 +2162,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	completionRequest *historyservice.RecordChildExecutionCompletedRequest,
 ) error {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(completionRequest.NamespaceUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(completionRequest.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -2267,7 +2267,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 ) (response *historyservice.ResetWorkflowExecutionResponse, retError error) {
 
 	request := resetRequest.ResetRequest
-	namespaceID := resetRequest.GetNamespaceUUID()
+	namespaceID := resetRequest.GetNamespaceId()
 	workflowID := request.WorkflowExecution.GetWorkflowId()
 	baseRunID := request.WorkflowExecution.GetRunId()
 
@@ -3004,7 +3004,7 @@ func (e *historyEngineImpl) ReadDLQMessages(
 	tasks, token, err := e.replicationDLQHandler.readMessages(
 		ctx,
 		request.GetSourceCluster(),
-		request.GetInclusiveEndMessageID(),
+		request.GetInclusiveEndMessageId(),
 		int(request.GetMaximumPageSize()),
 		request.GetNextPageToken(),
 	)
@@ -3025,7 +3025,7 @@ func (e *historyEngineImpl) PurgeDLQMessages(
 
 	return e.replicationDLQHandler.purgeMessages(
 		request.GetSourceCluster(),
-		request.GetInclusiveEndMessageID(),
+		request.GetInclusiveEndMessageId(),
 	)
 }
 
@@ -3037,7 +3037,7 @@ func (e *historyEngineImpl) MergeDLQMessages(
 	token, err := e.replicationDLQHandler.mergeMessages(
 		ctx,
 		request.GetSourceCluster(),
-		request.GetInclusiveEndMessageID(),
+		request.GetInclusiveEndMessageId(),
 		int(request.GetMaximumPageSize()),
 		request.GetNextPageToken(),
 	)

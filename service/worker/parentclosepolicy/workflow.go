@@ -59,9 +59,9 @@ type (
 
 	// Request defines the request for parent close policy
 	Request struct {
-		Executions    []RequestDetail
-		Namespace     string
-		NamespaceUUID string
+		Executions  []RequestDetail
+		Namespace   string
+		NamespaceID string
 	}
 )
 
@@ -108,7 +108,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			continue
 		case enums.ParentClosePolicyTerminate:
 			_, err = client.TerminateWorkflowExecution(nil, &historyservice.TerminateWorkflowExecutionRequest{
-				NamespaceUUID: request.NamespaceUUID,
+				NamespaceId: request.NamespaceID,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 					Namespace: request.Namespace,
 					WorkflowExecution: &commonproto.WorkflowExecution{
@@ -121,7 +121,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			})
 		case enums.ParentClosePolicyRequestCancel:
 			_, err = client.RequestCancelWorkflowExecution(nil, &historyservice.RequestCancelWorkflowExecutionRequest{
-				NamespaceUUID: request.NamespaceUUID,
+				NamespaceId: request.NamespaceID,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 					Namespace: request.Namespace,
 					WorkflowExecution: &commonproto.WorkflowExecution{

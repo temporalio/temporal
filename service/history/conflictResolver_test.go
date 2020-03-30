@@ -168,7 +168,7 @@ func (s *conflictResolverSuite) TestReset() {
 		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{}}}
 
 	historySize := int64(1234567)
-	shardId := s.mockShard.GetShardID()
+	shardId := s.mockShard.GetShardId()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    common.FirstEventID,

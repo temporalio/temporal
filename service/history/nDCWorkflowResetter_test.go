@@ -180,7 +180,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		gomock.Any(),
 	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil).Times(1)
 
-	shardId := s.mockShard.GetShardID()
+	shardId := s.mockShard.GetShardId()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: branchToken,
 		ForkNodeID:      baseEventID + 1,

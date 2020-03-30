@@ -79,7 +79,7 @@ func newTransferQueueActiveProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyActiveTask(primitives.UUID(task.NamespaceID).String(), task)
+		return taskAllocator.verifyActiveTask(primitives.UUID(task.GetNamespaceId()).String(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
@@ -162,7 +162,7 @@ func newTransferQueueFailoverProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, primitives.UUID(task.NamespaceID).String(), task)
+		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, primitives.UUID(task.GetNamespaceId()).String(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return maxLevel // this is a const

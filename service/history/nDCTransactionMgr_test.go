@@ -209,8 +209,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}).AnyTimes()
-	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastDecisionTaskStartedEventID).Times(1)
+	mutableState.EXPECT().GetNextEventId().Return(nextEventID).AnyTimes()
+	mutableState.EXPECT().GetPreviousStartedEventId().Return(lastDecisionTaskStartedEventID).Times(1)
 	mutableState.EXPECT().GetVersionHistories().Return(histories).Times(1)
 
 	s.mockWorkflowResetter.EXPECT().resetWorkflow(

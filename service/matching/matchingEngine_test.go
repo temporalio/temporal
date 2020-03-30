@@ -265,7 +265,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 		}).AnyTimes()
 
 	addRequest := matchingservice.AddDecisionTaskRequest{
-		NamespaceUUID:                 namespaceID.String(),
+		NamespaceId:                   namespaceID.String(),
 		Execution:                     execution,
 		ScheduleId:                    scheduleID,
 		TaskList:                      stickyTaskList,
@@ -276,7 +276,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 	s.NoError(err)
 
 	resp, err := s.matchingEngine.PollForDecisionTask(s.callContext, &matchingservice.PollForDecisionTaskRequest{
-		NamespaceUUID: namespaceID.String(),
+		NamespaceId: namespaceID.String(),
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
 			TaskList: stickyTaskList,
 			Identity: identity},
@@ -327,7 +327,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 	for i := 0; i < pollCount; i++ {
 		if taskType == persistence.TaskListTypeActivity {
 			pollResp, err := s.matchingEngine.PollForActivityTask(callContext, &matchingservice.PollForActivityTaskRequest{
-				NamespaceUUID: namespaceID.String(),
+				NamespaceId: namespaceID.String(),
 				PollRequest: &workflowservice.PollForActivityTaskRequest{
 					TaskList: taskList,
 					Identity: identity,
@@ -339,7 +339,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 			taskListType = enums.TaskListTypeActivity
 		} else {
 			resp, err := s.matchingEngine.PollForDecisionTask(callContext, &matchingservice.PollForDecisionTaskRequest{
-				NamespaceUUID: namespaceID.String(),
+				NamespaceId: namespaceID.String(),
 				PollRequest: &workflowservice.PollForDecisionTaskRequest{
 					TaskList: taskList,
 					Identity: identity},
@@ -356,7 +356,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 		}
 		// check the poller information
 		descResp, err := s.matchingEngine.DescribeTaskList(s.callContext, &matchingservice.DescribeTaskListRequest{
-			NamespaceUUID: namespaceID.String(),
+			NamespaceId: namespaceID.String(),
 			DescRequest: &workflowservice.DescribeTaskListRequest{
 				TaskList:              taskList,
 				TaskListType:          taskListType,
@@ -404,8 +404,8 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int32, isForwarded bool) {
 		var err error
 		if taskType == persistence.TaskListTypeActivity {
 			addRequest := matchingservice.AddActivityTaskRequest{
-				SourceNamespaceUUID:           namespaceID.String(),
-				NamespaceUUID:                 namespaceID.String(),
+				SourceNamespaceId:             namespaceID.String(),
+				NamespaceId:                   namespaceID.String(),
 				Execution:                     execution,
 				ScheduleId:                    scheduleID,
 				TaskList:                      taskList,
@@ -417,7 +417,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int32, isForwarded bool) {
 			_, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		} else {
 			addRequest := matchingservice.AddDecisionTaskRequest{
-				NamespaceUUID:                 namespaceID.String(),
+				NamespaceId:                   namespaceID.String(),
 				Execution:                     execution,
 				ScheduleId:                    scheduleID,
 				TaskList:                      taskList,
@@ -463,8 +463,8 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	s.Nil(err)
 
 	addRequest := matchingservice.AddActivityTaskRequest{
-		SourceNamespaceUUID:           namespaceID.String(),
-		NamespaceUUID:                 namespaceID.String(),
+		SourceNamespaceId:             namespaceID.String(),
+		NamespaceId:                   namespaceID.String(),
 		Execution:                     execution,
 		TaskList:                      taskList,
 		ScheduleToStartTimeoutSeconds: 1,
@@ -510,8 +510,8 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	for i := int64(0); i < taskCount; i++ {
 		scheduleID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceNamespaceUUID:           namespaceID.String(),
-			NamespaceUUID:                 namespaceID.String(),
+			SourceNamespaceId:             namespaceID.String(),
+			NamespaceId:                   namespaceID.String(),
 			Execution:                     workflowExecution,
 			ScheduleId:                    scheduleID,
 			TaskList:                      taskList,
@@ -555,7 +555,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		scheduleID := i * 3
 
 		result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
-			NamespaceUUID: namespaceID.String(),
+			NamespaceId: namespaceID.String(),
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
 				TaskList: taskList,
 				Identity: identity},
@@ -663,7 +663,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	pollFunc := func(maxDispatch float64) (*matchingservice.PollForActivityTaskResponse, error) {
 		return s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
-			NamespaceUUID: namespaceID.String(),
+			NamespaceId: namespaceID.String(),
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
 				TaskList:         taskList,
 				Identity:         identity,
@@ -690,8 +690,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		time.Sleep(20 * time.Millisecond) // Necessary for sync match to happen
 
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceNamespaceUUID:           namespaceID.String(),
-			NamespaceUUID:                 namespaceID.String(),
+			SourceNamespaceId:             namespaceID.String(),
+			NamespaceId:                   namespaceID.String(),
 			Execution:                     workflowExecution,
 			ScheduleId:                    scheduleID,
 			TaskList:                      taskList,
@@ -755,7 +755,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	// check the poller information
 	tlType := enums.TaskListTypeActivity
 	descResp, err := s.matchingEngine.DescribeTaskList(s.callContext, &matchingservice.DescribeTaskListRequest{
-		NamespaceUUID: namespaceID.String(),
+		NamespaceId: namespaceID.String(),
 		DescRequest: &workflowservice.DescribeTaskListRequest{
 			TaskList:              taskList,
 			TaskListType:          tlType,
@@ -837,8 +837,8 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			defer wg.Done()
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddActivityTaskRequest{
-					SourceNamespaceUUID:           namespaceID.String(),
-					NamespaceUUID:                 namespaceID.String(),
+					SourceNamespaceId:             namespaceID.String(),
+					NamespaceId:                   namespaceID.String(),
 					Execution:                     workflowExecution,
 					ScheduleId:                    scheduleID,
 					TaskList:                      taskList,
@@ -890,7 +890,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			for i := int64(0); i < taskCount; {
 				maxDispatch := dispatchLimitFn(wNum, i)
 				result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
-					NamespaceUUID: namespaceID.String(),
+					NamespaceId: namespaceID.String(),
 					PollRequest: &workflowservice.PollForActivityTaskRequest{
 						TaskList:         taskList,
 						Identity:         identity,
@@ -977,7 +977,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 		go func() {
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddDecisionTaskRequest{
-					NamespaceUUID:                 namespaceID.String(),
+					NamespaceId:                   namespaceID.String(),
 					Execution:                     workflowExecution,
 					ScheduleId:                    scheduleID,
 					TaskList:                      taskList,
@@ -1012,7 +1012,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 		go func() {
 			for i := int64(0); i < taskCount; {
 				result, err := s.matchingEngine.PollForDecisionTask(s.callContext, &matchingservice.PollForDecisionTaskRequest{
-					NamespaceUUID: namespaceID.String(),
+					NamespaceId: namespaceID.String(),
 					PollRequest: &workflowservice.PollForDecisionTaskRequest{
 						TaskList: taskList,
 						Identity: identity},
@@ -1072,7 +1072,7 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	cancel()
 	_, err := s.matchingEngine.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
-		NamespaceUUID: namespaceID.String(),
+		NamespaceId: namespaceID.String(),
 		PollRequest: &workflowservice.PollForActivityTaskRequest{
 			TaskList: taskList,
 			Identity: identity},
@@ -1084,7 +1084,7 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	resp, err := s.matchingEngine.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
-		NamespaceUUID: namespaceID.String(),
+		NamespaceId: namespaceID.String(),
 		PollRequest: &workflowservice.PollForActivityTaskRequest{
 			TaskList: taskList,
 			Identity: identity},
@@ -1127,8 +1127,8 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddActivityTaskRequest{
-					SourceNamespaceUUID:           namespaceID.String(),
-					NamespaceUUID:                 namespaceID.String(),
+					SourceNamespaceId:             namespaceID.String(),
+					NamespaceId:                   namespaceID.String(),
 					Execution:                     workflowExecution,
 					ScheduleId:                    scheduleID,
 					TaskList:                      taskList,
@@ -1187,7 +1187,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
 				result, err := engine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
-					NamespaceUUID: namespaceID.String(),
+					NamespaceId: namespaceID.String(),
 					PollRequest: &workflowservice.PollForActivityTaskRequest{
 						TaskList: taskList,
 						Identity: identity},
@@ -1276,7 +1276,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddDecisionTaskRequest{
-					NamespaceUUID:                 namespaceID.String(),
+					NamespaceId:                   namespaceID.String(),
 					Execution:                     workflowExecution,
 					ScheduleId:                    scheduleID,
 					TaskList:                      taskList,
@@ -1324,7 +1324,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
 				result, err := engine.PollForDecisionTask(s.callContext, &matchingservice.PollForDecisionTaskRequest{
-					NamespaceUUID: namespaceID.String(),
+					NamespaceId: namespaceID.String(),
 					PollRequest: &workflowservice.PollForDecisionTaskRequest{
 						TaskList: taskList,
 						Identity: identity},
@@ -1392,8 +1392,8 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 
 	scheduleID := int64(0)
 	addRequest := matchingservice.AddActivityTaskRequest{
-		SourceNamespaceUUID:           namespaceID.String(),
-		NamespaceUUID:                 namespaceID.String(),
+		SourceNamespaceId:             namespaceID.String(),
+		NamespaceId:                   namespaceID.String(),
 		Execution:                     workflowExecution,
 		ScheduleId:                    scheduleID,
 		TaskList:                      taskList,
@@ -1440,8 +1440,8 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	for i := int64(0); i < taskCount; i++ {
 		scheduleID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceNamespaceUUID:           namespaceID.String(),
-			NamespaceUUID:                 namespaceID.String(),
+			SourceNamespaceId:             namespaceID.String(),
+			NamespaceId:                   namespaceID.String(),
 			Execution:                     workflowExecution,
 			ScheduleId:                    scheduleID,
 			TaskList:                      taskList,
@@ -1496,7 +1496,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	for i := int64(0); i < rangeSize; i++ {
 		identity := "nobody"
 		result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
-			NamespaceUUID: namespaceID.String(),
+			NamespaceId: namespaceID.String(),
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
 				TaskList: taskList,
 				Identity: identity},
@@ -1581,8 +1581,8 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		for i := int64(0); i < taskCount; i++ {
 			scheduleID := i * 3
 			addRequest := matchingservice.AddActivityTaskRequest{
-				SourceNamespaceUUID:           namespaceID.String(),
-				NamespaceUUID:                 namespaceID.String(),
+				SourceNamespaceId:             namespaceID.String(),
+				NamespaceId:                   namespaceID.String(),
 				Execution:                     workflowExecution,
 				ScheduleId:                    scheduleID,
 				TaskList:                      taskList,
@@ -1610,8 +1610,8 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		s.setupRecordActivityTaskStartedMock(tl)
 
 		pollReq := &matchingservice.PollForActivityTaskRequest{
-			NamespaceUUID: namespaceID.String(),
-			PollRequest:   &workflowservice.PollForActivityTaskRequest{TaskList: taskList, Identity: "test"},
+			NamespaceId: namespaceID.String(),
+			PollRequest: &workflowservice.PollForActivityTaskRequest{TaskList: taskList, Identity: "test"},
 		}
 
 		remaining := taskCount

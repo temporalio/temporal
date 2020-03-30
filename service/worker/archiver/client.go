@@ -243,10 +243,10 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 	}
 
 	err = visibilityArchiver.Archive(ctx, URI, &archiverproto.ArchiveVisibilityRequest{
-		NamespaceID:        request.ArchiveRequest.NamespaceID,
+		NamespaceId:        request.ArchiveRequest.NamespaceID,
 		Namespace:          request.ArchiveRequest.Namespace,
-		WorkflowID:         request.ArchiveRequest.WorkflowID,
-		RunID:              request.ArchiveRequest.RunID,
+		WorkflowId:         request.ArchiveRequest.WorkflowID,
+		RunId:              request.ArchiveRequest.RunID,
 		WorkflowTypeName:   request.ArchiveRequest.WorkflowTypeName,
 		StartTimestamp:     request.ArchiveRequest.StartTimestamp,
 		ExecutionTimestamp: request.ArchiveRequest.ExecutionTimestamp,

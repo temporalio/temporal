@@ -290,7 +290,7 @@ func (e *mutableStateBuilder) Load(
 	}
 	e.pendingTimerInfoIDs = state.TimerInfos
 	for _, timerInfo := range state.TimerInfos {
-		e.pendingTimerEventIDToID[timerInfo.StartedID] = timerInfo.TimerID
+		e.pendingTimerEventIDToID[timerInfo.GetStartedId()] = timerInfo.GetTimerId()
 	}
 	e.pendingChildExecutionInfoIDs = state.ChildExecutionInfos
 	e.pendingRequestCancelInfoIDs = state.RequestCancelInfos
@@ -1372,10 +1372,10 @@ func (e *mutableStateBuilder) UpdateUserTimer(
 	ti *persistenceblobs.TimerInfo,
 ) error {
 
-	timerID, ok := e.pendingTimerEventIDToID[ti.StartedID]
+	timerID, ok := e.pendingTimerEventIDToID[ti.GetStartedId()]
 	if !ok {
 		e.logError(
-			fmt.Sprintf("unable to find timer event ID: %v in mutable state", ti.StartedID),
+			fmt.Sprintf("unable to find timer event ID: %v in mutable state", ti.GetStartedId()),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingTimerInfo
@@ -1402,8 +1402,8 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 	if timerInfo, ok := e.pendingTimerInfoIDs[timerID]; ok {
 		delete(e.pendingTimerInfoIDs, timerID)
 
-		if _, ok = e.pendingTimerEventIDToID[timerInfo.StartedID]; ok {
-			delete(e.pendingTimerEventIDToID, timerInfo.StartedID)
+		if _, ok = e.pendingTimerEventIDToID[timerInfo.GetStartedId()]; ok {
+			delete(e.pendingTimerEventIDToID, timerInfo.GetStartedId())
 		} else {
 			e.logError(
 				fmt.Sprintf("unable to find timer event ID: %v in mutable state", timerID),
@@ -1651,7 +1651,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceUUID:                   e.namespaceEntry.GetInfo().ID,
+		NamespaceId:                     e.namespaceEntry.GetInfo().ID,
 		StartRequest:                    createRequest,
 		ParentExecutionInfo:             parentExecutionInfo,
 		LastCompletionResult:            attributes.LastCompletionResult,
@@ -1680,7 +1680,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	// History event only has namespace so namespaceID has to be passed in explicitly to update the mutable state
 	var parentNamespaceID string
 	if parentExecutionInfo != nil {
-		parentNamespaceID = parentExecutionInfo.NamespaceUUID
+		parentNamespaceID = parentExecutionInfo.GetNamespaceId()
 	}
 
 	event := e.hBuilder.AddWorkflowExecutionStartedEvent(req, previousExecutionInfo, firstRunID, execution.GetRunId())
@@ -1743,7 +1743,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 
 	var parentNamespaceID string
 	if startRequest.ParentExecutionInfo != nil {
-		parentNamespaceID = startRequest.ParentExecutionInfo.GetNamespaceUUID()
+		parentNamespaceID = startRequest.ParentExecutionInfo.GetNamespaceId()
 	}
 	if err := e.ReplicateWorkflowExecutionStartedEvent(
 		parentNamespaceID,
@@ -2750,9 +2750,9 @@ func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionIni
 	initiatedEventID := event.GetEventId()
 	rci := &persistenceblobs.RequestCancelInfo{
 		Version:               event.GetVersion(),
-		InitiatedEventBatchID: firstEventID,
-		InitiatedID:           initiatedEventID,
-		CancelRequestID:       cancelRequestID,
+		InitiatedEventBatchId: firstEventID,
+		InitiatedId:           initiatedEventID,
+		CancelRequestId:       cancelRequestID,
 	}
 
 	e.pendingRequestCancelInfoIDs[initiatedEventID] = rci
@@ -2875,9 +2875,9 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedE
 	attributes := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 	si := &persistenceblobs.SignalInfo{
 		Version:               event.GetVersion(),
-		InitiatedEventBatchID: firstEventID,
-		InitiatedID:           initiatedEventID,
-		RequestID:             signalRequestID,
+		InitiatedEventBatchId: firstEventID,
+		InitiatedId:           initiatedEventID,
+		RequestId:             signalRequestID,
 		Name:                  attributes.GetSignalName(),
 		Input:                 attributes.Input,
 		Control:               attributes.Control,
@@ -3058,9 +3058,9 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 
 	ti := &persistenceblobs.TimerInfo{
 		Version:    event.GetVersion(),
-		TimerID:    timerID,
+		TimerId:    timerID,
 		ExpiryTime: expiryTime,
-		StartedID:  event.GetEventId(),
+		StartedId:  event.GetEventId(),
 		TaskStatus: timerTaskStatusNone,
 	}
 
@@ -3090,7 +3090,7 @@ func (e *mutableStateBuilder) AddTimerFiredEvent(
 	}
 
 	// Timer is running.
-	event := e.hBuilder.AddTimerFiredEvent(timerInfo.StartedID, timerID)
+	event := e.hBuilder.AddTimerFiredEvent(timerInfo.GetStartedId(), timerID)
 	if err := e.ReplicateTimerFiredEvent(event); err != nil {
 		return nil, err
 	}
@@ -3135,7 +3135,7 @@ func (e *mutableStateBuilder) AddTimerCanceledEvent(
 		}
 		timerStartedID = timerFiredEvent.GetTimerFiredEventAttributes().GetStartedEventId()
 	} else {
-		timerStartedID = ti.StartedID
+		timerStartedID = ti.GetStartedId()
 	}
 
 	// Timer is running.
@@ -3280,8 +3280,8 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	var parentInfo *commonproto.ParentExecutionInfo
 	if e.HasParentExecution() {
 		parentInfo = &commonproto.ParentExecutionInfo{
-			NamespaceUUID: e.executionInfo.ParentNamespaceID,
-			Namespace:     parentNamespace,
+			NamespaceId: e.executionInfo.ParentNamespaceID,
+			Namespace:   parentNamespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: e.executionInfo.ParentWorkflowID,
 				RunId:      e.executionInfo.ParentRunID,

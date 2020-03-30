@@ -152,8 +152,8 @@ func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error
 func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *commonproto.WorkflowExecutionInfo {
 	return &commonproto.WorkflowExecutionInfo{
 		Execution: &commonproto.WorkflowExecution{
-			WorkflowId: record.WorkflowID,
-			RunId:      record.RunID,
+			WorkflowId: record.GetWorkflowId(),
+			RunId:      record.GetRunId(),
 		},
 		Type: &commonproto.WorkflowType{
 			Name: record.WorkflowTypeName,

@@ -255,7 +255,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 		ScheduledId: scheduleID,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventId().Return(nextEventID).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil)
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
@@ -307,7 +307,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 		ScheduledId: scheduleID,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventId().Return(nextEventID).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
@@ -765,7 +765,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 		ScheduledId: scheduleID,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventId().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
@@ -817,7 +817,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivity
 		ScheduledId: scheduleID,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventId().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
@@ -882,7 +882,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 		Details:           details,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventId().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
@@ -954,7 +954,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 		Details:           details,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventId().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
@@ -1026,7 +1026,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 		Details:           details,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventId().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
@@ -1097,7 +1097,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 		Details:           details,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventId().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
@@ -1181,7 +1181,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 		Details:           details,
 	}
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventId().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()

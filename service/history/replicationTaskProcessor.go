@@ -260,7 +260,7 @@ func (p *ReplicationTaskProcessorImpl) sendFetchMessageRequest() <-chan *replica
 	// TODO: when we support prefetching, LastRetrievedMessageId can be different than LastProcessedMessageId
 	p.requestChan <- &request{
 		token: &replication.ReplicationToken{
-			ShardID:                int32(p.shard.GetShardID()),
+			ShardId:                int32(p.shard.GetShardID()),
 			LastRetrievedMessageId: p.lastRetrievedMessageID,
 			LastProcessedMessageId: p.lastProcessedMessageID,
 		},
@@ -389,10 +389,10 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 		return nil
 	}
 	p.logger.Info("Put history replication to DLQ",
-		tag.WorkflowNamespaceIDBytes(request.TaskInfo.GetNamespaceID()),
-		tag.WorkflowID(request.TaskInfo.GetWorkflowID()),
-		tag.WorkflowRunIDBytes(request.TaskInfo.GetRunID()),
-		tag.TaskID(request.TaskInfo.GetTaskID()),
+		tag.WorkflowNamespaceIDBytes(request.TaskInfo.GetNamespaceId()),
+		tag.WorkflowID(request.TaskInfo.GetWorkflowId()),
+		tag.WorkflowRunIDBytes(request.TaskInfo.GetRunId()),
+		tag.TaskID(request.TaskInfo.GetTaskId()),
 	)
 
 	p.metricsClient.Scope(
@@ -401,7 +401,7 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 		metrics.InstanceTag(strconv.Itoa(p.shard.GetShardID())),
 	).UpdateGauge(
 		metrics.ReplicationDLQMaxLevelGauge,
-		float64(request.TaskInfo.GetTaskID()),
+		float64(request.TaskInfo.GetTaskId()),
 	)
 	// The following is guaranteed to success or retry forever until processor is shutdown.
 	return backoff.Retry(func() error {
@@ -423,12 +423,12 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				NamespaceID: primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
-				WorkflowID:  taskAttributes.GetWorkflowId(),
-				RunID:       primitives.MustParseUUID(taskAttributes.GetRunId()),
-				TaskID:      replicationTask.GetSourceTaskId(),
+				NamespaceId: primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
+				WorkflowId:  taskAttributes.GetWorkflowId(),
+				RunId:       primitives.MustParseUUID(taskAttributes.GetRunId()),
+				TaskId:      replicationTask.GetSourceTaskId(),
 				TaskType:    persistence.ReplicationTaskTypeSyncActivity,
-				ScheduledID: taskAttributes.GetScheduledId(),
+				ScheduledId: taskAttributes.GetScheduledId(),
 			},
 		}, nil
 
@@ -437,13 +437,13 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				NamespaceID:         primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
-				WorkflowID:          taskAttributes.GetWorkflowId(),
-				RunID:               primitives.MustParseUUID(taskAttributes.GetRunId()),
-				TaskID:              replicationTask.GetSourceTaskId(),
+				NamespaceId:         primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
+				WorkflowId:          taskAttributes.GetWorkflowId(),
+				RunId:               primitives.MustParseUUID(taskAttributes.GetRunId()),
+				TaskId:              replicationTask.GetSourceTaskId(),
 				TaskType:            persistence.ReplicationTaskTypeHistory,
-				FirstEventID:        taskAttributes.GetFirstEventId(),
-				NextEventID:         taskAttributes.GetNextEventId(),
+				FirstEventId:        taskAttributes.GetFirstEventId(),
+				NextEventId:         taskAttributes.GetNextEventId(),
 				Version:             taskAttributes.GetVersion(),
 				LastReplicationInfo: taskAttributes.GetReplicationInfo(),
 				ResetWorkflow:       taskAttributes.GetResetWorkflow(),
@@ -466,13 +466,13 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
-				NamespaceID:  primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
-				WorkflowID:   taskAttributes.GetWorkflowId(),
-				RunID:        primitives.MustParseUUID(taskAttributes.GetRunId()),
-				TaskID:       replicationTask.GetSourceTaskId(),
+				NamespaceId:  primitives.MustParseUUID(taskAttributes.GetNamespaceId()),
+				WorkflowId:   taskAttributes.GetWorkflowId(),
+				RunId:        primitives.MustParseUUID(taskAttributes.GetRunId()),
+				TaskId:       replicationTask.GetSourceTaskId(),
 				TaskType:     persistence.ReplicationTaskTypeHistory,
-				FirstEventID: events[0].GetEventId(),
-				NextEventID:  events[len(events)-1].GetEventId(),
+				FirstEventId: events[0].GetEventId(),
+				NextEventId:  events[len(events)-1].GetEventId(),
 				Version:      events[0].GetVersion(),
 			},
 		}, nil

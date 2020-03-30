@@ -73,18 +73,18 @@ func (mr *MockqueueTaskInfoMockRecorder) GetVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetVersion))
 }
 
-// GetTaskID mocks base method
-func (m *MockqueueTaskInfo) GetTaskID() int64 {
+// GetTaskId mocks base method
+func (m *MockqueueTaskInfo) GetTaskId() int64 {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTaskID")
+	ret := m.ctrl.Call(m, "GetTaskId")
 	ret0, _ := ret[0].(int64)
 	return ret0
 }
 
-// GetTaskID indicates an expected call of GetTaskID
+// GetTaskId indicates an expected call of GetTaskId
 func (mr *MockqueueTaskInfoMockRecorder) GetTaskID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskID", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetTaskID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskId", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetTaskId))
 }
 
 // GetTaskType mocks base method
@@ -115,46 +115,46 @@ func (mr *MockqueueTaskInfoMockRecorder) GetVisibilityTimestamp() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTimestamp", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetVisibilityTimestamp))
 }
 
-// GetWorkflowID mocks base method
-func (m *MockqueueTaskInfo) GetWorkflowID() string {
+// GetWorkflowId mocks base method
+func (m *MockqueueTaskInfo) GetWorkflowId() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWorkflowID")
+	ret := m.ctrl.Call(m, "GetWorkflowId")
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// GetWorkflowID indicates an expected call of GetWorkflowID
+// GetWorkflowId indicates an expected call of GetWorkflowId
 func (mr *MockqueueTaskInfoMockRecorder) GetWorkflowID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowID", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetWorkflowID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowId", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetWorkflowId))
 }
 
-// GetRunID mocks base method
-func (m *MockqueueTaskInfo) GetRunID() []byte {
+// GetRunId mocks base method
+func (m *MockqueueTaskInfo) GetRunId() []byte {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRunID")
+	ret := m.ctrl.Call(m, "GetRunId")
 	ret0, _ := ret[0].([]byte)
 	return ret0
 }
 
-// GetRunID indicates an expected call of GetRunID
+// GetRunId indicates an expected call of GetRunId
 func (mr *MockqueueTaskInfoMockRecorder) GetRunID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunID", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetRunID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunId", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetRunId))
 }
 
-// GetNamespaceID mocks base method
-func (m *MockqueueTaskInfo) GetNamespaceID() []byte {
+// GetNamespaceId mocks base method
+func (m *MockqueueTaskInfo) GetNamespaceId() []byte {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespaceID")
+	ret := m.ctrl.Call(m, "GetNamespaceId")
 	ret0, _ := ret[0].([]byte)
 	return ret0
 }
 
-// GetNamespaceID indicates an expected call of GetNamespaceID
+// GetNamespaceId indicates an expected call of GetNamespaceId
 func (mr *MockqueueTaskInfoMockRecorder) GetNamespaceID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceID", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetNamespaceID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceId", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetNamespaceId))
 }
 
 // MockqueueTask is a mock of queueTask interface
@@ -300,18 +300,18 @@ func (mr *MockqueueTaskMockRecorder) GetVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockqueueTask)(nil).GetVersion))
 }
 
-// GetTaskID mocks base method
-func (m *MockqueueTask) GetTaskID() int64 {
+// GetTaskId mocks base method
+func (m *MockqueueTask) GetTaskId() int64 {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTaskID")
+	ret := m.ctrl.Call(m, "GetTaskId")
 	ret0, _ := ret[0].(int64)
 	return ret0
 }
 
-// GetTaskID indicates an expected call of GetTaskID
+// GetTaskId indicates an expected call of GetTaskId
 func (mr *MockqueueTaskMockRecorder) GetTaskID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskID", reflect.TypeOf((*MockqueueTask)(nil).GetTaskID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskId", reflect.TypeOf((*MockqueueTask)(nil).GetTaskId))
 }
 
 // GetTaskType mocks base method
@@ -342,46 +342,46 @@ func (mr *MockqueueTaskMockRecorder) GetVisibilityTimestamp() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTimestamp", reflect.TypeOf((*MockqueueTask)(nil).GetVisibilityTimestamp))
 }
 
-// GetWorkflowID mocks base method
-func (m *MockqueueTask) GetWorkflowID() string {
+// GetWorkflowId mocks base method
+func (m *MockqueueTask) GetWorkflowId() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWorkflowID")
+	ret := m.ctrl.Call(m, "GetWorkflowId")
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// GetWorkflowID indicates an expected call of GetWorkflowID
+// GetWorkflowId indicates an expected call of GetWorkflowId
 func (mr *MockqueueTaskMockRecorder) GetWorkflowID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowID", reflect.TypeOf((*MockqueueTask)(nil).GetWorkflowID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowId", reflect.TypeOf((*MockqueueTask)(nil).GetWorkflowId))
 }
 
-// GetRunID mocks base method
-func (m *MockqueueTask) GetRunID() []byte {
+// GetRunId mocks base method
+func (m *MockqueueTask) GetRunId() []byte {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRunID")
+	ret := m.ctrl.Call(m, "GetRunId")
 	ret0, _ := ret[0].([]byte)
 	return ret0
 }
 
-// GetRunID indicates an expected call of GetRunID
+// GetRunId indicates an expected call of GetRunId
 func (mr *MockqueueTaskMockRecorder) GetRunID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunID", reflect.TypeOf((*MockqueueTask)(nil).GetRunID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunId", reflect.TypeOf((*MockqueueTask)(nil).GetRunId))
 }
 
-// GetNamespaceID mocks base method
-func (m *MockqueueTask) GetNamespaceID() []byte {
+// GetNamespaceId mocks base method
+func (m *MockqueueTask) GetNamespaceId() []byte {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespaceID")
+	ret := m.ctrl.Call(m, "GetNamespaceId")
 	ret0, _ := ret[0].([]byte)
 	return ret0
 }
 
-// GetNamespaceID indicates an expected call of GetNamespaceID
+// GetNamespaceId indicates an expected call of GetNamespaceId
 func (mr *MockqueueTaskMockRecorder) GetNamespaceID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceID", reflect.TypeOf((*MockqueueTask)(nil).GetNamespaceID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceId", reflect.TypeOf((*MockqueueTask)(nil).GetNamespaceId))
 }
 
 // GetQueueType mocks base method

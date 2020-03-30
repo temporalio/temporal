@@ -107,7 +107,7 @@ func newNDCReplicationTask(
 		return nil, err
 	}
 
-	namespaceID := request.GetNamespaceUUID()
+	namespaceID := request.GetNamespaceId()
 	execution := request.WorkflowExecution
 	versionHistory := &commonproto.VersionHistory{
 		BranchToken: nil,
@@ -254,7 +254,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 	newVersionHistory := persistence.NewVersionHistoryFromProto(&commonproto.VersionHistory{
 		BranchToken: nil,
 		Items: []*commonproto.VersionHistoryItem{{
-			EventID: newLastEvent.GetEventId(),
+			EventId: newLastEvent.GetEventId(),
 			Version: newLastEvent.GetVersion(),
 		}},
 	})
@@ -298,7 +298,7 @@ func validateReplicateEventsRequest(
 
 	// TODO add validation on version history
 
-	if valid := validateUUID(request.GetNamespaceUUID()); !valid {
+	if valid := validateUUID(request.GetNamespaceId()); !valid {
 		return nil, nil, ErrInvalidNamespaceID
 	}
 	if request.WorkflowExecution == nil {

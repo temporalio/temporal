@@ -104,7 +104,7 @@ func (s *queueTaskProcessorSuite) TestPrepareSubmit_ProcessorNotRunning() {
 	shardID := 0
 
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetShardID().Return(shardID).Times(1)
+	mockTask.EXPECT().GetShardId().Return(shardID).Times(1)
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	scheduler, err := s.processor.prepareSubmit(mockTask)
@@ -116,7 +116,7 @@ func (s *queueTaskProcessorSuite) TestPrepareSubmit_ShardProcessorAlreadyExists(
 	shardID := 0
 
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetShardID().Return(shardID).Times(1)
+	mockTask.EXPECT().GetShardId().Return(shardID).Times(1)
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	mockScheduler := task.NewMockScheduler(s.controller)
@@ -132,7 +132,7 @@ func (s *queueTaskProcessorSuite) TestPrepareSubmit_ShardProcessorNotExist() {
 	shardID := 0
 
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetShardID().Return(shardID).Times(1)
+	mockTask.EXPECT().GetShardId().Return(shardID).Times(1)
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	s.Empty(s.processor.schedulers)
@@ -177,7 +177,7 @@ func (s *queueTaskProcessorSuite) TestSubmit() {
 	shardID := 0
 
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetShardID().Return(shardID).Times(1)
+	mockTask.EXPECT().GetShardId().Return(shardID).Times(1)
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	mockScheduler := task.NewMockScheduler(s.controller)
@@ -193,7 +193,7 @@ func (s *queueTaskProcessorSuite) TestTrySubmit_Fail() {
 	shardID := 0
 
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetShardID().Return(shardID).Times(1)
+	mockTask.EXPECT().GetShardId().Return(shardID).Times(1)
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	errTrySubmit := errors.New("some randome error")

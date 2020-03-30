@@ -134,7 +134,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 		RunID:       s.runID,
 	}).AnyTimes()
 
-	shardId := s.mockShard.GetShardID()
+	shardId := s.mockShard.GetShardId()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
 		s.Equal(&persistence.ForkHistoryBranchRequest{
@@ -308,7 +308,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 		RunID:       s.runID,
 	}).AnyTimes()
 
-	shardId := s.mockShard.GetShardID()
+	shardId := s.mockShard.GetShardId()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
 		s.Equal(&persistence.ForkHistoryBranchRequest{

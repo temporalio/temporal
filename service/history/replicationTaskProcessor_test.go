@@ -140,7 +140,7 @@ func (s *replicationTaskProcessorSuite) TestSendFetchMessageRequest() {
 	s.replicationTaskProcessor.sendFetchMessageRequest()
 	requestMessage := <-s.requestChan
 
-	s.Equal(int32(0), requestMessage.token.GetShardID())
+	s.Equal(int32(0), requestMessage.token.GetShardId())
 	s.Equal(int64(-1), requestMessage.token.GetLastProcessedMessageId())
 	s.Equal(int64(-1), requestMessage.token.GetLastRetrievedMessageId())
 }

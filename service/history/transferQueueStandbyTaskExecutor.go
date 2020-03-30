@@ -119,12 +119,12 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		activityInfo, ok := mutableState.GetActivityInfo(transferTask.ScheduleID)
+		activityInfo, ok := mutableState.GetActivityInfo(transferTask.GetScheduleId())
 		if !ok {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, activityInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), activityInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -160,7 +160,7 @@ func (t *transferQueueStandbyTaskExecutor) processDecisionTask(
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		decisionInfo, ok := mutableState.GetDecisionInfo(transferTask.ScheduleID)
+		decisionInfo, ok := mutableState.GetDecisionInfo(transferTask.GetScheduleId())
 		if !ok {
 			return nil, nil
 		}
@@ -169,7 +169,7 @@ func (t *transferQueueStandbyTaskExecutor) processDecisionTask(
 		workflowTimeout := executionInfo.WorkflowTimeout
 		decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, decisionInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), decisionInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -235,7 +235,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, lastWriteVersion, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), lastWriteVersion, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -243,16 +243,16 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		// DO NOT REPLY TO PARENT
 		// since event replication should be done by active cluster
 		return nil, t.recordWorkflowClosed(
-			primitives.UUIDString(transferTask.NamespaceID),
-			transferTask.WorkflowID,
-			primitives.UUIDString(transferTask.RunID),
+			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetWorkflowId(),
+			primitives.UUIDString(transferTask.GetRunId()),
 			workflowTypeName,
 			workflowStartTimestamp,
 			workflowExecutionTimestamp.UnixNano(),
 			workflowCloseTimestamp,
 			workflowCloseStatus,
 			workflowHistoryLength,
-			transferTask.GetTaskID(),
+			transferTask.GetTaskId(),
 			visibilityMemo,
 			searchAttr,
 		)
@@ -273,12 +273,12 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.ScheduleID)
+		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.GetScheduleId())
 		if !ok {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, requestCancelInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), requestCancelInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -308,12 +308,12 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		signalInfo, ok := mutableState.GetSignalInfo(transferTask.ScheduleID)
+		signalInfo, ok := mutableState.GetSignalInfo(transferTask.GetScheduleId())
 		if !ok {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, signalInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), signalInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -343,12 +343,12 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.ScheduleID)
+		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.GetScheduleId())
 		if !ok {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, childWorkflowInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), childWorkflowInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -418,7 +418,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 		if err != nil {
 			return err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.NamespaceID, startVersion, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), startVersion, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return err
 		}
@@ -438,27 +438,27 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 
 	if isRecordStart {
 		return t.recordWorkflowStarted(
-			primitives.UUIDString(transferTask.NamespaceID),
-			transferTask.WorkflowID,
-			primitives.UUIDString(transferTask.RunID),
+			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetWorkflowId(),
+			primitives.UUIDString(transferTask.GetRunId()),
 			wfTypeName,
 			startTimestamp,
 			executionTimestamp.UnixNano(),
 			workflowTimeout,
-			transferTask.GetTaskID(),
+			transferTask.GetTaskId(),
 			visibilityMemo,
 			searchAttr,
 		)
 	}
 	return t.upsertWorkflowExecution(
-		primitives.UUIDString(transferTask.NamespaceID),
-		transferTask.WorkflowID,
-		primitives.UUIDString(transferTask.RunID),
+		primitives.UUIDString(transferTask.GetNamespaceId()),
+		transferTask.GetWorkflowId(),
+		primitives.UUIDString(transferTask.GetRunId()),
 		wfTypeName,
 		startTimestamp,
 		executionTimestamp.UnixNano(),
 		workflowTimeout,
-		transferTask.GetTaskID(),
+		transferTask.GetTaskId(),
 		visibilityMemo,
 		searchAttr,
 	)
@@ -563,9 +563,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			primitives.UUIDString(transferTask.NamespaceID),
-			transferTask.WorkflowID,
-			primitives.UUIDString(transferTask.RunID),
+			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetWorkflowId(),
+			primitives.UUIDString(transferTask.GetRunId()),
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
 			0,
@@ -573,11 +573,11 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			primitives.UUIDString(transferTask.NamespaceID),
-			transferTask.WorkflowID,
-			primitives.UUIDString(transferTask.RunID),
+			primitives.UUIDString(transferTask.GetNamespaceId()),
+			transferTask.GetWorkflowId(),
+			primitives.UUIDString(transferTask.GetRunId()),
 			*resendInfo.nextEventID,
-			primitives.UUIDString(transferTask.RunID),
+			primitives.UUIDString(transferTask.GetRunId()),
 			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
@@ -589,9 +589,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowNamespaceIDBytes(transferTask.NamespaceID),
-			tag.WorkflowID(transferTask.WorkflowID),
-			tag.WorkflowRunIDBytes(transferTask.RunID),
+			tag.WorkflowNamespaceIDBytes(transferTask.GetNamespaceId()),
+			tag.WorkflowID(transferTask.GetWorkflowId()),
+			tag.WorkflowRunIDBytes(transferTask.GetRunId()),
 			tag.SourceCluster(t.clusterName))
 	}
 

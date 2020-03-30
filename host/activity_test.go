@@ -502,7 +502,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	descResp, err := describeWorkflowExecution()
 	s.NoError(err)
 	for _, pendingActivity := range descResp.GetPendingActivities() {
-		if pendingActivity.GetActivityID() == "A" {
+		if pendingActivity.GetActivityId() == "A" {
 			expectedErrString := "bad-luck-please-retry"
 			s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
 			s.Equal([]byte(expectedErrString), pendingActivity.GetLastFailureDetails())
@@ -516,7 +516,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	descResp, err = describeWorkflowExecution()
 	s.NoError(err)
 	for _, pendingActivity := range descResp.GetPendingActivities() {
-		if pendingActivity.GetActivityID() == "A" {
+		if pendingActivity.GetActivityId() == "A" {
 			expectedErrString := "bad-bug"
 			s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
 			s.Equal([]byte(expectedErrString), pendingActivity.GetLastFailureDetails())

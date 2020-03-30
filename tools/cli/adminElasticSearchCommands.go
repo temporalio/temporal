@@ -147,7 +147,7 @@ func AdminIndex(c *cli.Context) {
 		}
 	}
 	for i, message := range messages {
-		docID := message.GetWorkflowID() + esDocIDDelimiter + message.GetRunID()
+		docID := message.GetWorkflowId() + esDocIDDelimiter + message.GetRunId()
 		var req elastic.BulkableRequest
 		switch message.GetMessageType() {
 		case enums.MessageTypeIndex:
@@ -273,9 +273,9 @@ func parseIndexerMessage(fileName string) (messages []*indexer.Message, err erro
 
 func generateESDoc(msg *indexer.Message) map[string]interface{} {
 	doc := make(map[string]interface{})
-	doc[es.NamespaceID] = msg.GetNamespaceID()
-	doc[es.WorkflowID] = msg.GetWorkflowID()
-	doc[es.RunID] = msg.GetRunID()
+	doc[es.NamespaceID] = msg.GetNamespaceId()
+	doc[es.WorkflowID] = msg.GetWorkflowId()
+	doc[es.RunID] = msg.GetRunId()
 
 	for k, v := range msg.Fields {
 		switch v.GetType() {

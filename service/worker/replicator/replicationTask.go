@@ -190,7 +190,7 @@ func newHistoryReplicationTask(
 		},
 		req: &historyservice.ReplicateEventsRequest{
 			SourceCluster: sourceCluster,
-			NamespaceUUID: attr.NamespaceId,
+			NamespaceId:   attr.NamespaceId,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,
@@ -285,7 +285,7 @@ func newHistoryReplicationV2Task(
 			metricsClient: metricsClient,
 		},
 		req: &historyservice.ReplicateEventsV2Request{
-			NamespaceUUID: attr.NamespaceId,
+			NamespaceId: attr.NamespaceId,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,

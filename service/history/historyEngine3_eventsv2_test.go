@@ -184,7 +184,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	}, nil).Once()
 
 	request := historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &we,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -206,7 +206,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	expectedResponse.ScheduledEventId = di.ScheduleID
 	expectedResponse.StartedEventId = di.ScheduleID + 1
 	expectedResponse.StickyExecutionEnabled = true
-	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
+	expectedResponse.NextEventId = msBuilder.GetNextEventId() + 1
 	expectedResponse.Attempt = di.Attempt
 	expectedResponse.WorkflowExecutionTaskList = &commonproto.TaskList{
 		Name: executionInfo.TaskList,
@@ -241,7 +241,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 
 	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
@@ -275,7 +275,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	signalName := "my signal name"
 	input := []byte("test input")
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:  namespaceID,
 			WorkflowId: workflowID,
@@ -323,7 +323,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	input := []byte("test input")
 	requestID := uuid.New()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,

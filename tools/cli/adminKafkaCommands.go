@@ -154,10 +154,10 @@ func buildFilterFn(workflowID, runID string) filterFn {
 
 func buildFilterFnForVisibility(workflowID, runID string) filterFnForVisibility {
 	return func(msg *indexer.Message) bool {
-		if len(workflowID) != 0 && msg.GetWorkflowID() != workflowID {
+		if len(workflowID) != 0 && msg.GetWorkflowId() != workflowID {
 			return false
 		}
-		if len(runID) != 0 && msg.GetRunID() != runID {
+		if len(runID) != 0 && msg.GetRunId() != runID {
 			return false
 		}
 		return true
@@ -341,9 +341,9 @@ Loop:
 				} else {
 					outStr = fmt.Sprintf(
 						"%v, %v, %v, %v, %v",
-						msg.GetNamespaceID(),
-						msg.GetWorkflowID(),
-						msg.GetRunID(),
+						msg.GetNamespaceId(),
+						msg.GetWorkflowId(),
+						msg.GetRunId(),
 						msg.GetMessageType().String(),
 						msg.GetVersion(),
 					)

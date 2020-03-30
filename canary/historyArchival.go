@@ -143,7 +143,7 @@ func executeArchivalExeternalWorkflow(
 	}
 	return &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
-		RunId:      workflowRun.GetRunID(),
+		RunId:      workflowRun.GetRunId(),
 	}, nil
 }
 

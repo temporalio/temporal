@@ -94,7 +94,7 @@ func cronActivity(
 		}
 	} else {
 		logger.Info("cronActivity: started new job",
-			zap.String("wfID", jobID), zap.String("runID", wf.GetRunID()))
+			zap.String("wfID", jobID), zap.String("runID", wf.GetRunId()))
 	}
 
 	return nil

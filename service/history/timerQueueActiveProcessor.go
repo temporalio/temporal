@@ -69,7 +69,7 @@ func newTimerQueueActiveProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyActiveTask(primitives.UUID(timer.NamespaceID).String(), timer)
+		return taskAllocator.verifyActiveTask(primitives.UUID(timer.GetNamespaceId()).String(), timer)
 	}
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -159,7 +159,7 @@ func newTimerQueueFailoverProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, primitives.UUID(timer.NamespaceID).String(), timer)
+		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, primitives.UUID(timer.GetNamespaceId()).String(), timer)
 	}
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(

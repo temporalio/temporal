@@ -72,7 +72,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 	if err != nil {
 		if err == sql.ErrNoRows {
 			tlInfo := &persistenceblobs.TaskListInfo{
-				NamespaceID: namespaceID,
+				NamespaceId: namespaceID,
 				Name:        request.TaskList,
 				TaskType:    request.TaskType,
 				AckLevel:    ackLevel,
@@ -161,8 +161,8 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 }
 
 func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequest) (*persistence.UpdateTaskListResponse, error) {
-	shardID := m.shardID(request.TaskListInfo.NamespaceID, request.TaskListInfo.Name)
-	namespaceID := request.TaskListInfo.NamespaceID
+	shardID := m.shardID(request.TaskListInfo.GetNamespaceId(), request.TaskListInfo.Name)
+	namespaceID := request.TaskListInfo.GetNamespaceId()
 
 	tl := request.TaskListInfo
 	tl.LastUpdated = types.TimestampNow()
@@ -328,10 +328,10 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 			return nil, err
 		}
 		tasksRows[i] = sqlplugin.TasksRow{
-			NamespaceID:  v.Data.NamespaceID,
+			NamespaceID:  v.Data.GetNamespaceId(),
 			TaskListName: request.TaskListInfo.Data.Name,
 			TaskType:     int64(request.TaskListInfo.Data.TaskType),
-			TaskID:       v.TaskID,
+			TaskID:       v.GetTaskId(),
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
 		}
@@ -343,9 +343,9 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 		}
 		// Lock task list before committing.
 		err1 := lockTaskList(tx,
-			m.shardID(request.TaskListInfo.Data.NamespaceID,
+			m.shardID(request.TaskListInfo.Data.GetNamespaceId(),
 				request.TaskListInfo.Data.Name),
-			request.TaskListInfo.Data.NamespaceID,
+			request.TaskListInfo.Data.GetNamespaceId(),
 			request.TaskListInfo.Data.Name,
 			request.TaskListInfo.Data.TaskType,
 			request.TaskListInfo.RangeID)

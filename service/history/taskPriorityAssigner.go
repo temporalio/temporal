@@ -96,7 +96,7 @@ func (a *taskPriorityAssignerImpl) Assign(
 	}
 
 	// timer of transfer task, first check if namespace is active or not
-	namespace, active, err := a.getNamespaceInfo(primitives.UUIDString(task.GetNamespaceID()))
+	namespace, active, err := a.getNamespaceInfo(primitives.UUIDString(task.GetNamespaceId()))
 	if err != nil {
 		return err
 	}

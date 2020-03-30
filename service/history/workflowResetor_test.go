@@ -3981,7 +3981,7 @@ func (s *resetorSuite) TestApplyReset() {
 
 	request := &historyservice.ReplicateEventsRequest{
 		SourceCluster:     "standby",
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &we,
 		FirstEventId:      30,
 		NextEventId:       35,

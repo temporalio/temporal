@@ -179,7 +179,7 @@ func cancellationActivity(ctx context.Context, scheduledTimeNanos int64) error {
 		}
 		runID := ""
 		if useRunID {
-			runID = workflowRun.GetRunID()
+			runID = workflowRun.GetRunId()
 		}
 		err = client.CancelWorkflow(context.Background(), wfTypeCancellationExternal, runID)
 		if err != nil {

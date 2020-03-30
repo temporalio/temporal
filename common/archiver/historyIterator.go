@@ -128,14 +128,14 @@ func (i *historyIterator) Next() (*archiver.HistoryBlob, error) {
 	}
 	header := &archiver.HistoryBlobHeader{
 		Namespace:            i.request.Namespace,
-		NamespaceID:          i.request.NamespaceID,
-		WorkflowID:           i.request.WorkflowID,
-		RunID:                i.request.RunID,
+		NamespaceId:          i.request.NamespaceID,
+		WorkflowId:           i.request.WorkflowID,
+		RunId:                i.request.RunID,
 		IsLast:               i.FinishedIteration,
 		FirstFailoverVersion: firstEvent.Version,
 		LastFailoverVersion:  lastEvent.Version,
-		FirstEventID:         firstEvent.EventId,
-		LastEventID:          lastEvent.EventId,
+		FirstEventId:         firstEvent.EventId,
+		LastEventId:          lastEvent.EventId,
 		EventCount:           eventCount,
 	}
 

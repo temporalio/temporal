@@ -87,10 +87,10 @@ func loadMutableStateForTransferTask(
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
 	isDecisionRetry := transferTask.TaskType == persistence.TransferTaskTypeDecisionTask &&
-		executionInfo.DecisionScheduleID == transferTask.ScheduleID &&
+		executionInfo.DecisionScheduleID == transferTask.GetScheduleId() &&
 		executionInfo.DecisionAttempt > 0
 
-	if transferTask.ScheduleID >= msBuilder.GetNextEventID() && !isDecisionRetry {
+	if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
 		context.clear()
 
@@ -99,9 +99,9 @@ func loadMutableStateForTransferTask(
 			return nil, err
 		}
 		// after refresh, still mutable state's next event ID <= task ID
-		if transferTask.ScheduleID >= msBuilder.GetNextEventID() {
+		if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() {
 			logger.Info("Transfer Task Processor: task event ID >= MS NextEventID, skip.",
-				tag.WorkflowScheduleID(transferTask.ScheduleID),
+				tag.WorkflowScheduleID(transferTask.GetScheduleId()),
 				tag.WorkflowNextEventID(msBuilder.GetNextEventID()))
 			return nil, nil
 		}
@@ -132,10 +132,10 @@ func loadMutableStateForTimerTask(
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
 	isDecisionRetry := timerTask.TaskType == persistence.TaskTypeDecisionTimeout &&
-		executionInfo.DecisionScheduleID == timerTask.EventID &&
+		executionInfo.DecisionScheduleID == timerTask.GetEventId() &&
 		executionInfo.DecisionAttempt > 0
 
-	if timerTask.EventID >= msBuilder.GetNextEventID() && !isDecisionRetry {
+	if timerTask.GetEventId() >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
 		context.clear()
 
@@ -144,9 +144,9 @@ func loadMutableStateForTimerTask(
 			return nil, err
 		}
 		// after refresh, still mutable state's next event ID <= task ID
-		if timerTask.EventID >= msBuilder.GetNextEventID() {
+		if timerTask.GetEventId() >= msBuilder.GetNextEventID() {
 			logger.Info("Timer Task Processor: task event ID >= MS NextEventID, skip.",
-				tag.WorkflowEventID(timerTask.EventID),
+				tag.WorkflowEventID(timerTask.GetEventId()),
 				tag.WorkflowNextEventID(msBuilder.GetNextEventID()))
 			return nil, nil
 		}
@@ -162,12 +162,12 @@ func initializeLoggerForTask(
 
 	taskLogger := logger.WithTags(
 		tag.ShardID(shardID),
-		tag.TaskID(task.GetTaskID()),
+		tag.TaskID(task.GetTaskId()),
 		tag.FailoverVersion(task.GetVersion()),
 		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowNamespaceIDBytes(task.GetNamespaceID()),
-		tag.WorkflowID(task.GetWorkflowID()),
-		tag.WorkflowRunIDBytes(task.GetRunID()),
+		tag.WorkflowNamespaceIDBytes(task.GetNamespaceId()),
+		tag.WorkflowID(task.GetWorkflowId()),
+		tag.WorkflowRunIDBytes(task.GetRunId()),
 	)
 
 	switch task := task.(type) {

@@ -202,7 +202,7 @@ func (f *ReplicationTaskFetcherImpl) fetchTasks() {
 		select {
 		case request := <-f.requestChan:
 			// Here we only add the request to map. We will wait until timer fires to send the request to remote.
-			if req, ok := requestByShard[request.token.GetShardID()]; ok && req != request {
+			if req, ok := requestByShard[request.token.GetShardId()]; ok && req != request {
 				// since this replication task fetcher is per host
 				// and replication task processor is per shard
 				// during shard movement, duplicated requests can appear
@@ -210,7 +210,7 @@ func (f *ReplicationTaskFetcherImpl) fetchTasks() {
 				f.logger.Error("Get replication task request already exist for shard.")
 				close(req.respChan)
 			}
-			requestByShard[request.token.GetShardID()] = request
+			requestByShard[request.token.GetShardId()] = request
 
 		case <-timer.C:
 			// When timer fires, we collect all the requests we have so far and attempt to send them to remote.

@@ -83,8 +83,8 @@ func printTaskListStatus(taskListStatus *commonproto.TaskListStatus) {
 	table.Append([]string{strconv.FormatInt(taskListStatus.GetReadLevel(), 10),
 		strconv.FormatInt(taskListStatus.GetAckLevel(), 10),
 		strconv.FormatInt(taskListStatus.GetBacklogCountHint(), 10),
-		strconv.FormatInt(taskIDBlock.GetStartID(), 10),
-		strconv.FormatInt(taskIDBlock.GetEndID(), 10)})
+		strconv.FormatInt(taskIDBlock.GetStartId(), 10),
+		strconv.FormatInt(taskIDBlock.GetEndId(), 10)})
 	table.Render()
 }
 

@@ -98,7 +98,7 @@ func (m *namespaceToBucketMap) getRateLimiter(namespace string, numOfPriority, q
 
 func (p *visibilitySamplingClient) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
 	namespace := request.Namespace
-	namespaceID := request.NamespaceUUID
+	namespaceID := request.NamespaceID
 
 	rateLimiter := p.rateLimitersForOpen.getRateLimiter(namespace, numOfPriorityForOpen, p.config.VisibilityOpenMaxQPS(namespace))
 	if ok, _ := rateLimiter.GetToken(0, 1); ok {
@@ -118,7 +118,7 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionStarted(request *Recor
 
 func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	namespace := request.Namespace
-	namespaceID := request.NamespaceUUID
+	namespaceID := request.NamespaceID
 	priority := getRequestPriority(request)
 
 	rateLimiter := p.rateLimitersForClosed.getRateLimiter(namespace, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(namespace))
@@ -139,7 +139,7 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *Record
 
 func (p *visibilitySamplingClient) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
 	namespace := request.Namespace
-	namespaceID := request.NamespaceUUID
+	namespaceID := request.NamespaceID
 
 	rateLimiter := p.rateLimitersForClosed.getRateLimiter(namespace, numOfPriorityForClosed, p.config.VisibilityClosedMaxQPS(namespace))
 	if ok, _ := rateLimiter.GetToken(0, 1); ok {

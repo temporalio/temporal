@@ -1907,7 +1907,7 @@ func CompleteActivity(c *cli.Context) {
 	defer cancel()
 
 	frontendClient := cFactory.FrontendClient(c)
-	_, err := frontendClient.RespondActivityTaskCompletedByID(ctx, &workflowservice.RespondActivityTaskCompletedByIDRequest{
+	_, err := frontendClient.RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
 		Namespace:  namespace,
 		WorkflowID: wid,
 		RunID:      rid,
@@ -1938,7 +1938,7 @@ func FailActivity(c *cli.Context) {
 	defer cancel()
 
 	frontendClient := cFactory.FrontendClient(c)
-	_, err := frontendClient.RespondActivityTaskFailedByID(ctx, &workflowservice.RespondActivityTaskFailedByIDRequest{
+	_, err := frontendClient.RespondActivityTaskFailedById(ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
 		Namespace:  namespace,
 		WorkflowID: wid,
 		RunID:      rid,

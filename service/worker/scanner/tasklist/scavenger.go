@@ -199,7 +199,7 @@ func (s *Scavenger) emitStats() {
 func (s *Scavenger) newTask(info *p.PersistedTaskListInfo) executor.Task {
 	return &executorTask{
 		TaskListKey: p.TaskListKey{
-			NamespaceID: info.Data.NamespaceID,
+			NamespaceID: info.Data.GetNamespaceId(),
 			Name:        info.Data.Name,
 			TaskType:    info.Data.TaskType,
 		},

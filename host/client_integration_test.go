@@ -210,7 +210,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 		s.Logger.Fatal("Start workflow with err", tag.Error(err))
 	}
 	s.NotNil(we)
-	s.True(we.GetRunID() != "")
+	s.True(we.GetRunId() != "")
 
 	var res string
 	err = we.Get(ctx, &res)
@@ -244,14 +244,14 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 		s.Logger.Fatal("Start workflow with err", tag.Error(err))
 	}
 	s.NotNil(we)
-	s.True(we.GetRunID() != "")
+	s.True(we.GetRunId() != "")
 
 	var res string
 	err = we.Get(ctx, &res)
 	s.Error(err)
 
 	// Get history to make sure only the 2nd activity is failed because of mismatch of data converter
-	iter := s.sdkClient.GetWorkflowHistory(ctx, id, we.GetRunID(), false, 0)
+	iter := s.sdkClient.GetWorkflowHistory(ctx, id, we.GetRunId(), false, 0)
 	completedAct := 0
 	failedAct := 0
 	for iter.HasNext() {
@@ -350,7 +350,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 		s.Logger.Fatal("Start workflow with err", tag.Error(err))
 	}
 	s.NotNil(we)
-	s.True(we.GetRunID() != "")
+	s.True(we.GetRunId() != "")
 
 	var res string
 	err = we.Get(ctx, &res)

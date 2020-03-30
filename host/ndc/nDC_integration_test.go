@@ -1716,7 +1716,7 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
 		req := &historyservice.ReplicateEventsV2Request{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,

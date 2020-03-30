@@ -137,12 +137,12 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		return nil
 	}
 
-	ai, ok := mutableState.GetActivityInfo(task.ScheduleID)
+	ai, ok := mutableState.GetActivityInfo(task.GetScheduleId())
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(task.ScheduleID), tag.TaskType(persistence.TransferTaskTypeActivityTask))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(persistence.TransferTaskTypeActivityTask))
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.NamespaceID, ai.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), ai.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -174,12 +174,12 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 		return nil
 	}
 
-	decision, found := mutableState.GetDecisionInfo(task.ScheduleID)
+	decision, found := mutableState.GetDecisionInfo(task.GetScheduleId())
 	if !found {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(task.ScheduleID), tag.TaskType(persistence.TransferTaskTypeDecisionTask))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(persistence.TransferTaskTypeDecisionTask))
 		return nil
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, decision.Version, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -233,7 +233,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, lastWriteVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), lastWriteVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -271,16 +271,16 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	err = t.recordWorkflowClosed(
-		primitives.UUIDString(task.NamespaceID),
-		task.WorkflowID,
-		primitives.UUIDString(task.RunID),
+		primitives.UUIDString(task.GetNamespaceId()),
+		task.GetWorkflowId(),
+		primitives.UUIDString(task.GetRunId()),
 		workflowTypeName,
 		workflowStartTimestamp,
 		workflowExecutionTimestamp.UnixNano(),
 		workflowCloseTimestamp,
 		workflowCloseStatus,
 		workflowHistoryLength,
-		task.GetTaskID(),
+		task.GetTaskId(),
 		visibilityMemo,
 		searchAttr,
 	)
@@ -293,15 +293,15 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 		defer cancel()
 		_, err = t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
-			NamespaceUUID: parentNamespaceID,
+			NamespaceId: parentNamespaceID,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: parentWorkflowID,
 				RunId:      parentRunID,
 			},
 			InitiatedId: initiatedID,
 			CompletedExecution: &commonproto.WorkflowExecution{
-				WorkflowId: task.WorkflowID,
-				RunId:      primitives.UUID(task.RunID).String(),
+				WorkflowId: task.GetWorkflowId(),
+				RunId:      primitives.UUID(task.GetRunId()).String(),
 			},
 			CompletionEvent: completionEvent,
 		})
@@ -316,7 +316,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		return err
 	}
 
-	return t.processParentClosePolicy(primitives.UUID(task.NamespaceID).String(), namespace, children)
+	return t.processParentClosePolicy(primitives.UUID(task.GetNamespaceId()).String(), namespace, children)
 }
 
 func (t *transferQueueActiveTaskExecutor) processCancelExecution(
@@ -339,26 +339,26 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		return nil
 	}
 
-	initiatedEventID := task.ScheduleID
+	initiatedEventID := task.GetScheduleId()
 	requestCancelInfo, ok := mutableState.GetRequestCancelInfo(initiatedEventID)
 	if !ok {
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.NamespaceID, requestCancelInfo.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), requestCancelInfo.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	targetNamespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUIDString(task.TargetNamespaceID))
+	targetNamespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUIDString(task.GetTargetNamespaceId()))
 	if err != nil {
 		return err
 	}
 	targetNamespace := targetNamespaceEntry.GetInfo().Name
 
 	// handle workflow cancel itself
-	if bytes.Compare(task.NamespaceID, task.TargetNamespaceID) == 0 && task.WorkflowID == task.TargetWorkflowID {
+	if bytes.Compare(task.GetNamespaceId(), task.GetTargetNamespaceId()) == 0 && task.GetWorkflowId() == task.GetTargetWorkflowId() {
 		// it does not matter if the run ID is a mismatch
-		err = t.requestCancelExternalExecutionFailed(task, context, targetNamespace, task.TargetWorkflowID, primitives.UUID(task.TargetRunID).String())
+		err = t.requestCancelExternalExecutionFailed(task, context, targetNamespace, task.GetTargetWorkflowId(), primitives.UUID(task.GetTargetRunId()).String())
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
 			return nil
@@ -383,14 +383,14 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 			task,
 			context,
 			targetNamespace,
-			task.TargetWorkflowID,
-			primitives.UUID(task.TargetRunID).String(),
+			task.GetTargetWorkflowId(),
+			primitives.UUID(task.GetTargetRunId()).String(),
 		)
 	}
 
 	t.logger.Debug("RequestCancel successfully recorded to external workflow execution",
-		tag.WorkflowID(task.TargetWorkflowID),
-		tag.WorkflowRunIDBytes(task.TargetRunID),
+		tag.WorkflowID(task.GetTargetWorkflowId()),
+		tag.WorkflowRunIDBytes(task.GetTargetRunId()),
 	)
 
 	// Record ExternalWorkflowExecutionCancelRequested in source execution
@@ -398,8 +398,8 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		task,
 		context,
 		targetNamespace,
-		task.TargetWorkflowID,
-		primitives.UUID(task.TargetRunID).String(),
+		task.GetTargetWorkflowId(),
+		primitives.UUID(task.GetTargetRunId()).String(),
 	)
 }
 
@@ -423,7 +423,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		return nil
 	}
 
-	initiatedEventID := task.ScheduleID
+	initiatedEventID := task.GetScheduleId()
 	signalInfo, ok := mutableState.GetSignalInfo(initiatedEventID)
 	if !ok {
 		// TODO: here we should also RemoveSignalMutableState from target commonproto
@@ -431,26 +431,26 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		// To do that, probably need to add the SignalRequestID in transfer task.
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.NamespaceID, signalInfo.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), signalInfo.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	targetNamespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUIDString(task.TargetNamespaceID))
+	targetNamespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUIDString(task.GetTargetNamespaceId()))
 	if err != nil {
 		return err
 	}
 	targetNamespace := targetNamespaceEntry.GetInfo().Name
 
 	// handle workflow signal itself
-	if bytes.Compare(task.NamespaceID, task.TargetNamespaceID) == 0 && task.WorkflowID == task.TargetWorkflowID {
+	if bytes.Compare(task.GetNamespaceId(), task.GetTargetNamespaceId()) == 0 && task.GetWorkflowId() == task.GetTargetWorkflowId() {
 		// it does not matter if the run ID is a mismatch
 		return t.signalExternalExecutionFailed(
 			task,
 			weContext,
 			targetNamespace,
-			task.TargetWorkflowID,
-			primitives.UUID(task.TargetRunID).String(),
+			task.GetTargetWorkflowId(),
+			primitives.UUID(task.GetTargetRunId()).String(),
 			signalInfo.Control,
 		)
 	}
@@ -472,23 +472,23 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			task,
 			weContext,
 			targetNamespace,
-			task.TargetWorkflowID,
-			primitives.UUID(task.TargetRunID).String(),
+			task.GetTargetWorkflowId(),
+			primitives.UUID(task.GetTargetRunId()).String(),
 			signalInfo.Control,
 		)
 	}
 
 	t.logger.Debug("Signal successfully recorded to external workflow execution",
-		tag.WorkflowID(task.TargetWorkflowID),
-		tag.WorkflowRunIDBytes(task.TargetRunID),
+		tag.WorkflowID(task.GetTargetWorkflowId()),
+		tag.WorkflowRunIDBytes(task.GetTargetRunId()),
 	)
 
 	err = t.signalExternalExecutionCompleted(
 		task,
 		weContext,
 		targetNamespace,
-		task.TargetWorkflowID,
-		primitives.UUID(task.TargetRunID).String(),
+		task.GetTargetWorkflowId(),
+		primitives.UUID(task.GetTargetRunId()).String(),
 		signalInfo.Control,
 	)
 	if err != nil {
@@ -502,12 +502,12 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
-		NamespaceUUID: primitives.UUID(task.TargetNamespaceID).String(),
+		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
 		WorkflowExecution: &commonproto.WorkflowExecution{
-			WorkflowId: task.TargetWorkflowID,
-			RunId:      primitives.UUID(task.TargetRunID).String(),
+			WorkflowId: task.GetTargetWorkflowId(),
+			RunId:      primitives.UUID(task.GetTargetRunId()).String(),
 		},
-		RequestId: signalInfo.RequestID,
+		RequestId: signalInfo.GetRequestId(),
 	})
 	return err
 }
@@ -534,34 +534,34 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 
 	// Get parent namespace name
 	var namespace string
-	if namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUID(task.NamespaceID).String()); err != nil {
+	if namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUID(task.GetNamespaceId()).String()); err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 		// it is possible that the namespace got deleted. Use namespaceID instead as this is only needed for the history event
-		namespace = primitives.UUID(task.NamespaceID).String()
+		namespace = primitives.UUID(task.GetNamespaceId()).String()
 	} else {
 		namespace = namespaceEntry.GetInfo().Name
 	}
 
 	// Get target namespace name
 	var targetNamespace string
-	if namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUID(task.TargetNamespaceID).String()); err != nil {
+	if namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUID(task.GetTargetNamespaceId()).String()); err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 		// it is possible that the namespace got deleted. Use namespaceID instead as this is only needed for the history event
-		targetNamespace = primitives.UUID(task.NamespaceID).String()
+		targetNamespace = primitives.UUID(task.GetNamespaceId()).String()
 	} else {
 		targetNamespace = namespaceEntry.GetInfo().Name
 	}
 
-	initiatedEventID := task.ScheduleID
+	initiatedEventID := task.GetScheduleId()
 	childInfo, ok := mutableState.GetChildExecutionInfo(initiatedEventID)
 	if !ok {
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.NamespaceID, childInfo.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), childInfo.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -577,7 +577,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			WorkflowId: childInfo.StartedWorkflowID,
 			RunId:      childInfo.StartedRunID,
 		}
-		return t.createFirstDecisionTask(primitives.UUID(task.TargetNamespaceID).String(), childExecution)
+		return t.createFirstDecisionTask(primitives.UUID(task.GetTargetNamespaceId()).String(), childExecution)
 	}
 
 	attributes := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
@@ -610,8 +610,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return err
 	}
 	// Finally create first decision task for Child execution so it is really started
-	return t.createFirstDecisionTask(primitives.UUID(task.TargetNamespaceID).String(), &commonproto.WorkflowExecution{
-		WorkflowId: task.TargetWorkflowID,
+	return t.createFirstDecisionTask(primitives.UUID(task.GetTargetNamespaceId()).String(), &commonproto.WorkflowExecution{
+		WorkflowId: task.GetTargetWorkflowId(),
 		RunId:      childRunID,
 	})
 }
@@ -658,7 +658,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 		if err != nil {
 			return err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, startVersion, task.Version, task)
+		ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), startVersion, task.Version, task)
 		if err != nil || !ok {
 			return err
 		}
@@ -682,27 +682,27 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 
 	if recordStart {
 		return t.recordWorkflowStarted(
-			primitives.UUID(task.NamespaceID).String(),
-			task.WorkflowID,
-			primitives.UUID(task.RunID).String(),
+			primitives.UUID(task.GetNamespaceId()).String(),
+			task.GetWorkflowId(),
+			primitives.UUID(task.GetRunId()).String(),
 			wfTypeName,
 			startTimestamp,
 			executionTimestamp.UnixNano(),
 			workflowTimeout,
-			task.GetTaskID(),
+			task.GetTaskId(),
 			visibilityMemo,
 			searchAttr,
 		)
 	}
 	return t.upsertWorkflowExecution(
-		primitives.UUID(task.NamespaceID).String(),
-		task.WorkflowID,
-		primitives.UUID(task.RunID).String(),
+		primitives.UUID(task.GetNamespaceId()).String(),
+		task.GetWorkflowId(),
+		primitives.UUID(task.GetRunId()).String(),
 		wfTypeName,
 		startTimestamp,
 		executionTimestamp.UnixNano(),
 		workflowTimeout,
-		task.GetTaskID(),
+		task.GetTaskId(),
 		visibilityMemo,
 		searchAttr,
 	)
@@ -729,22 +729,22 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	}
 
 	logger := t.logger.WithTags(
-		tag.WorkflowNamespaceIDBytes(task.NamespaceID),
-		tag.WorkflowID(task.WorkflowID),
-		tag.WorkflowRunIDBytes(task.RunID),
+		tag.WorkflowNamespaceIDBytes(task.GetNamespaceId()),
+		tag.WorkflowID(task.GetWorkflowId()),
+		tag.WorkflowRunIDBytes(task.GetRunId()),
 	)
 
 	if !currentMutableState.IsWorkflowExecutionRunning() {
 		// it means this this might not be current anymore, we need to check
 		var resp *persistence.GetCurrentExecutionResponse
 		resp, err = t.shard.GetExecutionManager().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
-			NamespaceID: primitives.UUIDString(task.NamespaceID),
-			WorkflowID:  task.WorkflowID,
+			NamespaceID: primitives.UUIDString(task.GetNamespaceId()),
+			WorkflowID:  task.GetWorkflowId(),
 		})
 		if err != nil {
 			return err
 		}
-		if resp.RunID != primitives.UUIDString(task.RunID) {
+		if resp.RunID != primitives.UUIDString(task.GetRunId()) {
 			logger.Warn("Auto-Reset is skipped, because current run is stale.")
 			return nil
 		}
@@ -759,7 +759,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, currentStartVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), currentStartVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -791,10 +791,10 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		baseRelease = currentRelease
 	} else {
 		baseExecution := &commonproto.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
+			WorkflowId: task.GetWorkflowId(),
 			RunId:      resetPoint.GetRunId(),
 		}
-		baseContext, baseRelease, err = t.cache.getOrCreateWorkflowExecutionForBackground(primitives.UUIDString(task.NamespaceID), *baseExecution)
+		baseContext, baseRelease, err = t.cache.getOrCreateWorkflowExecutionForBackground(primitives.UUIDString(task.GetNamespaceId()), *baseExecution)
 		if err != nil {
 			return err
 		}
@@ -838,7 +838,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 			}
 
 			namespace := initiatedAttributes.Namespace
-			initiatedEventID := task.ScheduleID
+			initiatedEventID := task.GetScheduleId()
 			ci, ok := mutableState.GetChildExecutionInfo(initiatedEventID)
 			if !ok || ci.StartedID != common.EmptyEventID {
 				return serviceerror.NewNotFound("Pending child execution not found.")
@@ -847,7 +847,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 			_, err := mutableState.AddChildWorkflowExecutionStartedEvent(
 				namespace,
 				&commonproto.WorkflowExecution{
-					WorkflowId: task.TargetWorkflowID,
+					WorkflowId: task.GetTargetWorkflowId(),
 					RunId:      runID,
 				},
 				initiatedAttributes.WorkflowType,
@@ -871,7 +871,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
-			initiatedEventID := task.ScheduleID
+			initiatedEventID := task.GetScheduleId()
 			ci, ok := mutableState.GetChildExecutionInfo(initiatedEventID)
 			if !ok || ci.StartedID != common.EmptyEventID {
 				return serviceerror.NewNotFound("Pending child execution not found.")
@@ -894,7 +894,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstDecisionTask(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 	_, err := t.historyClient.ScheduleDecisionTask(ctx, &historyservice.ScheduleDecisionTaskRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: execution,
 		IsFirstDecision:   true,
 	})
@@ -924,7 +924,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 				return &serviceerror.NotFound{Message: "Workflow execution already completed."}
 			}
 
-			initiatedEventID := task.ScheduleID
+			initiatedEventID := task.GetScheduleId()
 			_, ok := mutableState.GetRequestCancelInfo(initiatedEventID)
 			if !ok {
 				return ErrMissingRequestCancelInfo
@@ -962,7 +962,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 				return &serviceerror.NotFound{Message: "Workflow execution already completed."}
 			}
 
-			initiatedEventID := task.ScheduleID
+			initiatedEventID := task.GetScheduleId()
 			_, ok := mutableState.GetSignalInfo(initiatedEventID)
 			if !ok {
 				return ErrMissingSignalInfo
@@ -1000,7 +1000,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 				return &serviceerror.NotFound{Message: "Workflow execution already completed."}
 			}
 
-			initiatedEventID := task.ScheduleID
+			initiatedEventID := task.GetScheduleId()
 			_, ok := mutableState.GetRequestCancelInfo(initiatedEventID)
 			if !ok {
 				return ErrMissingRequestCancelInfo
@@ -1040,7 +1040,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 				return &serviceerror.NotFound{Message: "Workflow is not running."}
 			}
 
-			initiatedEventID := task.ScheduleID
+			initiatedEventID := task.GetScheduleId()
 			_, ok := mutableState.GetSignalInfo(initiatedEventID)
 			if !ok {
 				return ErrMissingSignalInfo
@@ -1099,21 +1099,21 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 ) error {
 
 	request := &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceUUID: primitives.UUID(task.TargetNamespaceID).String(),
+		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			Namespace: targetNamespace,
 			WorkflowExecution: &commonproto.WorkflowExecution{
-				WorkflowId: task.TargetWorkflowID,
-				RunId:      primitives.UUID(task.TargetRunID).String(),
+				WorkflowId: task.GetTargetWorkflowId(),
+				RunId:      primitives.UUID(task.GetTargetRunId()).String(),
 			},
 			Identity: identityHistoryService,
 			// Use the same request ID to dedupe RequestCancelWorkflowExecution calls
-			RequestId: requestCancelInfo.CancelRequestID,
+			RequestId: requestCancelInfo.GetCancelRequestId(),
 		},
-		ExternalInitiatedEventId: task.ScheduleID,
+		ExternalInitiatedEventId: task.GetScheduleId(),
 		ExternalWorkflowExecution: &commonproto.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      primitives.UUID(task.RunID).String(),
+			WorkflowId: task.GetWorkflowId(),
+			RunId:      primitives.UUID(task.GetRunId()).String(),
 		},
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
@@ -1143,23 +1143,23 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 ) error {
 
 	request := &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceUUID: primitives.UUID(task.TargetNamespaceID).String(),
+		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: targetNamespace,
 			WorkflowExecution: &commonproto.WorkflowExecution{
-				WorkflowId: task.TargetWorkflowID,
-				RunId:      primitives.UUID(task.TargetRunID).String(),
+				WorkflowId: task.GetTargetWorkflowId(),
+				RunId:      primitives.UUID(task.GetTargetRunId()).String(),
 			},
 			Identity:   identityHistoryService,
 			SignalName: signalInfo.Name,
 			Input:      signalInfo.Input,
 			// Use same request ID to deduplicate SignalWorkflowExecution calls
-			RequestId: signalInfo.RequestID,
+			RequestId: signalInfo.GetRequestId(),
 			Control:   signalInfo.Control,
 		},
 		ExternalWorkflowExecution: &commonproto.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      primitives.UUID(task.RunID).String(),
+			WorkflowId: task.GetWorkflowId(),
+			RunId:      primitives.UUID(task.GetRunId()).String(),
 		},
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
@@ -1184,7 +1184,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 
 	now := t.shard.GetTimeSource().Now()
 	request := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceUUID: primitives.UUID(task.TargetNamespaceID).String(),
+		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           targetNamespace,
 			WorkflowId:                          attributes.WorkflowId,
@@ -1203,13 +1203,13 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			SearchAttributes:      attributes.SearchAttributes,
 		},
 		ParentExecutionInfo: &commonproto.ParentExecutionInfo{
-			NamespaceUUID: primitives.UUID(task.NamespaceID).String(),
-			Namespace:     namespace,
+			NamespaceId: primitives.UUID(task.GetNamespaceId()).String(),
+			Namespace:   namespace,
 			Execution: &commonproto.WorkflowExecution{
-				WorkflowId: task.WorkflowID,
-				RunId:      primitives.UUID(task.RunID).String(),
+				WorkflowId: task.GetWorkflowId(),
+				RunId:      primitives.UUID(task.GetRunId()).String(),
 			},
-			InitiatedId: task.ScheduleID,
+			InitiatedId: task.GetScheduleId(),
 		},
 		FirstDecisionTaskBackoffSeconds: backoff.GetBackoffForNextScheduleInSeconds(
 			attributes.GetCronSchedule(),
@@ -1250,8 +1250,8 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	namespaceID := task.NamespaceID
-	workflowID := task.WorkflowID
+	namespaceID := task.GetNamespaceId()
+	workflowID := task.GetWorkflowId()
 	baseRunID := baseMutableState.GetExecutionInfo().RunID
 
 	// TODO when NDC is rolled out, remove this block
@@ -1364,9 +1364,9 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		}
 
 		request := parentclosepolicy.Request{
-			NamespaceUUID: namespaceID,
-			Namespace:     namespace,
-			Executions:    executions,
+			NamespaceID: namespaceID,
+			Namespace:   namespace,
+			Executions:  executions,
 		}
 		return t.parentClosePolicyClient.SendParentClosePolicyRequest(request)
 	}
@@ -1403,7 +1403,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 
 	case enums.ParentClosePolicyTerminate:
 		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
-			NamespaceUUID: namespaceID,
+			NamespaceId: namespaceID,
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: namespace,
 				WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1418,7 +1418,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 
 	case enums.ParentClosePolicyRequestCancel:
 		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
-			NamespaceUUID: namespaceID,
+			NamespaceId: namespaceID,
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				Namespace: namespace,
 				WorkflowExecution: &commonproto.WorkflowExecution{

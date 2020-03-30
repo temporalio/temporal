@@ -625,17 +625,17 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeat(
 	return resp, err
 }
 
-// RecordActivityTaskHeartbeatByID API call
-func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeatByID(
+// RecordActivityTaskHeartbeatById API call
+func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeatById(
 	ctx context.Context,
-	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
-) (resp *workflowservice.RecordActivityTaskHeartbeatByIDResponse, retError error) {
+	request *workflowservice.RecordActivityTaskHeartbeatByIdRequest,
+) (resp *workflowservice.RecordActivityTaskHeartbeatByIdResponse, retError error) {
 
-	var apiName = "RecordActivityTaskHeartbeatByID"
+	var apiName = "RecordActivityTaskHeartbeatById"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRecordActivityTaskHeartbeatByIDScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRecordActivityTaskHeartbeatByIdScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -644,10 +644,10 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeatByID(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.RecordActivityTaskHeartbeatByID(ctx, request)
+			resp, err = handler.frontendHandler.RecordActivityTaskHeartbeatById(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.RecordActivityTaskHeartbeatByID(ctx, request)
+			resp, err = remoteClient.RecordActivityTaskHeartbeatById(ctx, request)
 		}
 		return err
 	})
@@ -780,17 +780,17 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceled(
 	return resp, err
 }
 
-// RespondActivityTaskCanceledByID API call
-func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceledByID(
+// RespondActivityTaskCanceledById API call
+func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceledById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
-) (resp *workflowservice.RespondActivityTaskCanceledByIDResponse, retError error) {
+	request *workflowservice.RespondActivityTaskCanceledByIdRequest,
+) (resp *workflowservice.RespondActivityTaskCanceledByIdResponse, retError error) {
 
-	var apiName = "RespondActivityTaskCanceledByID"
+	var apiName = "RespondActivityTaskCanceledById"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCanceledByIDScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCanceledByIdScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -799,10 +799,10 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceledByID(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.RespondActivityTaskCanceledByID(ctx, request)
+			resp, err = handler.frontendHandler.RespondActivityTaskCanceledById(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.RespondActivityTaskCanceledByID(ctx, request)
+			resp, err = remoteClient.RespondActivityTaskCanceledById(ctx, request)
 		}
 		return err
 	})
@@ -845,17 +845,17 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompleted(
 	return resp, err
 }
 
-// RespondActivityTaskCompletedByID API call
-func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompletedByID(
+// RespondActivityTaskCompletedById API call
+func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompletedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
-) (resp *workflowservice.RespondActivityTaskCompletedByIDResponse, retError error) {
+	request *workflowservice.RespondActivityTaskCompletedByIdRequest,
+) (resp *workflowservice.RespondActivityTaskCompletedByIdResponse, retError error) {
 
-	var apiName = "RespondActivityTaskCompletedByID"
+	var apiName = "RespondActivityTaskCompletedById"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCompletedByIDScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCompletedByIdScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -864,10 +864,10 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompletedByID(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.RespondActivityTaskCompletedByID(ctx, request)
+			resp, err = handler.frontendHandler.RespondActivityTaskCompletedById(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.RespondActivityTaskCompletedByID(ctx, request)
+			resp, err = remoteClient.RespondActivityTaskCompletedById(ctx, request)
 		}
 		return err
 	})
@@ -910,17 +910,17 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailed(
 	return resp, err
 }
 
-// RespondActivityTaskFailedByID API call
-func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedByID(
+// RespondActivityTaskFailedById API call
+func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskFailedByIDRequest,
-) (resp *workflowservice.RespondActivityTaskFailedByIDResponse, retError error) {
+	request *workflowservice.RespondActivityTaskFailedByIdRequest,
+) (resp *workflowservice.RespondActivityTaskFailedByIdResponse, retError error) {
 
-	var apiName = "RespondActivityTaskFailedByID"
+	var apiName = "RespondActivityTaskFailedById"
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskFailedByIDScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskFailedByIdScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -929,10 +929,10 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedByID(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.RespondActivityTaskFailedByID(ctx, request)
+			resp, err = handler.frontendHandler.RespondActivityTaskFailedById(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.RespondActivityTaskFailedByID(ctx, request)
+			resp, err = remoteClient.RespondActivityTaskFailedById(ctx, request)
 		}
 		return err
 	})

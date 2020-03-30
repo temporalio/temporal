@@ -166,7 +166,7 @@ func (wh *WorkflowHandler) DescribeNamespace(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	if request.GetName() == "" && request.GetUuid() == "" {
+	if request.GetName() == "" && request.GetId() == "" {
 		return nil, errNamespaceNotSet
 	}
 
@@ -449,7 +449,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		currentBranchToken []byte,
 	) ([]byte, string, int64, int64, bool, error) {
 		response, err := wh.GetHistoryClient().PollMutableState(ctx, &historyservice.PollMutableStateRequest{
-			NamespaceUUID:       namespaceUUID,
+			NamespaceId:         namespaceUUID,
 			Execution:           execution,
 			ExpectedNextEventId: expectedNextEventID,
 			CurrentBranchToken:  currentBranchToken,
@@ -659,9 +659,9 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 	op := func() error {
 		var err error
 		matchingResp, err = wh.GetMatchingClient().PollForDecisionTask(ctx, &matchingservice.PollForDecisionTaskRequest{
-			NamespaceUUID: namespaceID,
-			PollerID:      pollerID,
-			PollRequest:   request,
+			NamespaceId: namespaceID,
+			PollerId:    pollerID,
+			PollRequest: request,
 		})
 		return err
 	}
@@ -742,7 +742,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 	defer sw.Stop()
 
 	histResp, err := wh.GetHistoryClient().RespondDecisionTaskCompleted(ctx, &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID:   namespaceId,
+		NamespaceId:     namespaceId,
 		CompleteRequest: request},
 	)
 	if err != nil {
@@ -842,7 +842,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 	}
 
 	_, err = wh.GetHistoryClient().RespondDecisionTaskFailed(ctx, &historyservice.RespondDecisionTaskFailedRequest{
-		NamespaceUUID: namespaceId,
+		NamespaceId:   namespaceId,
 		FailedRequest: request,
 	})
 	if err != nil {
@@ -909,9 +909,9 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 	op := func() error {
 		var err error
 		matchingResponse, err = wh.GetMatchingClient().PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
-			NamespaceUUID: namespaceID,
-			PollerID:      pollerID,
-			PollRequest:   request,
+			NamespaceId: namespaceID,
+			PollerId:    pollerID,
+			PollRequest: request,
 		})
 		return err
 	}
@@ -1023,7 +1023,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-			NamespaceUUID: namespaceId,
+			NamespaceId:   namespaceId,
 			FailedRequest: failRequest,
 		})
 		if err != nil {
@@ -1033,7 +1033,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	}
 
 	resp, err := wh.GetHistoryClient().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
-		NamespaceUUID:    namespaceId,
+		NamespaceId:      namespaceId,
 		HeartbeatRequest: request,
 	})
 	if err != nil {
@@ -1043,15 +1043,15 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	return &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: resp.GetCancelRequested()}, nil
 }
 
-// RecordActivityTaskHeartbeatByID is called by application worker while it is processing an ActivityTask.  If worker fails
+// RecordActivityTaskHeartbeatById is called by application worker while it is processing an ActivityTask.  If worker fails
 // to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and
-// 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeatByID' will
+// 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeatById' will
 // fail with 'EntityNotExistsError' in such situations.  Instead of using 'taskToken' like in RecordActivityTaskHeartbeat,
 // use Namespace, WorkflowID and ActivityID
-func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIDRequest) (_ *workflowservice.RecordActivityTaskHeartbeatByIDResponse, retError error) {
+func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIdRequest) (_ *workflowservice.RecordActivityTaskHeartbeatByIdResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRecordActivityTaskHeartbeatByIDScope, request.GetNamespace())
+	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRecordActivityTaskHeartbeatByIdScope, request.GetNamespace())
 	defer sw.Stop()
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
@@ -1065,14 +1065,14 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
 	wh.allow("")
 
-	wh.GetLogger().Debug("Received RecordActivityTaskHeartbeatByID")
+	wh.GetLogger().Debug("Received RecordActivityTaskHeartbeatById")
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	workflowID := request.GetWorkflowID()
-	runID := request.GetRunID() // runID is optional so can be empty
-	activityID := request.GetActivityID()
+	workflowID := request.GetWorkflowId()
+	runID := request.GetRunId() // runID is optional so can be empty
+	activityID := request.GetActivityId()
 
 	if namespaceID == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
@@ -1125,13 +1125,13 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, 
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-			NamespaceUUID: namespaceID,
+			NamespaceId:   namespaceID,
 			FailedRequest: failRequest,
 		})
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
-		return &workflowservice.RecordActivityTaskHeartbeatByIDResponse{CancelRequested: true}, nil
+		return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{CancelRequested: true}, nil
 	}
 
 	req := &workflowservice.RecordActivityTaskHeartbeatRequest{
@@ -1141,13 +1141,13 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, 
 	}
 
 	resp, err := wh.GetHistoryClient().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
-		NamespaceUUID:    namespaceID,
+		NamespaceId:      namespaceID,
 		HeartbeatRequest: req,
 	})
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	return &workflowservice.RecordActivityTaskHeartbeatByIDResponse{CancelRequested: resp.GetCancelRequested()}, nil
+	return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{CancelRequested: resp.GetCancelRequested()}, nil
 }
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
@@ -1217,7 +1217,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-			NamespaceUUID: namespaceId,
+			NamespaceId:   namespaceId,
 			FailedRequest: failRequest,
 		})
 		if err != nil {
@@ -1225,7 +1225,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 		}
 	} else {
 		_, err = wh.GetHistoryClient().RespondActivityTaskCompleted(ctx, &historyservice.RespondActivityTaskCompletedRequest{
-			NamespaceUUID:   namespaceId,
+			NamespaceId:     namespaceId,
 			CompleteRequest: request,
 		})
 		if err != nil {
@@ -1236,15 +1236,15 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 	return &workflowservice.RespondActivityTaskCompletedResponse{}, nil
 }
 
-// RespondActivityTaskCompletedByID is called by application worker when it is done processing an ActivityTask.
+// RespondActivityTaskCompletedById is called by application worker when it is done processing an ActivityTask.
 // It will result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask
 // created for the workflow so new decisions could be made.  Similar to RespondActivityTaskCompleted but use Namespace,
 // WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
-func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIDRequest) (_ *workflowservice.RespondActivityTaskCompletedByIDResponse, retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIdRequest) (_ *workflowservice.RespondActivityTaskCompletedByIdResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRespondActivityTaskCompletedByIDScope, request.GetNamespace())
+	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRespondActivityTaskCompletedByIdScope, request.GetNamespace())
 	defer sw.Stop()
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
@@ -1262,9 +1262,9 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context,
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	workflowID := request.GetWorkflowID()
-	runID := request.GetRunID() // runID is optional so can be empty
-	activityID := request.GetActivityID()
+	workflowID := request.GetWorkflowId()
+	runID := request.GetRunId() // runID is optional so can be empty
+	activityID := request.GetActivityId()
 
 	if namespaceID == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
@@ -1321,7 +1321,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context,
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-			NamespaceUUID: namespaceID,
+			NamespaceId:   namespaceID,
 			FailedRequest: failRequest,
 		})
 		if err != nil {
@@ -1335,7 +1335,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context,
 		}
 
 		_, err = wh.GetHistoryClient().RespondActivityTaskCompleted(ctx, &historyservice.RespondActivityTaskCompletedRequest{
-			NamespaceUUID:   namespaceID,
+			NamespaceId:     namespaceID,
 			CompleteRequest: req,
 		})
 		if err != nil {
@@ -1343,7 +1343,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context,
 		}
 	}
 
-	return &workflowservice.RespondActivityTaskCompletedByIDResponse{}, nil
+	return &workflowservice.RespondActivityTaskCompletedByIdResponse{}, nil
 }
 
 // RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
@@ -1412,7 +1412,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	}
 
 	_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId:   namespaceID,
 		FailedRequest: request,
 	})
 	if err != nil {
@@ -1421,15 +1421,15 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	return &workflowservice.RespondActivityTaskFailedResponse{}, nil
 }
 
-// RespondActivityTaskFailedByID is called by application worker when it is done processing an ActivityTask.
+// RespondActivityTaskFailedById is called by application worker when it is done processing an ActivityTask.
 // It will result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask
 // created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskFailed but use
 // Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
-func (wh *WorkflowHandler) RespondActivityTaskFailedByID(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIDRequest) (_ *workflowservice.RespondActivityTaskFailedByIDResponse, retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIdRequest) (_ *workflowservice.RespondActivityTaskFailedByIdResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRespondActivityTaskFailedByIDScope, request.GetNamespace())
+	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRespondActivityTaskFailedByIdScope, request.GetNamespace())
 	defer sw.Stop()
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
@@ -1447,9 +1447,9 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(ctx context.Context, re
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	workflowID := request.GetWorkflowID()
-	runID := request.GetRunID() // runID is optional so can be empty
-	activityID := request.GetActivityID()
+	workflowID := request.GetWorkflowId()
+	runID := request.GetRunId() // runID is optional so can be empty
+	activityID := request.GetActivityId()
 
 	if namespaceID == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
@@ -1510,13 +1510,13 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(ctx context.Context, re
 	}
 
 	_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId:   namespaceID,
 		FailedRequest: req,
 	})
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	return &workflowservice.RespondActivityTaskFailedByIDResponse{}, nil
+	return &workflowservice.RespondActivityTaskFailedByIdResponse{}, nil
 }
 
 // RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
@@ -1589,7 +1589,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-			NamespaceUUID: primitives.UUIDString(taskToken.GetNamespaceId()),
+			NamespaceId:   primitives.UUIDString(taskToken.GetNamespaceId()),
 			FailedRequest: failRequest,
 		})
 		if err != nil {
@@ -1597,7 +1597,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		}
 	} else {
 		_, err = wh.GetHistoryClient().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
-			NamespaceUUID: primitives.UUIDString(taskToken.GetNamespaceId()),
+			NamespaceId:   primitives.UUIDString(taskToken.GetNamespaceId()),
 			CancelRequest: request,
 		})
 		if err != nil {
@@ -1608,12 +1608,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 	return &workflowservice.RespondActivityTaskCanceledResponse{}, nil
 }
 
-// RespondActivityTaskCanceledByID is called by application worker when it is successfully canceled an ActivityTask.
+// RespondActivityTaskCanceledById is called by application worker when it is successfully canceled an ActivityTask.
 // It will result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
 // created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskCanceled but use
 // Namespace, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
-func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIDRequest) (_ *workflowservice.RespondActivityTaskCanceledByIDResponse, retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIdRequest) (_ *workflowservice.RespondActivityTaskCanceledByIdResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRespondActivityTaskCanceledScope, request.GetNamespace())
@@ -1634,9 +1634,9 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, 
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	workflowID := request.GetWorkflowID()
-	runID := request.GetRunID() // runID is optional so can be empty
-	activityID := request.GetActivityID()
+	workflowID := request.GetWorkflowId()
+	runID := request.GetRunId() // runID is optional so can be empty
+	activityID := request.GetActivityId()
 
 	if namespaceID == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
@@ -1692,7 +1692,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, 
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-			NamespaceUUID: namespaceID,
+			NamespaceId:   namespaceID,
 			FailedRequest: failRequest,
 		})
 		if err != nil {
@@ -1706,7 +1706,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, 
 		}
 
 		_, err = wh.GetHistoryClient().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
-			NamespaceUUID: namespaceID,
+			NamespaceId:   namespaceID,
 			CancelRequest: req,
 		})
 		if err != nil {
@@ -1714,7 +1714,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, 
 		}
 	}
 
-	return &workflowservice.RespondActivityTaskCanceledByIDResponse{}, nil
+	return &workflowservice.RespondActivityTaskCanceledByIdResponse{}, nil
 }
 
 // RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
@@ -1753,7 +1753,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 	}
 
 	_, err = wh.GetHistoryClient().RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId:   namespaceID,
 		CancelRequest: request,
 	})
 	if err != nil {
@@ -1828,7 +1828,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 	}
 
 	_, err = wh.GetHistoryClient().SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId:   namespaceID,
 		SignalRequest: request,
 	})
 	if err != nil {
@@ -1959,7 +1959,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	op := func() error {
 		var err error
 		resp, err := wh.GetHistoryClient().SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
-			NamespaceUUID:          namespaceID,
+			NamespaceId:            namespaceID,
 			SignalWithStartRequest: request,
 		})
 		runId = resp.GetRunId()
@@ -2008,8 +2008,8 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	}
 
 	resp, err := wh.GetHistoryClient().ResetWorkflowExecution(ctx, &historyservice.ResetWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
-		ResetRequest:  request,
+		NamespaceId:  namespaceID,
+		ResetRequest: request,
 	})
 	if err != nil {
 		return nil, wh.error(err, scope)
@@ -2052,7 +2052,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 	}
 
 	_, err = wh.GetHistoryClient().TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
-		NamespaceUUID:    namespaceID,
+		NamespaceId:      namespaceID,
 		TerminateRequest: request,
 	})
 	if err != nil {
@@ -2108,7 +2108,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 	}
 
 	baseReq := persistence.ListWorkflowExecutionsRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceID:       namespaceID,
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
@@ -2200,7 +2200,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	}
 
 	baseReq := persistence.ListWorkflowExecutionsRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceID:       namespaceID,
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
@@ -2299,7 +2299,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 	}
 
 	req := &persistence.ListWorkflowExecutionsRequestV2{
-		NamespaceUUID: namespaceID,
+		NamespaceID:   namespaceID,
 		Namespace:     namespace,
 		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.NextPageToken,
@@ -2442,7 +2442,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 	}
 
 	req := &persistence.ListWorkflowExecutionsRequestV2{
-		NamespaceUUID: namespaceID,
+		NamespaceID:   namespaceID,
 		Namespace:     namespace,
 		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.NextPageToken,
@@ -2494,9 +2494,9 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 	}
 
 	req := &persistence.CountWorkflowExecutionsRequest{
-		NamespaceUUID: namespaceID,
-		Namespace:     namespace,
-		Query:         request.GetQuery(),
+		NamespaceID: namespaceID,
+		Namespace:   namespace,
+		Query:       request.GetQuery(),
 	}
 	persistenceResp, err := wh.GetVisibilityManager().CountWorkflowExecutions(req)
 	if err != nil {
@@ -2594,9 +2594,9 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		FeatureVersion: headers[1],
 	}
 	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
-		NamespaceUUID:    queryTaskToken.GetNamespaceId(),
+		NamespaceId:      queryTaskToken.GetNamespaceId(),
 		TaskList:         &commonproto.TaskList{Name: queryTaskToken.GetTaskList()},
-		TaskID:           queryTaskToken.GetTaskId(),
+		TaskId:           queryTaskToken.GetTaskId(),
 		CompletedRequest: request,
 	}
 
@@ -2642,8 +2642,8 @@ func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, request *wor
 	}
 
 	_, err = wh.GetHistoryClient().ResetStickyTaskList(ctx, &historyservice.ResetStickyTaskListRequest{
-		NamespaceUUID: namespaceID,
-		Execution:     request.Execution,
+		NamespaceId: namespaceID,
+		Execution:   request.Execution,
 	})
 	if err != nil {
 		return nil, wh.error(err, scope)
@@ -2706,8 +2706,8 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	}
 
 	req := &historyservice.QueryWorkflowRequest{
-		NamespaceUUID: namespaceID,
-		Request:       request,
+		NamespaceId: namespaceID,
+		Request:     request,
 	}
 	hResponse, err := wh.GetHistoryClient().QueryWorkflow(ctx, req)
 	if err != nil {
@@ -2748,8 +2748,8 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	}
 
 	response, err := wh.GetHistoryClient().DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
-		Request:       request,
+		NamespaceId: namespaceID,
+		Request:     request,
 	})
 
 	if err != nil {
@@ -2800,8 +2800,8 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workfl
 	op := func() error {
 		var err error
 		matchingResponse, err = wh.GetMatchingClient().DescribeTaskList(ctx, &matchingservice.DescribeTaskListRequest{
-			NamespaceUUID: namespaceID,
-			DescRequest:   request,
+			NamespaceId: namespaceID,
+			DescRequest: request,
 		})
 		return err
 	}
@@ -2874,7 +2874,7 @@ func (wh *WorkflowHandler) PollForWorkflowExecutionRawHistory(ctx context.Contex
 		currentBranchToken []byte,
 	) ([]byte, string, int64, int64, bool, error) {
 		response, err := wh.GetHistoryClient().PollMutableState(ctx, &historyservice.PollMutableStateRequest{
-			NamespaceUUID:       namespaceUUID,
+			NamespaceId:         namespaceUUID,
 			Execution:           execution,
 			ExpectedNextEventId: expectedNextEventID,
 			CurrentBranchToken:  currentBranchToken,
@@ -3069,7 +3069,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 		currentBranchToken []byte,
 	) ([]byte, string, int64, error) {
 		response, err := wh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-			NamespaceUUID:       namespaceUUID,
+			NamespaceId:         namespaceUUID,
 			Execution:           execution,
 			ExpectedNextEventId: common.EmptyEventID,
 			CurrentBranchToken:  currentBranchToken,
@@ -3617,8 +3617,8 @@ func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflo
 		return false
 	}
 	getMutableStateRequest := &historyservice.GetMutableStateRequest{
-		NamespaceUUID: namespaceID,
-		Execution:     request.Execution,
+		NamespaceId: namespaceID,
+		Execution:   request.Execution,
 	}
 	_, err := wh.GetHistoryClient().GetMutableState(ctx, getMutableStateRequest)
 	if err == nil {
@@ -3723,10 +3723,10 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error,
 		// Our rpc stack does not propagates context cancellation to the other service.  Lets make an explicit
 		// call to matching to notify this poller is gone to prevent any tasks being dispatched to zombie pollers.
 		_, err = wh.GetMatchingClient().CancelOutstandingPoll(context.Background(), &matchingservice.CancelOutstandingPollRequest{
-			NamespaceUUID: namespaceID,
-			TaskListType:  taskListType,
-			TaskList:      taskList,
-			PollerID:      pollerID,
+			NamespaceId:  namespaceID,
+			TaskListType: taskListType,
+			TaskList:     taskList,
+			PollerId:     pollerID,
 		})
 		// We can not do much if this call fails.  Just log the error and move on
 		if err != nil {

@@ -85,7 +85,7 @@ func (s *Scavenger) deleteHandler(key *p.TaskListKey, state *taskListState) hand
 			}
 		}
 
-		taskID := resp.Tasks[nTasks-1].TaskID
+		taskID := resp.Tasks[nTasks-1].GetTaskId()
 		if _, err = s.completeTasks(key, taskID, nTasks); err != nil {
 			return handlerStatusErr
 		}

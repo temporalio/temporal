@@ -217,7 +217,7 @@ func (e *matchingEngineImpl) removeTaskListManager(id *taskListID) {
 
 // AddDecisionTask either delivers task directly to waiting poller or save it into task list persistence.
 func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *matchingservice.AddDecisionTaskRequest) (bool, error) {
-	namespaceID := addRequest.GetNamespaceUUID()
+	namespaceID := addRequest.GetNamespaceId()
 	taskListName := addRequest.TaskList.GetName()
 	taskListKind := addRequest.TaskList.GetKind()
 
@@ -243,10 +243,10 @@ func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *ma
 	expiry := types.TimestampNow()
 	expiry.Seconds += int64(addRequest.ScheduleToStartTimeoutSeconds)
 	taskInfo := &persistenceblobs.TaskInfo{
-		NamespaceID: primitives.MustParseUUID(namespaceID),
-		RunID:       primitives.MustParseUUID(addRequest.Execution.GetRunId()),
-		WorkflowID:  addRequest.Execution.GetWorkflowId(),
-		ScheduleID:  addRequest.GetScheduleId(),
+		NamespaceId: primitives.MustParseUUID(namespaceID),
+		RunId:       primitives.MustParseUUID(addRequest.Execution.GetRunId()),
+		WorkflowId:  addRequest.Execution.GetWorkflowId(),
+		ScheduleId:  addRequest.GetScheduleId(),
 		Expiry:      expiry,
 		CreatedTime: now,
 	}
@@ -261,8 +261,8 @@ func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *ma
 
 // AddActivityTask either delivers task directly to waiting poller or save it into task list persistence.
 func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *matchingservice.AddActivityTaskRequest) (bool, error) {
-	namespaceID := addRequest.GetNamespaceUUID()
-	sourceNamespaceID := primitives.MustParseUUID(addRequest.GetSourceNamespaceUUID())
+	namespaceID := addRequest.GetNamespaceId()
+	sourceNamespaceID := primitives.MustParseUUID(addRequest.GetSourceNamespaceId())
 	runID := primitives.MustParseUUID(addRequest.Execution.GetRunId())
 	taskListName := addRequest.TaskList.GetName()
 	taskListKind := addRequest.TaskList.GetKind()
@@ -287,10 +287,10 @@ func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *ma
 	expiry := types.TimestampNow()
 	expiry.Seconds += int64(addRequest.GetScheduleToStartTimeoutSeconds())
 	taskInfo := &persistenceblobs.TaskInfo{
-		NamespaceID: sourceNamespaceID,
-		RunID:       runID,
-		WorkflowID:  addRequest.Execution.GetWorkflowId(),
-		ScheduleID:  addRequest.GetScheduleId(),
+		NamespaceId: sourceNamespaceID,
+		RunId:       runID,
+		WorkflowId:  addRequest.Execution.GetWorkflowId(),
+		ScheduleId:  addRequest.GetScheduleId(),
 		CreatedTime: now,
 		Expiry:      expiry,
 	}
@@ -305,8 +305,8 @@ func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *ma
 
 // PollForDecisionTask tries to get the decision task using exponential backoff.
 func (e *matchingEngineImpl) PollForDecisionTask(ctx context.Context, req *matchingservice.PollForDecisionTaskRequest) (*matchingservice.PollForDecisionTaskResponse, error) {
-	namespaceID := req.GetNamespaceUUID()
-	pollerID := req.GetPollerID()
+	namespaceID := req.GetNamespaceId()
+	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskListName := request.TaskList.GetName()
 	e.logger.Debug("Received PollForDecisionTask for taskList", tag.WorkflowTaskListName(taskListName))
@@ -347,8 +347,8 @@ pollLoop:
 			// for query task, we don't need to update history to record decision task started. but we need to know
 			// the NextEventID so front end knows what are the history events to load for this decision task.
 			mutableStateResp, err := e.historyService.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-				NamespaceUUID: req.GetNamespaceUUID(),
-				Execution:     task.workflowExecution(),
+				NamespaceId: req.GetNamespaceId(),
+				Execution:   task.workflowExecution(),
 			})
 			if err != nil {
 				// will notify query client that the query task failed
@@ -377,7 +377,7 @@ pollLoop:
 			switch err.(type) {
 			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
 				e.logger.Debug(fmt.Sprintf("Duplicated decision task taskList=%v, taskID=%v",
-					taskListName, task.event.TaskID))
+					taskListName, task.event.GetTaskId()))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -395,8 +395,8 @@ pollLoop:
 // error. Timeouts handled by the timer queue.
 func (e *matchingEngineImpl) PollForActivityTask(ctx context.Context, req *matchingservice.PollForActivityTaskRequest) (
 	*matchingservice.PollForActivityTaskResponse, error) {
-	namespaceID := req.GetNamespaceUUID()
-	pollerID := req.GetPollerID()
+	namespaceID := req.GetNamespaceId()
+	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskListName := request.TaskList.GetName()
 	e.logger.Debug("Received PollForActivityTask for taskList", tag.Name(taskListName))
@@ -441,7 +441,7 @@ pollLoop:
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
-				e.logger.Debug("Duplicated activity task", tag.Name(taskListName), tag.TaskID(task.event.TaskID))
+				e.logger.Debug("Duplicated activity task", tag.Name(taskListName), tag.TaskID(task.event.GetTaskId()))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -462,7 +462,7 @@ type queryResult struct {
 // QueryWorkflow creates a DecisionTask with query data, send it through sync match channel, wait for that DecisionTask
 // to be processed by worker, and then return the query result.
 func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error) {
-	namespaceID := queryRequest.GetNamespaceUUID()
+	namespaceID := queryRequest.GetNamespaceId()
 	taskListName := queryRequest.TaskList.GetName()
 	taskListKind := queryRequest.TaskList.GetKind()
 	taskList, err := newTaskListID(namespaceID, taskListName, persistence.TaskListTypeDecision)
@@ -510,7 +510,7 @@ func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *ma
 }
 
 func (e *matchingEngineImpl) RespondQueryTaskCompleted(ctx context.Context, request *matchingservice.RespondQueryTaskCompletedRequest) error {
-	if err := e.deliverQueryResult(request.GetTaskID(), &queryResult{workerResponse: request}); err != nil {
+	if err := e.deliverQueryResult(request.GetTaskId(), &queryResult{workerResponse: request}); err != nil {
 		e.metricsClient.IncCounter(metrics.MatchingRespondQueryTaskCompletedScope, metrics.RespondQueryTaskFailedCounter)
 		return err
 	}
@@ -527,10 +527,10 @@ func (e *matchingEngineImpl) deliverQueryResult(taskID string, queryResult *quer
 }
 
 func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request *matchingservice.CancelOutstandingPollRequest) error {
-	namespaceID := request.GetNamespaceUUID()
+	namespaceID := request.GetNamespaceId()
 	taskListType := request.GetTaskListType()
 	taskListName := request.TaskList.GetName()
-	pollerID := request.GetPollerID()
+	pollerID := request.GetPollerId()
 
 	taskList, err := newTaskListID(namespaceID, taskListName, taskListType)
 	if err != nil {
@@ -547,7 +547,7 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request 
 }
 
 func (e *matchingEngineImpl) DescribeTaskList(ctx context.Context, request *matchingservice.DescribeTaskListRequest) (*matchingservice.DescribeTaskListResponse, error) {
-	namespaceID := request.GetNamespaceUUID()
+	namespaceID := request.GetNamespaceId()
 	taskListType := persistence.TaskListTypeDecision
 	if request.DescRequest.GetTaskListType() == enums.TaskListTypeActivity {
 		taskListType = persistence.TaskListTypeActivity
@@ -678,16 +678,16 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		// for a query task
 		queryRequest := task.query.request
 		taskToken := &token.QueryTask{
-			NamespaceId: queryRequest.NamespaceUUID,
+			NamespaceId: queryRequest.GetNamespaceId(),
 			TaskList:    queryRequest.TaskList.Name,
 			TaskId:      task.query.taskID,
 		}
 		serializedToken, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
 	} else {
 		taskToken := &token.Task{
-			NamespaceId:     task.event.Data.NamespaceID,
-			WorkflowId:      task.event.Data.WorkflowID,
-			RunId:           task.event.Data.RunID,
+			NamespaceId:     task.event.Data.GetNamespaceId(),
+			WorkflowId:      task.event.Data.GetWorkflowId(),
+			RunId:           task.event.Data.GetRunId(),
 			ScheduleId:      historyResponse.GetScheduledEventId(),
 			ScheduleAttempt: historyResponse.GetAttempt(),
 		}
@@ -731,10 +731,10 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	}
 
 	taskToken := &token.Task{
-		NamespaceId:     task.event.Data.NamespaceID,
-		WorkflowId:      task.event.Data.WorkflowID,
-		RunId:           task.event.Data.RunID,
-		ScheduleId:      task.event.Data.ScheduleID,
+		NamespaceId:     task.event.Data.GetNamespaceId(),
+		WorkflowId:      task.event.Data.GetWorkflowId(),
+		RunId:           task.event.Data.GetRunId(),
+		ScheduleId:      task.event.Data.GetScheduleId(),
 		ScheduleAttempt: historyResponse.GetAttempt(),
 		ActivityId:      attributes.GetActivityId(),
 		ActivityType:    attributes.GetActivityType().GetName(),
@@ -768,10 +768,10 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 	task *internalTask,
 ) (*historyservice.RecordDecisionTaskStartedResponse, error) {
 	request := &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     primitives.UUIDString(task.event.Data.NamespaceID),
+		NamespaceId:       primitives.UUIDString(task.event.Data.GetNamespaceId()),
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        task.event.Data.ScheduleID,
-		TaskId:            task.event.TaskID,
+		ScheduleId:        task.event.Data.GetScheduleId(),
+		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
 	}
@@ -797,10 +797,10 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 	request := &historyservice.RecordActivityTaskStartedRequest{
-		NamespaceUUID:     primitives.UUIDString(task.event.Data.NamespaceID),
+		NamespaceId:       primitives.UUIDString(task.event.Data.GetNamespaceId()),
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        task.event.Data.ScheduleID,
-		TaskId:            task.event.TaskID,
+		ScheduleId:        task.event.Data.GetScheduleId(),
+		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
 	}

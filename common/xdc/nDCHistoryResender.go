@@ -196,7 +196,7 @@ func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
 ) *historyservice.ReplicateEventsV2Request {
 
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

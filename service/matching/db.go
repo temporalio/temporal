@@ -103,7 +103,7 @@ func (db *taskListDB) UpdateState(ackLevel int64) error {
 	defer db.Unlock()
 	_, err := db.store.UpdateTaskList(&persistence.UpdateTaskListRequest{
 		TaskListInfo: &persistenceblobs.TaskListInfo{
-			NamespaceID: db.namespaceID,
+			NamespaceId: db.namespaceID,
 			Name:        db.taskListName,
 			TaskType:    db.taskType,
 			AckLevel:    ackLevel,
@@ -125,7 +125,7 @@ func (db *taskListDB) CreateTasks(tasks []*persistenceblobs.AllocatedTaskInfo) (
 		&persistence.CreateTasksRequest{
 			TaskListInfo: &persistence.PersistedTaskListInfo{
 				Data: &persistenceblobs.TaskListInfo{
-					NamespaceID: db.namespaceID,
+					NamespaceId: db.namespaceID,
 					Name:        db.taskListName,
 					TaskType:    db.taskType,
 					AckLevel:    db.ackLevel,

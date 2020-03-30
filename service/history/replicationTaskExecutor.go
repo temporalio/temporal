@@ -206,7 +206,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 
 	request := &historyservice.ReplicateEventsRequest{
 		SourceCluster: sourceCluster,
-		NamespaceUUID: attr.NamespaceId,
+		NamespaceId:   attr.NamespaceId,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: attr.WorkflowId,
 			RunId:      attr.RunId,
@@ -263,7 +263,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 	}
 
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceUUID: attr.NamespaceId,
+		NamespaceId: attr.NamespaceId,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: attr.WorkflowId,
 			RunId:      attr.RunId,

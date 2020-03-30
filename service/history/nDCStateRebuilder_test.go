@@ -188,7 +188,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	history := append(history1, history2...)
 	pageToken := []byte("some random token")
 
-	shardId := s.mockShard.GetShardID()
+	shardId := s.mockShard.GetShardId()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
@@ -271,7 +271,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 
 	historySize1 := 12345
 	historySize2 := 67890
-	shardId := s.mockShard.GetShardID()
+	shardId := s.mockShard.GetShardId()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,

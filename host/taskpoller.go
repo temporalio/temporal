@@ -437,7 +437,7 @@ retry:
 			response.Input, response.TaskToken)
 		if cancel {
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
-			_, err := p.Engine.RespondActivityTaskCanceledByID(NewContext(), &workflowservice.RespondActivityTaskCanceledByIDRequest{
+			_, err := p.Engine.RespondActivityTaskCanceledById(NewContext(), &workflowservice.RespondActivityTaskCanceledByIdRequest{
 				Namespace:  p.Namespace,
 				WorkflowID: response.WorkflowExecution.GetWorkflowId(),
 				RunID:      response.WorkflowExecution.GetRunId(),
@@ -449,7 +449,7 @@ retry:
 		}
 
 		if err2 != nil {
-			_, err := p.Engine.RespondActivityTaskFailedByID(NewContext(), &workflowservice.RespondActivityTaskFailedByIDRequest{
+			_, err := p.Engine.RespondActivityTaskFailedById(NewContext(), &workflowservice.RespondActivityTaskFailedByIdRequest{
 				Namespace:  p.Namespace,
 				WorkflowID: response.WorkflowExecution.GetWorkflowId(),
 				RunID:      response.WorkflowExecution.GetRunId(),
@@ -461,7 +461,7 @@ retry:
 			return err
 		}
 
-		_, err := p.Engine.RespondActivityTaskCompletedByID(NewContext(), &workflowservice.RespondActivityTaskCompletedByIDRequest{
+		_, err := p.Engine.RespondActivityTaskCompletedById(NewContext(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
 			Namespace:  p.Namespace,
 			WorkflowID: response.WorkflowExecution.GetWorkflowId(),
 			RunID:      response.WorkflowExecution.GetRunId(),
