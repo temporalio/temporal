@@ -402,7 +402,7 @@ Update_History_Loop:
 				completedEvent.GetEventId(),
 				msBuilder,
 				executionStats,
-				handler.metricsClient,
+				handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.DomainTag(domainName)),
 				handler.throttledLogger,
 			)
 
@@ -658,7 +658,10 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(
 	workflowID := msBuilder.GetExecutionInfo().WorkflowID
 	runID := msBuilder.GetExecutionInfo().RunID
 
-	scope := handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope)
+	scope := handler.metricsClient.Scope(
+		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.DomainTag(domainEntry.GetInfo().Name),
+		metrics.DecisionTypeTag("ConsistentQuery"))
 
 	// Consistent query requires both server and client worker support. If a consistent query was requested (meaning there are
 	// buffered queries) but worker does not support consistent query then all buffered queries should be failed.
@@ -710,6 +713,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(
 			runID,
 			scope,
 			handler.throttledLogger,
+			tag.BlobSizeViolationOperation("ConsistentQuery"),
 		); err != nil {
 			handler.logger.Info("failing query because query result size is too large",
 				tag.WorkflowDomainName(domain),
