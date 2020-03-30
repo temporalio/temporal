@@ -25,20 +25,12 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	"go.uber.org/thriftrw/wire"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 )
-
-// thriftRWType represents an thrift auto generated type
-type thriftRWType interface {
-	ToWire() (wire.Value, error)
-	FromWire(w wire.Value) error
-}
 
 type ProtoMarshal interface {
 	Marshal() ([]byte, error)

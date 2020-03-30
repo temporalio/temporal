@@ -82,16 +82,12 @@ type (
 		encodingType common.EncodingType
 	}
 
-	serializerImpl struct {
-		thriftrwEncoder codec.BinaryEncoder
-	}
+	serializerImpl struct {}
 )
 
 // NewPayloadSerializer returns a PayloadSerializer
 func NewPayloadSerializer() PayloadSerializer {
-	return &serializerImpl{
-		thriftrwEncoder: codec.NewThriftRWEncoder(),
-	}
+	return &serializerImpl{}
 }
 
 func (t *serializerImpl) SerializeBatchEvents(events []*commonproto.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
