@@ -61,7 +61,7 @@ type (
 		shard                 ShardContext
 		timeSource            clock.TimeSource
 		historyEngine         *historyEngineImpl
-		domainCache           cache.DomainCache
+		namespaceCache        cache.NamespaceCache
 		historyCache          *historyCache
 		txProcessor           transferQueueProcessor
 		timerProcessor        timerQueueProcessor
@@ -81,7 +81,7 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 		shard:              historyEngine.shard,
 		timeSource:         historyEngine.shard.GetTimeSource(),
 		historyEngine:      historyEngine,
-		domainCache:        historyEngine.shard.GetDomainCache(),
+		namespaceCache:     historyEngine.shard.GetNamespaceCache(),
 		historyCache:       historyEngine.historyCache,
 		txProcessor:        historyEngine.txProcessor,
 		timerProcessor:     historyEngine.timerProcessor,
@@ -90,7 +90,7 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 		logger:             historyEngine.logger,
 		throttledLogger:    historyEngine.throttledLogger,
 		decisionAttrValidator: newDecisionAttrValidator(
-			historyEngine.shard.GetDomainCache(),
+			historyEngine.shard.GetNamespaceCache(),
 			historyEngine.config,
 			historyEngine.logger,
 		),
@@ -103,18 +103,18 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 	req *historyservice.ScheduleDecisionTaskRequest,
 ) error {
 
-	domainEntry, err := handler.historyEngine.getActiveDomainEntry(req.DomainUUID)
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.NamespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
 		RunId:      req.WorkflowExecution.RunId,
 	}
 
-	return handler.historyEngine.updateWorkflowExecutionWithAction(ctx, domainID, execution,
+	return handler.historyEngine.updateWorkflowExecutionWithAction(ctx, namespaceID, execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -145,11 +145,11 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	req *historyservice.RecordDecisionTaskStartedRequest,
 ) (*historyservice.RecordDecisionTaskStartedResponse, error) {
 
-	domainEntry, err := handler.historyEngine.getActiveDomainEntry(req.DomainUUID)
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.NamespaceUUID)
 	if err != nil {
 		return nil, err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
@@ -160,7 +160,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	requestID := req.GetRequestId()
 
 	var resp *historyservice.RecordDecisionTaskStartedResponse
-	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, domainID, execution,
+	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, namespaceID, execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -190,7 +190,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			if decision.StartedID != common.EmptyEventID {
 				// If decision is started as part of the current request scope then return a positive response
 				if decision.RequestID == requestID {
-					resp, err = handler.createRecordDecisionTaskStartedResponse(domainID, mutableState, decision, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
 					if err != nil {
 						return nil, err
 					}
@@ -209,7 +209,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 				return nil, serviceerror.NewInternal("Unable to add DecisionTaskStarted event to history.")
 			}
 
-			resp, err = handler.createRecordDecisionTaskStartedResponse(domainID, mutableState, decision, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -227,11 +227,11 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 	req *historyservice.RespondDecisionTaskFailedRequest,
 ) (retError error) {
 
-	domainEntry, err := handler.historyEngine.getActiveDomainEntry(req.DomainUUID)
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.NamespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	request := req.FailedRequest
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
@@ -244,7 +244,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
-	return handler.historyEngine.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
+	return handler.historyEngine.updateWorkflowExecution(ctx, namespaceID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -267,11 +267,11 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	req *historyservice.RespondDecisionTaskCompletedRequest,
 ) (resp *historyservice.RespondDecisionTaskCompletedResponse, retError error) {
 
-	domainEntry, err := handler.historyEngine.getActiveDomainEntry(req.DomainUUID)
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.NamespaceUUID)
 	if err != nil {
 		return nil, err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	request := req.CompleteRequest
 	token, err0 := handler.tokenSerializer.Deserialize(request.TaskToken)
@@ -289,7 +289,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	clientFeatureVersion := clientHeaders[1]
 	clientImpl := clientHeaders[2]
 
-	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, domainID, workflowExecution)
+	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, workflowExecution)
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +329,7 @@ Update_History_Loop:
 		}
 
 		startedID := currentDecision.StartedID
-		maxResetPoints := handler.config.MaxAutoResetPoints(domainEntry.GetInfo().Name)
+		maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.GetInfo().Name)
 		if msBuilder.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(msBuilder.GetExecutionInfo().AutoResetPoints.Points) {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
 		}
@@ -338,11 +338,11 @@ Update_History_Loop:
 		var decisionHeartbeatTimeout bool
 		var completedEvent *commonproto.HistoryEvent
 		if decisionHeartbeating {
-			domainName := domainEntry.GetInfo().Name
-			timeout := handler.config.DecisionHeartbeatTimeout(domainName)
+			namespace := namespaceEntry.GetInfo().Name
+			timeout := handler.config.DecisionHeartbeatTimeout(namespace)
 			if currentDecision.OriginalScheduledTimestamp > 0 && handler.timeSource.Now().After(time.Unix(0, currentDecision.OriginalScheduledTimestamp).Add(timeout)) {
 				decisionHeartbeatTimeout = true
-				scope := handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.DomainTag(domainName))
+				scope := handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.NamespaceTag(namespace))
 				scope.IncCounter(metrics.DecisionHeartbeatTimeoutCounter)
 				completedEvent, err = msBuilder.AddDecisionTaskTimedOutEvent(currentDecision.ScheduleID, currentDecision.StartedID)
 				if err != nil {
@@ -385,21 +385,21 @@ Update_History_Loop:
 		executionInfo.ClientImpl = clientImpl
 
 		binChecksum := request.GetBinaryChecksum()
-		if _, ok := domainEntry.GetConfig().BadBinaries.Binaries[binChecksum]; ok {
+		if _, ok := namespaceEntry.GetConfig().BadBinaries.Binaries[binChecksum]; ok {
 			failDecision = &failDecisionInfo{
 				cause:   enums.DecisionTaskFailedCauseBadBinary,
 				message: fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum),
 			}
 		} else {
 
-			domainName := domainEntry.GetInfo().Name
+			namespace := namespaceEntry.GetInfo().Name
 			workflowSizeChecker := newWorkflowSizeChecker(
-				handler.config.BlobSizeLimitWarn(domainName),
-				handler.config.BlobSizeLimitError(domainName),
-				handler.config.HistorySizeLimitWarn(domainName),
-				handler.config.HistorySizeLimitError(domainName),
-				handler.config.HistoryCountLimitWarn(domainName),
-				handler.config.HistoryCountLimitError(domainName),
+				handler.config.BlobSizeLimitWarn(namespace),
+				handler.config.BlobSizeLimitError(namespace),
+				handler.config.HistorySizeLimitWarn(namespace),
+				handler.config.HistorySizeLimitError(namespace),
+				handler.config.HistoryCountLimitWarn(namespace),
+				handler.config.HistoryCountLimitError(namespace),
 				completedEvent.GetEventId(),
 				msBuilder,
 				executionStats,
@@ -410,12 +410,12 @@ Update_History_Loop:
 			decisionTaskHandler := newDecisionTaskHandler(
 				request.GetIdentity(),
 				completedEvent.GetEventId(),
-				domainEntry,
+				namespaceEntry,
 				msBuilder,
 				handler.decisionAttrValidator,
 				workflowSizeChecker,
 				handler.logger,
-				handler.domainCache,
+				handler.namespaceCache,
 				handler.metricsClient,
 				handler.config,
 			)
@@ -445,7 +445,7 @@ Update_History_Loop:
 			handler.logger.Info("Failing the decision.", tag.WorkflowDecisionFailCause(int64(failDecision.cause)),
 				tag.WorkflowID(token.GetWorkflowId()),
 				tag.WorkflowRunIDBytes(token.GetRunId()),
-				tag.WorkflowDomainID(domainID))
+				tag.WorkflowNamespaceID(namespaceID))
 			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, []byte(failDecision.message), request)
 			if err != nil {
 				return nil, err
@@ -496,7 +496,7 @@ Update_History_Loop:
 			updateErr = weContext.updateWorkflowExecutionWithNewAsActive(
 				handler.shard.GetTimeSource().Now(),
 				newWorkflowExecutionContext(
-					continueAsNewExecutionInfo.DomainID,
+					continueAsNewExecutionInfo.NamespaceID,
 					commonproto.WorkflowExecution{
 						WorkflowId: continueAsNewExecutionInfo.WorkflowID,
 						RunId:      continueAsNewExecutionInfo.RunID,
@@ -547,7 +547,7 @@ Update_History_Loop:
 			return nil, updateErr
 		}
 
-		handler.handleBufferedQueries(msBuilder, req.GetCompleteRequest().GetQueryResults(), createNewDecisionTask, domainEntry, decisionHeartbeating)
+		handler.handleBufferedQueries(msBuilder, req.GetCompleteRequest().GetQueryResults(), createNewDecisionTask, namespaceEntry, decisionHeartbeating)
 
 		if decisionHeartbeatTimeout {
 			// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
@@ -557,7 +557,7 @@ Update_History_Loop:
 		resp = &historyservice.RespondDecisionTaskCompletedResponse{}
 		if request.GetReturnNewDecisionTask() && createNewDecisionTask {
 			decision, _ := msBuilder.GetDecisionInfo(newDecisionTaskScheduledID)
-			resp.StartedResponse, err = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, decision, request.GetIdentity())
+			resp.StartedResponse, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, msBuilder, decision, request.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -572,7 +572,7 @@ Update_History_Loop:
 }
 
 func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
-	domainID string,
+	namespaceID string,
 	msBuilder mutableState,
 	decision *decisionInfo,
 	identity string,
@@ -627,14 +627,14 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	return response, nil
 }
 
-func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*commonproto.WorkflowQueryResult, createNewDecisionTask bool, domainEntry *cache.DomainCacheEntry, decisionHeartbeating bool) {
+func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*commonproto.WorkflowQueryResult, createNewDecisionTask bool, namespaceEntry *cache.NamespaceCacheEntry, decisionHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.hasBufferedQuery() {
 		return
 	}
 
-	domainID := domainEntry.GetInfo().ID
-	domain := domainEntry.GetInfo().Name
+	namespaceID := namespaceEntry.GetInfo().ID
+	namespace := namespaceEntry.GetInfo().Name
 	workflowID := msBuilder.GetExecutionInfo().WorkflowID
 	runID := msBuilder.GetExecutionInfo().RunID
 
@@ -646,8 +646,8 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 		return
 	}
 
-	sizeLimitError := handler.config.BlobSizeLimitError(domain)
-	sizeLimitWarn := handler.config.BlobSizeLimitWarn(domain)
+	sizeLimitError := handler.config.BlobSizeLimitError(namespace)
+	sizeLimitWarn := handler.config.BlobSizeLimitWarn(namespace)
 
 	// Complete or fail all queries we have results for
 	for id, result := range queryResults {
@@ -655,14 +655,14 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 			len(result.GetAnswer()),
 			sizeLimitWarn,
 			sizeLimitError,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			scope,
 			handler.throttledLogger,
 		); err != nil {
 			handler.logger.Info("failing query because query result size is too large",
-				tag.WorkflowDomainName(domain),
+				tag.WorkflowNamespace(namespace),
 				tag.WorkflowID(workflowID),
 				tag.WorkflowRunID(runID),
 				tag.QueryID(id),
@@ -674,7 +674,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 			if err := queryRegistry.setTerminationState(id, failedTerminationState); err != nil {
 				handler.logger.Error(
 					"failed to set query termination state to failed",
-					tag.WorkflowDomainName(domain),
+					tag.WorkflowNamespace(namespace),
 					tag.WorkflowID(workflowID),
 					tag.WorkflowRunID(runID),
 					tag.QueryID(id),
@@ -689,7 +689,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 			if err := queryRegistry.setTerminationState(id, completedTerminationState); err != nil {
 				handler.logger.Error(
 					"failed to set query termination state to completed",
-					tag.WorkflowDomainName(domain),
+					tag.WorkflowNamespace(namespace),
 					tag.WorkflowID(workflowID),
 					tag.WorkflowRunID(runID),
 					tag.QueryID(id),
@@ -710,7 +710,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 			if err := queryRegistry.setTerminationState(id, unblockTerminationState); err != nil {
 				handler.logger.Error(
 					"failed to set query termination state to unblocked",
-					tag.WorkflowDomainName(domain),
+					tag.WorkflowNamespace(namespace),
 					tag.WorkflowID(workflowID),
 					tag.WorkflowRunID(runID),
 					tag.QueryID(id),

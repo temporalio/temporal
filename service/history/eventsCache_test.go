@@ -85,7 +85,7 @@ func (s *eventsCacheSuite) newTestEventsCache() *eventsCacheImpl {
 }
 
 func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
-	domainID := "events-cache-hit-success-domain"
+	namespaceID := "events-cache-hit-success-namespace"
 	workflowID := "events-cache-hit-success-workflow-id"
 	runID := "events-cache-hit-success-run-id"
 	eventID := int64(23)
@@ -95,14 +95,14 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 		Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{}},
 	}
 
-	s.cache.putEvent(domainID, workflowID, runID, eventID, event)
-	actualEvent, err := s.cache.getEvent(domainID, workflowID, runID, eventID, eventID, nil)
+	s.cache.putEvent(namespaceID, workflowID, runID, eventID, event)
+	actualEvent, err := s.cache.getEvent(namespaceID, workflowID, runID, eventID, eventID, nil)
 	s.Nil(err)
 	s.Equal(event, actualEvent)
 }
 
 func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
-	domainID := "events-cache-miss-multi-events-batch-v2-success-domain"
+	namespaceID := "events-cache-miss-multi-events-batch-v2-success-namespace"
 	workflowID := "events-cache-miss-multi-events-batch-v2-success-workflow-id"
 	runID := "events-cache-miss-multi-events-batch-v2-success-run-id"
 	event1 := &commonproto.HistoryEvent{
@@ -150,15 +150,15 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		LastFirstEventID: event1.GetEventId(),
 	}, nil)
 
-	s.cache.putEvent(domainID, workflowID, runID, event2.GetEventId(), event2)
-	actualEvent, err := s.cache.getEvent(domainID, workflowID, runID, event1.GetEventId(), event6.GetEventId(),
+	s.cache.putEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2)
+	actualEvent, err := s.cache.getEvent(namespaceID, workflowID, runID, event1.GetEventId(), event6.GetEventId(),
 		[]byte("store_token"))
 	s.Nil(err)
 	s.Equal(event6, actualEvent)
 }
 
 func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
-	domainID := "events-cache-miss-failure-domain"
+	namespaceID := "events-cache-miss-failure-namespace"
 	workflowID := "events-cache-miss-failure-workflow-id"
 	runID := "events-cache-miss-failure-run-id"
 
@@ -173,14 +173,14 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 		ShardID:       &shardId,
 	}).Return(nil, expectedErr)
 
-	actualEvent, err := s.cache.getEvent(domainID, workflowID, runID, int64(11), int64(14),
+	actualEvent, err := s.cache.getEvent(namespaceID, workflowID, runID, int64(11), int64(14),
 		[]byte("store_token"))
 	s.Nil(actualEvent)
 	s.Equal(expectedErr, err)
 }
 
 func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
-	domainID := "events-cache-disable-success-domain"
+	namespaceID := "events-cache-disable-success-namespace"
 	workflowID := "events-cache-disable-success-workflow-id"
 	runID := "events-cache-disable-success-run-id"
 	event1 := &commonproto.HistoryEvent{
@@ -208,10 +208,10 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		LastFirstEventID: event2.GetEventId(),
 	}, nil)
 
-	s.cache.putEvent(domainID, workflowID, runID, event1.GetEventId(), event1)
-	s.cache.putEvent(domainID, workflowID, runID, event2.GetEventId(), event2)
+	s.cache.putEvent(namespaceID, workflowID, runID, event1.GetEventId(), event1)
+	s.cache.putEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2)
 	s.cache.disabled = true
-	actualEvent, err := s.cache.getEvent(domainID, workflowID, runID, event2.GetEventId(), event2.GetEventId(),
+	actualEvent, err := s.cache.getEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2.GetEventId(),
 		[]byte("store_token"))
 	s.Nil(err)
 	s.Equal(event2, actualEvent)

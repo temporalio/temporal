@@ -1,1 +1,1 @@
-CREATE KEYSPACE IF NOT EXISTS cadence WITH replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1};
+CREATE KEYSPACE IF NOT EXISTS temporal WITH replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1};

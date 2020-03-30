@@ -38,7 +38,7 @@ type (
 	}
 )
 
-// NewNilCheckHandler creates a gRPC handler for the cadence matchingservice
+// NewNilCheckHandler creates a gRPC handler for the temporal matchingservice
 func NewNilCheckHandler(
 	parentHandler matchingservice.MatchingServiceServer,
 ) *NilCheckHandler {

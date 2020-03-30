@@ -66,7 +66,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() 
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
@@ -75,12 +75,12 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() 
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      runID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
 	}).AnyTimes()
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(runID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(runID, nil).Times(1)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, workflow)
 	s.NoError(err)
@@ -90,7 +90,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
@@ -108,16 +108,16 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 	workflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	workflowHistorySize := int64(12345)
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      runID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
 	}).AnyTimes()
 	mutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
 		workflowSnapshot, workflowEventsSeq, nil,
 	).Times(1)
 
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(
-		ctx, domainID, workflowID,
+		ctx, namespaceID, workflowID,
 	).Return("", nil).Times(1)
 
 	weContext.EXPECT().persistFirstWorkflowEvents(
@@ -141,7 +141,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -168,23 +168,23 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	).Times(1)
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      currentRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       currentRunID,
 	}).AnyTimes()
 	currentWorkflow.EXPECT().getVectorClock().Return(currentLastWriteVersion, int64(0), nil)
 
@@ -210,7 +210,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -232,23 +232,23 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
-			DomainID:   domainID,
-			WorkflowID: workflowID,
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowID,
 		},
 	}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	).Times(1)
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
@@ -276,7 +276,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -298,23 +298,23 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
-			DomainID:   domainID,
-			WorkflowID: workflowID,
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowID,
 		},
 	}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
 	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	).Times(1)
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
@@ -342,7 +342,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 	ctx := context.Background()
 	now := time.Now()
 
-	domainID := "some random domain ID"
+	namespaceID := "some random namespace ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -367,13 +367,13 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      targetRunID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
 	}).AnyTimes()
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()

@@ -42,10 +42,10 @@ import (
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/resource"
 	dc "github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -67,7 +67,7 @@ type (
 
 		controller          *gomock.Controller
 		mockResource        *resource.Test
-		mockDomainCache     *cache.MockDomainCache
+		mockNamespaceCache  *cache.MockNamespaceCache
 		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata *cluster.MockMetadata
 
@@ -81,8 +81,8 @@ type (
 		mockHistoryArchiver    *archiver.HistoryArchiverMock
 		mockVisibilityArchiver *archiver.VisibilityArchiverMock
 
-		testDomain   string
-		testDomainID string
+		testNamespace   string
+		testNamespaceID string
 	}
 )
 
@@ -100,12 +100,12 @@ func (s *workflowHandlerSuite) TearDownSuite() {
 func (s *workflowHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.testDomain = "test-domain"
-	s.testDomainID = "e4f90ec0-1313-45be-9877-8aa41f72a45a"
+	s.testNamespace = "test-namespace"
+	s.testNamespaceID = "e4f90ec0-1313-45be-9877-8aa41f72a45a"
 
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
-	s.mockDomainCache = s.mockResource.DomainCache
+	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockMetadataMgr = s.mockResource.MetadataMgr
@@ -133,18 +133,18 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
-	testDomain := "test-domain"
-	domainID := uuid.New()
+	testNamespace := "test-namespace"
+	namespaceID := uuid.New()
 	config := s.newConfig()
-	config.DisableListVisibilityByFilter = dc.GetBoolPropertyFnFilteredByDomain(true)
+	config.DisableListVisibilityByFilter = dc.GetBoolPropertyFnFilteredByNamespace(true)
 
 	wh := s.getWorkflowHandler(config)
 
-	s.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return(domainID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
 
 	// test list open by wid
 	listRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
-		Domain: testDomain,
+		Namespace: testNamespace,
 		StartTimeFilter: &commonproto.StartTimeFilter{
 			EarliestTime: 0,
 			LatestTime:   time.Now().UnixNano(),
@@ -167,7 +167,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 
 	// test list close by wid
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
-		Domain: testDomain,
+		Namespace: testNamespace,
 		StartTimeFilter: &commonproto.StartTimeFilter{
 			EarliestTime: 0,
 			LatestTime:   time.Now().UnixNano(),
@@ -227,7 +227,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 	wh := s.getWorkflowHandler(config)
 
 	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
-		Domain:     "test-domain",
+		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
 		WorkflowType: &commonproto.WorkflowType{
 			Name: "workflow-type",
@@ -260,7 +260,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNot
 	s.Equal(errRequestNotSet, err)
 }
 
-func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_DomainNotSet() {
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet() {
 	config := s.newConfig()
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
@@ -286,7 +286,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_DomainNotSet() 
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errDomainNotSet, err)
+	s.Equal(errNamespaceNotSet, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSet() {
@@ -295,7 +295,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 	wh := s.getWorkflowHandler(config)
 
 	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
-		Domain: "test-domain",
+		Namespace: "test-namespace",
 		WorkflowType: &commonproto.WorkflowType{
 			Name: "workflow-type",
 		},
@@ -324,7 +324,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 	wh := s.getWorkflowHandler(config)
 
 	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
-		Domain:     "test-domain",
+		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
 		WorkflowType: &commonproto.WorkflowType{
 			Name: "",
@@ -354,7 +354,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 	wh := s.getWorkflowHandler(config)
 
 	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
-		Domain:     "test-domain",
+		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
 		WorkflowType: &commonproto.WorkflowType{
 			Name: "workflow-type",
@@ -384,7 +384,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 	wh := s.getWorkflowHandler(config)
 
 	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
-		Domain:     "test-domain",
+		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
 		WorkflowType: &commonproto.WorkflowType{
 			Name: "workflow-type",
@@ -414,7 +414,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStar
 	wh := s.getWorkflowHandler(config)
 
 	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
-		Domain:     "test-domain",
+		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
 		WorkflowType: &commonproto.WorkflowType{
 			Name: "workflow-type",
@@ -438,11 +438,11 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStar
 	s.Equal(errInvalidTaskStartToCloseTimeoutSeconds, err)
 }
 
-func (s *workflowHandlerSuite) TestRegisterDomain_Failure_InvalidArchivalURI() {
-	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false)
+func (s *workflowHandlerSuite) TestRegisterNamespace_Failure_InvalidArchivalURI() {
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(nil)
 	s.mockVisibilityArchiver.On("ValidateURI", mock.Anything).Return(errors.New("invalid URI"))
 	s.mockArchiverProvider.On("GetHistoryArchiver", mock.Anything, mock.Anything).Return(s.mockHistoryArchiver, nil)
@@ -450,24 +450,24 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Failure_InvalidArchivalURI() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := registerDomainRequest(
+	req := registerNamespaceRequest(
 		enums.ArchivalStatusEnabled,
 		testHistoryArchivalURI,
 		enums.ArchivalStatusEnabled,
 		testVisibilityArchivalURI,
 	)
-	_, err := wh.RegisterDomain(context.Background(), req)
+	_, err := wh.RegisterNamespace(context.Background(), req)
 	s.Error(err)
 }
 
-func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithNoArchivalURI() {
-	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false)
+func (s *workflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithNoArchivalURI() {
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", testHistoryArchivalURI))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", testVisibilityArchivalURI))
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
-	s.mockMetadataMgr.On("CreateDomain", mock.Anything).Return(&persistence.CreateDomainResponse{
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
 		ID: "test-id",
 	}, nil)
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(nil)
@@ -477,19 +477,19 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithNoArchivalU
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := registerDomainRequest(enums.ArchivalStatusEnabled, "", enums.ArchivalStatusEnabled, "")
-	_, err := wh.RegisterDomain(context.Background(), req)
+	req := registerNamespaceRequest(enums.ArchivalStatusEnabled, "", enums.ArchivalStatusEnabled, "")
+	_, err := wh.RegisterNamespace(context.Background(), req)
 	s.NoError(err)
 }
 
-func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithArchivalURI() {
-	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false)
+func (s *workflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithArchivalURI() {
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "invalidURI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "invalidURI"))
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
-	s.mockMetadataMgr.On("CreateDomain", mock.Anything).Return(&persistence.CreateDomainResponse{
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
 		ID: "test-id",
 	}, nil)
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(nil)
@@ -499,70 +499,70 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithArchivalURI
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := registerDomainRequest(
+	req := registerNamespaceRequest(
 		enums.ArchivalStatusEnabled,
 		testHistoryArchivalURI,
 		enums.ArchivalStatusEnabled,
 		testVisibilityArchivalURI,
 	)
-	_, err := wh.RegisterDomain(context.Background(), req)
+	_, err := wh.RegisterNamespace(context.Background(), req)
 	s.NoError(err)
 }
 
-func (s *workflowHandlerSuite) TestRegisterDomain_Success_ClusterNotConfiguredForArchival() {
-	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false)
+func (s *workflowHandlerSuite) TestRegisterNamespace_Success_ClusterNotConfiguredForArchival() {
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewDisabledArchvialConfig())
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewDisabledArchvialConfig())
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
-	s.mockMetadataMgr.On("CreateDomain", mock.Anything).Return(&persistence.CreateDomainResponse{
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
 		ID: "test-id",
 	}, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := registerDomainRequest(
+	req := registerNamespaceRequest(
 		enums.ArchivalStatusEnabled,
 		testVisibilityArchivalURI,
 		enums.ArchivalStatusEnabled,
 		"invalidURI",
 	)
-	_, err := wh.RegisterDomain(context.Background(), req)
+	_, err := wh.RegisterNamespace(context.Background(), req)
 	s.NoError(err)
 }
 
-func (s *workflowHandlerSuite) TestRegisterDomain_Success_NotEnabled() {
-	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false)
+func (s *workflowHandlerSuite) TestRegisterNamespace_Success_NotEnabled() {
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
-	s.mockMetadataMgr.On("CreateDomain", mock.Anything).Return(&persistence.CreateDomainResponse{
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
 		ID: "test-id",
 	}, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := registerDomainRequest(enums.ArchivalStatusDefault, "", enums.ArchivalStatusDefault, "")
-	_, err := wh.RegisterDomain(context.Background(), req)
+	req := registerNamespaceRequest(enums.ArchivalStatusDefault, "", enums.ArchivalStatusDefault, "")
+	_, err := wh.RegisterNamespace(context.Background(), req)
 	s.NoError(err)
 }
 
-func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalDisabled() {
-	getDomainResp := persistenceGetDomainResponse(
-		&domain.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
-		&domain.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
+func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalDisabled() {
+	getNamespaceResp := persistenceGetNamespaceResponse(
+		&namespace.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
+		&namespace.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
 	)
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := &workflowservice.DescribeDomainRequest{
-		Name: "test-domain",
+	req := &workflowservice.DescribeNamespaceRequest{
+		Name: "test-namespace",
 	}
-	result, err := wh.DescribeDomain(context.Background(), req)
+	result, err := wh.DescribeNamespace(context.Background(), req)
 
 	s.NoError(err)
 	s.NotNil(result)
@@ -573,19 +573,19 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalDisabled() {
 	s.Equal("", result.Configuration.GetVisibilityArchivalURI())
 }
 
-func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalEnabled() {
-	getDomainResp := persistenceGetDomainResponse(
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
+func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
+	getNamespaceResp := persistenceGetNamespaceResponse(
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
 	)
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := &workflowservice.DescribeDomainRequest{
-		Name: "test-domain",
+	req := &workflowservice.DescribeNamespaceRequest{
+		Name: "test-namespace",
 	}
-	result, err := wh.DescribeDomain(context.Background(), req)
+	result, err := wh.DescribeNamespace(context.Background(), req)
 
 	s.NoError(err)
 	s.NotNil(result)
@@ -596,15 +596,15 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalEnabled() {
 	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
 }
 
-func (s *workflowHandlerSuite) TestUpdateDomain_Failure_UpdateExistingArchivalURI() {
+func (s *workflowHandlerSuite) TestUpdateNamespace_Failure_UpdateExistingArchivalURI() {
 	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
-	getDomainResp := persistenceGetDomainResponse(
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
+	getNamespaceResp := persistenceGetNamespaceResponse(
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
 	)
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(nil)
@@ -618,19 +618,19 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Failure_UpdateExistingArchivalUR
 		"updated visibility URI",
 		enums.ArchivalStatusDefault,
 	)
-	_, err := wh.UpdateDomain(context.Background(), updateReq)
+	_, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.Error(err)
 }
 
-func (s *workflowHandlerSuite) TestUpdateDomain_Failure_InvalidArchivalURI() {
+func (s *workflowHandlerSuite) TestUpdateNamespace_Failure_InvalidArchivalURI() {
 	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
-	getDomainResp := persistenceGetDomainResponse(
-		&domain.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
-		&domain.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
+	getNamespaceResp := persistenceGetNamespaceResponse(
+		&namespace.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
+		&namespace.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
 	)
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(errors.New("invalid URI"))
 	s.mockArchiverProvider.On("GetHistoryArchiver", mock.Anything, mock.Anything).Return(s.mockHistoryArchiver, nil)
@@ -643,20 +643,20 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Failure_InvalidArchivalURI() {
 		"",
 		enums.ArchivalStatusDefault,
 	)
-	_, err := wh.UpdateDomain(context.Background(), updateReq)
+	_, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.Error(err)
 }
 
-func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchivalDisabledWithoutSettingURI() {
+func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArchivalDisabledWithoutSettingURI() {
 	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
-	getDomainResp := persistenceGetDomainResponse(
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
+	getNamespaceResp := persistenceGetNamespaceResponse(
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
 	)
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
-	s.mockMetadataMgr.On("UpdateDomain", mock.Anything).Return(nil)
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.On("UpdateNamespace", mock.Anything).Return(nil)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
@@ -674,7 +674,7 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 		"",
 		enums.ArchivalStatusDisabled,
 	)
-	result, err := wh.UpdateDomain(context.Background(), updateReq)
+	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
@@ -684,15 +684,15 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
 }
 
-func (s *workflowHandlerSuite) TestUpdateDomain_Success_ClusterNotConfiguredForArchival() {
+func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ClusterNotConfiguredForArchival() {
 	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
-	getDomainResp := persistenceGetDomainResponse(
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: "some random history URI"},
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: "some random visibility URI"},
+	getNamespaceResp := persistenceGetNamespaceResponse(
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: "some random history URI"},
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: "some random visibility URI"},
 	)
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewDisabledArchvialConfig())
@@ -701,7 +701,7 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ClusterNotConfiguredForA
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	updateReq := updateRequest("", enums.ArchivalStatusDisabled, "", enums.ArchivalStatusDefault)
-	result, err := wh.UpdateDomain(context.Background(), updateReq)
+	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
@@ -711,16 +711,16 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ClusterNotConfiguredForA
 	s.Equal("some random visibility URI", result.Configuration.GetVisibilityArchivalURI())
 }
 
-func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchivalDisabledWithSettingBucket() {
+func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArchivalDisabledWithSettingBucket() {
 	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
-	getDomainResp := persistenceGetDomainResponse(
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
+	getNamespaceResp := persistenceGetNamespaceResponse(
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
 	)
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
-	s.mockMetadataMgr.On("UpdateDomain", mock.Anything).Return(nil)
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.On("UpdateNamespace", mock.Anything).Return(nil)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
@@ -738,7 +738,7 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 		testVisibilityArchivalURI,
 		enums.ArchivalStatusDisabled,
 	)
-	result, err := wh.UpdateDomain(context.Background(), updateReq)
+	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
@@ -748,15 +748,15 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
 }
 
-func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToEnabled() {
+func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToEnabled() {
 	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
-	getDomainResp := persistenceGetDomainResponse(
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
-		&domain.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
+	getNamespaceResp := persistenceGetNamespaceResponse(
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testHistoryArchivalURI},
+		&namespace.ArchivalState{Status: enums.ArchivalStatusEnabled, URI: testVisibilityArchivalURI},
 	)
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
@@ -774,7 +774,7 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToEnabled
 		testVisibilityArchivalURI,
 		enums.ArchivalStatusEnabled,
 	)
-	result, err := wh.UpdateDomain(context.Background(), updateReq)
+	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
@@ -784,16 +784,16 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToEnabled
 	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
 }
 
-func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalNeverEnabledToEnabled() {
+func (s *workflowHandlerSuite) TestUpdateNamespace_Success_ArchivalNeverEnabledToEnabled() {
 	s.mockMetadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
 	}, nil)
-	getDomainResp := persistenceGetDomainResponse(
-		&domain.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
-		&domain.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
+	getNamespaceResp := persistenceGetNamespaceResponse(
+		&namespace.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
+		&namespace.ArchivalState{Status: enums.ArchivalStatusDisabled, URI: ""},
 	)
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(getDomainResp, nil)
-	s.mockMetadataMgr.On("UpdateDomain", mock.Anything).Return(nil)
+	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(getNamespaceResp, nil)
+	s.mockMetadataMgr.On("UpdateNamespace", mock.Anything).Return(nil)
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
@@ -811,7 +811,7 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalNeverEnabledToEn
 		testVisibilityArchivalURI,
 		enums.ArchivalStatusEnabled,
 	)
-	result, err := wh.UpdateDomain(context.Background(), updateReq)
+	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
@@ -825,12 +825,12 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	getHistoryRequest := &workflowservice.GetWorkflowExecutionHistoryRequest{}
-	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
+	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 
 	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Execution: &commonproto.WorkflowExecution{},
 	}
-	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
+	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -839,7 +839,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 			RunId:      testRunID,
 		},
 	}
-	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
+	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("got archival indication error")).Times(1)
 	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -848,7 +848,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 			RunId:      testRunID,
 		},
 	}
-	s.True(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
+	s.True(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, errors.New("got non-archival indication error")).Times(1)
 	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -857,23 +857,23 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 			RunId:      testRunID,
 		},
 	}
-	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
+	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 }
 
-func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_DomainCacheEntryError() {
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(nil, errors.New("error getting domain")).Times(1)
+func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_NamespaceCacheEntryError() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(nil, errors.New("error getting namespace")).Times(1)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testDomainID, metrics.NoopScope(metrics.Frontend))
+	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID, metrics.NoopScope(metrics.Frontend))
 	s.Nil(resp)
 	s.Error(err)
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty() {
-	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: "test-domain"},
-		&persistence.DomainConfig{
+	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: "test-namespace"},
+		&persistence.NamespaceConfig{
 			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:       "",
 			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
@@ -881,19 +881,19 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 		},
 		"",
 		nil)
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(domainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testDomainID, metrics.NoopScope(metrics.Frontend))
+	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID, metrics.NoopScope(metrics.Frontend))
 	s.Nil(resp)
 	s.Error(err)
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
-	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: "test-domain"},
-		&persistence.DomainConfig{
+	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: "test-namespace"},
+		&persistence.NamespaceConfig{
 			HistoryArchivalStatus:    enums.ArchivalStatusEnabled,
 			HistoryArchivalURI:       "uri without scheme",
 			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
@@ -901,19 +901,19 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 		},
 		"",
 		nil)
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(domainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testDomainID, metrics.NoopScope(metrics.Frontend))
+	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID, metrics.NoopScope(metrics.Frontend))
 	s.Nil(resp)
 	s.Error(err)
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
-	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: "test-domain"},
-		&persistence.DomainConfig{
+	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: "test-namespace"},
+		&persistence.NamespaceConfig{
 			HistoryArchivalStatus:    enums.ArchivalStatusEnabled,
 			HistoryArchivalURI:       testHistoryArchivalURI,
 			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
@@ -921,7 +921,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 		},
 		"",
 		nil)
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(domainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 
 	nextPageToken := []byte{'1', '2', '3'}
 	historyBatch1 := &commonproto.History{
@@ -948,7 +948,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testDomainID, metrics.NoopScope(metrics.Frontend))
+	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID, metrics.NoopScope(metrics.Frontend))
 	s.NoError(err)
 	s.NotNil(resp)
 	s.NotNil(resp.History)
@@ -958,7 +958,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 }
 
 func (s *workflowHandlerSuite) TestGetHistory() {
-	domainID := uuid.New()
+	namespaceID := uuid.New()
 	firstEventID := int64(100)
 	nextEventID := int64(101)
 	branchToken := []byte{1}
@@ -989,7 +989,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	scope := metrics.NoopScope(metrics.Frontend)
-	history, token, err := wh.getHistory(scope, domainID, we, firstEventID, nextEventID, 0, []byte{}, nil, branchToken)
+	history, token, err := wh.getHistory(scope, namespaceID, we, firstEventID, nextEventID, 0, []byte{}, nil, branchToken)
 	s.NoError(err)
 	s.NotNil(history)
 	s.Equal([]byte{}, token)
@@ -1013,8 +1013,8 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_ClusterNotConf
 	s.Error(err)
 }
 
-func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_DomainCacheEntryError() {
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(nil, errors.New("error getting domain"))
+func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceCacheEntryError() {
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(nil, errors.New("error getting namespace"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
 
 	wh := s.getWorkflowHandler(s.newConfig())
@@ -1024,10 +1024,10 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_DomainCacheEnt
 	s.Error(err)
 }
 
-func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_DomainNotConfiguredForArchival() {
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(
+func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotConfiguredForArchival() {
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
 		nil,
-		&persistence.DomainConfig{
+		&persistence.NamespaceConfig{
 			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 		},
 		"",
@@ -1043,9 +1043,9 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_DomainNotConfi
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: "test-domain"},
-		&persistence.DomainConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: "test-namespace"},
+		&persistence.NamespaceConfig{
 			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 			VisibilityArchivalURI:    "uri without scheme",
 		},
@@ -1062,9 +1062,9 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: "test-domain"},
-		&persistence.DomainConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: "test-namespace"},
+		&persistence.NamespaceConfig{
 			VisibilityArchivalStatus: enums.ArchivalStatusEnabled,
 			VisibilityArchivalURI:    testVisibilityArchivalURI,
 		},
@@ -1095,12 +1095,12 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	s.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return(s.testDomainID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.On("ListWorkflowExecutions", mock.Anything).Return(&persistence.ListWorkflowExecutionsResponse{}, nil).Once()
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Domain:   s.testDomain,
-		PageSize: int32(config.ESIndexMaxResultWindow()),
+		Namespace: s.testNamespace,
+		PageSize:  int32(config.ESIndexMaxResultWindow()),
 	}
 	ctx := context.Background()
 
@@ -1124,16 +1124,16 @@ func (s *workflowHandlerSuite) TestScantWorkflowExecutions() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	s.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return(s.testDomainID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.On("ScanWorkflowExecutions", mock.Anything).Return(&persistence.ListWorkflowExecutionsResponse{}, nil).Once()
 
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
-		Domain:   s.testDomain,
-		PageSize: int32(config.ESIndexMaxResultWindow()),
+		Namespace: s.testNamespace,
+		PageSize:  int32(config.ESIndexMaxResultWindow()),
 	}
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Domain:   s.testDomain,
-		PageSize: int32(config.ESIndexMaxResultWindow()),
+		Namespace: s.testNamespace,
+		PageSize:  int32(config.ESIndexMaxResultWindow()),
 	}
 	ctx := context.Background()
 
@@ -1156,11 +1156,11 @@ func (s *workflowHandlerSuite) TestScantWorkflowExecutions() {
 func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	s.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return(s.testDomainID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.On("CountWorkflowExecutions", mock.Anything).Return(&persistence.CountWorkflowExecutionsResponse{}, nil).Once()
 
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
-		Domain: s.testDomain,
+		Namespace: s.testNamespace,
 	}
 	ctx := context.Background()
 
@@ -1288,10 +1288,10 @@ func updateRequest(
 	historyArchivalStatus enums.ArchivalStatus,
 	visibilityArchivalURI string,
 	visibilityArchivalStatus enums.ArchivalStatus,
-) *workflowservice.UpdateDomainRequest {
-	return &workflowservice.UpdateDomainRequest{
+) *workflowservice.UpdateNamespaceRequest {
+	return &workflowservice.UpdateNamespaceRequest{
 		Name: "test-name",
-		Configuration: &commonproto.DomainConfiguration{
+		Configuration: &commonproto.NamespaceConfiguration{
 			HistoryArchivalStatus:    historyArchivalStatus,
 			HistoryArchivalURI:       historyArchivalURI,
 			VisibilityArchivalStatus: visibilityArchivalStatus,
@@ -1300,9 +1300,9 @@ func updateRequest(
 	}
 }
 
-func persistenceGetDomainResponse(historyArchivalState, visibilityArchivalState *domain.ArchivalState) *persistence.GetDomainResponse {
-	return &persistence.GetDomainResponse{
-		Info: &persistence.DomainInfo{
+func persistenceGetNamespaceResponse(historyArchivalState, visibilityArchivalState *namespace.ArchivalState) *persistence.GetNamespaceResponse {
+	return &persistence.GetNamespaceResponse{
+		Info: &persistence.NamespaceInfo{
 			ID:          "test-id",
 			Name:        "test-name",
 			Status:      0,
@@ -1310,7 +1310,7 @@ func persistenceGetDomainResponse(historyArchivalState, visibilityArchivalState 
 			OwnerEmail:  "test-owner-email",
 			Data:        make(map[string]string),
 		},
-		Config: &persistence.DomainConfig{
+		Config: &persistence.NamespaceConfig{
 			Retention:                1,
 			EmitMetric:               true,
 			HistoryArchivalStatus:    historyArchivalState.Status,
@@ -1318,7 +1318,7 @@ func persistenceGetDomainResponse(historyArchivalState, visibilityArchivalState 
 			VisibilityArchivalStatus: visibilityArchivalState.Status,
 			VisibilityArchivalURI:    visibilityArchivalState.URI,
 		},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
+		ReplicationConfig: &persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{
@@ -1326,7 +1326,7 @@ func persistenceGetDomainResponse(historyArchivalState, visibilityArchivalState 
 				},
 			},
 		},
-		IsGlobalDomain:              false,
+		IsGlobalNamespace:           false,
 		ConfigVersion:               0,
 		FailoverVersion:             0,
 		FailoverNotificationVersion: 0,
@@ -1334,14 +1334,14 @@ func persistenceGetDomainResponse(historyArchivalState, visibilityArchivalState 
 	}
 }
 
-func registerDomainRequest(
+func registerNamespaceRequest(
 	historyArchivalStatus enums.ArchivalStatus,
 	historyArchivalURI string,
 	visibilityArchivalStatus enums.ArchivalStatus,
 	visibilityArchivalURI string,
-) *workflowservice.RegisterDomainRequest {
-	return &workflowservice.RegisterDomainRequest{
-		Name:                                   "test-domain",
+) *workflowservice.RegisterNamespaceRequest {
+	return &workflowservice.RegisterNamespaceRequest{
+		Name:                                   "test-namespace",
 		Description:                            "test-description",
 		OwnerEmail:                             "test-owner-email",
 		WorkflowExecutionRetentionPeriodInDays: 10,
@@ -1358,7 +1358,7 @@ func registerDomainRequest(
 		HistoryArchivalURI:       historyArchivalURI,
 		VisibilityArchivalStatus: visibilityArchivalStatus,
 		VisibilityArchivalURI:    visibilityArchivalURI,
-		IsGlobalDomain:           false,
+		IsGlobalNamespace:        false,
 	}
 }
 
@@ -1374,8 +1374,8 @@ func getHistoryRequest(nextPageToken []byte) *workflowservice.GetWorkflowExecuti
 
 func listArchivedWorkflowExecutionsTestRequest() *workflowservice.ListArchivedWorkflowExecutionsRequest {
 	return &workflowservice.ListArchivedWorkflowExecutionsRequest{
-		Domain:   "some random domain name",
-		PageSize: 10,
-		Query:    "some random query string",
+		Namespace: "some random namespace name",
+		PageSize:  10,
+		Query:     "some random query string",
 	}
 }

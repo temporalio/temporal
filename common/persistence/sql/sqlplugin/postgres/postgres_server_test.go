@@ -105,13 +105,13 @@ func TestClusterMetadataPersistence(t *testing.T) {
 // TODO flaky test in buildkite
 // https://github.com/temporalio/temporal/issues/2877
 /*
-FAIL: TestSQLQueuePersistence/TestDomainReplicationQueue (0.26s)
+FAIL: TestSQLQueuePersistence/TestNamespaceReplicationQueue (0.26s)
         queuePersistenceTest.go:102:
             	Error Trace:	queuePersistenceTest.go:102
             	Error:      	Not equal:
             	            	expected: 99
             	            	actual  : 98
-            	Test:       	TestSQLQueuePersistence/TestDomainReplicationQueue
+            	Test:       	TestSQLQueuePersistence/TestNamespaceReplicationQueue
 */
 //func TestSQLQueuePersistence(t *testing.T) {
 //	s := new(pt.QueuePersistenceSuite)

@@ -31,13 +31,13 @@ type MockDCRedirectionPolicy struct {
 	mock.Mock
 }
 
-// WithDomainIDRedirect provides a mock function with given fields: domainID, apiName, call
-func (_m *MockDCRedirectionPolicy) WithDomainIDRedirect(ctx context.Context, domainID string, apiName string, call func(string) error) error {
-	ret := _m.Called(domainID, apiName, call)
+// WithNamespaceIDRedirect provides a mock function with given fields: namespaceID, apiName, call
+func (_m *MockDCRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID string, apiName string, call func(string) error) error {
+	ret := _m.Called(namespaceID, apiName, call)
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(string, string, func(string) error) error); ok {
-		r0 = rf(domainID, apiName, call)
+		r0 = rf(namespaceID, apiName, call)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -45,13 +45,13 @@ func (_m *MockDCRedirectionPolicy) WithDomainIDRedirect(ctx context.Context, dom
 	return r0
 }
 
-// WithDomainNameRedirect provides a mock function with given fields: domainName, apiName, call
-func (_m *MockDCRedirectionPolicy) WithDomainNameRedirect(ctx context.Context, domainName string, apiName string, call func(string) error) error {
-	ret := _m.Called(domainName, apiName, call)
+// WithNamespaceRedirect provides a mock function with given fields: namespace, apiName, call
+func (_m *MockDCRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespace string, apiName string, call func(string) error) error {
+	ret := _m.Called(namespace, apiName, call)
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(string, string, func(string) error) error); ok {
-		r0 = rf(domainName, apiName, call)
+		r0 = rf(namespace, apiName, call)
 	} else {
 		r0 = ret.Error(0)
 	}

@@ -69,7 +69,7 @@ func newTimerQueueActiveProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyActiveTask(primitives.UUID(timer.DomainID).String(), timer)
+		return taskAllocator.verifyActiveTask(primitives.UUID(timer.NamespaceID).String(), timer)
 	}
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -116,7 +116,7 @@ func newTimerQueueActiveProcessor(
 func newTimerQueueFailoverProcessor(
 	shard ShardContext,
 	historyService *historyEngineImpl,
-	domainIDs map[string]struct{},
+	namespaceIDs map[string]struct{},
 	standbyClusterName string,
 	minLevel time.Time,
 	maxLevel time.Time,
@@ -127,7 +127,7 @@ func newTimerQueueFailoverProcessor(
 
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
-		// should use current cluster's time when doing domain failover
+		// should use current cluster's time when doing namespace failover
 		return shard.GetCurrentTime(currentClusterName)
 	}
 	failoverStartTime := shard.GetTimeSource().Now()
@@ -141,7 +141,7 @@ func newTimerQueueFailoverProcessor(
 				MinLevel:     minLevel,
 				CurrentLevel: ackLevel.VisibilityTimestamp,
 				MaxLevel:     maxLevel,
-				DomainIDs:    domainIDs,
+				NamespaceIDs: namespaceIDs,
 			},
 		)
 	}
@@ -151,7 +151,7 @@ func newTimerQueueFailoverProcessor(
 
 	logger = logger.WithTags(
 		tag.ClusterName(currentClusterName),
-		tag.WorkflowDomainIDs(domainIDs),
+		tag.WorkflowNamespaceIDs(namespaceIDs),
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
 	timerTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
@@ -159,7 +159,7 @@ func newTimerQueueFailoverProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyFailoverActiveTask(domainIDs, primitives.UUID(timer.DomainID).String(), timer)
+		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, primitives.UUID(timer.NamespaceID).String(), timer)
 	}
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(

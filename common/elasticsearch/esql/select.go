@@ -27,7 +27,7 @@ import (
 	"github.com/xwb1989/sqlparser"
 )
 
-func (e *ESql) convertSelect(sel sqlparser.Select, domainID string, pagination ...interface{}) (dsl string, sortField []string, err error) {
+func (e *ESql) convertSelect(sel sqlparser.Select, namespaceID string, pagination ...interface{}) (dsl string, sortField []string, err error) {
 	if sel.Distinct != "" {
 		err := fmt.Errorf(`esql: SELECT DISTINCT not supported. use GROUP BY instead`)
 		return "", nil, err
@@ -45,9 +45,9 @@ func (e *ESql) convertSelect(sel sqlparser.Select, domainID string, pagination .
 		}
 		dslMap["query"] = dslQuery
 	}
-	// temporal special handling: add domain ID query and time query bounds
+	// temporal special handling: add namespace ID query and time query bounds
 	if e.temporal {
-		e.addTemporalDomainTimeQuery(sel, domainID, dslMap)
+		e.addTemporalNamespaceTimeQuery(sel, namespaceID, dslMap)
 	}
 
 	// handle FROM keyword, currently only support 1 target table

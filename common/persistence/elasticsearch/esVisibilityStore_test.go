@@ -64,8 +64,8 @@ type ESVisibilitySuite struct {
 
 var (
 	testIndex        = "test-index"
-	testDomain       = "test-domain"
-	testDomainID     = "bfd5c907-f899-4baf-a7b2-2ab85e623ebd"
+	testNamespace    = "test-namespace"
+	testNamespaceID  = "bfd5c907-f899-4baf-a7b2-2ab85e623ebd"
 	testPageSize     = 5
 	testEarliestTime = int64(1547596872371000000)
 	testLatestTime   = int64(2547596872371000000)
@@ -75,8 +75,8 @@ var (
 	testCloseStatus  = enums.WorkflowExecutionCloseStatusFailed
 
 	testRequest = &p.ListWorkflowExecutionsRequest{
-		DomainUUID:        testDomainID,
-		Domain:            testDomain,
+		NamespaceUUID:     testNamespaceID,
+		Namespace:         testNamespace,
 		PageSize:          testPageSize,
 		EarliestStartTime: testEarliestTime,
 		LatestStartTime:   testLatestTime,
@@ -121,7 +121,7 @@ func (s *ESVisibilitySuite) TearDownTest() {
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	// test non-empty request fields match
 	request := &p.InternalRecordWorkflowExecutionStartedRequest{}
-	request.DomainUUID = "domainID"
+	request.NamespaceUUID = "namespaceID"
 	request.WorkflowID = "wid"
 	request.RunID = "rid"
 	request.WorkflowTypeName = "wfType"
@@ -132,7 +132,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeThriftRW)
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
 		fields := input.Fields
-		s.Equal(request.DomainUUID, input.GetDomainID())
+		s.Equal(request.NamespaceUUID, input.GetNamespaceID())
 		s.Equal(request.WorkflowID, input.GetWorkflowID())
 		s.Equal(request.RunID, input.GetRunID())
 		s.Equal(request.TaskID, input.GetVersion())
@@ -167,7 +167,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	// test non-empty request fields match
 	request := &p.InternalRecordWorkflowExecutionClosedRequest{}
-	request.DomainUUID = "domainID"
+	request.NamespaceUUID = "namespaceID"
 	request.WorkflowID = "wid"
 	request.RunID = "rid"
 	request.WorkflowTypeName = "wfType"
@@ -181,7 +181,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	request.HistoryLength = int64(20)
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
 		fields := input.Fields
-		s.Equal(request.DomainUUID, input.GetDomainID())
+		s.Equal(request.NamespaceUUID, input.GetNamespaceID())
 		s.Equal(request.WorkflowID, input.GetWorkflowID())
 		s.Equal(request.RunID, input.GetRunID())
 		s.Equal(request.TaskID, input.GetVersion())
@@ -374,7 +374,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 		return true
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
-		DomainUUID: testDomainID,
+		NamespaceUUID: testNamespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 			RunId:      testRunID,
@@ -400,7 +400,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
 		return true
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
-		DomainUUID: testDomainID,
+		NamespaceUUID: testNamespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 		},
@@ -432,7 +432,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	from := 1
 	token := &esVisibilityPageToken{From: from}
 
-	matchDomainQuery := elastic.NewMatchQuery(es.DomainID, request.DomainUUID)
+	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceUUID)
 	existClosedStatusQuery := elastic.NewExistsQuery(es.CloseStatus)
 	tieBreakerSorter := elastic.NewFieldSort(es.RunID).Desc()
 
@@ -442,7 +442,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	// test for open
 	isOpen := true
 	rangeQuery := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(latestTime)
-	boolQuery := elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery).MustNot(existClosedStatusQuery)
+	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).MustNot(existClosedStatusQuery)
 	params := &es.SearchParameters{
 		Index:    testIndex,
 		Query:    boolQuery,
@@ -457,7 +457,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	// test request latestTime overflow
 	request.LatestStartTime = math.MaxInt64
 	rangeQuery1 := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(strconv.FormatInt(request.LatestStartTime, 10))
-	boolQuery1 := elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery1).MustNot(existClosedStatusQuery)
+	boolQuery1 := elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery1).MustNot(existClosedStatusQuery)
 	param1 := &es.SearchParameters{
 		Index:    testIndex,
 		Query:    boolQuery1,
@@ -473,7 +473,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	// test for closed
 	isOpen = false
 	rangeQuery = elastic.NewRangeQuery(es.CloseTime).Gte(earliestTime).Lte(latestTime)
-	boolQuery = elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery).Must(existClosedStatusQuery)
+	boolQuery = elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).Must(existClosedStatusQuery)
 	params.Query = boolQuery
 	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(es.CloseTime).Desc(), tieBreakerSorter}
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
@@ -482,7 +482,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 
 	// test for additional matchQuery
 	matchQuery := elastic.NewMatchQuery(es.CloseStatus, int32(0))
-	boolQuery = elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery).Must(matchQuery).Must(existClosedStatusQuery)
+	boolQuery = elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).Must(matchQuery).Must(existClosedStatusQuery)
 	params.Query = boolQuery
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
 	_, err = s.visibilityStore.getSearchResult(request, token, matchQuery, isOpen)
@@ -514,13 +514,13 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	// test for one hits
 	data := []byte(`{"CloseStatus": 1,
           "CloseTime": 1547596872817380000,
-          "DomainID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+          "NamespaceID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
           "KafkaKey": "7-619",
           "RunID": "e481009e-14b3-45ae-91af-dce6e2a88365",
           "StartTime": 1547596872371000000,
           "WorkflowID": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
-          "WorkflowType": "code.uber.internal/devexp/cadence-bench/load/basic.stressWorkflowExecute"}`)
+          "WorkflowType": "basic.stressWorkflowExecute"}`)
 	source := (*json.RawMessage)(&data)
 	searchHit := &elastic.SearchHit{
 		Source: source,
@@ -623,7 +623,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	data := []byte(`{"CloseStatus": 2,
           "CloseTime": 1547596872817380000,
-          "DomainID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+          "NamespaceID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
           "KafkaKey": "7-619",
           "RunID": "e481009e-14b3-45ae-91af-dce6e2a88365",
@@ -675,8 +675,8 @@ func (s *ESVisibilitySuite) TestShouldSearchAfter() {
 //nolint
 func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	request := &p.ListWorkflowExecutionsRequestV2{
-		DomainUUID: testDomainID,
-		PageSize:   10,
+		NamespaceUUID: testNamespaceID,
+		PageSize:      10,
 	}
 	token := &esVisibilityPageToken{}
 
@@ -685,7 +685,7 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	request.Query = ""
 	dsl, err := v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = "invaild query"
 	dsl, err = v.getESQueryDSL(request, token)
@@ -695,57 +695,57 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	request.Query = `WorkflowID = 'wid'`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' or WorkflowID = 'another-wid'`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"should":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"match_phrase":{"WorkflowID":{"query":"another-wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"should":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"match_phrase":{"WorkflowID":{"query":"another-wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' order by StartTime desc`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' and CloseTime = missing`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' or CloseTime = missing`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"should":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"should":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `CloseTime = missing order by CloseTime desc`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}]}},"from":0,"size":10,"sort":[{"CloseTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `StartTime = "2018-06-07T15:04:05-08:00"`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"StartTime":{"query":"1528412645000000000"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"StartTime":{"query":"1528412645000000000"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' and StartTime > "2018-06-07T15:04:05+00:00"`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"range":{"StartTime":{"gt":"1528383845000000000"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}},{"range":{"StartTime":{"gt":"1528383845000000000"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < 1000`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < 1000 or ExecutionTime > 2000`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"should":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"2000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"should":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"2000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `order by ExecutionTime desc`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"ExecutionTime":"desc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"ExecutionTime":"desc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `order by StartTime desc, CloseTime desc`
 	dsl, err = v.getESQueryDSL(request, token)
@@ -758,7 +758,7 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	request.Query = `order by CustomIntField asc`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"CustomIntField":"asc"},{"RunID":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}},"from":0,"size":10,"sort":[{"CustomIntField":"asc"},{"RunID":"desc"}]}`, dsl)
 
 	request.Query = `ExecutionTime < "unable to parse"`
 	_, err = v.getESQueryDSL(request, token)
@@ -768,7 +768,7 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	request.Query = `WorkflowID = 'wid'`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}],"search_after":[1,"t"]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}],"search_after":[1,"t"]}`, dsl)
 
 	// invalid union injection
 	request.Query = `WorkflowID = 'wid' union select * from dummy`
@@ -778,66 +778,66 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {
 	request := &p.ListWorkflowExecutionsRequestV2{
-		DomainUUID: testDomainID,
-		PageSize:   10,
+		NamespaceUUID: testNamespaceID,
+		PageSize:      10,
 	}
 
 	request.Query = `WorkflowID = 'wid' order by StartTime desc`
 	dsl, err := getESQueryDSLForScan(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10}`, dsl)
 
 	request.Query = `WorkflowID = 'wid'`
 	dsl, err = getESQueryDSLForScan(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}},"from":0,"size":10}`, dsl)
 
 	request.Query = `CloseTime = missing and (ExecutionTime >= "2019-08-27T15:04:05+00:00" or StartTime <= "2018-06-07T15:04:05+00:00")`
 	dsl, err = getESQueryDSLForScan(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}},{"bool":{"should":[{"range":{"ExecutionTime":{"from":"1566918245000000000"}}},{"range":{"StartTime":{"to":"1528383845000000000"}}}]}}]}}]}}]}},"from":0,"size":10}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}},{"bool":{"should":[{"range":{"ExecutionTime":{"from":"1566918245000000000"}}},{"range":{"StartTime":{"to":"1528383845000000000"}}}]}}]}}]}}]}},"from":0,"size":10}`, dsl)
 
 	request.Query = `ExecutionTime < 1000 and ExecutionTime > 500`
 	dsl, err = getESQueryDSLForScan(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"500"}}}]}}]}}]}},"from":0,"size":10}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"500"}}}]}}]}}]}},"from":0,"size":10}`, dsl)
 }
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForCount() {
 	request := &p.CountWorkflowExecutionsRequest{
-		DomainUUID: testDomainID,
+		NamespaceUUID: testNamespaceID,
 	}
 
 	// empty query
 	dsl, err := getESQueryDSLForCount(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}}}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}}}`, dsl)
 
 	request.Query = `WorkflowID = 'wid' order by StartTime desc`
 	dsl, err = getESQueryDSLForCount(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}}}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowID":{"query":"wid"}}}]}}]}}}`, dsl)
 
 	request.Query = `CloseTime < "2018-06-07T15:04:05+07:00" and StartTime > "2018-05-04T16:00:00+07:00" and ExecutionTime >= "2018-05-05T16:00:00+07:00"`
 	dsl, err = getESQueryDSLForCount(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"CloseTime":{"lt":"1528358645000000000"}}},{"range":{"StartTime":{"gt":"1525424400000000000"}}},{"range":{"ExecutionTime":{"from":"1525510800000000000"}}}]}}]}}]}}}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"CloseTime":{"lt":"1528358645000000000"}}},{"range":{"StartTime":{"gt":"1525424400000000000"}}},{"range":{"ExecutionTime":{"from":"1525510800000000000"}}}]}}]}}]}}}`, dsl)
 
 	request.Query = `ExecutionTime < 1000`
 	dsl, err = getESQueryDSLForCount(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}}]}}]}}]}}}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}}]}}]}}]}}}`, dsl)
 }
 
-func (s *ESVisibilitySuite) TestAddDomainToQuery() {
+func (s *ESVisibilitySuite) TestAddNamespaceToQuery() {
 	dsl := fastjson.MustParse(`{}`)
 	dslStr := dsl.String()
-	addDomainToQuery(dsl, "")
+	addNamespaceToQuery(dsl, "")
 	s.Equal(dslStr, dsl.String())
 
 	dsl = fastjson.MustParse(`{"query":{"bool":{"must":[{"match_all":{}}]}}}`)
-	addDomainToQuery(dsl, testDomainID)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}}}`, dsl.String())
+	addNamespaceToQuery(dsl, testNamespaceID)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_all":{}}]}}]}}}`, dsl.String())
 }
 
 func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
@@ -847,10 +847,10 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	})).Return(testSearchResult, nil).Once()
 
 	request := &p.ListWorkflowExecutionsRequestV2{
-		DomainUUID: testDomainID,
-		Domain:     testDomain,
-		PageSize:   10,
-		Query:      `CloseStatus = 5`,
+		NamespaceUUID: testNamespaceID,
+		Namespace:     testNamespace,
+		PageSize:      10,
+		Query:         `CloseStatus = 5`,
 	}
 	_, err := s.visibilityStore.ListWorkflowExecutions(request)
 	s.NoError(err)
@@ -878,10 +878,10 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	})).Return(testSearchResult, nil, nil).Once()
 
 	request := &p.ListWorkflowExecutionsRequestV2{
-		DomainUUID: testDomainID,
-		Domain:     testDomain,
-		PageSize:   10,
-		Query:      `CloseStatus = 5`,
+		NamespaceUUID: testNamespaceID,
+		Namespace:     testNamespace,
+		PageSize:      10,
+		Query:         `CloseStatus = 5`,
 	}
 	_, err := s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
@@ -929,9 +929,9 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	})).Return(int64(1), nil).Once()
 
 	request := &p.CountWorkflowExecutionsRequest{
-		DomainUUID: testDomainID,
-		Domain:     testDomain,
-		Query:      `CloseStatus = 5`,
+		NamespaceUUID: testNamespaceID,
+		Namespace:     testNamespace,
+		Query:         `CloseStatus = 5`,
 	}
 	resp, err := s.visibilityStore.CountWorkflowExecutions(request)
 	s.NoError(err)
@@ -1099,19 +1099,19 @@ func (s *ESVisibilitySuite) getTokenHelper(sortValue interface{}) *esVisibilityP
 
 func (s *ESVisibilitySuite) TestCleanDSL() {
 	// dsl without `field`
-	dsl := `{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"match_phrase":{"Attr.CustomIntField":{"query":"1"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`
+	dsl := `{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"match_phrase":{"Attr.CustomIntField":{"query":"1"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`
 	res := cleanDSL(dsl)
 	s.Equal(dsl, res)
 
 	// dsl with `field`
-	dsl = `{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"` + "`Attr.CustomIntField`" + `":{"from":"1","to":"5"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`
+	dsl = `{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"` + "`Attr.CustomIntField`" + `":{"from":"1","to":"5"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`
 	res = cleanDSL(dsl)
-	expected := `{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"Attr.CustomIntField":{"from":"1","to":"5"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`
+	expected := `{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"Attr.CustomIntField":{"from":"1","to":"5"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`
 	s.Equal(expected, res)
 
 	// dsl with mixed
-	dsl = `{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"` + "`Attr.CustomIntField`" + `":{"from":"1","to":"5"}}},{"range":{"` + "`Attr.CustomDoubleField`" + `":{"from":"1.0","to":"2.0"}}},{"range":{"StartTime":{"gt":"0"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`
+	dsl = `{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"` + "`Attr.CustomIntField`" + `":{"from":"1","to":"5"}}},{"range":{"` + "`Attr.CustomDoubleField`" + `":{"from":"1.0","to":"2.0"}}},{"range":{"StartTime":{"gt":"0"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`
 	res = cleanDSL(dsl)
-	expected = `{"query":{"bool":{"must":[{"match_phrase":{"DomainID":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"Attr.CustomIntField":{"from":"1","to":"5"}}},{"range":{"Attr.CustomDoubleField":{"from":"1.0","to":"2.0"}}},{"range":{"StartTime":{"gt":"0"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`
+	expected = `{"query":{"bool":{"must":[{"match_phrase":{"NamespaceID":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"Attr.CustomIntField":{"from":"1","to":"5"}}},{"range":{"Attr.CustomDoubleField":{"from":"1.0","to":"2.0"}}},{"range":{"StartTime":{"gt":"0"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunID":"desc"}]}`
 	s.Equal(expected, res)
 }

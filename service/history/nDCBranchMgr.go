@@ -51,7 +51,7 @@ type (
 
 	nDCBranchMgrImpl struct {
 		shard           ShardContext
-		domainCache     cache.DomainCache
+		namespaceCache  cache.NamespaceCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryManager
 
@@ -72,7 +72,7 @@ func newNDCBranchMgr(
 
 	return &nDCBranchMgrImpl{
 		shard:           shard,
-		domainCache:     shard.GetDomainCache(),
+		namespaceCache:  shard.GetNamespaceCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryManager(),
 
@@ -165,7 +165,7 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 
 	targetWorkflow := newNDCWorkflow(
 		ctx,
-		r.domainCache,
+		r.namespaceCache,
 		r.clusterMetadata,
 		r.context,
 		r.mutableState,
@@ -209,7 +209,7 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 		executionInfo := r.mutableState.GetExecutionInfo()
 		return false, newNDCRetryTaskErrorWithHint(
 			outOfOrderDeliveryMessage,
-			executionInfo.DomainID,
+			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
 			lastVersionHistoryItem.GetEventID(),
@@ -230,13 +230,13 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 
 	shardID := r.shard.GetShardID()
 	executionInfo := r.mutableState.GetExecutionInfo()
-	domainID := executionInfo.DomainID
+	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
 
 	resp, err := r.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseBranchLastEventID + 1,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(domainID, workflowID, uuid.New()),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, uuid.New()),
 		ShardID:         common.IntPtr(shardID),
 	})
 	if err != nil {

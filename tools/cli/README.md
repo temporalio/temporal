@@ -4,9 +4,9 @@ Documentation for the Temporal command line interface is located at our [main si
 Run `make bins` from the project root. You should see an executable file called `tctl`. Try a few example commands to 
 get started:   
 `./tctl` for help on top level commands and global options   
-`./tctl domain` for help on domain operations  
+`./tctl namespace` for help on namespace operations  
 `./tctl workflow` for help on workflow operations  
 `./tctl tasklist` for help on tasklist operations  
-(`./tctl help`, `./tctl help [domain|workflow]` will also print help messages)
+(`./tctl help`, `./tctl help [namespace|workflow]` will also print help messages)
 
 **Note:** Make sure you have a Temporal server running before using the CLI.

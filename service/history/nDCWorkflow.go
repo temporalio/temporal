@@ -47,7 +47,7 @@ type (
 	}
 
 	nDCWorkflowImpl struct {
-		domainCache     cache.DomainCache
+		namespaceCache  cache.NamespaceCache
 		clusterMetadata cluster.Metadata
 
 		ctx          context.Context
@@ -59,7 +59,7 @@ type (
 
 func newNDCWorkflow(
 	ctx context.Context,
-	domainCache cache.DomainCache,
+	namespaceCache cache.NamespaceCache,
 	clusterMetadata cluster.Metadata,
 	context workflowExecutionContext,
 	mutableState mutableState,
@@ -68,7 +68,7 @@ func newNDCWorkflow(
 
 	return &nDCWorkflowImpl{
 		ctx:             ctx,
-		domainCache:     domainCache,
+		namespaceCache:  namespaceCache,
 		clusterMetadata: clusterMetadata,
 
 		context:      context,

@@ -143,7 +143,7 @@ func scheduleDecision(
 func retryWorkflow(
 	mutableState mutableState,
 	eventBatchFirstEventID int64,
-	parentDomainName string,
+	parentNamespace string,
 	continueAsNewAttributes *commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes,
 ) (mutableState, error) {
 
@@ -160,7 +160,7 @@ func retryWorkflow(
 	_, newMutableState, err := mutableState.AddContinueAsNewEvent(
 		eventBatchFirstEventID,
 		common.EmptyEventID,
-		parentDomainName,
+		parentNamespace,
 		continueAsNewAttributes,
 	)
 	if err != nil {

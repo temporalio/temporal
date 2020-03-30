@@ -79,7 +79,7 @@ const (
 	TieBreaker           = "RunID"
 	RunID                = "RunID"
 	StartTime            = "StartTime"
-	DomainID             = "DomainID"
+	NamespaceID          = "NamespaceID"
 	WorkflowID           = "WorkflowID"
 	ExecutionTime        = "ExecutionTime"
 	TieBreakerOrder      = "desc"

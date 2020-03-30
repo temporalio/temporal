@@ -43,8 +43,8 @@ func registerBatch(r registrar) {
 const (
 	// TODO: to get rid of them:
 	//  after batch job has an API, we should use the API: https://github.com/uber/cadence/issues/2225
-	sysBatchWFTypeName        = "cadence-sys-batch-workflow"
-	systemBatcherTaskListName = "cadence-sys-batcher-tasklist"
+	sysBatchWFTypeName        = "temporal-sys-batch-workflow"
+	systemBatcherTaskListName = "temporal-sys-batcher-tasklist"
 
 	// there are two level, so totally 5*5 + 5 == 30 descendants
 	// default batch RPS is 50, so it will takes ~1 seconds to terminate all
@@ -56,14 +56,14 @@ type (
 	// TODO: to get rid of it:
 	//  after batch job has an API, we should use the API: https://github.com/uber/cadence/issues/2225
 	BatchParams struct {
-		DomainName string
-		Query      string
-		Reason     string
-		BatchType  string
+		Namespace string
+		Query     string
+		Reason    string
+		BatchType string
 	}
 )
 
-func batchWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func batchWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	profile, err := beginWorkflow(ctx, wfTypeBatch, scheduledTimeNanos)
 	if err != nil {
 		return err
@@ -108,7 +108,7 @@ func batchWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 	})
 
 	startTime := workflow.Now(ctx).Format(time.RFC3339)
-	err = workflow.ExecuteActivity(ctx, activityTypeStartBatch, domain, startTime).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, activityTypeStartBatch, namespace, startTime).Get(ctx, nil)
 	if err != nil {
 		return profile.end(err)
 	}
@@ -118,7 +118,7 @@ func batchWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 		return profile.end(err)
 	}
 
-	err = workflow.ExecuteActivity(ctx, activityTypeVerifyBatch, domain, startTime).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, activityTypeVerifyBatch, namespace, startTime).Get(ctx, nil)
 
 	return profile.end(err)
 }
@@ -163,14 +163,14 @@ func batchWorkflowChild(ctx workflow.Context, scheduledTimeNanos int64) error {
 	return profile.end(err)
 }
 
-func startBatchWorkflow(ctx context.Context, domain, startTime string) error {
+func startBatchWorkflow(ctx context.Context, namespace, startTime string) error {
 	sdkClient := getContextValue(ctx, ctxKeyActivitySystemClient).(*activityContext).cadence
 
 	params := BatchParams{
-		DomainName: domain,
-		Query:      "WorkflowType = '" + wfTypeBatchParent + "' AND CloseTime = missing AND StartTime <'" + startTime + "' ",
-		Reason:     "batch canary",
-		BatchType:  "terminate",
+		Namespace: namespace,
+		Query:     "WorkflowType = '" + wfTypeBatchParent + "' AND CloseTime = missing AND StartTime <'" + startTime + "' ",
+		Reason:    "batch canary",
+		BatchType: "terminate",
 	}
 
 	options := client.StartWorkflowOptions{
@@ -178,8 +178,8 @@ func startBatchWorkflow(ctx context.Context, domain, startTime string) error {
 		DecisionTaskStartToCloseTimeout: decisionTaskTimeout,
 		TaskList:                        systemBatcherTaskListName,
 		SearchAttributes: map[string]interface{}{
-			"CustomDomain": domain,
-			"Operator":     "admin",
+			"CustomNamespace": namespace,
+			"Operator":        "admin",
 		},
 	}
 
@@ -192,13 +192,13 @@ func startBatchWorkflow(ctx context.Context, domain, startTime string) error {
 	return err
 }
 
-func verifyBatchActivity(ctx context.Context, domain, startTime string) error {
+func verifyBatchActivity(ctx context.Context, namespace, startTime string) error {
 	svClient := getActivityContext(ctx).cadence.Service
 
 	q1 := "WorkflowType = '" + wfTypeBatchParent + "' AND CloseTime = missing  AND StartTime <'" + startTime + "' "
 	resp, err := svClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-		Domain: domain,
-		Query:  q1,
+		Namespace: namespace,
+		Query:     q1,
 	})
 	if err != nil {
 		return err
@@ -209,8 +209,8 @@ func verifyBatchActivity(ctx context.Context, domain, startTime string) error {
 
 	q2 := "WorkflowType = '" + wfTypeBatchChild + "' AND CloseTime = missing  AND StartTime <'" + startTime + "' "
 	resp, err = svClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-		Domain: domain,
-		Query:  q2,
+		Namespace: namespace,
+		Query:     q2,
 	})
 	if err != nil {
 		return err

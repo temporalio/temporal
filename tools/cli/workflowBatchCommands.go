@@ -40,7 +40,7 @@ import (
 func TerminateBatchJob(c *cli.Context) {
 	jobID := getRequiredOption(c, FlagJobID)
 	reason := getRequiredOption(c, FlagReason)
-	client := cFactory.SDKClient(c, common.SystemLocalDomainName)
+	client := cFactory.SDKClient(c, common.SystemLocalNamespace)
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	err := client.TerminateWorkflow(tcCtx, jobID, "", reason, nil)
@@ -57,7 +57,7 @@ func TerminateBatchJob(c *cli.Context) {
 func DescribeBatchJob(c *cli.Context) {
 	jobID := getRequiredOption(c, FlagJobID)
 
-	client := cFactory.SDKClient(c, common.SystemLocalDomainName)
+	client := cFactory.SDKClient(c, common.SystemLocalNamespace)
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	wf, err := client.DescribeWorkflowExecution(tcCtx, jobID, "")
@@ -89,15 +89,15 @@ func DescribeBatchJob(c *cli.Context) {
 
 // ListBatchJobs list the started batch jobs
 func ListBatchJobs(c *cli.Context) {
-	domain := getRequiredGlobalOption(c, FlagDomain)
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	pageSize := c.Int(FlagPageSize)
-	client := cFactory.SDKClient(c, common.SystemLocalDomainName)
+	client := cFactory.SDKClient(c, common.SystemLocalNamespace)
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	resp, err := client.ListWorkflow(tcCtx, &workflowservice.ListWorkflowExecutionsRequest{
-		Domain:   common.SystemLocalDomainName,
-		PageSize: int32(pageSize),
-		Query:    fmt.Sprintf("CustomDomain = '%v'", domain),
+		Namespace: common.SystemLocalNamespace,
+		PageSize:  int32(pageSize),
+		Query:     fmt.Sprintf("CustomNamespace = '%v'", namespace),
 	})
 	if err != nil {
 		ErrorAndExit("Failed to list batch jobs", err)
@@ -125,7 +125,7 @@ func ListBatchJobs(c *cli.Context) {
 
 // StartBatchJob starts a batch job
 func StartBatchJob(c *cli.Context) {
-	domain := getRequiredGlobalOption(c, FlagDomain)
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	query := getRequiredOption(c, FlagListQuery)
 	reason := getRequiredOption(c, FlagReason)
 	batchType := getRequiredOption(c, FlagBatchType)
@@ -140,12 +140,12 @@ func StartBatchJob(c *cli.Context) {
 	}
 	rps := c.Int(FlagRPS)
 
-	client := cFactory.SDKClient(c, common.SystemLocalDomainName)
+	client := cFactory.SDKClient(c, common.SystemLocalNamespace)
 	tcCtx, cancel := newContext(c)
 	defer cancel()
 	resp, err := client.CountWorkflow(tcCtx, &workflowservice.CountWorkflowExecutionsRequest{
-		Domain: domain,
-		Query:  query,
+		Namespace: namespace,
+		Query:     query,
 	})
 	if err != nil {
 		ErrorAndExit("Failed to count impacting workflows for starting a batch job", err)
@@ -177,15 +177,15 @@ func StartBatchJob(c *cli.Context) {
 			"Reason": reason,
 		},
 		SearchAttributes: map[string]interface{}{
-			"CustomDomain": domain,
-			"Operator":     operator,
+			"CustomNamespace": namespace,
+			"Operator":        operator,
 		},
 	}
 	params := batcher.BatchParams{
-		DomainName: domain,
-		Query:      query,
-		Reason:     reason,
-		BatchType:  batchType,
+		Namespace: namespace,
+		Query:     query,
+		Reason:    reason,
+		BatchType: batchType,
 		SignalParams: batcher.SignalParams{
 			SignalName: sigName,
 			Input:      sigVal,

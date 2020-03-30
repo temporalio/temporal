@@ -291,7 +291,7 @@ Loop:
 				} else {
 					outStr = fmt.Sprintf(
 						"%v, %v, %v, %v, %v",
-						task.GetHistoryTaskAttributes().GetDomainId(),
+						task.GetHistoryTaskAttributes().GetNamespaceId(),
 						task.GetHistoryTaskAttributes().GetWorkflowId(),
 						task.GetHistoryTaskAttributes().GetRunId(),
 						task.GetHistoryTaskAttributes().GetFirstEventId(),
@@ -341,7 +341,7 @@ Loop:
 				} else {
 					outStr = fmt.Sprintf(
 						"%v, %v, %v, %v, %v",
-						msg.GetDomainID(),
+						msg.GetNamespaceID(),
 						msg.GetWorkflowID(),
 						msg.GetRunID(),
 						msg.GetMessageType().String(),
@@ -479,7 +479,7 @@ type ClustersConfig struct {
 	TLS      auth.TLS
 }
 
-func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, targets []string, producer messaging.Producer, session *gocql.Session) {
+func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64, targets []string, producer messaging.Producer, session *gocql.Session) {
 	if minID <= 0 {
 		minID = 1
 	}
@@ -496,7 +496,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 	for {
 		fmt.Printf("Start rereplicate for wid: %v, rid:%v \n", wid, rid)
 		resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
-			DomainID: domainID,
+			NamespaceID: namespaceID,
 			Execution: commonproto.WorkflowExecution{
 				WorkflowId: wid,
 				RunId:      rid,
@@ -516,7 +516,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 
 		exeInfo := resp.State.ExecutionInfo
 		taskTemplate := &persistenceblobs.ReplicationTaskInfo{
-			DomainID:            primitives.MustParseUUID(domainID),
+			NamespaceID:         primitives.MustParseUUID(namespaceID),
 			WorkflowID:          wid,
 			RunID:               primitives.MustParseUUID(rid),
 			Version:             currVersion,
@@ -542,7 +542,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 				continueAsNew = true
 				newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
-					DomainID: domainID,
+					NamespaceID: namespaceID,
 					Execution: commonproto.WorkflowExecution{
 						WorkflowId: wid,
 						RunId:      newRunID,
@@ -595,7 +595,7 @@ func AdminRereplicate(c *cli.Context) {
 	if c.IsSet(FlagInputFile) {
 		inFile := c.String(FlagInputFile)
 		// This code is executed from the CLI. All user input is from a CLI user.
-		// parse domainID,workflowID,runID,minEventID,maxEventID
+		// parse namespaceID,workflowID,runID,minEventID,maxEventID
 		// #nosec
 		file, err := os.Open(inFile)
 		if err != nil {
@@ -617,7 +617,7 @@ func AdminRereplicate(c *cli.Context) {
 				ErrorAndExit("Split failed", fmt.Errorf("line %v has less than 3 cols separated by comma, only %v ", idx, len(cols)))
 			}
 			fmt.Printf("Start processing line %v ...\n", idx)
-			domainID := strings.TrimSpace(cols[0])
+			namespaceID := strings.TrimSpace(cols[0])
 			wid := strings.TrimSpace(cols[1])
 			rid := strings.TrimSpace(cols[2])
 			var minID, maxID int64
@@ -637,21 +637,21 @@ func AdminRereplicate(c *cli.Context) {
 			}
 
 			shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-			doRereplicate(shardID, domainID, wid, rid, minID, maxID, targets, producer, session)
+			doRereplicate(shardID, namespaceID, wid, rid, minID, maxID, targets, producer, session)
 			fmt.Printf("Done processing line %v ...\n", idx)
 		}
 		if err := scanner.Err(); err != nil {
 			ErrorAndExit("scanner failed", err)
 		}
 	} else {
-		domainID := getRequiredOption(c, FlagDomainID)
+		namespaceID := getRequiredOption(c, FlagNamespaceID)
 		wid := getRequiredOption(c, FlagWorkflowID)
 		rid := getRequiredOption(c, FlagRunID)
 		minID := c.Int64(FlagMinEventID)
 		maxID := c.Int64(FlagMaxEventID)
 
 		shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-		doRereplicate(shardID, domainID, wid, rid, minID, maxID, targets, producer, session)
+		doRereplicate(shardID, namespaceID, wid, rid, minID, maxID, targets, producer, session)
 	}
 }
 

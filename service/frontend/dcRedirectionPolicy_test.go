@@ -51,11 +51,11 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller      *gomock.Controller
-		mockDomainCache *cache.MockDomainCache
+		controller         *gomock.Controller
+		mockNamespaceCache *cache.MockNamespaceCache
 
-		domainName             string
-		domainID               string
+		namespace              string
+		namespaceID            string
 		currentClusterName     string
 		alternativeClusterName string
 		mockConfig             *Config
@@ -88,9 +88,9 @@ func (s *noopDCRedirectionPolicySuite) TearDownTest() {
 
 }
 
-func (s *noopDCRedirectionPolicySuite) TestWithDomainRedirect() {
-	domainName := "some random domain name"
-	domainID := "some random domain ID"
+func (s *noopDCRedirectionPolicySuite) TestWithNamespaceRedirect() {
+	namespace := "some random namespace name"
+	namespaceID := "some random namespace ID"
 	apiName := "any random API name"
 	callCount := 0
 	callFn := func(targetCluster string) error {
@@ -99,10 +99,10 @@ func (s *noopDCRedirectionPolicySuite) TestWithDomainRedirect() {
 		return nil
 	}
 
-	err := s.policy.WithDomainIDRedirect(context.Background(), domainID, apiName, callFn)
+	err := s.policy.WithNamespaceIDRedirect(context.Background(), namespaceID, apiName, callFn)
 	s.Nil(err)
 
-	err = s.policy.WithDomainNameRedirect(context.Background(), domainName, apiName, callFn)
+	err = s.policy.WithNamespaceRedirect(context.Background(), namespace, apiName, callFn)
 	s.Nil(err)
 
 	s.Equal(2, callCount)
@@ -124,10 +124,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
 
-	s.domainName = "some random domain name"
-	s.domainID = "some random domain ID"
+	s.namespace = "some random namespace name"
+	s.namespaceID = "some random namespace ID"
 	s.currentClusterName = cluster.TestCurrentClusterName
 	s.alternativeClusterName = cluster.TestAlternativeClusterName
 
@@ -136,11 +136,11 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 
 	s.mockConfig = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), logger), 0, false)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
+	s.mockClusterMetadata.On("IsGlobalNamespaceEnabled").Return(true)
 	s.policy = NewSelectedAPIsForwardingPolicy(
 		s.currentClusterName,
 		s.mockConfig,
-		s.mockDomainCache,
+		s.mockNamespaceCache,
 	)
 }
 
@@ -148,8 +148,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_LocalDomain() {
-	s.setupLocalDomain()
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_LocalNamespace() {
+	s.setupLocalNamespace()
 
 	apiName := "any random API name"
 	callCount := 0
@@ -159,17 +159,17 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_Lo
 		return nil
 	}
 
-	err := s.policy.WithDomainIDRedirect(context.Background(), s.domainID, apiName, callFn)
+	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
 	s.Nil(err)
 
-	err = s.policy.WithDomainNameRedirect(context.Background(), s.domainName, apiName, callFn)
+	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
 	s.Nil(err)
 
 	s.Equal(2, callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_GlobalDomain_OneReplicationCluster() {
-	s.setupGlobalDomainWithOneReplicationCluster()
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_OneReplicationCluster() {
+	s.setupGlobalNamespaceWithOneReplicationCluster()
 
 	apiName := "any random API name"
 	callCount := 0
@@ -179,17 +179,17 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_Gl
 		return nil
 	}
 
-	err := s.policy.WithDomainIDRedirect(context.Background(), s.domainID, apiName, callFn)
+	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
 	s.Nil(err)
 
-	err = s.policy.WithDomainNameRedirect(context.Background(), s.domainName, apiName, callFn)
+	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
 	s.Nil(err)
 
 	s.Equal(2, callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_GlobalDomain_NoForwarding_DomainNotWhiltelisted() {
-	s.setupGlobalDomainWithTwoReplicationCluster(false, true)
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_NamespaceNotWhiltelisted() {
+	s.setupGlobalNamespaceWithTwoReplicationCluster(false, true)
 
 	apiName := "any random API name"
 	callCount := 0
@@ -199,17 +199,17 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_Gl
 		return nil
 	}
 
-	err := s.policy.WithDomainIDRedirect(context.Background(), s.domainID, apiName, callFn)
+	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
 	s.Nil(err)
 
-	err = s.policy.WithDomainNameRedirect(context.Background(), s.domainName, apiName, callFn)
+	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
 	s.Nil(err)
 
 	s.Equal(2, callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_GlobalDomain_NoForwarding_APINotWhiltelisted() {
-	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_APINotWhiltelisted() {
+	s.setupGlobalNamespaceWithTwoReplicationCluster(true, true)
 
 	callCount := 0
 	callFn := func(targetCluster string) error {
@@ -219,18 +219,18 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_Gl
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithDomainIDRedirect(context.Background(), s.domainID, apiName, callFn)
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
 		s.Nil(err)
 
-		err = s.policy.WithDomainNameRedirect(context.Background(), s.domainName, apiName, callFn)
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
 		s.Nil(err)
 	}
 
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_Forwarding_CurrentCluster() {
-	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_CurrentCluster() {
+	s.setupGlobalNamespaceWithTwoReplicationCluster(true, true)
 
 	callCount := 0
 	callFn := func(targetCluster string) error {
@@ -240,18 +240,18 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithDomainIDRedirect(context.Background(), s.domainID, apiName, callFn)
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
 		s.Nil(err)
 
-		err = s.policy.WithDomainNameRedirect(context.Background(), s.domainName, apiName, callFn)
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
 		s.Nil(err)
 	}
 
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_Forwarding_AlternativeCluster() {
-	s.setupGlobalDomainWithTwoReplicationCluster(true, false)
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeCluster() {
+	s.setupGlobalNamespaceWithTwoReplicationCluster(true, false)
 
 	callCount := 0
 	callFn := func(targetCluster string) error {
@@ -261,18 +261,18 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithDomainIDRedirect(context.Background(), s.domainID, apiName, callFn)
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
 		s.Nil(err)
 
-		err = s.policy.WithDomainNameRedirect(context.Background(), s.domainName, apiName, callFn)
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
 		s.Nil(err)
 	}
 
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_Forwarding_CurrentClusterToAlternativeCluster() {
-	s.setupGlobalDomainWithTwoReplicationCluster(true, true)
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_CurrentClusterToAlternativeCluster() {
+	s.setupGlobalNamespaceWithTwoReplicationCluster(true, true)
 
 	currentClustercallCount := 0
 	alternativeClustercallCount := 0
@@ -280,7 +280,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		switch targetCluster {
 		case s.currentClusterName:
 			currentClustercallCount++
-			return serviceerror.NewDomainNotActive("", s.currentClusterName, s.alternativeClusterName)
+			return serviceerror.NewNamespaceNotActive("", s.currentClusterName, s.alternativeClusterName)
 		case s.alternativeClusterName:
 			alternativeClustercallCount++
 			return nil
@@ -290,10 +290,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithDomainIDRedirect(context.Background(), s.domainID, apiName, callFn)
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
 		s.Nil(err)
 
-		err = s.policy.WithDomainNameRedirect(context.Background(), s.domainName, apiName, callFn)
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
 		s.Nil(err)
 	}
 
@@ -301,8 +301,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalDomain_Forwarding_AlternativeClusterToCurrentCluster() {
-	s.setupGlobalDomainWithTwoReplicationCluster(true, false)
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeClusterToCurrentCluster() {
+	s.setupGlobalNamespaceWithTwoReplicationCluster(true, false)
 
 	currentClustercallCount := 0
 	alternativeClustercallCount := 0
@@ -313,17 +313,17 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 			return nil
 		case s.alternativeClusterName:
 			alternativeClustercallCount++
-			return serviceerror.NewDomainNotActive("", s.alternativeClusterName, s.currentClusterName)
+			return serviceerror.NewNamespaceNotActive("", s.alternativeClusterName, s.currentClusterName)
 		default:
 			panic(fmt.Sprintf("unknown cluster name %v", targetCluster))
 		}
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithDomainIDRedirect(context.Background(), s.domainID, apiName, callFn)
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
 		s.Nil(err)
 
-		err = s.policy.WithDomainNameRedirect(context.Background(), s.domainName, apiName, callFn)
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
 		s.Nil(err)
 	}
 
@@ -331,23 +331,23 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalDomain() {
-	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
-		&persistence.DomainConfig{Retention: 1},
+func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {
+	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: s.namespaceID, Name: s.namespace},
+		&persistence.NamespaceConfig{Retention: 1},
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.domainID).Return(domainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(s.domainName).Return(domainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithOneReplicationCluster() {
-	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithOneReplicationCluster() {
+	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: s.namespaceID, Name: s.namespace},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -358,19 +358,19 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithOneR
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.domainID).Return(domainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(s.domainName).Return(domainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithTwoReplicationCluster(forwardingEnabled bool, isRecordActive bool) {
+func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithTwoReplicationCluster(forwardingEnabled bool, isRecordActive bool) {
 	activeCluster := s.alternativeClusterName
 	if isRecordActive {
 		activeCluster = s.currentClusterName
 	}
-	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: s.namespaceID, Name: s.namespace},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: activeCluster,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -381,7 +381,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithTwoR
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.domainID).Return(domainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(s.domainName).Return(domainEntry, nil).AnyTimes()
-	s.mockConfig.EnableDomainNotActiveAutoForwarding = dynamicconfig.GetBoolPropertyFnFilteredByDomain(forwardingEnabled)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
+	s.mockConfig.EnableNamespaceNotActiveAutoForwarding = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(forwardingEnabled)
 }

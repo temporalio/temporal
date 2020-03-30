@@ -24,23 +24,23 @@ import (
 	"sync"
 )
 
-// MultiStageRateLimiter indicates a domain specific rate limit policy
+// MultiStageRateLimiter indicates a namespace specific rate limit policy
 type MultiStageRateLimiter struct {
 	sync.RWMutex
-	rps            RPSFunc
-	domainRPS      RPSKeyFunc
-	domainLimiters map[string]*DynamicRateLimiter
-	globalLimiter  *DynamicRateLimiter
+	rps               RPSFunc
+	namespaceRPS      RPSKeyFunc
+	namespaceLimiters map[string]*DynamicRateLimiter
+	globalLimiter     *DynamicRateLimiter
 }
 
-// NewMultiStageRateLimiter returns a new domain quota rate limiter. This is about
+// NewMultiStageRateLimiter returns a new namespace quota rate limiter. This is about
 // an order of magnitude slower than
-func NewMultiStageRateLimiter(rps RPSFunc, domainRps RPSKeyFunc) *MultiStageRateLimiter {
+func NewMultiStageRateLimiter(rps RPSFunc, namespaceRps RPSKeyFunc) *MultiStageRateLimiter {
 	rl := &MultiStageRateLimiter{
-		rps:            rps,
-		domainRPS:      domainRps,
-		domainLimiters: map[string]*DynamicRateLimiter{},
-		globalLimiter:  NewDynamicRateLimiter(rps),
+		rps:               rps,
+		namespaceRPS:      namespaceRps,
+		namespaceLimiters: map[string]*DynamicRateLimiter{},
+		globalLimiter:     NewDynamicRateLimiter(rps),
 	}
 	return rl
 }
@@ -49,36 +49,36 @@ func NewMultiStageRateLimiter(rps RPSFunc, domainRps RPSKeyFunc) *MultiStageRate
 // immediately with a true or false indicating if the request can make
 // progress
 func (d *MultiStageRateLimiter) Allow(info Info) bool {
-	domain := info.Domain
-	if len(domain) == 0 {
+	namespace := info.Namespace
+	if len(namespace) == 0 {
 		return d.globalLimiter.Allow()
 	}
 
-	// check if we have a per-domain limiter - if not create a default one for
-	// the domain.
+	// check if we have a per-namespace limiter - if not create a default one for
+	// the namespace.
 	d.RLock()
-	limiter, ok := d.domainLimiters[domain]
+	limiter, ok := d.namespaceLimiters[namespace]
 	d.RUnlock()
 
 	if !ok {
 		// create a new limiter
-		domainLimiter := NewDynamicRateLimiter(
+		namespaceLimiter := NewDynamicRateLimiter(
 			func() float64 {
-				return d.domainRPS(domain)
+				return d.namespaceRPS(namespace)
 			},
 		)
 
 		// verify that it is needed and add to map
 		d.Lock()
-		limiter, ok = d.domainLimiters[domain]
+		limiter, ok = d.namespaceLimiters[namespace]
 		if !ok {
-			d.domainLimiters[domain] = domainLimiter
-			limiter = domainLimiter
+			d.namespaceLimiters[namespace] = namespaceLimiter
+			limiter = namespaceLimiter
 		}
 		d.Unlock()
 	}
 
-	// take a reservation with the domain limiter first
+	// take a reservation with the namespace limiter first
 	rsv := limiter.Reserve()
 	if !rsv.OK() {
 		return false

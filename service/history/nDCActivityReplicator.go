@@ -81,13 +81,13 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// 2. activity heart beat
 	// no sync activity task will be sent when active side fail / timeout activity,
 	// since standby side does not have activity retry timer
-	domainID := request.GetDomainId()
+	namespaceID := request.GetNamespaceId()
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
 		RunId:      request.RunId,
 	}
 
-	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
+	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
 	if err != nil {
 		// for get workflow execution context, with valid run id
 		// err will not be of type EntityNotExistsError
@@ -111,7 +111,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	version := request.GetVersion()
 	scheduleID := request.GetScheduledId()
 	shouldApply, err := r.shouldApplySyncActivity(
-		domainID,
+		namespaceID,
 		execution.GetWorkflowId(),
 		execution.GetRunId(),
 		scheduleID,
@@ -205,7 +205,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 }
 
 func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	scheduleID int64,
@@ -248,7 +248,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			if scheduleID > lcaItem.GetEventID() {
 				return false, newNDCRetryTaskErrorWithHint(
 					resendMissingEventMessage,
-					domainID,
+					namespaceID,
 					workflowID,
 					runID,
 					lcaItem.GetEventID(),
@@ -266,7 +266,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 				// case 2-2
 				return false, newNDCRetryTaskErrorWithHint(
 					resendHigherVersionMessage,
-					domainID,
+					namespaceID,
 					workflowID,
 					runID,
 					lcaItem.GetEventID(),
@@ -300,7 +300,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			// this can happen if out of order delivery happens
 			return false, newRetryTaskErrorWithHint(
 				ErrRetrySyncActivityMsg,
-				domainID,
+				namespaceID,
 				workflowID,
 				runID,
 				mutableState.GetNextEventID(),

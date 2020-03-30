@@ -49,7 +49,7 @@ func applyWorkflowMutationBatch(
 	executionInfo := workflowMutation.ExecutionInfo
 	replicationState := workflowMutation.ReplicationState
 	versionHistories := workflowMutation.VersionHistories
-	domainID := executionInfo.DomainID
+	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
 	runID := executionInfo.RunID
 	condition := workflowMutation.Condition
@@ -83,7 +83,7 @@ func applyWorkflowMutationBatch(
 		workflowMutation.UpsertActivityInfos,
 		workflowMutation.DeleteActivityInfos,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -95,7 +95,7 @@ func applyWorkflowMutationBatch(
 		workflowMutation.UpsertTimerInfos,
 		workflowMutation.DeleteTimerInfos,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -107,7 +107,7 @@ func applyWorkflowMutationBatch(
 		workflowMutation.UpsertChildExecutionInfos,
 		workflowMutation.DeleteChildExecutionInfo,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -119,7 +119,7 @@ func applyWorkflowMutationBatch(
 		workflowMutation.UpsertRequestCancelInfos,
 		workflowMutation.DeleteRequestCancelInfo,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -131,7 +131,7 @@ func applyWorkflowMutationBatch(
 		workflowMutation.UpsertSignalInfos,
 		workflowMutation.DeleteSignalInfo,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -143,7 +143,7 @@ func applyWorkflowMutationBatch(
 		workflowMutation.UpsertSignalRequestedIDs,
 		workflowMutation.DeleteSignalRequestedID,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	)
@@ -153,7 +153,7 @@ func applyWorkflowMutationBatch(
 		workflowMutation.NewBufferedEvents,
 		workflowMutation.ClearBufferedEvents,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	)
@@ -162,7 +162,7 @@ func applyWorkflowMutationBatch(
 	return applyTasks(
 		batch,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		workflowMutation.TransferTasks,
@@ -182,7 +182,7 @@ func applyWorkflowSnapshotBatchAsReset(
 	executionInfo := workflowSnapshot.ExecutionInfo
 	replicationState := workflowSnapshot.ReplicationState
 	versionHistories := workflowSnapshot.VersionHistories
-	domainID := executionInfo.DomainID
+	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
 	runID := executionInfo.RunID
 	condition := workflowSnapshot.Condition
@@ -215,7 +215,7 @@ func applyWorkflowSnapshotBatchAsReset(
 		batch,
 		workflowSnapshot.ActivityInfos,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -226,7 +226,7 @@ func applyWorkflowSnapshotBatchAsReset(
 		batch,
 		workflowSnapshot.TimerInfos,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -237,7 +237,7 @@ func applyWorkflowSnapshotBatchAsReset(
 		batch,
 		workflowSnapshot.ChildExecutionInfos,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -248,7 +248,7 @@ func applyWorkflowSnapshotBatchAsReset(
 		batch,
 		workflowSnapshot.RequestCancelInfos,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -259,7 +259,7 @@ func applyWorkflowSnapshotBatchAsReset(
 		batch,
 		workflowSnapshot.SignalInfos,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -270,7 +270,7 @@ func applyWorkflowSnapshotBatchAsReset(
 		batch,
 		workflowSnapshot.SignalRequestedIDs,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	)
@@ -278,7 +278,7 @@ func applyWorkflowSnapshotBatchAsReset(
 	deleteBufferedEvents(
 		batch,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	)
@@ -287,7 +287,7 @@ func applyWorkflowSnapshotBatchAsReset(
 	return applyTasks(
 		batch,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
@@ -307,7 +307,7 @@ func applyWorkflowSnapshotBatchAsNew(
 	executionInfo := workflowSnapshot.ExecutionInfo
 	replicationState := workflowSnapshot.ReplicationState
 	versionHistories := workflowSnapshot.VersionHistories
-	domainID := executionInfo.DomainID
+	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
 	runID := executionInfo.RunID
 
@@ -339,7 +339,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.ActivityInfos,
 		nil,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -351,7 +351,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.TimerInfos,
 		nil,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -363,7 +363,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.ChildExecutionInfos,
 		nil,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -375,7 +375,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.RequestCancelInfos,
 		nil,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -387,7 +387,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.SignalInfos,
 		nil,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -399,7 +399,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.SignalRequestedIDs,
 		"",
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	)
@@ -408,7 +408,7 @@ func applyWorkflowSnapshotBatchAsNew(
 	return applyTasks(
 		batch,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		workflowSnapshot.TransferTasks,
@@ -436,7 +436,7 @@ func createExecution(
 		return err
 	}
 
-	domainID := executionInfo.DomainID
+	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
 	runID := executionInfo.RunID
 
@@ -468,7 +468,7 @@ func createExecution(
 		// Cross DC feature is currently disabled so we will be creating workflow executions without replication state
 		batch.Query(templateCreateWorkflowExecutionQuery,
 			shardID,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			rowTypeExecution,
@@ -486,7 +486,7 @@ func createExecution(
 		versionHistoriesData, versionHistoriesEncoding := p.FromDataBlob(versionHistories)
 		batch.Query(templateCreateWorkflowExecutionWithVersionHistoriesQuery,
 			shardID,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			rowTypeExecution,
@@ -509,7 +509,7 @@ func createExecution(
 
 		batch.Query(templateCreateWorkflowExecutionWithReplicationQuery,
 			shardID,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			rowTypeExecution,
@@ -553,7 +553,7 @@ func updateExecution(
 		return err
 	}
 
-	domainID := executionInfo.DomainID
+	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
 	runID := executionInfo.RunID
 
@@ -592,7 +592,7 @@ func updateExecution(
 			checksumDatablob.Encoding.String(),
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -613,7 +613,7 @@ func updateExecution(
 			checksumDatablob.Encoding.String(),
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -640,7 +640,7 @@ func updateExecution(
 			checksumDatablob.Encoding.String(),
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -656,7 +656,7 @@ func updateExecution(
 func applyTasks(
 	batch *gocql.Batch,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	transferTasks []p.Task,
@@ -668,7 +668,7 @@ func applyTasks(
 		batch,
 		transferTasks,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -679,7 +679,7 @@ func applyTasks(
 		batch,
 		replicationTasks,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	); err != nil {
@@ -690,7 +690,7 @@ func applyTasks(
 		batch,
 		timerTasks,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 	)
@@ -700,12 +700,12 @@ func createTransferTasks(
 	batch *gocql.Batch,
 	transferTasks []p.Task,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
 
-	targetDomainID := domainID
+	targetNamespaceID := namespaceID
 	for _, task := range transferTasks {
 		var taskList string
 		var scheduleID int64
@@ -716,18 +716,18 @@ func createTransferTasks(
 
 		switch task.GetType() {
 		case p.TransferTaskTypeActivityTask:
-			targetDomainID = task.(*p.ActivityTask).DomainID
+			targetNamespaceID = task.(*p.ActivityTask).NamespaceID
 			taskList = task.(*p.ActivityTask).TaskList
 			scheduleID = task.(*p.ActivityTask).ScheduleID
 
 		case p.TransferTaskTypeDecisionTask:
-			targetDomainID = task.(*p.DecisionTask).DomainID
+			targetNamespaceID = task.(*p.DecisionTask).NamespaceID
 			taskList = task.(*p.DecisionTask).TaskList
 			scheduleID = task.(*p.DecisionTask).ScheduleID
 			recordVisibility = task.(*p.DecisionTask).RecordVisibility
 
 		case p.TransferTaskTypeCancelExecution:
-			targetDomainID = task.(*p.CancelExecutionTask).TargetDomainID
+			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.CancelExecutionTask).TargetRunID
 
@@ -735,7 +735,7 @@ func createTransferTasks(
 			scheduleID = task.(*p.CancelExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeSignalExecution:
-			targetDomainID = task.(*p.SignalExecutionTask).TargetDomainID
+			targetNamespaceID = task.(*p.SignalExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.SignalExecutionTask).TargetRunID
 
@@ -743,7 +743,7 @@ func createTransferTasks(
 			scheduleID = task.(*p.SignalExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeStartChildExecution:
-			targetDomainID = task.(*p.StartChildExecutionTask).TargetDomainID
+			targetNamespaceID = task.(*p.StartChildExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
 
@@ -765,11 +765,11 @@ func createTransferTasks(
 
 		// todo ~~~ come back for record visibility
 		p := &persistenceblobs.TransferTaskInfo{
-			DomainID:                primitives.MustParseUUID(domainID),
+			NamespaceID:             primitives.MustParseUUID(namespaceID),
 			WorkflowID:              workflowID,
 			RunID:                   primitives.MustParseUUID(runID),
 			TaskType:                int32(task.GetType()),
-			TargetDomainID:          primitives.MustParseUUID(targetDomainID),
+			TargetNamespaceID:       primitives.MustParseUUID(targetNamespaceID),
 			TargetWorkflowID:        targetWorkflowID,
 			TargetRunID:             primitives.MustParseUUID(targetRunID),
 			TaskList:                taskList,
@@ -788,7 +788,7 @@ func createTransferTasks(
 		batch.Query(templateCreateTransferTaskQuery,
 			shardID,
 			rowTypeTransferTask,
-			rowTypeTransferDomainID,
+			rowTypeTransferNamespaceID,
 			rowTypeTransferWorkflowID,
 			rowTypeTransferRunID,
 			datablob.Data,
@@ -804,7 +804,7 @@ func createReplicationTasks(
 	batch *gocql.Batch,
 	replicationTasks []p.Task,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -844,7 +844,7 @@ func createReplicationTasks(
 		}
 
 		datablob, err := serialization.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
-			DomainID:                primitives.MustParseUUID(domainID),
+			NamespaceID:             primitives.MustParseUUID(namespaceID),
 			WorkflowID:              workflowID,
 			RunID:                   primitives.MustParseUUID(runID),
 			TaskID:                  task.GetTaskID(),
@@ -868,7 +868,7 @@ func createReplicationTasks(
 		batch.Query(templateCreateReplicationTaskQuery,
 			shardID,
 			rowTypeReplicationTask,
-			rowTypeReplicationDomainID,
+			rowTypeReplicationNamespaceID,
 			rowTypeReplicationWorkflowID,
 			rowTypeReplicationRunID,
 			datablob.Data,
@@ -884,7 +884,7 @@ func createTimerTasks(
 	batch *gocql.Batch,
 	timerTasks []p.Task,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -937,7 +937,7 @@ func createTimerTasks(
 		}
 
 		datablob, err := serialization.TimerTaskInfoToBlob(&persistenceblobs.TimerTaskInfo{
-			DomainID:            primitives.MustParseUUID(domainID),
+			NamespaceID:         primitives.MustParseUUID(namespaceID),
 			WorkflowID:          workflowID,
 			RunID:               primitives.MustParseUUID(runID),
 			TaskType:            int32(task.GetType()),
@@ -956,7 +956,7 @@ func createTimerTasks(
 		batch.Query(templateCreateTimerTaskQuery,
 			shardID,
 			rowTypeTimerTask,
-			rowTypeTimerDomainID,
+			rowTypeTimerNamespaceID,
 			rowTypeTimerWorkflowID,
 			rowTypeTimerRunID,
 			datablob.Data,
@@ -972,7 +972,7 @@ func createOrUpdateCurrentExecution(
 	batch *gocql.Batch,
 	createMode p.CreateWorkflowMode,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	state int,
@@ -1007,7 +1007,7 @@ func createOrUpdateCurrentExecution(
 			state,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			permanentRunID,
 			defaultVisibilityTimestamp,
@@ -1025,7 +1025,7 @@ func createOrUpdateCurrentExecution(
 			state,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			permanentRunID,
 			defaultVisibilityTimestamp,
@@ -1038,7 +1038,7 @@ func createOrUpdateCurrentExecution(
 		batch.Query(templateCreateCurrentWorkflowExecutionQuery,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			permanentRunID,
 			defaultVisibilityTimestamp,
@@ -1063,7 +1063,7 @@ func updateActivityInfos(
 	activityInfos []*p.InternalActivityInfo,
 	deleteInfos []int64,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -1085,7 +1085,7 @@ func updateActivityInfos(
 			activityBlob.Encoding,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1097,7 +1097,7 @@ func updateActivityInfos(
 			deleteInfo,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1109,7 +1109,7 @@ func updateActivityInfos(
 func deleteBufferedEvents(
 	batch *gocql.Batch,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) {
@@ -1117,7 +1117,7 @@ func deleteBufferedEvents(
 	batch.Query(templateDeleteBufferedEventsQuery,
 		shardID,
 		rowTypeExecution,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		defaultVisibilityTimestamp,
@@ -1129,7 +1129,7 @@ func resetActivityInfos(
 	batch *gocql.Batch,
 	activityInfos []*p.InternalActivityInfo,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -1144,7 +1144,7 @@ func resetActivityInfos(
 		encoding,
 		shardID,
 		rowTypeExecution,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		defaultVisibilityTimestamp,
@@ -1157,7 +1157,7 @@ func updateTimerInfos(
 	timerInfos []*persistenceblobs.TimerInfo,
 	deleteInfos []string,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -1173,7 +1173,7 @@ func updateTimerInfos(
 			datablob.Encoding, // timermap encoding
 			shardID,           // where ...
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1185,7 +1185,7 @@ func updateTimerInfos(
 			t,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1199,7 +1199,7 @@ func resetTimerInfos(
 	batch *gocql.Batch,
 	timerInfos []*persistenceblobs.TimerInfo,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -1214,7 +1214,7 @@ func resetTimerInfos(
 		timerMapEncoding,
 		shardID,
 		rowTypeExecution,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		defaultVisibilityTimestamp,
@@ -1228,7 +1228,7 @@ func updateChildExecutionInfos(
 	childExecutionInfos []*p.InternalChildExecutionInfo,
 	deleteInfo *int64,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -1249,7 +1249,7 @@ func updateChildExecutionInfos(
 			datablob.Encoding,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1262,7 +1262,7 @@ func updateChildExecutionInfos(
 			*deleteInfo,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1275,7 +1275,7 @@ func resetChildExecutionInfos(
 	batch *gocql.Batch,
 	childExecutionInfos []*p.InternalChildExecutionInfo,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -1289,7 +1289,7 @@ func resetChildExecutionInfos(
 		encoding,
 		shardID,
 		rowTypeExecution,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		defaultVisibilityTimestamp,
@@ -1302,7 +1302,7 @@ func updateRequestCancelInfos(
 	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
 	deleteInfo *int64,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -1319,7 +1319,7 @@ func updateRequestCancelInfos(
 			datablob.Encoding,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1332,7 +1332,7 @@ func updateRequestCancelInfos(
 			*deleteInfo,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1346,7 +1346,7 @@ func resetRequestCancelInfos(
 	batch *gocql.Batch,
 	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -1362,7 +1362,7 @@ func resetRequestCancelInfos(
 		rciMapEncoding,
 		shardID,
 		rowTypeExecution,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		defaultVisibilityTimestamp,
@@ -1376,7 +1376,7 @@ func updateSignalInfos(
 	signalInfos []*persistenceblobs.SignalInfo,
 	deleteInfo *int64,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -1393,7 +1393,7 @@ func updateSignalInfos(
 			datablob.Encoding,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1406,7 +1406,7 @@ func updateSignalInfos(
 			*deleteInfo,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1420,7 +1420,7 @@ func resetSignalInfos(
 	batch *gocql.Batch,
 	signalInfos []*persistenceblobs.SignalInfo,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
@@ -1435,7 +1435,7 @@ func resetSignalInfos(
 		sMapEncoding,
 		shardID,
 		rowTypeExecution,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		defaultVisibilityTimestamp,
@@ -1449,7 +1449,7 @@ func updateSignalsRequested(
 	signalReqIDs []string,
 	deleteSignalReqID string,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) {
@@ -1459,7 +1459,7 @@ func updateSignalsRequested(
 			signalReqIDs,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1472,7 +1472,7 @@ func updateSignalsRequested(
 			req,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1484,7 +1484,7 @@ func resetSignalRequested(
 	batch *gocql.Batch,
 	signalRequested []string,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) {
@@ -1493,7 +1493,7 @@ func resetSignalRequested(
 		signalRequested,
 		shardID,
 		rowTypeExecution,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		defaultVisibilityTimestamp,
@@ -1505,7 +1505,7 @@ func updateBufferedEvents(
 	newBufferedEvents *serialization.DataBlob,
 	clearBufferedEvents bool,
 	shardID int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) {
@@ -1514,7 +1514,7 @@ func updateBufferedEvents(
 		batch.Query(templateDeleteBufferedEventsQuery,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,
@@ -1529,7 +1529,7 @@ func updateBufferedEvents(
 			newEventValues,
 			shardID,
 			rowTypeExecution,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			defaultVisibilityTimestamp,

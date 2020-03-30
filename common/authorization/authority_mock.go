@@ -29,35 +29,34 @@ package authorization
 
 import (
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
+	reflect "reflect"
 )
 
-// MockAuthorizer is a mock of Authorizer interface
+// MockAuthorizer is a mock of Authorizer interface.
 type MockAuthorizer struct {
 	ctrl     *gomock.Controller
 	recorder *MockAuthorizerMockRecorder
 }
 
-// MockAuthorizerMockRecorder is the mock recorder for MockAuthorizer
+// MockAuthorizerMockRecorder is the mock recorder for MockAuthorizer.
 type MockAuthorizerMockRecorder struct {
 	mock *MockAuthorizer
 }
 
-// NewMockAuthorizer creates a new mock instance
+// NewMockAuthorizer creates a new mock instance.
 func NewMockAuthorizer(ctrl *gomock.Controller) *MockAuthorizer {
 	mock := &MockAuthorizer{ctrl: ctrl}
 	mock.recorder = &MockAuthorizerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockAuthorizer) EXPECT() *MockAuthorizerMockRecorder {
 	return m.recorder
 }
 
-// Authorize mocks base method
+// Authorize mocks base method.
 func (m *MockAuthorizer) Authorize(ctx context.Context, attributes *Attributes) (Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Authorize", ctx, attributes)
@@ -66,7 +65,7 @@ func (m *MockAuthorizer) Authorize(ctx context.Context, attributes *Attributes) 
 	return ret0, ret1
 }
 
-// Authorize indicates an expected call of Authorize
+// Authorize indicates an expected call of Authorize.
 func (mr *MockAuthorizerMockRecorder) Authorize(ctx, attributes interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorize", reflect.TypeOf((*MockAuthorizer)(nil).Authorize), ctx, attributes)

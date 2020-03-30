@@ -63,7 +63,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
 	cfg := NewConfig(dynamicconfig.NewNopCollection())
 	t.taskList = newTestTaskListID(uuid.New(), taskListPartitionPrefix+"tl0/1", persistence.TaskListTypeDecision)
-	tlCfg, err := newTaskListConfig(t.taskList, cfg, t.newDomainCache())
+	tlCfg, err := newTaskListConfig(t.taskList, cfg, t.newNamespaceCache())
 	t.NoError(err)
 	tlCfg.forwarderConfig = forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },
@@ -76,8 +76,8 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskList, enums.TaskListKindNormal, t.client, scope)
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
 
-	rootTaskList := newTestTaskListID(t.taskList.domainID, t.taskList.Parent(20), persistence.TaskListTypeDecision)
-	rootTasklistCfg, err := newTaskListConfig(rootTaskList, cfg, t.newDomainCache())
+	rootTaskList := newTestTaskListID(t.taskList.namespaceID, t.taskList.Parent(20), persistence.TaskListTypeDecision)
+	rootTasklistCfg, err := newTaskListConfig(rootTaskList, cfg, t.newNamespaceCache())
 	t.NoError(err)
 	t.rootMatcher = newTaskMatcher(rootTasklistCfg, nil, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
 }
@@ -457,14 +457,14 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 	t.True(task.isStarted())
 }
 
-func (t *MatcherTestSuite) newDomainCache() cache.DomainCache {
-	entry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: "test-domain"},
-		&persistence.DomainConfig{},
+func (t *MatcherTestSuite) newNamespaceCache() cache.NamespaceCache {
+	entry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: "test-namespace"},
+		&persistence.NamespaceConfig{},
 		"",
 		nil)
-	dc := cache.NewMockDomainCache(t.controller)
-	dc.EXPECT().GetDomainByID(gomock.Any()).Return(entry, nil).AnyTimes()
+	dc := cache.NewMockNamespaceCache(t.controller)
+	dc.EXPECT().GetNamespaceByID(gomock.Any()).Return(entry, nil).AnyTimes()
 	return dc
 }
 
@@ -474,7 +474,7 @@ func randomTaskInfo() *persistenceblobs.AllocatedTaskInfo {
 
 	return &persistenceblobs.AllocatedTaskInfo{
 		Data: &persistenceblobs.TaskInfo{
-			DomainID:    uuid.NewRandom(),
+			NamespaceID: uuid.NewRandom(),
 			WorkflowID:  uuid.New(),
 			RunID:       uuid.NewRandom(),
 			ScheduleID:  rand.Int63(),

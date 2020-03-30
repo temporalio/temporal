@@ -74,8 +74,8 @@ func (s *clientIntegrationSuite) SetupSuite() {
 
 	var err error
 	s.sdkClient, err = sdkclient.NewClient(sdkclient.Options{
-		HostPort:   s.hostPort,
-		DomainName: s.domainName,
+		HostPort:  s.hostPort,
+		Namespace: s.namespace,
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
@@ -171,7 +171,7 @@ func testDataConverterWorkflow(ctx workflow.Context, tl string) (string, error) 
 func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataConverter encoded.DataConverter) (sdkclient.Client, worker.Worker) {
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
 		HostPort:      s.hostPort,
-		DomainName:    s.domainName,
+		Namespace:     s.namespace,
 		DataConverter: dataConverter,
 	})
 	if err != nil {

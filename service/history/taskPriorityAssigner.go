@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination taskPriorityAssigner_mock.go -self_package github.com/uber/cadence/service/history
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination taskPriorityAssigner_mock.go -self_package github.com/temporalio/temporal/service/history
 
 package history
 
@@ -44,7 +44,7 @@ type (
 		sync.RWMutex
 
 		currentClusterName string
-		domainCache        cache.DomainCache
+		namespaceCache     cache.NamespaceCache
 		config             *Config
 		logger             log.Logger
 		scope              metrics.Scope
@@ -72,14 +72,14 @@ const (
 
 func newTaskPriorityAssigner(
 	currentClusterName string,
-	domainCache cache.DomainCache,
+	namespaceCache cache.NamespaceCache,
 	logger log.Logger,
 	metricClient metrics.Client,
 	config *Config,
 ) *taskPriorityAssignerImpl {
 	return &taskPriorityAssignerImpl{
 		currentClusterName: currentClusterName,
-		domainCache:        domainCache,
+		namespaceCache:     namespaceCache,
 		config:             config,
 		logger:             logger,
 		scope:              metricClient.Scope(metrics.TaskPriorityAssignerScope),
@@ -95,8 +95,8 @@ func (a *taskPriorityAssignerImpl) Assign(
 		return nil
 	}
 
-	// timer of transfer task, first check if domain is active or not
-	domainName, active, err := a.getDomainInfo(primitives.UUIDString(task.GetDomainID()))
+	// timer of transfer task, first check if namespace is active or not
+	namespace, active, err := a.getNamespaceInfo(primitives.UUIDString(task.GetNamespaceID()))
 	if err != nil {
 		return err
 	}
@@ -106,9 +106,9 @@ func (a *taskPriorityAssignerImpl) Assign(
 		return nil
 	}
 
-	if !a.getRateLimiter(domainName).Allow() {
+	if !a.getRateLimiter(namespace).Allow() {
 		task.SetPriority(getTaskPriority(taskDefaultPriorityClass, taskDefaultPrioritySubclass))
-		taggedScope := a.scope.Tagged(metrics.DomainTag(domainName))
+		taggedScope := a.scope.Tagged(metrics.NamespaceTag(namespace))
 		if task.GetQueueType() == transferQueueType {
 			taggedScope.IncCounter(metrics.TransferTaskThrottledCounter)
 		} else {
@@ -121,36 +121,36 @@ func (a *taskPriorityAssignerImpl) Assign(
 	return nil
 }
 
-// getDomainInfo returns three pieces of information:
-//  1. domain name
-//  2. if domain is active
+// getNamespaceInfo returns three pieces of information:
+//  1. namespace name
+//  2. if namespace is active
 //  3. error, if any
-func (a *taskPriorityAssignerImpl) getDomainInfo(
-	domainID string,
+func (a *taskPriorityAssignerImpl) getNamespaceInfo(
+	namespaceID string,
 ) (string, bool, error) {
-	domainEntry, err := a.domainCache.GetDomainByID(domainID)
+	namespaceEntry, err := a.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
-			a.logger.Warn("Cannot find domain", tag.WorkflowDomainID(domainID))
+			a.logger.Warn("Cannot find namespace", tag.WorkflowNamespaceID(namespaceID))
 			return "", false, err
 		}
-		// it is possible that the domain is deleted
-		// we should treat that domain as active
-		a.logger.Warn("Cannot find domain, treat as active task.", tag.WorkflowDomainID(domainID))
+		// it is possible that the namespace is deleted
+		// we should treat that namespace as active
+		a.logger.Warn("Cannot find namespace, treat as active task.", tag.WorkflowNamespaceID(namespaceID))
 		return "", true, nil
 	}
 
-	if domainEntry.IsGlobalDomain() && a.currentClusterName != domainEntry.GetReplicationConfig().ActiveClusterName {
-		return domainEntry.GetInfo().Name, false, nil
+	if namespaceEntry.IsGlobalNamespace() && a.currentClusterName != namespaceEntry.GetReplicationConfig().ActiveClusterName {
+		return namespaceEntry.GetInfo().Name, false, nil
 	}
-	return domainEntry.GetInfo().Name, true, nil
+	return namespaceEntry.GetInfo().Name, true, nil
 }
 
 func (a *taskPriorityAssignerImpl) getRateLimiter(
-	domainName string,
+	namespace string,
 ) quotas.Limiter {
 	a.RLock()
-	if limiter, ok := a.rateLimiters[domainName]; ok {
+	if limiter, ok := a.rateLimiters[namespace]; ok {
 		a.RUnlock()
 		return limiter
 	}
@@ -158,17 +158,17 @@ func (a *taskPriorityAssignerImpl) getRateLimiter(
 
 	limiter := quotas.NewDynamicRateLimiter(
 		func() float64 {
-			return float64(a.config.TaskProcessRPS(domainName))
+			return float64(a.config.TaskProcessRPS(namespace))
 		},
 	)
 
 	a.Lock()
 	defer a.Unlock()
-	if existingLimiter, ok := a.rateLimiters[domainName]; ok {
+	if existingLimiter, ok := a.rateLimiters[namespace]; ok {
 		return existingLimiter
 	}
 
-	a.rateLimiters[domainName] = limiter
+	a.rateLimiters[namespace] = limiter
 	return limiter
 }
 

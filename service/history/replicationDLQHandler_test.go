@@ -133,11 +133,11 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
 		Tasks: []*pblobs.ReplicationTaskInfo{
 			&pblobs.ReplicationTaskInfo{
-				DomainID:   primitives.MustParseUUID(uuid.New()),
-				WorkflowID: uuid.New(),
-				RunID:      primitives.MustParseUUID(uuid.New()),
-				TaskID:     0,
-				TaskType:   1,
+				NamespaceID: primitives.MustParseUUID(uuid.New()),
+				WorkflowID:  uuid.New(),
+				RunID:       primitives.MustParseUUID(uuid.New()),
+				TaskID:      0,
+				TaskType:    1,
 			},
 		},
 	}
@@ -187,11 +187,11 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
 		Tasks: []*pblobs.ReplicationTaskInfo{
 			&pblobs.ReplicationTaskInfo{
-				DomainID:   primitives.MustParseUUID(uuid.New()),
-				WorkflowID: uuid.New(),
-				RunID:      primitives.MustParseUUID(uuid.New()),
-				TaskID:     0,
-				TaskType:   1,
+				NamespaceID: primitives.MustParseUUID(uuid.New()),
+				WorkflowID:  uuid.New(),
+				RunID:       primitives.MustParseUUID(uuid.New()),
+				TaskID:      0,
+				TaskType:    1,
 			},
 		},
 	}

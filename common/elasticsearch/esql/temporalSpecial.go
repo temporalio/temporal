@@ -50,24 +50,24 @@ func (e *ESql) addTemporalSort(orderBySlice []string, sortFields []string) ([]st
 	return orderBySlice, sortFields, nil
 }
 
-func (e *ESql) addTemporalDomainTimeQuery(sel sqlparser.Select, domainID string, dslMap map[string]interface{}) {
-	var domainIDQuery string
-	if domainID != "" {
-		domainIDQuery = fmt.Sprintf(`{"term": {"%v": "%v"}}`, DomainID, domainID)
+func (e *ESql) addTemporalNamespaceTimeQuery(sel sqlparser.Select, namespaceID string, dslMap map[string]interface{}) {
+	var namespaceIDQuery string
+	if namespaceID != "" {
+		namespaceIDQuery = fmt.Sprintf(`{"term": {"%v": "%v"}}`, NamespaceID, namespaceID)
 	}
 	if sel.Where == nil {
-		if domainID != "" {
-			dslMap["query"] = domainIDQuery
+		if namespaceID != "" {
+			dslMap["query"] = namespaceIDQuery
 		}
 	} else {
-		if domainID != "" {
-			domainIDQuery = domainIDQuery + ","
+		if namespaceID != "" {
+			namespaceIDQuery = namespaceIDQuery + ","
 		}
 		if strings.Contains(fmt.Sprintf("%v", dslMap["query"]), ExecutionTime) {
 			executionTimeBound := fmt.Sprintf(`{"range": {"%v": {"gte": "0"}}}`, ExecutionTime)
-			dslMap["query"] = fmt.Sprintf(`{"bool": {"filter": [%v %v, %v]}}`, domainIDQuery, executionTimeBound, dslMap["query"])
+			dslMap["query"] = fmt.Sprintf(`{"bool": {"filter": [%v %v, %v]}}`, namespaceIDQuery, executionTimeBound, dslMap["query"])
 		} else {
-			dslMap["query"] = fmt.Sprintf(`{"bool": {"filter": [%v %v]}}`, domainIDQuery, dslMap["query"])
+			dslMap["query"] = fmt.Sprintf(`{"bool": {"filter": [%v %v]}}`, namespaceIDQuery, dslMap["query"])
 		}
 	}
 }

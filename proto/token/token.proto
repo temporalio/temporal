@@ -40,7 +40,7 @@ message HistoryContinuation {
 }
 
 message RawHistoryContinuation{
-    string DomainName = 1;
+    string Namespace = 1;
     string WorkflowId = 2;
     string RunId = 3;
     int64 StartEventId = 4;
@@ -52,7 +52,7 @@ message RawHistoryContinuation{
 }
 
 message Task {
-    bytes DomainId = 1;
+    bytes NamespaceId = 1;
     string WorkflowId  = 2;
     bytes RunId = 3;
     int64 ScheduleId = 4;
@@ -63,7 +63,7 @@ message Task {
 }
 
 message QueryTask {
-    string DomainId = 1;
+    string NamespaceId = 1;
     string TaskList = 2;
     string TaskId = 3;
 }

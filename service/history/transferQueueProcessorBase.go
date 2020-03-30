@@ -48,7 +48,7 @@ type (
 const (
 	secondsInDay = int32(24 * time.Hour / time.Second)
 
-	defaultDomainName = "defaultDomainName"
+	defaultNamespace = "defaultNamespace"
 )
 
 func newTransferQueueProcessorBase(

@@ -78,7 +78,7 @@ func newTransferQueueStandbyProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyStandbyTask(clusterName, primitives.UUID(task.DomainID).String(), task)
+		return taskAllocator.verifyStandbyTask(clusterName, primitives.UUID(task.NamespaceID).String(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()

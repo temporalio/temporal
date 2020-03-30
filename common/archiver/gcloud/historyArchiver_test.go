@@ -45,8 +45,8 @@ import (
 )
 
 const (
-	testDomainID                  = "test-domain-id"
-	testDomainName                = "test-domain-name"
+	testNamespaceID               = "test-namespace-id"
+	testNamespace                 = "test-namespace"
 	testWorkflowID                = "test-workflow-id"
 	testRunID                     = "test-run-id"
 	testNextEventID               = 1800
@@ -141,8 +141,8 @@ func (h *historyArchiverSuite) TestArchive_Fail_InvalidURI() {
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -168,8 +168,8 @@ func (h *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           "",
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -198,8 +198,8 @@ func (h *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -226,8 +226,8 @@ func (h *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -272,8 +272,8 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -302,8 +302,8 @@ func (h *historyArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -365,8 +365,8 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -390,10 +390,10 @@ func (h *historyArchiverSuite) TestGet_Fail_InvalidURI() {
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 
 	request := &archiver.GetHistoryRequest{
-		DomainID:   testDomainID,
-		WorkflowID: testWorkflowID,
-		RunID:      testRunID,
-		PageSize:   100,
+		NamespaceID: testNamespaceID,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
+		PageSize:    100,
 	}
 	URI, err := archiver.NewURI("wrongscheme://")
 	h.NoError(err)
@@ -410,7 +410,7 @@ func (h *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
-		DomainID:      testDomainID,
+		NamespaceID:   testNamespaceID,
 		WorkflowID:    testWorkflowID,
 		RunID:         testRunID,
 		PageSize:      testPageSize,
@@ -431,14 +431,14 @@ func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
 	storageWrapper.On("Query", ctx, URI, mock.Anything).Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil).Times(1)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
-		DomainID:   testDomainID,
-		WorkflowID: testWorkflowID,
-		RunID:      testRunID,
-		PageSize:   testPageSize,
+		NamespaceID: testNamespaceID,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
+		PageSize:    testPageSize,
 	}
 
 	h.NoError(err)
@@ -454,12 +454,12 @@ func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
-	storageWrapper.On("Query", ctx, URI, "71817125141568232911739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil).Times(1)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-25_0.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.On("Query", ctx, URI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil).Times(1)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-25_0.history").Return([]byte(exampleHistoryRecord), nil)
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
-		DomainID:             testDomainID,
+		NamespaceID:          testNamespaceID,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		PageSize:             testPageSize,
@@ -479,19 +479,19 @@ func (h *historyArchiverSuite) TestGet_Success_PageSize() {
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
-	storageWrapper.On("Query", ctx, URI, "71817125141568232911739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-24_1.history", "905702227796330300141628222723188294514017512010591354159_-24_2.history", "905702227796330300141628222723188294514017512010591354159_-24_3.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil).Times(1)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-24_1.history").Return([]byte(exampleHistoryRecord), nil)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-24_2.history").Return([]byte(exampleHistoryRecord), nil)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-24_3.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.On("Query", ctx, URI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-24_1.history", "905702227796330300141628222723188294514017512010591354159_-24_2.history", "905702227796330300141628222723188294514017512010591354159_-24_3.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil).Times(1)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_1.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_2.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_3.history").Return([]byte(exampleHistoryRecord), nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
-		DomainID:   testDomainID,
-		WorkflowID: testWorkflowID,
-		RunID:      testRunID,
-		PageSize:   2,
+		NamespaceID: testNamespaceID,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
+		PageSize:    2,
 	}
 
 	h.NoError(err)
@@ -508,13 +508,13 @@ func (h *historyArchiverSuite) TestGet_Success_FromToken() {
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
-	storageWrapper.On("Query", ctx, URI, "71817125141568232911739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-24_1.history", "905702227796330300141628222723188294514017512010591354159_-24_2.history", "905702227796330300141628222723188294514017512010591354159_-24_3.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil).Times(1)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-24_1.history").Return([]byte(exampleHistoryRecord), nil)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-24_2.history").Return([]byte(exampleHistoryRecord), nil)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-24_3.history").Return([]byte(twoEventsExampleHistoryRecord), nil)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-24_4.history").Return([]byte(exampleHistoryRecord), nil)
-	storageWrapper.On("Get", ctx, URI, "71817125141568232911739672280485489488911532452831150339470_-24_5.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.On("Query", ctx, URI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-24_1.history", "905702227796330300141628222723188294514017512010591354159_-24_2.history", "905702227796330300141628222723188294514017512010591354159_-24_3.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil).Times(1)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_1.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_2.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_3.history").Return([]byte(twoEventsExampleHistoryRecord), nil)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_4.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.On("Get", ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_5.history").Return([]byte(exampleHistoryRecord), nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
@@ -530,7 +530,7 @@ func (h *historyArchiverSuite) TestGet_Success_FromToken() {
 	h.NoError(err)
 
 	request := &archiver.GetHistoryRequest{
-		DomainID:      testDomainID,
+		NamespaceID:   testNamespaceID,
 		WorkflowID:    testWorkflowID,
 		RunID:         testRunID,
 		PageSize:      4,

@@ -37,7 +37,7 @@ import (
 )
 
 type (
-	cadenceSerializerSuite struct {
+	temporalSerializerSuite struct {
 		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
@@ -46,12 +46,12 @@ type (
 	}
 )
 
-func TestCadenceSerializerSuite(t *testing.T) {
-	s := new(cadenceSerializerSuite)
+func TestTemporalSerializerSuite(t *testing.T) {
+	s := new(temporalSerializerSuite)
 	suite.Run(t, s)
 }
 
-func (s *cadenceSerializerSuite) SetupTest() {
+func (s *temporalSerializerSuite) SetupTest() {
 	var err error
 	s.logger, err = loggerimpl.NewDevelopment()
 	s.Require().NoError(err)
@@ -59,7 +59,7 @@ func (s *cadenceSerializerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *cadenceSerializerSuite) TestSerializer() {
+func (s *temporalSerializerSuite) TestSerializer() {
 
 	concurrency := 1
 	startWG := sync.WaitGroup{}

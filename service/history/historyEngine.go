@@ -104,11 +104,11 @@ type (
 		GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*replication.ReplicationMessages, error)
 		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replication.ReplicationTaskInfo) ([]*replication.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
-		ReapplyEvents(ctx context.Context, domainUUID string, workflowID string, runID string, events []*commonproto.HistoryEvent) error
+		ReapplyEvents(ctx context.Context, namespaceUUID string, workflowID string, runID string, events []*commonproto.HistoryEvent) error
 		ReadDLQMessages(ctx context.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error)
 		PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error
 		MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
-		RefreshWorkflowTasks(ctx context.Context, domainUUID string, execution commonproto.WorkflowExecution) error
+		RefreshWorkflowTasks(ctx context.Context, namespaceUUID string, execution commonproto.WorkflowExecution) error
 
 		NotifyNewHistoryEvent(event *historyEventNotification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
@@ -186,8 +186,8 @@ var (
 	ErrQueryEnteredInvalidState = serviceerror.NewInvalidArgument("query entered invalid state, this should be impossible")
 	// ErrQueryWorkflowBeforeFirstDecision is error indicating that query was attempted before first decision task completed
 	ErrQueryWorkflowBeforeFirstDecision = serviceerror.NewInvalidArgument("workflow must handle at least one decision task before it can be queried")
-	// ErrConsistentQueryNotEnabled is error indicating that consistent query was requested but either cluster or domain does not enable consistent query
-	ErrConsistentQueryNotEnabled = serviceerror.NewInvalidArgument("cluster or domain does not enable strongly consistent query but strongly consistent query was requested")
+	// ErrConsistentQueryNotEnabled is error indicating that consistent query was requested but either cluster or namespace does not enable consistent query
+	ErrConsistentQueryNotEnabled = serviceerror.NewInvalidArgument("cluster or namespace does not enable strongly consistent query but strongly consistent query was requested")
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
 	ErrConsistentQueryBufferExceeded = serviceerror.NewInternal("consistent query buffer is full, cannot accept new consistent queries")
 
@@ -268,7 +268,7 @@ func NewEngineWithShardContext(
 			clock.NewRealTimeSource(),
 			historyEngImpl,
 			historyCache,
-			shard.GetDomainCache(),
+			shard.GetNamespaceCache(),
 			historyV2Manager,
 			logger,
 		)
@@ -293,7 +293,7 @@ func NewEngineWithShardContext(
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 
 	nDCHistoryResender := xdc.NewNDCHistoryResender(
-		shard.GetDomainCache(),
+		shard.GetNamespaceCache(),
 		shard.GetService().GetClientBean().GetRemoteAdminClient(currentClusterName),
 		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 			return historyEngImpl.ReplicateEventsV2(ctx, request)
@@ -303,7 +303,7 @@ func NewEngineWithShardContext(
 	)
 	historyRereplicator := xdc.NewHistoryRereplicator(
 		currentClusterName,
-		shard.GetDomainCache(),
+		shard.GetNamespaceCache(),
 		shard.GetService().GetClientBean().GetRemoteAdminClient(currentClusterName),
 		func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
 			return historyEngImpl.ReplicateRawEvents(ctx, request)
@@ -314,7 +314,7 @@ func NewEngineWithShardContext(
 	)
 	replicationTaskExecutor := newReplicationTaskExecutor(
 		currentClusterName,
-		shard.GetDomainCache(),
+		shard.GetNamespaceCache(),
 		nDCHistoryResender,
 		historyRereplicator,
 		historyEngImpl,
@@ -348,7 +348,7 @@ func (e *historyEngineImpl) Start() {
 	e.logger.Info("", tag.LifeCycleStarting)
 	defer e.logger.Info("", tag.LifeCycleStarted)
 
-	e.registerDomainFailoverCallback()
+	e.registerNamespaceFailoverCallback()
 
 	e.txProcessor.Start()
 	e.timerProcessor.Start()
@@ -379,73 +379,73 @@ func (e *historyEngineImpl) Stop() {
 	}
 
 	// unset the failover callback
-	e.shard.GetDomainCache().UnregisterDomainChangeCallback(e.shard.GetShardID())
+	e.shard.GetNamespaceCache().UnregisterNamespaceChangeCallback(e.shard.GetShardID())
 }
 
-func (e *historyEngineImpl) registerDomainFailoverCallback() {
+func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 	// NOTE: READ BEFORE MODIFICATION
 	//
 	// Tasks, e.g. transfer tasks and timer tasks, are created when holding the shard lock
 	// meaning tasks -> release of shard lock
 	//
-	// Domain change notification follows the following steps, order matters
+	// Namespace change notification follows the following steps, order matters
 	// 1. lock all task processing.
-	// 2. domain changes visible to everyone (Note: lock of task processing prevents task processing logic seeing the domain changes).
+	// 2. namespace changes visible to everyone (Note: lock of task processing prevents task processing logic seeing the namespace changes).
 	// 3. failover min and max task levels are calaulated, then update to shard.
-	// 4. failover start & task processing unlock & shard domain version notification update. (order does not matter for this discussion)
+	// 4. failover start & task processing unlock & shard namespace version notification update. (order does not matter for this discussion)
 	//
 	// The above guarantees that task created during the failover will be processed.
-	// If the task is created after domain change:
+	// If the task is created after namespace change:
 	// 		then active processor will handle it. (simple case)
-	// If the task is created before domain change:
+	// If the task is created before namespace change:
 	//		task -> release of shard lock
 	//		failover min / max task levels calculated & updated to shard (using shard lock) -> failover start
 	// above 2 guarantees that failover start is after persistence of the task.
 
-	failoverPredicate := func(shardNotificationVersion int64, nextDomain *cache.DomainCacheEntry, action func()) {
-		domainFailoverNotificationVersion := nextDomain.GetFailoverNotificationVersion()
-		domainActiveCluster := nextDomain.GetReplicationConfig().ActiveClusterName
+	failoverPredicate := func(shardNotificationVersion int64, nextNamespace *cache.NamespaceCacheEntry, action func()) {
+		namespaceFailoverNotificationVersion := nextNamespace.GetFailoverNotificationVersion()
+		namespaceActiveCluster := nextNamespace.GetReplicationConfig().ActiveClusterName
 
-		if nextDomain.IsGlobalDomain() &&
-			domainFailoverNotificationVersion >= shardNotificationVersion &&
-			domainActiveCluster == e.currentClusterName {
+		if nextNamespace.IsGlobalNamespace() &&
+			namespaceFailoverNotificationVersion >= shardNotificationVersion &&
+			namespaceActiveCluster == e.currentClusterName {
 			action()
 		}
 	}
 
 	// first set the failover callback
-	e.shard.GetDomainCache().RegisterDomainChangeCallback(
+	e.shard.GetNamespaceCache().RegisterNamespaceChangeCallback(
 		e.shard.GetShardID(),
-		e.shard.GetDomainNotificationVersion(),
+		e.shard.GetNamespaceNotificationVersion(),
 		func() {
 			e.txProcessor.LockTaskProcessing()
 			e.timerProcessor.LockTaskProcessing()
 		},
-		func(prevDomains []*cache.DomainCacheEntry, nextDomains []*cache.DomainCacheEntry) {
+		func(prevNamespaces []*cache.NamespaceCacheEntry, nextNamespaces []*cache.NamespaceCacheEntry) {
 			defer func() {
 				e.txProcessor.UnlockTaskPrrocessing()
 				e.timerProcessor.UnlockTaskProcessing()
 			}()
 
-			if len(nextDomains) == 0 {
+			if len(nextNamespaces) == 0 {
 				return
 			}
 
-			shardNotificationVersion := e.shard.GetDomainNotificationVersion()
-			failoverDomainIDs := map[string]struct{}{}
+			shardNotificationVersion := e.shard.GetNamespaceNotificationVersion()
+			failoverNamespaceIDs := map[string]struct{}{}
 
-			for _, nextDomain := range nextDomains {
-				failoverPredicate(shardNotificationVersion, nextDomain, func() {
-					failoverDomainIDs[nextDomain.GetInfo().ID] = struct{}{}
+			for _, nextNamespace := range nextNamespaces {
+				failoverPredicate(shardNotificationVersion, nextNamespace, func() {
+					failoverNamespaceIDs[nextNamespace.GetInfo().ID] = struct{}{}
 				})
 			}
 
-			if len(failoverDomainIDs) > 0 {
-				e.logger.Info("Domain Failover Start.", tag.WorkflowDomainIDs(failoverDomainIDs))
+			if len(failoverNamespaceIDs) > 0 {
+				e.logger.Info("Namespace Failover Start.", tag.WorkflowNamespaceIDs(failoverNamespaceIDs))
 
-				e.txProcessor.FailoverDomain(failoverDomainIDs)
-				e.timerProcessor.FailoverDomain(failoverDomainIDs)
+				e.txProcessor.FailoverNamespace(failoverNamespaceIDs)
+				e.timerProcessor.FailoverNamespace(failoverNamespaceIDs)
 
 				now := e.shard.GetTimeSource().Now()
 				// the fake tasks will not be actually used, we just need to make sure
@@ -457,45 +457,45 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 			}
 
 			//nolint:errcheck
-			e.shard.UpdateDomainNotificationVersion(nextDomains[len(nextDomains)-1].GetNotificationVersion() + 1)
+			e.shard.UpdateNamespaceNotificationVersion(nextNamespaces[len(nextNamespaces)-1].GetNotificationVersion() + 1)
 		},
 	)
 }
 
 func (e *historyEngineImpl) createMutableState(
 	clusterMetadata cluster.Metadata,
-	domainEntry *cache.DomainCacheEntry,
+	namespaceEntry *cache.NamespaceCacheEntry,
 	runID string,
 ) (mutableState, error) {
 
-	domainName := domainEntry.GetInfo().Name
-	enableNDC := e.config.EnableNDC(domainName)
+	namespace := namespaceEntry.GetInfo().Name
+	enableNDC := e.config.EnableNDC(namespace)
 
 	var newMutableState mutableState
 	if enableNDC {
-		// version history applies to both local and global domain
+		// version history applies to both local and global namespace
 		newMutableState = newMutableStateBuilderWithVersionHistories(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
-			domainEntry,
+			namespaceEntry,
 		)
-	} else if domainEntry.IsGlobalDomain() {
+	} else if namespaceEntry.IsGlobalNamespace() {
 		// 2DC XDC protocol
-		// all workflows within a global domain should have replication state,
+		// all workflows within a global namespace should have replication state,
 		// no matter whether it will be replicated to multiple target clusters or not
 		newMutableState = newMutableStateBuilderWithReplicationState(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
-			domainEntry,
+			namespaceEntry,
 		)
 	} else {
 		newMutableState = newMutableStateBuilder(
 			e.shard,
 			e.shard.GetEventsCache(),
 			e.logger,
-			domainEntry,
+			namespaceEntry,
 		)
 	}
 
@@ -529,24 +529,24 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
 
-	domainEntry, err := e.getActiveDomainEntry(startRequest.GetDomainUUID())
+	namespaceEntry, err := e.getActiveNamespaceEntry(startRequest.GetNamespaceUUID())
 	if err != nil {
 		return nil, err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	request := startRequest.StartRequest
 	err = validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
-	e.overrideStartWorkflowExecutionRequest(domainEntry, request, metrics.HistoryStartWorkflowExecutionScope)
+	e.overrideStartWorkflowExecutionRequest(namespaceEntry, request, metrics.HistoryStartWorkflowExecutionScope)
 
 	workflowID := request.GetWorkflowId()
 	// grab the current context as a lock, nothing more
 	_, currentRelease, err := e.historyCache.getOrCreateCurrentWorkflowExecution(
 		ctx,
-		domainID,
+		namespaceID,
 		workflowID,
 	)
 	if err != nil {
@@ -559,7 +559,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		RunId:      uuid.New(),
 	}
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(clusterMetadata, domainEntry, execution.GetRunId())
+	mutableState, err := e.createMutableState(clusterMetadata, namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err
 	}
@@ -581,7 +581,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, err
 	}
 
-	weContext := newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
+	weContext := newWorkflowExecutionContext(namespaceID, execution, e.shard, e.executionManager, e.logger)
 
 	now := e.timeSource.Now()
 	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
@@ -614,8 +614,8 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			}
 
 			if mutableState.GetCurrentVersion() < t.LastWriteVersion {
-				return nil, serviceerror.NewDomainNotActive(
-					request.GetDomain(),
+				return nil, serviceerror.NewNamespaceNotActive(
+					request.GetNamespace(),
 					clusterMetadata.GetCurrentClusterName(),
 					clusterMetadata.ClusterNameForFailoverVersion(t.LastWriteVersion),
 				)
@@ -630,7 +630,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				prevRunID,
 				t.State,
 				t.CloseStatus,
-				domainID,
+				namespaceID,
 				execution,
 				startRequest.StartRequest.GetWorkflowIdReusePolicy(),
 			); err != nil {
@@ -667,7 +667,7 @@ func (e *historyEngineImpl) PollMutableState(
 ) (*historyservice.PollMutableStateResponse, error) {
 
 	response, err := e.getMutableStateOrPolling(ctx, &historyservice.GetMutableStateRequest{
-		DomainUUID:          request.DomainUUID,
+		NamespaceUUID:       request.NamespaceUUID,
 		Execution:           request.Execution,
 		ExpectedNextEventId: request.ExpectedNextEventId,
 		CurrentBranchToken:  request.CurrentBranchToken})
@@ -700,7 +700,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 	request *historyservice.GetMutableStateRequest,
 ) (*historyservice.GetMutableStateResponse, error) {
 
-	domainID, err := validateDomainUUID(request.DomainUUID)
+	namespaceID, err := validateNamespaceUUID(request.NamespaceUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -708,7 +708,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		WorkflowId: request.Execution.WorkflowId,
 		RunId:      request.Execution.RunId,
 	}
-	response, err := e.getMutableState(ctx, domainID, execution)
+	response, err := e.getMutableState(ctx, namespaceID, execution)
 	if err != nil {
 		return nil, err
 	}
@@ -730,13 +730,13 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 	// if caller decide to long poll on workflow execution
 	// and the event ID we are looking for is smaller than current next event ID
 	if expectedNextEventID >= response.GetNextEventId() && response.GetIsWorkflowRunning() {
-		subscriberID, channel, err := e.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()))
+		subscriberID, channel, err := e.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
 		if err != nil {
 			return nil, err
 		}
-		defer e.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID) //nolint:errcheck
+		defer e.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID) //nolint:errcheck
 		// check again in case the next event ID is updated
-		response, err = e.getMutableState(ctx, domainID, execution)
+		response, err = e.getMutableState(ctx, namespaceID, execution)
 		if err != nil {
 			return nil, err
 		}
@@ -748,11 +748,11 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 			return response, nil
 		}
 
-		domainCache, err := e.shard.GetDomainCache().GetDomainByID(domainID)
+		namespaceCache, err := e.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 		if err != nil {
 			return nil, err
 		}
-		timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval(domainCache.GetInfo().Name))
+		timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval(namespaceCache.GetInfo().Name))
 		defer timer.Stop()
 		for {
 			select {
@@ -787,12 +787,12 @@ func (e *historyEngineImpl) QueryWorkflow(
 
 	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
 
-	consistentQueryEnabled := e.config.EnableConsistentQuery() && e.config.EnableConsistentQueryByDomain(request.GetRequest().GetDomain())
+	consistentQueryEnabled := e.config.EnableConsistentQuery() && e.config.EnableConsistentQueryByNamespace(request.GetRequest().GetNamespace())
 	if request.GetRequest().GetQueryConsistencyLevel() == enums.QueryConsistencyLevelStrong && !consistentQueryEnabled {
 		return nil, ErrConsistentQueryNotEnabled
 	}
 
-	mutableStateResp, err := e.getMutableState(ctx, request.GetDomainUUID(), *request.GetRequest().GetExecution())
+	mutableStateResp, err := e.getMutableState(ctx, request.GetNamespaceUUID(), *request.GetRequest().GetExecution())
 	if err != nil {
 		return nil, err
 	}
@@ -817,7 +817,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
 	for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
 		<-time.After(queryFirstDecisionTaskCheckInterval)
-		mutableStateResp, err = e.getMutableState(ctx, request.GetDomainUUID(), *request.GetRequest().GetExecution())
+		mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceUUID(), *request.GetRequest().GetExecution())
 		if err != nil {
 			return nil, err
 		}
@@ -828,12 +828,12 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, ErrQueryWorkflowBeforeFirstDecision
 	}
 
-	de, err := e.shard.GetDomainCache().GetDomainByID(request.GetDomainUUID())
+	de, err := e.shard.GetNamespaceCache().GetNamespaceByID(request.GetNamespaceUUID())
 	if err != nil {
 		return nil, err
 	}
 
-	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, request.GetDomainUUID(), *request.GetRequest().GetExecution())
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, request.GetNamespaceUUID(), *request.GetRequest().GetExecution())
 	if err != nil {
 		return nil, err
 	}
@@ -850,22 +850,22 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// is used to determine if a query can be safely dispatched directly through matching or if given the desired consistency
 	// level must be dispatched on a decision task. There are four cases in which a query can be dispatched directly through
 	// matching safely, without violating the desired consistency level:
-	// 1. the domain is not active, in this case history is immutable so a query dispatched at any time is consistent
+	// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
 	// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
 	// 3. the client requested eventual consistency, in this case there are no consistency requirements so dispatching directly through matching is safe
 	// 4. if there is no pending or started decision it means no events came before query arrived, so its safe to dispatch directly
-	safeToDispatchDirectly := !de.IsDomainActive() ||
+	safeToDispatchDirectly := !de.IsNamespaceActive() ||
 		!mutableState.IsWorkflowExecutionRunning() ||
 		req.GetQueryConsistencyLevel() == enums.QueryConsistencyLevelEventual ||
 		(!mutableState.HasPendingDecision() && !mutableState.HasInFlightDecision())
 	if safeToDispatchDirectly {
 		release(nil)
-		msResp, err := e.getMutableState(ctx, request.GetDomainUUID(), *request.GetRequest().GetExecution())
+		msResp, err := e.getMutableState(ctx, request.GetNamespaceUUID(), *request.GetRequest().GetExecution())
 		if err != nil {
 			return nil, err
 		}
 		req.Execution.RunId = msResp.Execution.RunId
-		return e.queryDirectlyThroughMatching(ctx, msResp, request.GetDomainUUID(), req, scope)
+		return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceUUID(), req, scope)
 	}
 
 	// If we get here it means query could not be dispatched through matching directly, so it must block
@@ -904,12 +904,12 @@ func (e *historyEngineImpl) QueryWorkflow(
 				return nil, ErrQueryEnteredInvalidState
 			}
 		case queryTerminationTypeUnblocked:
-			msResp, err := e.getMutableState(ctx, request.GetDomainUUID(), *request.GetRequest().GetExecution())
+			msResp, err := e.getMutableState(ctx, request.GetNamespaceUUID(), *request.GetRequest().GetExecution())
 			if err != nil {
 				return nil, err
 			}
 			req.Execution.RunId = msResp.Execution.RunId
-			return e.queryDirectlyThroughMatching(ctx, msResp, request.GetDomainUUID(), req, scope)
+			return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceUUID(), req, scope)
 		case queryTerminationTypeFailed:
 			return nil, state.failure
 		default:
@@ -925,7 +925,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 func (e *historyEngineImpl) queryDirectlyThroughMatching(
 	ctx context.Context,
 	msResp *historyservice.GetMutableStateResponse,
-	domainID string,
+	namespaceID string,
 	queryRequest *workflowservice.QueryWorkflowRequest,
 	scope metrics.Scope,
 ) (*historyservice.QueryWorkflowResponse, error) {
@@ -935,12 +935,12 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 
 	if msResp.GetIsStickyTaskListEnabled() &&
 		len(msResp.GetStickyTaskList().GetName()) != 0 &&
-		e.config.EnableStickyQuery(queryRequest.GetDomain()) {
+		e.config.EnableStickyQuery(queryRequest.GetNamespace()) {
 
 		stickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
-			DomainUUID:   domainID,
-			QueryRequest: queryRequest,
-			TaskList:     msResp.GetStickyTaskList(),
+			NamespaceUUID: namespaceID,
+			QueryRequest:  queryRequest,
+			TaskList:      msResp.GetStickyTaskList(),
 		}
 
 		// using a clean new context in case customer provide a context which has
@@ -960,7 +960,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		}
 		if _, ok := err.(*serviceerror.DeadlineExceeded); !ok {
 			e.logger.Error("query directly though matching on sticky failed, will not attempt query on non-sticky",
-				tag.WorkflowDomainName(queryRequest.GetDomain()),
+				tag.WorkflowNamespace(queryRequest.GetNamespace()),
 				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 				tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
 				tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
@@ -969,15 +969,15 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		}
 		if msResp.GetIsWorkflowRunning() {
 			e.logger.Info("query direct through matching failed on sticky, clearing sticky before attempting on non-sticky",
-				tag.WorkflowDomainName(queryRequest.GetDomain()),
+				tag.WorkflowNamespace(queryRequest.GetNamespace()),
 				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 				tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
 				tag.WorkflowQueryType(queryRequest.Query.GetQueryType()))
 			resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			clearStickinessStopWatch := scope.StartTimer(metrics.DirectQueryDispatchClearStickinessLatency)
 			_, err := e.ResetStickyTaskList(resetContext, &historyservice.ResetStickyTaskListRequest{
-				DomainUUID: domainID,
-				Execution:  queryRequest.GetExecution(),
+				NamespaceUUID: namespaceID,
+				Execution:     queryRequest.GetExecution(),
 			})
 			clearStickinessStopWatch.Stop()
 			cancel()
@@ -990,7 +990,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 
 	if err := common.IsValidContext(ctx); err != nil {
 		e.logger.Info("query context timed out before query on non-sticky task list could be attempted",
-			tag.WorkflowDomainName(queryRequest.GetDomain()),
+			tag.WorkflowNamespace(queryRequest.GetNamespace()),
 			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
 			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()))
@@ -999,7 +999,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 	}
 
 	e.logger.Info("query directly through matching on sticky timed out, attempting to query on non-sticky",
-		tag.WorkflowDomainName(queryRequest.GetDomain()),
+		tag.WorkflowNamespace(queryRequest.GetNamespace()),
 		tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 		tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
 		tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
@@ -1007,9 +1007,9 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		tag.WorkflowNextEventID(msResp.GetNextEventId()))
 
 	nonStickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
-		DomainUUID:   domainID,
-		QueryRequest: queryRequest,
-		TaskList:     msResp.TaskList,
+		NamespaceUUID: namespaceID,
+		QueryRequest:  queryRequest,
+		TaskList:      msResp.TaskList,
 	}
 
 	nonStickyStopWatch := scope.StartTimer(metrics.DirectQueryDispatchNonStickyLatency)
@@ -1017,7 +1017,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 	nonStickyStopWatch.Stop()
 	if err != nil {
 		e.logger.Error("query directly though matching on non-sticky failed",
-			tag.WorkflowDomainName(queryRequest.GetDomain()),
+			tag.WorkflowNamespace(queryRequest.GetNamespace()),
 			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
 			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
@@ -1034,11 +1034,11 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 
 func (e *historyEngineImpl) getMutableState(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 ) (retResp *historyservice.GetMutableStateResponse, retError error) {
 
-	context, release, retError := e.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
+	context, release, retError := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
 	if retError != nil {
 		return
 	}
@@ -1097,7 +1097,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 	request *historyservice.DescribeMutableStateRequest,
 ) (response *historyservice.DescribeMutableStateResponse, retError error) {
 
-	domainID, err := validateDomainUUID(request.DomainUUID)
+	namespaceID, err := validateNamespaceUUID(request.NamespaceUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -1108,7 +1108,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 	}
 
 	cacheCtx, dbCtx, release, cacheHit, err := e.historyCache.getAndCreateWorkflowExecution(
-		ctx, domainID, execution,
+		ctx, namespaceID, execution,
 	)
 	if err != nil {
 		return nil, err
@@ -1159,12 +1159,12 @@ func (e *historyEngineImpl) ResetStickyTaskList(
 	resetRequest *historyservice.ResetStickyTaskListRequest,
 ) (*historyservice.ResetStickyTaskListResponse, error) {
 
-	domainID, err := validateDomainUUID(resetRequest.DomainUUID)
+	namespaceID, err := validateNamespaceUUID(resetRequest.NamespaceUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	err = e.updateWorkflowExecution(ctx, domainID, *resetRequest.Execution, false,
+	err = e.updateWorkflowExecution(ctx, namespaceID, *resetRequest.Execution, false,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -1186,14 +1186,14 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	request *historyservice.DescribeWorkflowExecutionRequest,
 ) (retResp *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 
-	domainID, err := validateDomainUUID(request.DomainUUID)
+	namespaceID, err := validateNamespaceUUID(request.NamespaceUUID)
 	if err != nil {
 		return nil, err
 	}
 
 	execution := *request.Request.Execution
 
-	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
 	if err0 != nil {
 		return nil, err0
 	}
@@ -1240,7 +1240,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			WorkflowId: executionInfo.ParentWorkflowID,
 			RunId:      executionInfo.ParentRunID,
 		}
-		result.WorkflowExecutionInfo.ParentDomainId = executionInfo.ParentDomainID
+		result.WorkflowExecutionInfo.ParentNamespaceId = executionInfo.ParentNamespaceID
 	}
 	if executionInfo.State == persistence.WorkflowStateCompleted {
 		// for closed workflow
@@ -1319,15 +1319,15 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	request *historyservice.RecordActivityTaskStartedRequest,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 
-	domainEntry, err := e.getActiveDomainEntry(request.DomainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(request.NamespaceUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	domainInfo := domainEntry.GetInfo()
+	namespaceInfo := namespaceEntry.GetInfo()
 
-	domainID := domainInfo.ID
-	domainName := domainInfo.Name
+	namespaceID := namespaceInfo.ID
+	namespace := namespaceInfo.Name
 
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
@@ -1335,7 +1335,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	}
 
 	response := &historyservice.RecordActivityTaskStartedResponse{}
-	err = e.updateWorkflowExecution(ctx, domainID, execution, false,
+	err = e.updateWorkflowExecution(ctx, namespaceID, execution, false,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -1393,7 +1393,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			response.HeartbeatDetails = ai.Details
 
 			response.WorkflowType = mutableState.GetWorkflowType()
-			response.WorkflowDomain = domainName
+			response.WorkflowNamespace = namespace
 
 			return nil
 		})
@@ -1443,12 +1443,12 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	req *historyservice.RespondActivityTaskCompletedRequest,
 ) error {
 
-	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(req.NamespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
-	domainName := domainEntry.GetInfo().Name
+	namespaceID := namespaceEntry.GetInfo().ID
+	namespace := namespaceEntry.GetInfo().Name
 
 	request := req.CompleteRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1463,7 +1463,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 
 	var activityStartedTime time.Time
 	var taskList string
-	err = e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
+	err = e.updateWorkflowExecution(ctx, namespaceID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -1501,7 +1501,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	if err == nil && !activityStartedTime.IsZero() {
 		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCompletedScope).
 			Tagged(
-				metrics.DomainTag(domainName),
+				metrics.NamespaceTag(namespace),
 				metrics.WorkflowTypeTag(token.WorkflowType),
 				metrics.ActivityTypeTag(token.ActivityType),
 				metrics.TaskListTag(taskList),
@@ -1517,12 +1517,12 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	req *historyservice.RespondActivityTaskFailedRequest,
 ) error {
 
-	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(req.NamespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
-	domainName := domainEntry.GetInfo().Name
+	namespaceID := namespaceEntry.GetInfo().ID
+	namespace := namespaceEntry.GetInfo().Name
 
 	request := req.FailedRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1537,7 +1537,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 
 	var activityStartedTime time.Time
 	var taskList string
-	err = e.updateWorkflowExecutionWithAction(ctx, domainID, workflowExecution,
+	err = e.updateWorkflowExecutionWithAction(ctx, namespaceID, workflowExecution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -1585,7 +1585,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	if err == nil && !activityStartedTime.IsZero() {
 		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskFailedScope).
 			Tagged(
-				metrics.DomainTag(domainName),
+				metrics.NamespaceTag(namespace),
 				metrics.WorkflowTypeTag(token.WorkflowType),
 				metrics.ActivityTypeTag(token.ActivityType),
 				metrics.TaskListTag(taskList),
@@ -1601,12 +1601,12 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	req *historyservice.RespondActivityTaskCanceledRequest,
 ) error {
 
-	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(req.NamespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
-	domainName := domainEntry.GetInfo().Name
+	namespaceID := namespaceEntry.GetInfo().ID
+	namespace := namespaceEntry.GetInfo().Name
 
 	request := req.CancelRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1621,7 +1621,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 
 	var activityStartedTime time.Time
 	var taskList string
-	err = e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
+	err = e.updateWorkflowExecution(ctx, namespaceID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -1665,7 +1665,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	if err == nil && !activityStartedTime.IsZero() {
 		scope := e.metricsClient.Scope(metrics.HistoryClientRespondActivityTaskCanceledScope).
 			Tagged(
-				metrics.DomainTag(domainName),
+				metrics.NamespaceTag(namespace),
 				metrics.WorkflowTypeTag(token.WorkflowType),
 				metrics.ActivityTypeTag(token.ActivityType),
 				metrics.TaskListTag(taskList),
@@ -1684,11 +1684,11 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	req *historyservice.RecordActivityTaskHeartbeatRequest,
 ) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
 
-	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(req.NamespaceUUID)
 	if err != nil {
 		return nil, err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	request := req.HeartbeatRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1702,7 +1702,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	}
 
 	var cancelRequested bool
-	err = e.updateWorkflowExecution(ctx, domainID, workflowExecution, false,
+	err = e.updateWorkflowExecution(ctx, namespaceID, workflowExecution, false,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				e.logger.Debug("Heartbeat failed")
@@ -1754,11 +1754,11 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	req *historyservice.RequestCancelWorkflowExecutionRequest,
 ) error {
 
-	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(req.NamespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	request := req.CancelRequest
 	parentExecution := req.ExternalWorkflowExecution
@@ -1768,7 +1768,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflow(ctx, domainID, execution,
+	return e.updateWorkflow(ctx, namespaceID, execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -1811,11 +1811,11 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 	signalRequest *historyservice.SignalWorkflowExecutionRequest,
 ) error {
 
-	domainEntry, err := e.getActiveDomainEntry(signalRequest.DomainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(signalRequest.NamespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	request := signalRequest.SignalRequest
 	parentExecution := signalRequest.ExternalWorkflowExecution
@@ -1827,7 +1827,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 
 	return e.updateWorkflow(
 		ctx,
-		domainID,
+		namespaceID,
 		execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			executionInfo := mutableState.GetExecutionInfo()
@@ -1844,12 +1844,12 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 				return nil, ErrWorkflowCompleted
 			}
 
-			maxAllowedSignals := e.config.MaximumSignalsPerExecution(domainEntry.GetInfo().Name)
+			maxAllowedSignals := e.config.MaximumSignalsPerExecution(namespaceEntry.GetInfo().Name)
 			if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
 				e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
 					tag.WorkflowID(execution.GetWorkflowId()),
 					tag.WorkflowRunID(execution.GetRunId()),
-					tag.WorkflowDomainID(domainID))
+					tag.WorkflowNamespaceID(namespaceID))
 				return nil, ErrSignalsLimitExceeded
 			}
 
@@ -1886,11 +1886,11 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	signalWithStartRequest *historyservice.SignalWithStartWorkflowExecutionRequest,
 ) (retResp *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 
-	domainEntry, err := e.getActiveDomainEntry(signalWithStartRequest.DomainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(signalWithStartRequest.NamespaceUUID)
 	if err != nil {
 		return nil, err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	sRequest := signalWithStartRequest.SignalWithStartRequest
 	execution := commonproto.WorkflowExecution{
@@ -1900,7 +1900,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	var prevMutableState mutableState
 	attempt := 0
 
-	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
 
 	if err0 == nil {
 		defer func() { release(retError) }()
@@ -1921,12 +1921,12 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			}
 
 			executionInfo := mutableState.GetExecutionInfo()
-			maxAllowedSignals := e.config.MaximumSignalsPerExecution(domainEntry.GetInfo().Name)
+			maxAllowedSignals := e.config.MaximumSignalsPerExecution(namespaceEntry.GetInfo().Name)
 			if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
 				e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
 					tag.WorkflowID(execution.GetWorkflowId()),
 					tag.WorkflowRunID(execution.GetRunId()),
-					tag.WorkflowDomainID(domainID))
+					tag.WorkflowNamespaceID(namespaceID))
 				return nil, ErrSignalsLimitExceeded
 			}
 
@@ -1966,19 +1966,19 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	// Start workflow and signal
-	startRequest := getStartRequest(domainID, sRequest)
+	startRequest := getStartRequest(namespaceID, sRequest)
 	request := startRequest.StartRequest
 	err = validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
-	e.overrideStartWorkflowExecutionRequest(domainEntry, request, metrics.HistorySignalWorkflowExecutionScope)
+	e.overrideStartWorkflowExecutionRequest(namespaceEntry, request, metrics.HistorySignalWorkflowExecutionScope)
 
 	workflowID := request.GetWorkflowId()
 	// grab the current context as a lock, nothing more
 	_, currentRelease, err := e.historyCache.getOrCreateCurrentWorkflowExecution(
 		ctx,
-		domainID,
+		namespaceID,
 		workflowID,
 	)
 	if err != nil {
@@ -1992,7 +1992,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(clusterMetadata, domainEntry, execution.GetRunId())
+	mutableState, err := e.createMutableState(clusterMetadata, namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err
 	}
@@ -2003,14 +2003,14 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			return nil, err
 		}
 		if prevLastWriteVersion > mutableState.GetCurrentVersion() {
-			return nil, serviceerror.NewDomainNotActive(
-				domainEntry.GetInfo().Name,
+			return nil, serviceerror.NewNamespaceNotActive(
+				namespaceEntry.GetInfo().Name,
 				clusterMetadata.GetCurrentClusterName(),
 				clusterMetadata.ClusterNameForFailoverVersion(prevLastWriteVersion),
 			)
 		}
 
-		err = e.applyWorkflowIDReusePolicyForSigWithStart(prevMutableState.GetExecutionInfo(), domainID, execution, request.WorkflowIdReusePolicy)
+		err = e.applyWorkflowIDReusePolicyForSigWithStart(prevMutableState.GetExecutionInfo(), namespaceID, execution, request.WorkflowIdReusePolicy)
 		if err != nil {
 			return nil, err
 		}
@@ -2041,7 +2041,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
-	context = newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
+	context = newWorkflowExecutionContext(namespaceID, execution, e.shard, e.executionManager, e.logger)
 
 	now := e.timeSource.Now()
 	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
@@ -2096,18 +2096,18 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 	request *historyservice.RemoveSignalMutableStateRequest,
 ) error {
 
-	domainEntry, err := e.getActiveDomainEntry(request.DomainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(request.NamespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflowExecution(ctx, domainID, execution, false,
+	return e.updateWorkflowExecution(ctx, namespaceID, execution, false,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -2124,11 +2124,11 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	terminateRequest *historyservice.TerminateWorkflowExecutionRequest,
 ) error {
 
-	domainEntry, err := e.getActiveDomainEntry(terminateRequest.DomainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(terminateRequest.NamespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	request := terminateRequest.TerminateRequest
 	execution := commonproto.WorkflowExecution{
@@ -2138,7 +2138,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 
 	return e.updateWorkflow(
 		ctx,
-		domainID,
+		namespaceID,
 		execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -2162,18 +2162,18 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	completionRequest *historyservice.RecordChildExecutionCompletedRequest,
 ) error {
 
-	domainEntry, err := e.getActiveDomainEntry(completionRequest.DomainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(completionRequest.NamespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: completionRequest.WorkflowExecution.WorkflowId,
 		RunId:      completionRequest.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflowExecution(ctx, domainID, execution, true,
+	return e.updateWorkflowExecution(ctx, namespaceID, execution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -2267,13 +2267,13 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 ) (response *historyservice.ResetWorkflowExecutionResponse, retError error) {
 
 	request := resetRequest.ResetRequest
-	domainID := resetRequest.GetDomainUUID()
+	namespaceID := resetRequest.GetNamespaceUUID()
 	workflowID := request.WorkflowExecution.GetWorkflowId()
 	baseRunID := request.WorkflowExecution.GetRunId()
 
 	baseContext, baseReleaseFn, err := e.historyCache.getOrCreateWorkflowExecution(
 		ctx,
-		domainID,
+		namespaceID,
 		commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      baseRunID,
@@ -2295,8 +2295,8 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 
 	// also load the current run of the workflow, it can be different from the base runID
 	resp, err := e.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: request.WorkflowExecution.GetWorkflowId(),
+		NamespaceID: namespaceID,
+		WorkflowID:  request.WorkflowExecution.GetWorkflowId(),
 	})
 	if err != nil {
 		return nil, err
@@ -2312,7 +2312,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	} else {
 		currentContext, currentReleaseFn, err = e.historyCache.getOrCreateWorkflowExecution(
 			ctx,
-			domainID,
+			namespaceID,
 			commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      currentRunID,
@@ -2334,7 +2334,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		e.logger.Info("Duplicated reset request",
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(currentRunID),
-			tag.WorkflowDomainID(domainID))
+			tag.WorkflowNamespaceID(namespaceID))
 		return &historyservice.ResetWorkflowExecutionResponse{
 			RunId: currentRunID,
 		}, nil
@@ -2368,7 +2368,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 
 	if err := e.workflowResetter.resetWorkflow(
 		ctx,
-		domainID,
+		namespaceID,
 		workflowID,
 		baseRunID,
 		baseCurrentBranchToken,
@@ -2379,7 +2379,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		request.GetRequestId(),
 		newNDCWorkflow(
 			ctx,
-			e.shard.GetDomainCache(),
+			e.shard.GetNamespaceCache(),
 			e.shard.GetClusterMetadata(),
 			currentContext,
 			currentMutableState,
@@ -2397,12 +2397,12 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 
 func (e *historyEngineImpl) updateWorkflow(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 	action updateWorkflowActionFunc,
 ) (retError error) {
 
-	workflowContext, err := e.loadWorkflow(ctx, domainID, execution.GetWorkflowId(), execution.GetRunId())
+	workflowContext, err := e.loadWorkflow(ctx, namespaceID, execution.GetWorkflowId(), execution.GetRunId())
 	if err != nil {
 		return err
 	}
@@ -2413,12 +2413,12 @@ func (e *historyEngineImpl) updateWorkflow(
 
 func (e *historyEngineImpl) updateWorkflowExecutionWithAction(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 	action updateWorkflowActionFunc,
 ) (retError error) {
 
-	workflowContext, err := e.loadWorkflowOnce(ctx, domainID, execution.GetWorkflowId(), execution.GetRunId())
+	workflowContext, err := e.loadWorkflowOnce(ctx, namespaceID, execution.GetWorkflowId(), execution.GetRunId())
 	if err != nil {
 		return err
 	}
@@ -2488,7 +2488,7 @@ UpdateHistoryLoop:
 // TODO: remove and use updateWorkflowExecutionWithAction
 func (e *historyEngineImpl) updateWorkflowExecution(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 	createDecisionTask bool,
 	action func(context workflowExecutionContext, mutableState mutableState) error,
@@ -2496,7 +2496,7 @@ func (e *historyEngineImpl) updateWorkflowExecution(
 
 	return e.updateWorkflowExecutionWithAction(
 		ctx,
-		domainID,
+		namespaceID,
 		execution,
 		getUpdateWorkflowActionFunc(createDecisionTask, action),
 	)
@@ -2605,8 +2605,8 @@ func validateStartWorkflowExecutionRequest(
 	if request.WorkflowType == nil || request.WorkflowType.GetName() == "" {
 		return serviceerror.NewInvalidArgument("Missing WorkflowType.")
 	}
-	if len(request.GetDomain()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("Domain exceeds length limit.")
+	if len(request.GetNamespace()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
 	}
 	if len(request.GetWorkflowId()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
@@ -2622,13 +2622,13 @@ func validateStartWorkflowExecutionRequest(
 }
 
 func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
-	domainEntry *cache.DomainCacheEntry,
+	namespaceEntry *cache.NamespaceCacheEntry,
 	request *workflowservice.StartWorkflowExecutionRequest,
 	metricsScope int,
 ) {
 
-	domainName := domainEntry.GetInfo().Name
-	maxDecisionStartToCloseTimeoutSeconds := int32(e.config.MaxDecisionStartToCloseSeconds(domainName))
+	namespace := namespaceEntry.GetInfo().Name
+	maxDecisionStartToCloseTimeoutSeconds := int32(e.config.MaxDecisionStartToCloseSeconds(namespace))
 
 	taskStartToCloseTimeoutSecs := request.GetTaskStartToCloseTimeoutSeconds()
 	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, maxDecisionStartToCloseTimeoutSeconds)
@@ -2638,48 +2638,48 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 		request.TaskStartToCloseTimeoutSeconds = taskStartToCloseTimeoutSecs
 		e.metricsClient.Scope(
 			metricsScope,
-			metrics.DomainTag(domainName),
+			metrics.NamespaceTag(namespace),
 		).IncCounter(metrics.DecisionStartToCloseTimeoutOverrideCount)
 	}
 }
 
-func validateDomainUUID(
-	domainUUID string,
+func validateNamespaceUUID(
+	namespaceUUID string,
 ) (string, error) {
 
-	if domainUUID == "" {
-		return "", serviceerror.NewInvalidArgument("Missing domain UUID.")
-	} else if uuid.Parse(domainUUID) == nil {
-		return "", serviceerror.NewInvalidArgument("Invalid domain UUID.")
+	if namespaceUUID == "" {
+		return "", serviceerror.NewInvalidArgument("Missing namespace UUID.")
+	} else if uuid.Parse(namespaceUUID) == nil {
+		return "", serviceerror.NewInvalidArgument("Invalid namespace UUID.")
 	}
-	return domainUUID, nil
+	return namespaceUUID, nil
 }
 
-func (e *historyEngineImpl) getActiveDomainEntry(
-	domainUUID string,
-) (*cache.DomainCacheEntry, error) {
+func (e *historyEngineImpl) getActiveNamespaceEntry(
+	namespaceUUID string,
+) (*cache.NamespaceCacheEntry, error) {
 
-	return getActiveDomainEntryFromShard(e.shard, domainUUID)
+	return getActiveNamespaceEntryFromShard(e.shard, namespaceUUID)
 }
 
-func getActiveDomainEntryFromShard(
+func getActiveNamespaceEntryFromShard(
 	shard ShardContext,
-	domainUUID string,
-) (*cache.DomainCacheEntry, error) {
+	namespaceUUID string,
+) (*cache.NamespaceCacheEntry, error) {
 
-	domainID, err := validateDomainUUID(domainUUID)
+	namespaceID, err := validateNamespaceUUID(namespaceUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	domainEntry, err := shard.GetDomainCache().GetDomainByID(domainID)
+	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
-	if err = domainEntry.GetDomainNotActiveErr(); err != nil {
+	if err = namespaceEntry.GetNamespaceNotActiveErr(); err != nil {
 		return nil, err
 	}
-	return domainEntry, nil
+	return namespaceEntry, nil
 }
 
 func getScheduleID(
@@ -2698,12 +2698,12 @@ func getScheduleID(
 }
 
 func getStartRequest(
-	domainID string,
+	namespaceID string,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) *historyservice.StartWorkflowExecutionRequest {
 
 	req := &workflowservice.StartWorkflowExecutionRequest{
-		Domain:                              request.GetDomain(),
+		Namespace:                           request.GetNamespace(),
 		WorkflowId:                          request.GetWorkflowId(),
 		WorkflowType:                        request.GetWorkflowType(),
 		TaskList:                            request.GetTaskList(),
@@ -2720,7 +2720,7 @@ func getStartRequest(
 		Header:                              request.GetHeader(),
 	}
 
-	return common.CreateHistoryStartWorkflowRequest(domainID, req)
+	return common.CreateHistoryStartWorkflowRequest(namespaceID, req)
 }
 
 func setTaskInfo(
@@ -2742,7 +2742,7 @@ func setTaskInfo(
 // for startWorkflowExecution & signalWithStart to handle workflow reuse policy
 func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 	prevExecutionInfo *persistence.WorkflowExecutionInfo,
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 	wfIDReusePolicy enums.WorkflowIdReusePolicy,
 ) error {
@@ -2757,7 +2757,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 		prevRunID,
 		prevState,
 		prevCloseState,
-		domainID,
+		namespaceID,
 		execution,
 		wfIDReusePolicy,
 	)
@@ -2769,7 +2769,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	prevRunID string,
 	prevState int,
 	prevCloseState enums.WorkflowExecutionCloseStatus,
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 	wfIDReusePolicy enums.WorkflowIdReusePolicy,
 ) error {
@@ -2866,17 +2866,17 @@ func (e *historyEngineImpl) GetDLQReplicationMessages(
 
 func (e *historyEngineImpl) ReapplyEvents(
 	ctx context.Context,
-	domainUUID string,
+	namespaceUUID string,
 	workflowID string,
 	runID string,
 	reapplyEvents []*commonproto.HistoryEvent,
 ) error {
 
-	domainEntry, err := e.getActiveDomainEntry(domainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(namespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 	// remove run id from the execution so that reapply events to the current run
 	currentExecution := commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -2884,7 +2884,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 
 	return e.updateWorkflowExecutionWithAction(
 		ctx,
-		domainID,
+		namespaceID,
 		currentExecution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			// Filter out reapply event from the same cluster
@@ -2922,7 +2922,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				//  since cannot reapply event to a finished workflow which had no decisions started
 				if baseRebuildLastEventID == common.EmptyEventID {
 					e.logger.Warn("cannot reapply event to a finished workflow",
-						tag.WorkflowDomainID(domainID),
+						tag.WorkflowNamespaceID(namespaceID),
 						tag.WorkflowID(currentExecution.GetWorkflowId()),
 					)
 					e.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
@@ -2943,7 +2943,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 
 				if err = e.workflowResetter.resetWorkflow(
 					ctx,
-					domainID,
+					namespaceID,
 					workflowID,
 					baseRunID,
 					baseCurrentBranchToken,
@@ -2954,7 +2954,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					uuid.New(),
 					newNDCWorkflow(
 						ctx,
-						e.shard.GetDomainCache(),
+						e.shard.GetNamespaceCache(),
 						e.shard.GetClusterMetadata(),
 						context,
 						mutableState,
@@ -3051,17 +3051,17 @@ func (e *historyEngineImpl) MergeDLQMessages(
 
 func (e *historyEngineImpl) RefreshWorkflowTasks(
 	ctx context.Context,
-	domainUUID string,
+	namespaceUUID string,
 	execution commonproto.WorkflowExecution,
 ) (retError error) {
 
-	domainEntry, err := e.getActiveDomainEntry(domainUUID)
+	namespaceEntry, err := e.getActiveNamespaceEntry(namespaceUUID)
 	if err != nil {
 		return err
 	}
-	domainID := domainEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().ID
 
-	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
 	if err != nil {
 		return err
 	}
@@ -3078,7 +3078,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 
 	mutableStateTaskRefresher := newMutableStateTaskRefresher(
 		e.shard.GetConfig(),
-		e.shard.GetDomainCache(),
+		e.shard.GetNamespaceCache(),
 		e.shard.GetEventsCache(),
 		e.shard.GetLogger(),
 	)
@@ -3099,14 +3099,14 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 
 func (e *historyEngineImpl) loadWorkflowOnce(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) (workflowContext, error) {
 
 	context, release, err := e.historyCache.getOrCreateWorkflowExecution(
 		ctx,
-		domainID,
+		namespaceID,
 		commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -3127,18 +3127,18 @@ func (e *historyEngineImpl) loadWorkflowOnce(
 
 func (e *historyEngineImpl) loadWorkflow(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 ) (workflowContext, error) {
 
 	if runID != "" {
-		return e.loadWorkflowOnce(ctx, domainID, workflowID, runID)
+		return e.loadWorkflowOnce(ctx, namespaceID, workflowID, runID)
 	}
 
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 
-		workflowContext, err := e.loadWorkflowOnce(ctx, domainID, workflowID, "")
+		workflowContext, err := e.loadWorkflowOnce(ctx, namespaceID, workflowID, "")
 		if err != nil {
 			return nil, err
 		}
@@ -3150,8 +3150,8 @@ func (e *historyEngineImpl) loadWorkflow(
 		// workflow not running, need to check current record
 		resp, err := e.shard.GetExecutionManager().GetCurrentExecution(
 			&persistence.GetCurrentExecutionRequest{
-				DomainID:   domainID,
-				WorkflowID: workflowID,
+				NamespaceID: namespaceID,
+				WorkflowID:  workflowID,
 			},
 		)
 		if err != nil {

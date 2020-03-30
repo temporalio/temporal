@@ -66,14 +66,14 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	//  workflow mutation is done in methods within executeTransaction function
 
 	targetExecutionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
-	domainID := targetExecutionInfo.DomainID
+	namespaceID := targetExecutionInfo.NamespaceID
 	workflowID := targetExecutionInfo.WorkflowID
 	targetRunID := targetExecutionInfo.RunID
 
 	// we need to check the current workflow execution
 	currentRunID, err := r.transactionMgr.getCurrentWorkflowRunID(
 		ctx,
-		domainID,
+		namespaceID,
 		workflowID,
 	)
 	if err != nil || currentRunID == targetRunID {
@@ -95,7 +95,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	// there exists a current workflow, need additional check
 	currentWorkflow, err := r.transactionMgr.loadNDCWorkflow(
 		ctx,
-		domainID,
+		namespaceID,
 		workflowID,
 		currentRunID,
 	)

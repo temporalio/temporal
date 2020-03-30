@@ -131,11 +131,11 @@ func (adh *AdminNilCheckHandler) GetReplicationMessages(ctx context.Context, req
 	return resp, err
 }
 
-// GetDomainReplicationMessages ...
-func (adh *AdminNilCheckHandler) GetDomainReplicationMessages(ctx context.Context, request *adminservice.GetDomainReplicationMessagesRequest) (_ *adminservice.GetDomainReplicationMessagesResponse, retError error) {
-	resp, err := adh.parentHandler.GetDomainReplicationMessages(ctx, request)
+// GetNamespaceReplicationMessages ...
+func (adh *AdminNilCheckHandler) GetNamespaceReplicationMessages(ctx context.Context, request *adminservice.GetNamespaceReplicationMessagesRequest) (_ *adminservice.GetNamespaceReplicationMessagesResponse, retError error) {
+	resp, err := adh.parentHandler.GetNamespaceReplicationMessages(ctx, request)
 	if resp == nil && err == nil {
-		resp = &adminservice.GetDomainReplicationMessagesResponse{}
+		resp = &adminservice.GetNamespaceReplicationMessagesResponse{}
 	}
 	return resp, err
 }

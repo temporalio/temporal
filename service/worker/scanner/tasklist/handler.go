@@ -42,7 +42,7 @@ const (
 	handlerStatusDefer = executor.TaskStatusDefer
 )
 
-const scannerTaskListPrefix = "cadence-sys-tl-scanner"
+const scannerTaskListPrefix = "temporal-sys-tl-scanner"
 
 // deleteHandler handles deletions for a given task list
 // this handler limits the amount of tasks deleted to maxTasksPerJob
@@ -123,7 +123,7 @@ func (s *Scavenger) tryDeleteTaskList(key *p.TaskListKey, state *taskListState) 
 		return
 	}
 	atomic.AddInt64(&s.stats.tasklist.nDeleted, 1)
-	s.logger.Info("tasklist deleted", tag.WorkflowDomainIDBytes(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType))
+	s.logger.Info("tasklist deleted", tag.WorkflowNamespaceIDBytes(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType))
 }
 
 func (s *Scavenger) deleteHandlerLog(key *p.TaskListKey, state *taskListState, nProcessed int, nDeleted int, err error) {
@@ -131,12 +131,12 @@ func (s *Scavenger) deleteHandlerLog(key *p.TaskListKey, state *taskListState, n
 	atomic.AddInt64(&s.stats.task.nProcessed, int64(nProcessed))
 	if err != nil {
 		s.logger.Error("scavenger.deleteHandler processed.",
-			tag.Error(err), tag.WorkflowDomainIDBytes(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
+			tag.Error(err), tag.WorkflowNamespaceIDBytes(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 		return
 	}
 	if nProcessed > 0 {
 		s.logger.Info("scavenger.deleteHandler processed.",
-			tag.WorkflowDomainIDBytes(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
+			tag.WorkflowNamespaceIDBytes(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 	}
 }
 

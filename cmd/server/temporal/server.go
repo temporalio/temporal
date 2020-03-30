@@ -62,7 +62,7 @@ type (
 )
 
 // newServer returns a new instance of a daemon
-// that represents a cadence service
+// that represents a temporal service
 func newServer(service string, cfg *config.Config) common.Daemon {
 	return &server{
 		cfg:   cfg,
@@ -151,7 +151,7 @@ func (s *server) startService() common.Daemon {
 
 	params.ClusterMetadata = cluster.NewMetadata(
 		params.Logger,
-		dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, clusterMetadata.EnableGlobalDomain),
+		dc.GetBoolProperty(dynamicconfig.EnableGlobalNamespace, clusterMetadata.EnableGlobalNamespace),
 		clusterMetadata.FailoverVersionIncrement,
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,
@@ -165,7 +165,7 @@ func (s *server) startService() common.Daemon {
 		var err error
 		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
 			HostPort:     s.cfg.PublicClient.HostPort,
-			DomainName:   common.SystemLocalDomainName,
+			Namespace:    common.SystemLocalNamespace,
 			MetricsScope: params.MetricScope,
 		})
 		if err != nil {
@@ -178,7 +178,7 @@ func (s *server) startService() common.Daemon {
 		common.GetDefaultAdvancedVisibilityWritingMode(params.PersistenceConfig.IsAdvancedVisibilityConfigExist()),
 	)()
 	isAdvancedVisEnabled := advancedVisMode != common.AdvancedVisibilityWritingModeOff
-	if params.ClusterMetadata.IsGlobalDomainEnabled() {
+	if params.ClusterMetadata.IsGlobalNamespaceEnabled() {
 		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, true, isAdvancedVisEnabled)
 	} else if isAdvancedVisEnabled {
 		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, params.MetricsClient, zap.NewNop(), params.Logger, params.MetricScope, false, isAdvancedVisEnabled)
@@ -214,7 +214,7 @@ func (s *server) startService() common.Daemon {
 		s.cfg.Archival.History.EnableRead,
 		s.cfg.Archival.Visibility.Status,
 		s.cfg.Archival.Visibility.EnableRead,
-		&s.cfg.DomainDefaults.Archival,
+		&s.cfg.NamespaceDefaults.Archival,
 	)
 
 	params.ArchiverProvider = provider.NewArchiverProvider(s.cfg.Archival.History.Provider, s.cfg.Archival.Visibility.Provider)

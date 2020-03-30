@@ -50,7 +50,7 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shardContextTest
-		mockDomainCache     *cache.MockDomainCache
+		mockNamespaceCache  *cache.MockNamespaceCache
 		mockMutableState    *MockmutableState
 		mockClusterMetadata *cluster.MockMetadata
 
@@ -95,12 +95,12 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	)
 
 	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
 	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
 	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 	historyCache := newHistoryCache(s.mockShard)
@@ -117,8 +117,8 @@ func (s *replicatorQueueProcessorSuite) TearDownTest() {
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -126,23 +126,23 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 		TaskID:      taskID,
-		DomainID:    primitives.MustParseUUID(domainID),
+		NamespaceID: primitives.MustParseUUID(namespaceID),
 		WorkflowID:  workflowID,
 		RunID:       primitives.MustParseUUID(runID),
 		ScheduledID: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: domainID, Name: domainName},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -159,8 +159,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -169,7 +169,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 		TaskID:      taskID,
-		DomainID:    primitives.MustParseUUID(domainID),
+		NamespaceID: primitives.MustParseUUID(namespaceID),
 		WorkflowID:  workflowID,
 		RunID:       primitives.MustParseUUID(runID),
 		ScheduledID: scheduleID,
@@ -177,7 +177,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
-		domainID,
+		namespaceID,
 		commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -187,10 +187,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	release(nil)
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: domainID, Name: domainName},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -207,8 +207,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -217,7 +217,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 		TaskID:      taskID,
-		DomainID:    primitives.MustParseUUID(domainID),
+		NamespaceID: primitives.MustParseUUID(namespaceID),
 		WorkflowID:  workflowID,
 		RunID:       primitives.MustParseUUID(runID),
 		ScheduledID: scheduleID,
@@ -225,7 +225,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
-		domainID,
+		namespaceID,
 		commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -237,10 +237,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: domainID, Name: domainName},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -257,8 +257,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -267,7 +267,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 		TaskID:      taskID,
-		DomainID:    primitives.MustParseUUID(domainID),
+		NamespaceID: primitives.MustParseUUID(namespaceID),
 		WorkflowID:  workflowID,
 		RunID:       primitives.MustParseUUID(runID),
 		ScheduledID: scheduleID,
@@ -275,7 +275,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
-		domainID,
+		namespaceID,
 		commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -327,10 +327,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		},
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: domainID, Name: domainName},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -345,7 +345,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		TaskType: enums.ReplicationTaskTypeSyncActivity,
 		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
-				DomainId:           domainID,
+				NamespaceId:        namespaceID,
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            activityVersion,
@@ -370,8 +370,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
-	domainName := "some random domain name"
-	domainID := testDomainID
+	namespace := "some random namespace name"
+	namespaceID := testNamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -380,7 +380,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 		TaskID:      taskID,
-		DomainID:    primitives.MustParseUUID(domainID),
+		NamespaceID: primitives.MustParseUUID(namespaceID),
 		WorkflowID:  workflowID,
 		RunID:       primitives.MustParseUUID(runID),
 		ScheduledID: scheduleID,
@@ -388,7 +388,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
-		domainID,
+		namespaceID,
 		commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -440,10 +440,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		},
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: domainID, Name: domainName},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -457,7 +457,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		TaskType: enums.ReplicationTaskTypeSyncActivity,
 		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
-				DomainId:           domainID,
+				NamespaceId:        namespaceID,
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            activityVersion,

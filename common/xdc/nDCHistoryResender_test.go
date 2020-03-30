@@ -51,13 +51,13 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller        *gomock.Controller
-		mockDomainCache   *cache.MockDomainCache
-		mockAdminClient   *adminservicemock.MockAdminServiceClient
-		mockHistoryClient *historyservicemock.MockHistoryServiceClient
+		controller         *gomock.Controller
+		mockNamespaceCache *cache.MockNamespaceCache
+		mockAdminClient    *adminservicemock.MockAdminServiceClient
+		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 
-		domainID   string
-		domainName string
+		namespaceID string
+		namespace   string
 
 		mockClusterMetadata *mocks.ClusterMetadata
 
@@ -86,18 +86,18 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
+	s.mockClusterMetadata.On("IsGlobalNamespaceEnabled").Return(true)
 
-	s.domainID = uuid.New()
-	s.domainName = "some random domain name"
-	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: s.domainID, Name: s.domainName},
-		&persistence.DomainConfig{Retention: 1},
-		&persistence.DomainReplicationConfig{
+	s.namespaceID = uuid.New()
+	s.namespace = "some random namespace name"
+	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: s.namespaceID, Name: s.namespace},
+		&persistence.NamespaceConfig{Retention: 1},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -107,12 +107,12 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 		1234,
 		nil,
 	)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.domainID).Return(domainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(s.domainName).Return(domainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
 	s.serializer = persistence.NewPayloadSerializer()
 
 	s.rereplicator = NewNDCHistoryResender(
-		s.mockDomainCache,
+		s.mockNamespaceCache,
 		s.mockAdminClient,
 		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 			_, err := s.mockHistoryClient.ReplicateEventsV2(ctx, request)
@@ -159,7 +159,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -181,7 +181,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -203,7 +203,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	s.mockHistoryClient.EXPECT().ReplicateEventsV2(
 		gomock.Any(),
 		&historyservice.ReplicateEventsV2Request{
-			DomainUUID: s.domainID,
+			NamespaceUUID: s.namespaceID,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -213,7 +213,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		}).Return(nil, nil).Times(2)
 
 	err := s.rereplicator.SendSingleWorkflowHistory(
-		s.domainID,
+		s.namespaceID,
 		workflowID,
 		runID,
 		startEventID,
@@ -240,7 +240,7 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 	}
 
 	s.Equal(&historyservice.ReplicateEventsV2Request{
-		DomainUUID: s.domainID,
+		NamespaceUUID: s.namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -248,7 +248,7 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 		VersionHistoryItems: versionHistoryItems,
 		Events:              blob,
 	}, s.rereplicator.createReplicationRawRequest(
-		s.domainID,
+		s.namespaceID,
 		workflowID,
 		runID,
 		blob,
@@ -263,7 +263,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 		Version: 1,
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		DomainUUID: s.domainID,
+		NamespaceUUID: s.namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -288,7 +288,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 		Version: 1,
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		DomainUUID: s.domainID,
+		NamespaceUUID: s.namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -301,7 +301,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 	}
 	retryErr := serviceerror.NewRetryTaskV2(
 		"",
-		s.domainID,
+		s.namespaceID,
 		workflowID,
 		runID,
 		common.EmptyEventID,
@@ -334,7 +334,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 		NextPageToken: nextTokenOut,
 	}
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -348,7 +348,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 	}).Return(response, nil).Times(1)
 
 	out, err := s.rereplicator.getHistory(
-		s.domainID,
+		s.namespaceID,
 		workflowID,
 		runID,
 		startEventID,

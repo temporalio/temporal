@@ -16,8 +16,8 @@ View metrics at localhost:8080/dashboard
 View Cadence-Web at localhost:8088  
 Use Temporal-CLI with `docker run --network=host --rm temporalio/tctl:latest`
 
-For example to register new domain 'test-domain' with 1 retention day
-`docker run --network=host --rm temporalio/tctl:latest --do test-domain domain register -rd 1`
+For example to register new namespace 'test-namespace' with 1 retention day
+`docker run --network=host --rm temporalio/tctl:latest --ns test-namespace namespace register -rd 1`
 
 
 Using a pre-built image

@@ -59,15 +59,15 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller        *gomock.Controller
-		mockResource      *resource.Test
-		mockHistoryClient *historyservicemock.MockHistoryServiceClient
-		mockDomainCache   *cache.MockDomainCache
+		controller         *gomock.Controller
+		mockResource       *resource.Test
+		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
+		mockNamespaceCache *cache.MockNamespaceCache
 
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
 
-		domainName string
-		domainID   string
+		namespace   string
+		namespaceID string
 
 		handler *AdminHandler
 	}
@@ -81,12 +81,12 @@ func TestAdminHandlerSuite(t *testing.T) {
 func (s *adminHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.domainName = "some random domain name"
-	s.domainID = "some random domain ID"
+	s.namespace = "some random namespace name"
+	s.namespaceID = "some random namespace ID"
 
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
-	s.mockDomainCache = s.mockResource.DomainCache
+	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
 
@@ -153,7 +153,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	ctx := context.Background()
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: "",
 				RunId:      uuid.New(),
@@ -172,7 +172,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	ctx := context.Background()
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      "runID",
@@ -191,7 +191,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	ctx := context.Background()
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
@@ -206,12 +206,12 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	s.Error(err)
 }
 
-func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnDomainCache() {
+func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCache() {
 	ctx := context.Background()
-	s.mockDomainCache.EXPECT().GetDomainID(s.domainName).Return("", fmt.Errorf("test")).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return("", fmt.Errorf("test")).Times(1)
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
@@ -228,7 +228,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnDomain
 
 func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	ctx := context.Background()
-	s.mockDomainCache.EXPECT().GetDomainID(s.domainName).Return(s.domainID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
 	branchToken := []byte{1}
 	versionHistory := persistence.NewVersionHistory(branchToken, []*persistence.VersionHistoryItem{
 		persistence.NewVersionHistoryItem(int64(10), int64(100)),
@@ -250,7 +250,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	}, nil)
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
@@ -267,7 +267,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 
 func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAndEndID() {
 	ctx := context.Background()
-	s.mockDomainCache.EXPECT().GetDomainID(s.domainName).Return(s.domainID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
 	branchToken := []byte{1}
 	versionHistory := persistence.NewVersionHistory(branchToken, []*persistence.VersionHistoryItem{
 		persistence.NewVersionHistoryItem(int64(10), int64(100)),
@@ -284,7 +284,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAnd
 
 	resp, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
@@ -310,7 +310,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistory := persistence.NewVersionHistory([]byte{}, []*persistence.VersionHistoryItem{firstItem, endItem})
 	versionHistories := persistence.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
@@ -343,7 +343,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistory := persistence.NewVersionHistory([]byte{}, []*persistence.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := persistence.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
@@ -376,7 +376,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistory := persistence.NewVersionHistory([]byte{}, []*persistence.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := persistence.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
@@ -414,7 +414,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	_, _, err := versionHistories.AddVersionHistory(versionHistory2)
 	s.NoError(err)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),

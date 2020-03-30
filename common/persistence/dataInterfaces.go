@@ -45,11 +45,11 @@ import (
 	"github.com/temporalio/temporal/common"
 )
 
-// Domain status
+// Namespace status
 const (
-	DomainStatusRegistered = iota
-	DomainStatusDeprecated
-	DomainStatusDeleted
+	NamespaceStatusRegistered = iota
+	NamespaceStatusDeprecated
+	NamespaceStatusDeleted
 )
 
 const (
@@ -70,7 +70,7 @@ type QueueType int
 // Use positive numbers for queue type
 // Negative numbers are reserved for DLQ
 const (
-	DomainReplicationQueueType QueueType = iota + 1
+	NamespaceReplicationQueueType QueueType = iota + 1
 )
 
 // Create Workflow Execution Mode
@@ -189,7 +189,7 @@ const (
 )
 
 const (
-	// InitialFailoverNotificationVersion is the initial failover version for a domain
+	// InitialFailoverNotificationVersion is the initial failover version for a namespace
 	InitialFailoverNotificationVersion int64 = 0
 
 	// TransferTaskTransferTargetWorkflowID is the the dummy workflow ID for transfer tasks of types
@@ -262,24 +262,24 @@ type (
 		MinLevel     int64
 		CurrentLevel int64
 		MaxLevel     int64
-		DomainIDs    map[string]struct{}
+		NamespaceIDs map[string]struct{}
 	}
 
-	// TimerFailoverLevel contains domain IDs and corresponding start / end level
+	// TimerFailoverLevel contains namespace IDs and corresponding start / end level
 	TimerFailoverLevel struct {
 		StartTime    time.Time
 		MinLevel     time.Time
 		CurrentLevel time.Time
 		MaxLevel     time.Time
-		DomainIDs    map[string]struct{}
+		NamespaceIDs map[string]struct{}
 	}
 
 	// WorkflowExecutionInfo describes a workflow execution
 	WorkflowExecutionInfo struct {
-		DomainID                           string
+		NamespaceID                        string
 		WorkflowID                         string
 		RunID                              string
-		ParentDomainID                     string
+		ParentNamespaceID                  string
 		ParentWorkflowID                   string
 		ParentRunID                        string
 		InitiatedID                        int64
@@ -339,7 +339,7 @@ type (
 		HistorySize int64
 	}
 
-	// ReplicationState represents mutable state information for global domains.
+	// ReplicationState represents mutable state information for global namespaces.
 	// This information is used by replication protocol when applying events from remote clusters
 	ReplicationState struct {
 		CurrentVersion      int64
@@ -367,16 +367,16 @@ type (
 
 	// TaskListKey is the struct used to identity TaskLists
 	TaskListKey struct {
-		DomainID primitives.UUID
-		Name     string
-		TaskType int32
+		NamespaceID primitives.UUID
+		Name        string
+		TaskType    int32
 	}
 
 	// ActivityTask identifies a transfer task for activity
 	ActivityTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		DomainID            string
+		NamespaceID         string
 		TaskList            string
 		ScheduleID          int64
 		Version             int64
@@ -386,7 +386,7 @@ type (
 	DecisionTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		DomainID            string
+		NamespaceID         string
 		TaskList            string
 		ScheduleID          int64
 		Version             int64
@@ -442,7 +442,7 @@ type (
 	CancelExecutionTask struct {
 		VisibilityTimestamp     time.Time
 		TaskID                  int64
-		TargetDomainID          string
+		TargetNamespaceID       string
 		TargetWorkflowID        string
 		TargetRunID             string
 		TargetChildWorkflowOnly bool
@@ -454,7 +454,7 @@ type (
 	SignalExecutionTask struct {
 		VisibilityTimestamp     time.Time
 		TaskID                  int64
-		TargetDomainID          string
+		TargetNamespaceID       string
 		TargetWorkflowID        string
 		TargetRunID             string
 		TargetChildWorkflowOnly bool
@@ -475,7 +475,7 @@ type (
 	StartChildExecutionTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		TargetDomainID      string
+		TargetNamespaceID   string
 		TargetWorkflowID    string
 		InitiatedID         int64
 		Version             int64
@@ -584,7 +584,7 @@ type (
 		StartedID                int64
 		StartedEvent             *commonproto.HistoryEvent
 		StartedTime              time.Time
-		DomainID                 string
+		NamespaceID              string
 		ActivityID               string
 		RequestID                string
 		Details                  []byte
@@ -625,7 +625,7 @@ type (
 		StartedRunID          string
 		StartedEvent          *commonproto.HistoryEvent
 		CreateRequestID       string
-		DomainName            string
+		Namespace             string
 		WorkflowTypeName      string
 		ParentClosePolicy     enums.ParentClosePolicy
 	}
@@ -669,8 +669,8 @@ type (
 
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
 	GetWorkflowExecutionRequest struct {
-		DomainID  string
-		Execution commonproto.WorkflowExecution
+		NamespaceID string
+		Execution   commonproto.WorkflowExecution
 	}
 
 	// GetWorkflowExecutionResponse is the response to GetworkflowExecutionRequest
@@ -681,8 +681,8 @@ type (
 
 	// GetCurrentExecutionRequest is used to retrieve the current RunId for an execution
 	GetCurrentExecutionRequest struct {
-		DomainID   string
-		WorkflowID string
+		NamespaceID string
+		WorkflowID  string
 	}
 
 	// GetCurrentExecutionResponse is the response to GetCurrentExecution
@@ -760,7 +760,7 @@ type (
 
 	// WorkflowEvents is used as generic workflow history events transaction container
 	WorkflowEvents struct {
-		DomainID    string
+		NamespaceID string
 		WorkflowID  string
 		RunID       string
 		BranchToken []byte
@@ -821,9 +821,9 @@ type (
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
 	DeleteWorkflowExecutionRequest struct {
-		DomainID   string
-		WorkflowID string
-		RunID      string
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
 	}
 
 	// DeleteTaskRequest is used to detele a task that corrupted and need to be removed
@@ -836,9 +836,9 @@ type (
 
 	// DeleteCurrentWorkflowExecutionRequest is used to delete the current workflow execution
 	DeleteCurrentWorkflowExecutionRequest struct {
-		DomainID   string
-		WorkflowID string
-		RunID      string
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
 	}
 
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
@@ -932,7 +932,7 @@ type (
 
 	// LeaseTaskListRequest is used to request lease of a task list
 	LeaseTaskListRequest struct {
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		TaskList     string
 		TaskType     int32
 		TaskListKind int32
@@ -989,7 +989,7 @@ type (
 
 	// GetTasksRequest is used to retrieve tasks of a task list
 	GetTasksRequest struct {
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		TaskList     string
 		TaskType     int32
 		ReadLevel    int64  // range exclusive
@@ -1010,7 +1010,7 @@ type (
 
 	// CompleteTasksLessThanRequest contains the request params needed to invoke CompleteTasksLessThan API
 	CompleteTasksLessThanRequest struct {
-		DomainID     primitives.UUID
+		NamespaceID  primitives.UUID
 		TaskListName string
 		TaskType     int32
 		TaskID       int64 // Tasks less than or equal to this ID will be completed
@@ -1032,8 +1032,8 @@ type (
 		NextPageToken []byte
 	}
 
-	// DomainInfo describes the domain entity
-	DomainInfo struct {
+	// NamespaceInfo describes the namespace entity
+	NamespaceInfo struct {
 		ID          string
 		Name        string
 		Status      int
@@ -1042,8 +1042,8 @@ type (
 		Data        map[string]string
 	}
 
-	// DomainConfig describes the domain configuration
-	DomainConfig struct {
+	// NamespaceConfig describes the namespace configuration
+	NamespaceConfig struct {
 		// NOTE: this retention is in days, not in seconds
 		Retention                int32
 		EmitMetric               bool
@@ -1054,8 +1054,8 @@ type (
 		BadBinaries              commonproto.BadBinaries
 	}
 
-	// DomainReplicationConfig describes the cross DC domain replication configuration
-	DomainReplicationConfig struct {
+	// NamespaceReplicationConfig describes the cross DC namespace replication configuration
+	NamespaceReplicationConfig struct {
 		ActiveClusterName string
 		Clusters          []*ClusterReplicationConfig
 	}
@@ -1066,69 +1066,69 @@ type (
 		// Note: if adding new properties of non-primitive types, remember to update GetCopy()
 	}
 
-	// CreateDomainRequest is used to create the domain
-	CreateDomainRequest struct {
-		Info              *DomainInfo
-		Config            *DomainConfig
-		ReplicationConfig *DomainReplicationConfig
-		IsGlobalDomain    bool
+	// CreateNamespaceRequest is used to create the namespace
+	CreateNamespaceRequest struct {
+		Info              *NamespaceInfo
+		Config            *NamespaceConfig
+		ReplicationConfig *NamespaceReplicationConfig
+		IsGlobalNamespace bool
 		ConfigVersion     int64
 		FailoverVersion   int64
 	}
 
-	// CreateDomainResponse is the response for CreateDomain
-	CreateDomainResponse struct {
+	// CreateNamespaceResponse is the response for CreateNamespace
+	CreateNamespaceResponse struct {
 		ID string
 	}
 
-	// GetDomainRequest is used to read domain
-	GetDomainRequest struct {
+	// GetNamespaceRequest is used to read namespace
+	GetNamespaceRequest struct {
 		ID   string
 		Name string
 	}
 
-	// GetDomainResponse is the response for GetDomain
-	GetDomainResponse struct {
-		Info                        *DomainInfo
-		Config                      *DomainConfig
-		ReplicationConfig           *DomainReplicationConfig
-		IsGlobalDomain              bool
+	// GetNamespaceResponse is the response for GetNamespace
+	GetNamespaceResponse struct {
+		Info                        *NamespaceInfo
+		Config                      *NamespaceConfig
+		ReplicationConfig           *NamespaceReplicationConfig
+		IsGlobalNamespace           bool
 		ConfigVersion               int64
 		FailoverVersion             int64
 		FailoverNotificationVersion int64
 		NotificationVersion         int64
 	}
 
-	// UpdateDomainRequest is used to update domain
-	UpdateDomainRequest struct {
-		Info                        *DomainInfo
-		Config                      *DomainConfig
-		ReplicationConfig           *DomainReplicationConfig
+	// UpdateNamespaceRequest is used to update namespace
+	UpdateNamespaceRequest struct {
+		Info                        *NamespaceInfo
+		Config                      *NamespaceConfig
+		ReplicationConfig           *NamespaceReplicationConfig
 		ConfigVersion               int64
 		FailoverVersion             int64
 		FailoverNotificationVersion int64
 		NotificationVersion         int64
 	}
 
-	// DeleteDomainRequest is used to delete domain entry from domains table
-	DeleteDomainRequest struct {
+	// DeleteNamespaceRequest is used to delete namespace entry from namespaces table
+	DeleteNamespaceRequest struct {
 		ID string
 	}
 
-	// DeleteDomainByNameRequest is used to delete domain entry from domains_by_name table
-	DeleteDomainByNameRequest struct {
+	// DeleteNamespaceByNameRequest is used to delete namespace entry from namespaces_by_name table
+	DeleteNamespaceByNameRequest struct {
 		Name string
 	}
 
-	// ListDomainsRequest is used to list domains
-	ListDomainsRequest struct {
+	// ListNamespacesRequest is used to list namespaces
+	ListNamespacesRequest struct {
 		PageSize      int
 		NextPageToken []byte
 	}
 
-	// ListDomainsResponse is the response for GetDomain
-	ListDomainsResponse struct {
-		Domains       []*GetDomainResponse
+	// ListNamespacesResponse is the response for GetNamespace
+	ListNamespacesResponse struct {
+		Namespaces    []*GetNamespaceResponse
 		NextPageToken []byte
 	}
 
@@ -1499,7 +1499,7 @@ type (
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
-		// For Cadence, treeID is new runID, except for fork(reset), treeID will be the runID that it forks from.
+		// For Temporal, treeID is new runID, except for fork(reset), treeID will be the runID that it forks from.
 
 		// AppendHistoryNodes add(or override) a batch of nodes to a history branch
 		AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
@@ -1521,16 +1521,16 @@ type (
 		GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
 	}
 
-	// MetadataManager is used to manage metadata CRUD for domain entities
+	// MetadataManager is used to manage metadata CRUD for namespace entities
 	MetadataManager interface {
 		Closeable
 		GetName() string
-		CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error)
-		GetDomain(request *GetDomainRequest) (*GetDomainResponse, error)
-		UpdateDomain(request *UpdateDomainRequest) error
-		DeleteDomain(request *DeleteDomainRequest) error
-		DeleteDomainByName(request *DeleteDomainByNameRequest) error
-		ListDomains(request *ListDomainsRequest) (*ListDomainsResponse, error)
+		CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error)
+		GetNamespace(request *GetNamespaceRequest) (*GetNamespaceResponse, error)
+		UpdateNamespace(request *UpdateNamespaceRequest) error
+		DeleteNamespace(request *DeleteNamespaceRequest) error
+		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
+		ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error)
 		GetMetadata() (*GetMetadataResponse, error)
 	}
 
@@ -2299,21 +2299,21 @@ func NewHistoryBranchTokenByBranchID(treeID, branchID []byte) ([]byte, error) {
 }
 
 // BuildHistoryGarbageCleanupInfo combine the workflow identity information into a string
-func BuildHistoryGarbageCleanupInfo(domainID, workflowID, runID string) string {
-	return fmt.Sprintf("%v:%v:%v", domainID, workflowID, runID)
+func BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, runID string) string {
+	return fmt.Sprintf("%v:%v:%v", namespaceID, workflowID, runID)
 }
 
 // SplitHistoryGarbageCleanupInfo returns workflow identity information
-func SplitHistoryGarbageCleanupInfo(info string) (domainID, workflowID, runID string, err error) {
+func SplitHistoryGarbageCleanupInfo(info string) (namespaceID, workflowID, runID string, err error) {
 	ss := strings.Split(info, ":")
 	// workflowID can contain ":" so len(ss) can be greater than 3
 	if len(ss) < numItemsInGarbageInfo {
 		return "", "", "", fmt.Errorf("not able to split info for  %s", info)
 	}
-	domainID = ss[0]
+	namespaceID = ss[0]
 	runID = ss[len(ss)-1]
 	workflowEnd := len(info) - len(runID) - 1
-	workflowID = info[len(domainID)+1 : workflowEnd]
+	workflowID = info[len(namespaceID)+1 : workflowEnd]
 	return
 }
 

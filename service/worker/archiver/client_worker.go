@@ -40,15 +40,15 @@ import (
 )
 
 type (
-	// ClientWorker is a cadence client worker
+	// ClientWorker is a temporal client worker
 	ClientWorker interface {
 		Start() error
 		Stop()
 	}
 
 	clientWorker struct {
-		worker      worker.Worker
-		domainCache cache.DomainCache
+		worker         worker.Worker
+		namespaceCache cache.NamespaceCache
 	}
 
 	// BootstrapContainer contains everything need for bootstrapping
@@ -57,7 +57,7 @@ type (
 		MetricsClient    metrics.Client
 		Logger           log.Logger
 		HistoryV2Manager persistence.HistoryManager
-		DomainCache      cache.DomainCache
+		NamespaceCache   cache.NamespaceCache
 		Config           *Config
 		ArchiverProvider provider.ArchiverProvider
 	}
@@ -73,9 +73,9 @@ type (
 )
 
 const (
-	workflowIDPrefix                = "cadence-archival"
-	decisionTaskList                = "cadence-archival-tl"
-	signalName                      = "cadence-archival-signal"
+	workflowIDPrefix                = "temporal-archival"
+	decisionTaskList                = "temporal-archival-tl"
+	signalName                      = "temporal-archival-signal"
 	archivalWorkflowFnName          = "archivalWorkflow"
 	workflowStartToCloseTimeout     = time.Hour * 24 * 30
 	workflowTaskStartToCloseTimeout = time.Minute
@@ -92,7 +92,7 @@ var (
 
 // NewClientWorker returns a new ClientWorker
 func NewClientWorker(container *BootstrapContainer) ClientWorker {
-	globalLogger = container.Logger.WithTags(tag.ComponentArchiver, tag.WorkflowDomainName(common.SystemLocalDomainName))
+	globalLogger = container.Logger.WithTags(tag.ComponentArchiver, tag.WorkflowNamespace(common.SystemLocalNamespace))
 	globalMetricsClient = container.MetricsClient
 	globalConfig = container.Config
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)
@@ -100,8 +100,8 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 		BackgroundActivityContext: actCtx,
 	}
 	clientWorker := &clientWorker{
-		worker:      worker.New(container.PublicClient, decisionTaskList, wo),
-		domainCache: container.DomainCache,
+		worker:         worker.New(container.PublicClient, decisionTaskList, wo),
+		namespaceCache: container.NamespaceCache,
 	}
 
 	clientWorker.worker.RegisterWorkflowWithOptions(archivalWorkflow, workflow.RegisterOptions{Name: archivalWorkflowFnName})
@@ -124,5 +124,5 @@ func (w *clientWorker) Start() error {
 // Stop the ClientWorker
 func (w *clientWorker) Stop() {
 	w.worker.Stop()
-	w.domainCache.Stop()
+	w.namespaceCache.Stop()
 }

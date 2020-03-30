@@ -42,7 +42,7 @@ type (
 	decisionTaskHandlerImpl struct {
 		identity                string
 		decisionTaskCompletedID int64
-		domainEntry             *cache.DomainCacheEntry
+		namespaceEntry          *cache.NamespaceCacheEntry
 
 		// internal state
 		hasUnhandledEventsBeforeDecisions bool
@@ -56,10 +56,10 @@ type (
 		attrValidator    *decisionAttrValidator
 		sizeLimitChecker *workflowSizeChecker
 
-		logger        log.Logger
-		domainCache   cache.DomainCache
-		metricsClient metrics.Client
-		config        *Config
+		logger         log.Logger
+		namespaceCache cache.NamespaceCache
+		metricsClient  metrics.Client
+		config         *Config
 	}
 
 	failDecisionInfo struct {
@@ -71,12 +71,12 @@ type (
 func newDecisionTaskHandler(
 	identity string,
 	decisionTaskCompletedID int64,
-	domainEntry *cache.DomainCacheEntry,
+	namespaceEntry *cache.NamespaceCacheEntry,
 	mutableState mutableState,
 	attrValidator *decisionAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
-	domainCache cache.DomainCache,
+	namespaceCache cache.NamespaceCache,
 	metricsClient metrics.Client,
 	config *Config,
 ) *decisionTaskHandlerImpl {
@@ -84,7 +84,7 @@ func newDecisionTaskHandler(
 	return &decisionTaskHandlerImpl{
 		identity:                identity,
 		decisionTaskCompletedID: decisionTaskCompletedID,
-		domainEntry:             domainEntry,
+		namespaceEntry:          namespaceEntry,
 
 		// internal state
 		hasUnhandledEventsBeforeDecisions: mutableState.HasBufferedEvents(),
@@ -98,10 +98,10 @@ func newDecisionTaskHandler(
 		attrValidator:    attrValidator,
 		sizeLimitChecker: sizeLimitChecker,
 
-		logger:        logger,
-		domainCache:   domainCache,
-		metricsClient: metricsClient,
-		config:        config,
+		logger:         logger,
+		namespaceCache: namespaceCache,
+		metricsClient:  metricsClient,
+		config:         config,
 	}
 }
 
@@ -184,21 +184,21 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	domainID := executionInfo.DomainID
-	targetDomainID := domainID
-	if attr.GetDomain() != "" {
-		targetDomainEntry, err := handler.domainCache.GetDomain(attr.GetDomain())
+	namespaceID := executionInfo.NamespaceID
+	targetNamespaceID := namespaceID
+	if attr.GetNamespace() != "" {
+		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule activity across domain %v.", attr.GetDomain()))
+			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule activity across namespace %v.", attr.GetNamespace()))
 		}
-		targetDomainID = targetDomainEntry.GetInfo().ID
+		targetNamespaceID = targetNamespaceEntry.GetInfo().ID
 	}
 
 	if err := handler.validateDecisionAttr(
 		func() error {
 			return handler.attrValidator.validateActivityScheduleAttributes(
-				domainID,
-				targetDomainID,
+				namespaceID,
+				targetNamespaceID,
 				attr,
 				executionInfo.WorkflowTimeout,
 			)
@@ -563,21 +563,21 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelExternalWorkf
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	domainID := executionInfo.DomainID
-	targetDomainID := domainID
-	if attr.GetDomain() != "" {
-		targetDomainEntry, err := handler.domainCache.GetDomain(attr.GetDomain())
+	namespaceID := executionInfo.NamespaceID
+	targetNamespaceID := namespaceID
+	if attr.GetNamespace() != "" {
+		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("Unable to cancel workflow across domain: %v.", attr.GetDomain()))
+			return serviceerror.NewInternal(fmt.Sprintf("Unable to cancel workflow across namespace: %v.", attr.GetNamespace()))
 		}
-		targetDomainID = targetDomainEntry.GetInfo().ID
+		targetNamespaceID = targetNamespaceEntry.GetInfo().ID
 	}
 
 	if err := handler.validateDecisionAttr(
 		func() error {
 			return handler.attrValidator.validateCancelExternalWorkflowExecutionAttributes(
-				domainID,
-				targetDomainID,
+				namespaceID,
+				targetNamespaceID,
 				attr,
 			)
 		},
@@ -674,21 +674,21 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 		return nil
 	}
 
-	// Extract parentDomainName so it can be passed down to next run of workflow execution
-	var parentDomainName string
+	// Extract parentNamespace so it can be passed down to next run of workflow execution
+	var parentNamespace string
 	if handler.mutableState.HasParentExecution() {
-		parentDomainID := executionInfo.ParentDomainID
-		parentDomainEntry, err := handler.domainCache.GetDomainByID(parentDomainID)
+		parentNamespaceID := executionInfo.ParentNamespaceID
+		parentNamespaceEntry, err := handler.namespaceCache.GetNamespaceByID(parentNamespaceID)
 		if err != nil {
 			return err
 		}
-		parentDomainName = parentDomainEntry.GetInfo().Name
+		parentNamespace = parentNamespaceEntry.GetInfo().Name
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
 		handler.decisionTaskCompletedID,
 		handler.decisionTaskCompletedID,
-		parentDomainName,
+		parentNamespace,
 		attr,
 	)
 	if err != nil {
@@ -709,21 +709,21 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	domainID := executionInfo.DomainID
-	targetDomainID := domainID
-	if attr.GetDomain() != "" {
-		targetDomainEntry, err := handler.domainCache.GetDomain(attr.GetDomain())
+	namespaceID := executionInfo.NamespaceID
+	targetNamespaceID := namespaceID
+	if attr.GetNamespace() != "" {
+		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule child execution across domain %v.", attr.GetDomain()))
+			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule child execution across namespace %v.", attr.GetNamespace()))
 		}
-		targetDomainID = targetDomainEntry.GetInfo().ID
+		targetNamespaceID = targetNamespaceEntry.GetInfo().ID
 	}
 
 	if err := handler.validateDecisionAttr(
 		func() error {
 			return handler.attrValidator.validateStartChildExecutionAttributes(
-				domainID,
-				targetDomainID,
+				namespaceID,
+				targetNamespaceID,
 				attr,
 				executionInfo,
 			)
@@ -742,7 +742,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 		return err
 	}
 
-	enabled := handler.config.EnableParentClosePolicy(handler.domainEntry.GetInfo().Name)
+	enabled := handler.config.EnableParentClosePolicy(handler.namespaceEntry.GetInfo().Name)
 	if !enabled {
 		attr.ParentClosePolicy = enums.ParentClosePolicyAbandon
 	}
@@ -764,21 +764,21 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	domainID := executionInfo.DomainID
-	targetDomainID := domainID
-	if attr.GetDomain() != "" {
-		targetDomainEntry, err := handler.domainCache.GetDomain(attr.GetDomain())
+	namespaceID := executionInfo.NamespaceID
+	targetNamespaceID := namespaceID
+	if attr.GetNamespace() != "" {
+		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("Unable to signal workflow across domain: %v.", attr.GetDomain()))
+			return serviceerror.NewInternal(fmt.Sprintf("Unable to signal workflow across namespace: %v.", attr.GetNamespace()))
 		}
-		targetDomainID = targetDomainEntry.GetInfo().ID
+		targetNamespaceID = targetNamespaceEntry.GetInfo().ID
 	}
 
 	if err := handler.validateDecisionAttr(
 		func() error {
 			return handler.attrValidator.validateSignalExternalWorkflowExecutionAttributes(
-				domainID,
-				targetDomainID,
+				namespaceID,
+				targetNamespaceID,
 				attr,
 			)
 		},
@@ -812,20 +812,20 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 		metrics.DecisionTypeUpsertWorkflowSearchAttributesCounter,
 	)
 
-	// get domain name
+	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	domainID := executionInfo.DomainID
-	domainEntry, err := handler.domainCache.GetDomainByID(domainID)
+	namespaceID := executionInfo.NamespaceID
+	namespaceEntry, err := handler.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("Unable to get domain for domainID: %v.", domainID))
+		return serviceerror.NewInternal(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
 	}
-	domainName := domainEntry.GetInfo().Name
+	namespace := namespaceEntry.GetInfo().Name
 
 	// valid search attributes for upsert
 	if err := handler.validateDecisionAttr(
 		func() error {
 			return handler.attrValidator.validateUpsertWorkflowSearchAttributes(
-				domainName,
+				namespace,
 				attr,
 			)
 		},
@@ -890,7 +890,7 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
 		handler.decisionTaskCompletedID,
 		handler.decisionTaskCompletedID,
-		attr.GetParentWorkflowDomain(),
+		attr.GetParentWorkflowNamespace(),
 		continueAsNewAttributes,
 	)
 	if err != nil {

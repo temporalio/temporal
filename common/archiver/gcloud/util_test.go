@@ -83,23 +83,23 @@ func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 
 func (s *utilSuite) TestconstructHistoryFilename() {
 	testCases := []struct {
-		domainID             string
+		namespaceID          string
 		workflowID           string
 		runID                string
 		closeFailoverVersion int64
 		expectBuiltName      string
 	}{
 		{
-			domainID:             "testDomainID",
+			namespaceID:          "testNamespaceID",
 			workflowID:           "testWorkflowID",
 			runID:                "testRunID",
 			closeFailoverVersion: 5,
-			expectBuiltName:      "17971674567288329890367046253745284795510285995943906173973_5_0.history",
+			expectBuiltName:      "11936904199538907273367046253745284795510285995943906173973_5_0.history",
 		},
 	}
 
 	for _, tc := range testCases {
-		filename := constructHistoryFilenameMultipart(tc.domainID, tc.workflowID, tc.runID, tc.closeFailoverVersion, 0)
+		filename := constructHistoryFilenameMultipart(tc.namespaceID, tc.workflowID, tc.runID, tc.closeFailoverVersion, 0)
 		s.Equal(tc.expectBuiltName, filename)
 	}
 }
@@ -119,23 +119,23 @@ func (s *utilSuite) TestSerializeDeserializeGetHistoryToken() {
 }
 
 func (s *utilSuite) TestConstructHistoryFilenamePrefix() {
-	s.Equal("28646288347718592068344541402884576509131521284625246243", constructHistoryFilenamePrefix("domainID", "workflowID", "runID"))
+	s.Equal("67753999582745295208344541402884576509131521284625246243", constructHistoryFilenamePrefix("namespaceID", "workflowID", "runID"))
 }
 
 func (s *utilSuite) TestConstructHistoryFilenameMultipart() {
-	s.Equal("28646288347718592068344541402884576509131521284625246243_-24_0.history", constructHistoryFilenameMultipart("domainID", "workflowID", "runID", -24, 0))
+	s.Equal("67753999582745295208344541402884576509131521284625246243_-24_0.history", constructHistoryFilenameMultipart("namespaceID", "workflowID", "runID", -24, 0))
 }
 
 func (s *utilSuite) TestConstructVisibilityFilenamePrefix() {
-	s.Equal("domainID/startTimeout", constructVisibilityFilenamePrefix("domainID", indexKeyStartTimeout))
+	s.Equal("namespaceID/startTimeout", constructVisibilityFilenamePrefix("namespaceID", indexKeyStartTimeout))
 }
 
 func (s *utilSuite) TestConstructTimeBasedSearchKey() {
-	s.Equal("domainID/startTimeout_1970-01-01T", constructTimeBasedSearchKey("domainID", indexKeyStartTimeout, 1580819141, "Day"))
+	s.Equal("namespaceID/startTimeout_1970-01-01T", constructTimeBasedSearchKey("namespaceID", indexKeyStartTimeout, 1580819141, "Day"))
 }
 
 func (s *utilSuite) TestConstructVisibilityFilename() {
-	s.Equal("domainID/startTimeout_1970-01-01T00:24:32Z_4346151385925082125_8344541402884576509_131521284625246243.visibility", constructVisibilityFilename("domainID", "workflowTypeName", "workflowID", "runID", indexKeyStartTimeout, 1472313624305))
+	s.Equal("namespaceID/startTimeout_1970-01-01T00:24:32Z_4346151385925082125_8344541402884576509_131521284625246243.visibility", constructVisibilityFilename("namespaceID", "workflowTypeName", "workflowID", "runID", indexKeyStartTimeout, 1472313624305))
 }
 
 func (s *utilSuite) TestWorkflowIdPrecondition() {

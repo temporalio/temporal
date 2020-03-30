@@ -292,47 +292,47 @@ func newAdminHistoryHostCommands() []cli.Command {
 	}
 }
 
-func newAdminDomainCommands() []cli.Command {
+func newAdminNamespaceCommands() []cli.Command {
 	return []cli.Command{
 		{
 			Name:    "register",
 			Aliases: []string{"re"},
-			Usage:   "Register workflow domain",
-			Flags:   adminRegisterDomainFlags,
+			Usage:   "Register workflow namespace",
+			Flags:   adminRegisterNamespaceFlags,
 			Action: func(c *cli.Context) {
-				newDomainCLI(c, true).RegisterDomain(c)
+				newNamespaceCLI(c, true).RegisterNamespace(c)
 			},
 		},
 		{
 			Name:    "update",
 			Aliases: []string{"up", "u"},
-			Usage:   "Update existing workflow domain",
-			Flags:   adminUpdateDomainFlags,
+			Usage:   "Update existing workflow namespace",
+			Flags:   adminUpdateNamespaceFlags,
 			Action: func(c *cli.Context) {
-				newDomainCLI(c, true).UpdateDomain(c)
+				newNamespaceCLI(c, true).UpdateNamespace(c)
 			},
 		},
 		{
 			Name:    "describe",
 			Aliases: []string{"desc"},
-			Usage:   "Describe existing workflow domain",
-			Flags:   adminDescribeDomainFlags,
+			Usage:   "Describe existing workflow namespace",
+			Flags:   adminDescribeNamespaceFlags,
 			Action: func(c *cli.Context) {
-				newDomainCLI(c, true).DescribeDomain(c)
+				newNamespaceCLI(c, true).DescribeNamespace(c)
 			},
 		},
 		{
-			Name:    "getdomainidorname",
+			Name:    "getnamespaceidorname",
 			Aliases: []string{"getdn"},
-			Usage:   "Get domainID or domainName",
+			Usage:   "Get namespaceID or namespace",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagDomain,
-					Usage: "DomainName",
+					Name:  FlagNamespace,
+					Usage: "Namespace",
 				},
 				cli.StringFlag{
-					Name:  FlagDomainID,
-					Usage: "Domain ID(uuid)",
+					Name:  FlagNamespaceID,
+					Usage: "Namespace ID(uuid)",
 				},
 
 				// for persistence connection
@@ -380,7 +380,7 @@ func newAdminDomainCommands() []cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) {
-				AdminGetDomainIDOrName(c)
+				AdminGetNamespaceIDOrName(c)
 			},
 		},
 	}
@@ -415,7 +415,7 @@ func newAdminKafkaCommands() []cli.Command {
 				},
 				cli.BoolFlag{
 					Name:  FlagHeadersModeWithAlias,
-					Usage: "Output headers of messages in format: DomainID, WorkflowID, RunID, FirstEventID, NextEventID",
+					Usage: "Output headers of messages in format: NamespaceID, WorkflowID, RunID, FirstEventID, NextEventID",
 				},
 				cli.IntFlag{
 					Name:  FlagMessageTypeWithAlias,
@@ -533,7 +533,7 @@ clusters:
 				// for multiple workflow
 				cli.StringFlag{
 					Name:  FlagInputFileWithAlias,
-					Usage: "Input file to read multiple workflow line by line. For each line: domainID,workflowID,runID,minEventID,maxEventID (minEventID/maxEventID are optional.)",
+					Usage: "Input file to read multiple workflow line by line. For each line: namespaceID,workflowID,runID,minEventID,maxEventID (minEventID/maxEventID are optional.)",
 				},
 
 				// for one workflow
@@ -554,8 +554,8 @@ clusters:
 					Usage: "RunID",
 				},
 				cli.StringFlag{
-					Name:  FlagDomainID,
-					Usage: "DomainID",
+					Name:  FlagNamespaceID,
+					Usage: "NamespaceID",
 				},
 
 				// for persistence connection
@@ -811,7 +811,7 @@ func newAdminDLQCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagDLQTypeWithAlias,
-					Usage: "Type of DLQ to manage. (Options: domain, history)",
+					Usage: "Type of DLQ to manage. (Options: namespace, history)",
 				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
@@ -841,7 +841,7 @@ func newAdminDLQCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagDLQTypeWithAlias,
-					Usage: "Type of DLQ to manage. (Options: domain, history)",
+					Usage: "Type of DLQ to manage. (Options: namespace, history)",
 				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
@@ -863,7 +863,7 @@ func newAdminDLQCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagDLQTypeWithAlias,
-					Usage: "Type of DLQ to manage. (Options: domain, history)",
+					Usage: "Type of DLQ to manage. (Options: namespace, history)",
 				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,

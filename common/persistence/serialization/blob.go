@@ -118,12 +118,12 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 	return shardInfo, nil
 }
 
-func DomainInfoToBlob(info *persistenceblobs.DomainInfo) (DataBlob, error) {
+func NamespaceInfoToBlob(info *persistenceblobs.NamespaceInfo) (DataBlob, error) {
 	return protoRWEncode(info)
 }
 
-func DomainInfoFromBlob(b []byte, proto string) (*persistenceblobs.DomainInfo, error) {
-	result := &persistenceblobs.DomainInfo{}
+func NamespaceInfoFromBlob(b []byte, proto string) (*persistenceblobs.NamespaceInfo, error) {
+	result := &persistenceblobs.NamespaceInfo{}
 	return result, protoRWDecode(b, proto, result)
 }
 

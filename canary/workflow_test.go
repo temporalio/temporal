@@ -40,8 +40,8 @@ type (
 	}
 
 	mockCadenceClient struct {
-		client       *mocks.Client
-		domainClient *mocks.DomainClient
+		client          *mocks.Client
+		namespaceClient *mocks.NamespaceClient
 	}
 )
 
@@ -163,15 +163,15 @@ func newTestWorkerOptions(ctx *activityContext) worker.Options {
 func newMockActivityContext(client mockCadenceClient) *activityContext {
 	return &activityContext{
 		cadence: cadenceClient{
-			Client:       client.client,
-			DomainClient: client.domainClient,
+			Client:          client.client,
+			NamespaceClient: client.namespaceClient,
 		},
 	}
 }
 
 func newMockCadenceClient() mockCadenceClient {
 	return mockCadenceClient{
-		client:       new(mocks.Client),
-		domainClient: new(mocks.DomainClient),
+		client:          new(mocks.Client),
+		namespaceClient: new(mocks.NamespaceClient),
 	}
 }

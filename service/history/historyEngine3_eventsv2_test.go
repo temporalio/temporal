@@ -60,7 +60,7 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockEventsCache          *MockeventsCache
-		mockDomainCache          *cache.MockDomainCache
+		mockNamespaceCache       *cache.MockNamespaceCache
 		mockClusterMetadata      *cluster.MockMetadata
 
 		historyEngine    *historyEngineImpl
@@ -108,10 +108,10 @@ func (s *engine3Suite) SetupTest() {
 	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
 	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
 	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
 	s.mockEventsCache = s.mockShard.mockEventsCache
 
-	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -149,13 +149,13 @@ func (s *engine3Suite) TearDownTest() {
 }
 
 func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
-	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
+	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&p.NamespaceInfo{ID: testNamespaceID}, &p.NamespaceConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	we := commonproto.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
@@ -184,7 +184,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	}, nil).Once()
 
 	request := historyservice.RecordDecisionTaskStartedRequest{
-		DomainUUID:        domainID,
+		NamespaceUUID:     namespaceID,
 		WorkflowExecution: &we,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -224,13 +224,13 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 }
 
 func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
-	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
+	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&p.NamespaceInfo{ID: testNamespaceID}, &p.NamespaceConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "workflowID"
 	workflowType := "workflowType"
 	taskList := "testTaskList"
@@ -241,9 +241,9 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 
 	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
-		DomainUUID: domainID,
+		NamespaceUUID: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Domain:                              domainID,
+			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
 			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 			TaskList:                            &commonproto.TaskList{Name: taskList},
@@ -258,26 +258,26 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 }
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
-	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
+	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&p.NamespaceInfo{ID: testNamespaceID}, &p.NamespaceConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.EqualError(err, "Missing domain UUID.")
+	s.EqualError(err, "Missing namespace UUID.")
 
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "wId"
 	runID := testRunID
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := []byte("test input")
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		DomainUUID: domainID,
+		NamespaceUUID: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Domain:     domainID,
+			Namespace:  namespaceID,
 			WorkflowId: workflowID,
 			Identity:   identity,
 			SignalName: signalName,
@@ -304,17 +304,17 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 }
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
-	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
+	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&p.NamespaceInfo{ID: testNamespaceID}, &p.NamespaceConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.EqualError(err, "Missing domain UUID.")
+	s.EqualError(err, "Missing namespace UUID.")
 
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	workflowID := "wId"
 	workflowType := "workflowType"
 	taskList := "testTaskList"
@@ -323,9 +323,9 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	input := []byte("test input")
 	requestID := uuid.New()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		DomainUUID: domainID,
+		NamespaceUUID: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Domain:                              domainID,
+			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
 			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
 			TaskList:                            &commonproto.TaskList{Name: taskList},

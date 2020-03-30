@@ -39,11 +39,11 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -51,8 +51,8 @@ import (
 )
 
 const (
-	getDomainReplicationMessageBatchSize = 100
-	defaultLastMessageID                 = -1
+	getNamespaceReplicationMessageBatchSize = 100
+	defaultLastMessageID                    = -1
 )
 
 type (
@@ -63,7 +63,7 @@ type (
 		numberOfHistoryShards int
 		params                *resource.BootstrapParams
 		config                *Config
-		domainDLQHandler      domain.DLQMessageHandler
+		namespaceDLQHandler   namespace.DLQMessageHandler
 	}
 )
 
@@ -80,7 +80,7 @@ func NewAdminHandler(
 	config *Config,
 ) *AdminHandler {
 
-	domainReplicationTaskExecutor := domain.NewReplicationTaskExecutor(
+	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
 		resource.GetMetadataManager(),
 		resource.GetLogger(),
 	)
@@ -89,9 +89,9 @@ func NewAdminHandler(
 		numberOfHistoryShards: params.PersistenceConfig.NumHistoryShards,
 		params:                params,
 		config:                config,
-		domainDLQHandler: domain.NewDLQMessageHandler(
-			domainReplicationTaskExecutor,
-			resource.GetDomainReplicationQueue(),
+		namespaceDLQHandler: namespace.NewDLQMessageHandler(
+			namespaceReplicationTaskExecutor,
+			resource.GetNamespaceReplicationQueue(),
 			resource.GetLogger(),
 		),
 	}
@@ -99,13 +99,13 @@ func NewAdminHandler(
 
 // Start starts the handler
 func (adh *AdminHandler) Start() {
-	// Start domain replication queue cleanup
-	adh.Resource.GetDomainReplicationQueue().Start()
+	// Start namespace replication queue cleanup
+	adh.Resource.GetNamespaceReplicationQueue().Start()
 }
 
 // Stop stops the handler
 func (adh *AdminHandler) Stop() {
-	adh.Resource.GetDomainReplicationQueue().Stop()
+	adh.Resource.GetNamespaceReplicationQueue().Stop()
 }
 
 // AddSearchAttribute add search attribute to whitelist
@@ -196,12 +196,12 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 		return nil, adh.error(err, scope)
 	}
 
-	domainID, err := adh.GetDomainCache().GetDomainID(request.GetDomain())
+	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 
 	historyAddr := historyHost.GetAddress()
 	resp2, err := adh.GetHistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
-		DomainUUID: domainID,
-		Execution:  request.Execution,
+		NamespaceUUID: namespaceID,
+		Execution:     request.Execution,
 	})
 
 	if err != nil {
@@ -277,7 +277,7 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	return &adminservice.DescribeHistoryHostResponse{
 		NumberOfShards:        resp.GetNumberOfShards(),
 		ShardIDs:              resp.GetShardIDs(),
-		DomainCache:           resp.GetDomainCache(),
+		NamespaceCache:        resp.GetNamespaceCache(),
 		ShardControllerStatus: resp.GetShardControllerStatus(),
 		Address:               resp.GetAddress(),
 	}, err
@@ -293,11 +293,11 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 	var err error
 	var size int
 
-	domainID, err := adh.GetDomainCache().GetDomainID(request.GetDomain())
+	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
-	scope = scope.Tagged(metrics.DomainTag(request.GetDomain()))
+	scope = scope.Tagged(metrics.NamespaceTag(request.GetNamespace()))
 
 	execution := request.Execution
 	if execution.GetWorkflowId() == "" {
@@ -349,8 +349,8 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		}
 
 		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-			DomainUUID: domainID,
-			Execution:  execution,
+			NamespaceUUID: namespaceID,
+			Execution:     execution,
 		})
 		if err != nil {
 			return nil, err
@@ -406,7 +406,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 	}
 
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
-	// domains along with the individual domains stats
+	// namespaces along with the individual namespaces stats
 	adh.GetMetricsClient().RecordTimer(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.HistorySize, time.Duration(size))
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
@@ -450,19 +450,19 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	); err != nil {
 		return nil, adh.error(err, scope)
 	}
-	domainID, err := adh.GetDomainCache().GetDomainID(request.GetDomain())
+	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
-	scope = scope.Tagged(metrics.DomainTag(request.GetDomain()))
+	scope = scope.Tagged(metrics.NamespaceTag(request.GetNamespace()))
 
 	execution := request.Execution
 	var pageToken *token.RawHistoryContinuation
 	var targetVersionHistory *persistence.VersionHistory
 	if request.NextPageToken == nil {
 		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-			DomainUUID: domainID,
-			Execution:  execution,
+			NamespaceUUID: namespaceID,
+			Execution:     execution,
 		})
 		if err != nil {
 			return nil, adh.error(err, scope)
@@ -544,7 +544,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
 	size := rawHistoryResponse.Size
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
-	// domains along with the individual domains stats
+	// namespaces along with the individual namespaces stats
 	adh.GetMetricsClient().RecordTimer(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.HistorySize, time.Duration(size))
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
@@ -570,7 +570,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	return result, nil
 }
 
-// DescribeCluster return information about cadence deployment
+// DescribeCluster return information about temporal deployment
 func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.DescribeClusterRequest) (_ *adminservice.DescribeClusterResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
 
@@ -651,24 +651,24 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 	return &adminservice.GetReplicationMessagesResponse{MessagesByShard: resp.GetMessagesByShard()}, nil
 }
 
-// GetDomainReplicationMessages returns new domain replication tasks since last retrieved task ID.
-func (adh *AdminHandler) GetDomainReplicationMessages(ctx context.Context, request *adminservice.GetDomainReplicationMessagesRequest) (_ *adminservice.GetDomainReplicationMessagesResponse, retError error) {
+// GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
+func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, request *adminservice.GetNamespaceReplicationMessagesRequest) (_ *adminservice.GetNamespaceReplicationMessagesResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminGetDomainReplicationMessagesScope)
+	scope, sw := adh.startRequestProfile(metrics.AdminGetNamespaceReplicationMessagesScope)
 	defer sw.Stop()
 
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 
-	if adh.GetDomainReplicationQueue() == nil {
-		return nil, adh.error(errors.New("domain replication queue not enabled for cluster"), scope)
+	if adh.GetNamespaceReplicationQueue() == nil {
+		return nil, adh.error(errors.New("namespace replication queue not enabled for cluster"), scope)
 	}
 
 	lastMessageID := defaultLastMessageID
 	if request.GetLastRetrievedMessageId() == defaultLastMessageID {
-		clusterAckLevels, err := adh.GetDomainReplicationQueue().GetAckLevels()
+		clusterAckLevels, err := adh.GetNamespaceReplicationQueue().GetAckLevels()
 		if err == nil {
 			if ackLevel, ok := clusterAckLevels[request.GetClusterName()]; ok {
 				lastMessageID = ackLevel
@@ -676,22 +676,22 @@ func (adh *AdminHandler) GetDomainReplicationMessages(ctx context.Context, reque
 		}
 	}
 
-	replicationTasks, lastMessageID, err := adh.GetDomainReplicationQueue().GetReplicationMessages(
-		lastMessageID, getDomainReplicationMessageBatchSize)
+	replicationTasks, lastMessageID, err := adh.GetNamespaceReplicationQueue().GetReplicationMessages(
+		lastMessageID, getNamespaceReplicationMessageBatchSize)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
 
 	if request.GetLastProcessedMessageId() != defaultLastMessageID {
-		err := adh.GetDomainReplicationQueue().UpdateAckLevel(int(request.GetLastProcessedMessageId()), request.GetClusterName())
+		err := adh.GetNamespaceReplicationQueue().UpdateAckLevel(int(request.GetLastProcessedMessageId()), request.GetClusterName())
 		if err != nil {
-			adh.GetLogger().Warn("Failed to update domain replication queue ack level",
+			adh.GetLogger().Warn("Failed to update namespace replication queue ack level",
 				tag.TaskID(request.GetLastProcessedMessageId()),
 				tag.ClusterName(request.GetClusterName()))
 		}
 	}
 
-	return &adminservice.GetDomainReplicationMessagesResponse{
+	return &adminservice.GetNamespaceReplicationMessagesResponse{
 		Messages: &replication.ReplicationMessages{
 			ReplicationTasks:       replicationTasks,
 			LastRetrievedMessageId: int64(lastMessageID),
@@ -729,8 +729,8 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-	if request.GetDomainName() == "" {
-		return nil, adh.error(errDomainNotSet, scope)
+	if request.GetNamespace() == "" {
+		return nil, adh.error(errNamespaceNotSet, scope)
 	}
 	if request.WorkflowExecution == nil {
 		return nil, adh.error(errExecutionNotSet, scope)
@@ -741,14 +741,14 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	if request.GetEvents() == nil {
 		return nil, adh.error(errWorkflowIDNotSet, scope)
 	}
-	domainEntry, err := adh.GetDomainCache().GetDomain(request.GetDomainName())
+	namespaceEntry, err := adh.GetNamespaceCache().GetNamespace(request.GetNamespace())
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
 
 	_, err = adh.GetHistoryClient().ReapplyEvents(ctx, &historyservice.ReapplyEventsRequest{
-		DomainUUID: domainEntry.GetInfo().ID,
-		Request:    request,
+		NamespaceUUID: namespaceEntry.GetInfo().ID,
+		Request:       request,
 	})
 	if err != nil {
 		return nil, adh.error(err, scope)
@@ -801,14 +801,14 @@ func (adh *AdminHandler) ReadDLQMessages(
 			ReplicationTasks: resp.GetReplicationTasks(),
 			NextPageToken:    resp.GetNextPageToken(),
 		}, err
-	case enums.DLQTypeDomain:
+	case enums.DLQTypeNamespace:
 		op = func() error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
 				var err error
-				tasks, token, err = adh.domainDLQHandler.Read(
+				tasks, token, err = adh.namespaceDLQHandler.Read(
 					int(request.GetInclusiveEndMessageID()),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken())
@@ -862,13 +862,13 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		}
 
 		return &adminservice.PurgeDLQMessagesResponse{}, err
-	case enums.DLQTypeDomain:
+	case enums.DLQTypeNamespace:
 		op = func() error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
-				return adh.domainDLQHandler.Purge(int(request.GetInclusiveEndMessageID()))
+				return adh.namespaceDLQHandler.Purge(int(request.GetInclusiveEndMessageID()))
 			}
 		}
 	default:
@@ -919,7 +919,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 		return &adminservice.MergeDLQMessagesResponse{
 			NextPageToken: request.GetNextPageToken(),
 		}, nil
-	case enums.DLQTypeDomain:
+	case enums.DLQTypeNamespace:
 
 		op = func() error {
 			select {
@@ -927,7 +927,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 				return ctx.Err()
 			default:
 				var err error
-				token, err = adh.domainDLQHandler.Merge(
+				token, err = adh.namespaceDLQHandler.Merge(
 					int(request.GetInclusiveEndMessageID()),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken(),
@@ -963,14 +963,14 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	if err := validateExecution(request.Execution); err != nil {
 		return nil, adh.error(err, scope)
 	}
-	domainEntry, err := adh.GetDomainCache().GetDomain(request.GetDomain())
+	namespaceEntry, err := adh.GetNamespaceCache().GetNamespace(request.GetNamespace())
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
 
 	_, err = adh.GetHistoryClient().RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
-		DomainUUID: domainEntry.GetInfo().ID,
-		Request:    request,
+		NamespaceUUID: namespaceEntry.GetInfo().ID,
+		Request:       request,
 	})
 	if err != nil {
 		return nil, adh.error(err, scope)

@@ -234,7 +234,7 @@ func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 				metricsScope: metrics.SyncActivityTaskScope,
 				startTime:    activityTask.startTime,
 				queueID: definition.NewWorkflowIdentifier(
-					replicationAttr.GetDomainId(),
+					replicationAttr.GetNamespaceId(),
 					replicationAttr.GetWorkflowId(),
 					replicationAttr.GetRunId(),
 				),
@@ -249,7 +249,7 @@ func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 				metricsClient: s.metricsClient,
 			},
 			req: &historyservice.SyncActivityRequest{
-				DomainId:           replicationAttr.DomainId,
+				NamespaceId:        replicationAttr.NamespaceId,
 				WorkflowId:         replicationAttr.WorkflowId,
 				RunId:              replicationAttr.RunId,
 				Version:            replicationAttr.Version,
@@ -338,14 +338,14 @@ func (s *activityReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 	task.attempt = s.config.ReplicatorActivityBufferRetryCount() + 1
 	retryErr := serviceerror.NewRetryTask(
 		"",
-		task.queueID.DomainID,
+		task.queueID.NamespaceID,
 		task.queueID.WorkflowID,
 		"other random run ID",
 		447,
 	)
 
 	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.DomainID, task.queueID.WorkflowID,
+		task.queueID.NamespaceID, task.queueID.WorkflowID,
 		retryErr.RunId, retryErr.NextEventId,
 		task.queueID.RunID, task.taskID+1,
 	).Return(errors.New("some random error")).Once()
@@ -353,7 +353,7 @@ func (s *activityReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 	s.Equal(retryErr, err)
 
 	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.DomainID, task.queueID.WorkflowID,
+		task.queueID.NamespaceID, task.queueID.WorkflowID,
 		retryErr.RunId, retryErr.NextEventId,
 		task.queueID.RunID, task.taskID+1,
 	).Return(nil).Once()
@@ -481,7 +481,7 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 				metricsScope: metrics.HistoryReplicationTaskScope,
 				startTime:    historyTask.startTime,
 				queueID: definition.NewWorkflowIdentifier(
-					replicationAttr.GetDomainId(),
+					replicationAttr.GetNamespaceId(),
 					replicationAttr.GetWorkflowId(),
 					replicationAttr.GetRunId(),
 				),
@@ -497,7 +497,7 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 			},
 			req: &historyservice.ReplicateEventsRequest{
 				SourceCluster: s.sourceCluster,
-				DomainUUID:    replicationAttr.DomainId,
+				NamespaceUUID: replicationAttr.NamespaceId,
 				WorkflowExecution: &commonproto.WorkflowExecution{
 					WorkflowId: replicationAttr.WorkflowId,
 					RunId:      replicationAttr.RunId,
@@ -553,14 +553,14 @@ func (s *historyReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 	task.attempt = s.config.ReplicatorHistoryBufferRetryCount() + 1
 	retryErr := serviceerror.NewRetryTask(
 		"",
-		task.queueID.DomainID,
+		task.queueID.NamespaceID,
 		task.queueID.WorkflowID,
 		"other random run ID",
 		447,
 	)
 
 	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.DomainID, task.queueID.WorkflowID,
+		task.queueID.NamespaceID, task.queueID.WorkflowID,
 		retryErr.RunId, retryErr.NextEventId,
 		task.queueID.RunID, task.taskID,
 	).Return(errors.New("some random error")).Once()
@@ -568,7 +568,7 @@ func (s *historyReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 	s.Equal(retryErr, err)
 
 	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.DomainID, task.queueID.WorkflowID,
+		task.queueID.NamespaceID, task.queueID.WorkflowID,
 		retryErr.RunId, retryErr.NextEventId,
 		task.queueID.RunID, task.taskID,
 	).Return(nil).Once()
@@ -649,7 +649,7 @@ func (s *historyMetadataReplicationTaskSuite) TestNewHistoryMetadataReplicationT
 				metricsScope: metrics.HistoryMetadataReplicationTaskScope,
 				startTime:    metadataTask.startTime,
 				queueID: definition.NewWorkflowIdentifier(
-					replicationAttr.GetDomainId(),
+					replicationAttr.GetNamespaceId(),
 					replicationAttr.GetWorkflowId(),
 					replicationAttr.GetRunId(),
 				),
@@ -678,7 +678,7 @@ func (s *historyMetadataReplicationTaskSuite) TestExecute() {
 
 	randomErr := errors.New("some random error")
 	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.DomainID, task.queueID.WorkflowID,
+		task.queueID.NamespaceID, task.queueID.WorkflowID,
 		task.queueID.RunID, task.firstEventID,
 		task.queueID.RunID, task.nextEventID,
 	).Return(randomErr).Once()
@@ -701,14 +701,14 @@ func (s *historyMetadataReplicationTaskSuite) TestHandleErr_RetryErr() {
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 	retryErr := serviceerror.NewRetryTask(
 		"",
-		task.queueID.DomainID,
+		task.queueID.NamespaceID,
 		task.queueID.WorkflowID,
 		"other random run ID",
 		447,
 	)
 
 	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.DomainID, task.queueID.WorkflowID,
+		task.queueID.NamespaceID, task.queueID.WorkflowID,
 		retryErr.RunId, retryErr.NextEventId,
 		task.queueID.RunID, task.taskID,
 	).Return(errors.New("some random error")).Once()
@@ -716,12 +716,12 @@ func (s *historyMetadataReplicationTaskSuite) TestHandleErr_RetryErr() {
 	s.Equal(retryErr, err)
 
 	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.DomainID, task.queueID.WorkflowID,
+		task.queueID.NamespaceID, task.queueID.WorkflowID,
 		retryErr.RunId, retryErr.NextEventId,
 		task.queueID.RunID, task.taskID,
 	).Return(nil).Once()
 	s.mockRereplicator.On("SendMultiWorkflowHistory",
-		task.queueID.DomainID, task.queueID.WorkflowID,
+		task.queueID.NamespaceID, task.queueID.WorkflowID,
 		task.queueID.RunID, task.firstEventID,
 		task.queueID.RunID, task.nextEventID,
 	).Return(nil).Once()
@@ -778,7 +778,7 @@ func (s *historyMetadataReplicationTaskSuite) TestNack() {
 
 func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication.ReplicationTask {
 	replicationAttr := &replication.SyncActivityTaskAttributes{
-		DomainId:           "some random domain ID",
+		NamespaceId:        "some random namespace ID",
 		WorkflowId:         "some random workflow ID",
 		RunId:              "some random run ID",
 		Version:            1394,
@@ -803,7 +803,7 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication
 func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replication.ReplicationTask {
 	replicationAttr := &replication.HistoryTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:       "some random domain ID",
+		NamespaceId:    "some random namespace ID",
 		WorkflowId:     "some random workflow ID",
 		RunId:          "some random run ID",
 		Version:        1394,
@@ -837,7 +837,7 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replication.R
 func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask() *replication.ReplicationTask {
 	replicationAttr := &replication.HistoryMetadataTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:       "some random domain ID",
+		NamespaceId:    "some random namespace ID",
 		WorkflowId:     "some random workflow ID",
 		RunId:          "some random run ID",
 		FirstEventId:   728,

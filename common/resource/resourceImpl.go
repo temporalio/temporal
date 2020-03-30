@@ -77,7 +77,7 @@ type (
 
 		// other common resources
 
-		domainCache       cache.DomainCache
+		namespaceCache    cache.NamespaceCache
 		timeSource        clock.TimeSource
 		payloadSerializer persistence.PayloadSerializer
 		metricsClient     metrics.Client
@@ -216,7 +216,7 @@ func New(
 		return nil, err
 	}
 
-	domainCache := cache.NewDomainCache(
+	namespaceCache := cache.NewNamespaceCache(
 		persistenceBean.GetMetadataManager(),
 		params.ClusterMetadata,
 		params.MetricsClient,
@@ -230,7 +230,7 @@ func New(
 		common.IsWhitelistServiceTransientError,
 	)
 
-	matchingRawClient, err := clientBean.GetMatchingClient(domainCache.GetDomainName)
+	matchingRawClient, err := clientBean.GetMatchingClient(namespaceCache.GetNamespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -252,13 +252,13 @@ func New(
 		Logger:           logger,
 		MetricsClient:    params.MetricsClient,
 		ClusterMetadata:  params.ClusterMetadata,
-		DomainCache:      domainCache,
+		NamespaceCache:   namespaceCache,
 	}
 	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
 		Logger:          logger,
 		MetricsClient:   params.MetricsClient,
 		ClusterMetadata: params.ClusterMetadata,
-		DomainCache:     domainCache,
+		NamespaceCache:  namespaceCache,
 	}
 	if err := params.ArchiverProvider.RegisterBootstrapContainer(
 		serviceName,
@@ -281,7 +281,7 @@ func New(
 
 		// other common resources
 
-		domainCache:       domainCache,
+		namespaceCache:    namespaceCache,
 		timeSource:        clock.NewRealTimeSource(),
 		payloadSerializer: persistence.NewPayloadSerializer(),
 		metricsClient:     params.MetricsClient,
@@ -351,7 +351,7 @@ func (h *Impl) Start() {
 	h.runtimeMetricsReporter.Start()
 
 	h.membershipMonitor.Start()
-	h.domainCache.Start()
+	h.namespaceCache.Start()
 
 	hostInfo, err := h.membershipMonitor.WhoAmI()
 	if err != nil {
@@ -376,7 +376,7 @@ func (h *Impl) Stop() {
 		return
 	}
 
-	h.domainCache.Stop()
+	h.namespaceCache.Stop()
 	h.membershipMonitor.Stop()
 	h.ringpopChannel.Close()
 	if err := h.grpcListener.Close(); err != nil {
@@ -409,9 +409,9 @@ func (h *Impl) GetClusterMetadata() cluster.Metadata {
 
 // other common resources
 
-// GetDomainCache return domain cache
-func (h *Impl) GetDomainCache() cache.DomainCache {
-	return h.domainCache
+// GetNamespaceCache return namespace cache
+func (h *Impl) GetNamespaceCache() cache.NamespaceCache {
+	return h.namespaceCache
 }
 
 // GetTimeSource return time source
@@ -551,9 +551,9 @@ func (h *Impl) GetVisibilityManager() persistence.VisibilityManager {
 	return h.visibilityMgr
 }
 
-// GetDomainReplicationQueue return domain replication queue
-func (h *Impl) GetDomainReplicationQueue() persistence.DomainReplicationQueue {
-	return h.persistenceBean.GetDomainReplicationQueue()
+// GetNamespaceReplicationQueue return namespace replication queue
+func (h *Impl) GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue {
+	return h.persistenceBean.GetNamespaceReplicationQueue()
 }
 
 // GetShardManager return shard manager

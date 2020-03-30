@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package domain
+package namespace
 
 import (
 	"fmt"
@@ -44,7 +44,7 @@ type (
 		controller *gomock.Controller
 
 		mockReplicationTaskExecutor *MockReplicationTaskExecutor
-		mockReplicationQueue        *persistence.MockDomainReplicationQueue
+		mockReplicationQueue        *persistence.MockNamespaceReplicationQueue
 		dlqMessageHandler           *dlqMessageHandlerImpl
 	}
 )
@@ -68,7 +68,7 @@ func (s *dlqMessageHandlerSuite) SetupTest() {
 	zapLogger, err := zap.NewDevelopment()
 	s.Require().NoError(err)
 	s.mockReplicationTaskExecutor = NewMockReplicationTaskExecutor(s.controller)
-	s.mockReplicationQueue = persistence.NewMockDomainReplicationQueue(s.controller)
+	s.mockReplicationQueue = persistence.NewMockNamespaceReplicationQueue(s.controller)
 
 	logger := loggerimpl.NewLogger(zapLogger)
 	s.dlqMessageHandler = NewDLQMessageHandler(
@@ -89,7 +89,7 @@ func (s *dlqMessageHandlerSuite) TestReadMessages() {
 
 	tasks := []*replication.ReplicationTask{
 		{
-			TaskType:     enums.ReplicationTaskTypeDomain,
+			TaskType:     enums.ReplicationTaskTypeNamespace,
 			SourceTaskId: 1,
 		},
 	}
@@ -111,7 +111,7 @@ func (s *dlqMessageHandlerSuite) TestReadMessages_ThrowErrorOnGetDLQAckLevel() {
 
 	tasks := []*replication.ReplicationTask{
 		{
-			TaskType:     enums.ReplicationTaskTypeDomain,
+			TaskType:     enums.ReplicationTaskTypeNamespace,
 			SourceTaskId: 1,
 		},
 	}
@@ -185,23 +185,23 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages() {
 	pageToken := []byte{}
 	messageID := 11
 
-	domainAttribute := &replication.DomainTaskAttributes{
+	namespaceAttribute := &replication.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
 
 	tasks := []*replication.ReplicationTask{
 		{
-			TaskType:     enums.ReplicationTaskTypeDomain,
+			TaskType:     enums.ReplicationTaskTypeNamespace,
 			SourceTaskId: int64(messageID),
-			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-				DomainTaskAttributes: domainAttribute,
+			Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+				NamespaceTaskAttributes: namespaceAttribute,
 			},
 		},
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil).Times(1)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(ackLevel, lastMessageID, pageSize, pageToken).
 		Return(tasks, nil, nil).Times(1)
-	s.mockReplicationTaskExecutor.EXPECT().Execute(domainAttribute).Return(nil).Times(1)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute).Return(nil).Times(1)
 	s.mockReplicationQueue.EXPECT().UpdateDLQAckLevel(messageID).Return(nil).Times(1)
 	s.mockReplicationQueue.EXPECT().RangeDeleteMessagesFromDLQ(ackLevel, messageID).Return(nil).Times(1)
 
@@ -216,16 +216,16 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnGetDLQAckLevel() 
 	pageToken := []byte{}
 	messageID := 11
 	testError := fmt.Errorf("test")
-	domainAttribute := &replication.DomainTaskAttributes{
+	namespaceAttribute := &replication.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
 
 	tasks := []*replication.ReplicationTask{
 		{
-			TaskType:     enums.ReplicationTaskTypeDomain,
+			TaskType:     enums.ReplicationTaskTypeNamespace,
 			SourceTaskId: int64(messageID),
-			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-				DomainTaskAttributes: domainAttribute,
+			Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+				NamespaceTaskAttributes: namespaceAttribute,
 			},
 		},
 	}
@@ -268,33 +268,33 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnHandleReceivingTa
 	messageID1 := 11
 	messageID2 := 12
 	testError := fmt.Errorf("test")
-	domainAttribute1 := &replication.DomainTaskAttributes{
+	namespaceAttribute1 := &replication.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
-	domainAttribute2 := &replication.DomainTaskAttributes{
+	namespaceAttribute2 := &replication.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
 	tasks := []*replication.ReplicationTask{
 		{
-			TaskType:     enums.ReplicationTaskTypeDomain,
+			TaskType:     enums.ReplicationTaskTypeNamespace,
 			SourceTaskId: int64(messageID1),
-			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-				DomainTaskAttributes: domainAttribute1,
+			Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+				NamespaceTaskAttributes: namespaceAttribute1,
 			},
 		},
 		{
-			TaskType:     enums.ReplicationTaskTypeDomain,
+			TaskType:     enums.ReplicationTaskTypeNamespace,
 			SourceTaskId: int64(messageID2),
-			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-				DomainTaskAttributes: domainAttribute2,
+			Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+				NamespaceTaskAttributes: namespaceAttribute2,
 			},
 		},
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil).Times(1)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(ackLevel, lastMessageID, pageSize, pageToken).
 		Return(tasks, nil, nil).Times(1)
-	s.mockReplicationTaskExecutor.EXPECT().Execute(domainAttribute1).Return(nil).Times(1)
-	s.mockReplicationTaskExecutor.EXPECT().Execute(domainAttribute2).Return(testError).Times(1)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute1).Return(nil).Times(1)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute2).Return(testError).Times(1)
 	s.mockReplicationQueue.EXPECT().DeleteMessageFromDLQ(messageID1).Return(nil).Times(1)
 	s.mockReplicationQueue.EXPECT().DeleteMessageFromDLQ(messageID2).Times(0)
 	s.mockReplicationQueue.EXPECT().UpdateDLQAckLevel(messageID1).Return(nil).Times(1)
@@ -312,33 +312,33 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnDeleteMessages() 
 	messageID1 := 11
 	messageID2 := 12
 	testError := fmt.Errorf("test")
-	domainAttribute1 := &replication.DomainTaskAttributes{
+	namespaceAttribute1 := &replication.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
-	domainAttribute2 := &replication.DomainTaskAttributes{
+	namespaceAttribute2 := &replication.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
 	tasks := []*replication.ReplicationTask{
 		{
-			TaskType:     enums.ReplicationTaskTypeDomain,
+			TaskType:     enums.ReplicationTaskTypeNamespace,
 			SourceTaskId: int64(messageID1),
-			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-				DomainTaskAttributes: domainAttribute1,
+			Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+				NamespaceTaskAttributes: namespaceAttribute1,
 			},
 		},
 		{
-			TaskType:     enums.ReplicationTaskTypeDomain,
+			TaskType:     enums.ReplicationTaskTypeNamespace,
 			SourceTaskId: int64(messageID2),
-			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-				DomainTaskAttributes: domainAttribute2,
+			Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+				NamespaceTaskAttributes: namespaceAttribute2,
 			},
 		},
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil).Times(1)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(ackLevel, lastMessageID, pageSize, pageToken).
 		Return(tasks, nil, nil).Times(1)
-	s.mockReplicationTaskExecutor.EXPECT().Execute(domainAttribute1).Return(nil).Times(1)
-	s.mockReplicationTaskExecutor.EXPECT().Execute(domainAttribute2).Return(nil).Times(1)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute1).Return(nil).Times(1)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute2).Return(nil).Times(1)
 	s.mockReplicationQueue.EXPECT().RangeDeleteMessagesFromDLQ(ackLevel, messageID2).Return(testError).Times(1)
 	s.mockReplicationQueue.EXPECT().UpdateDLQAckLevel(messageID1).Return(nil).Times(1)
 
@@ -354,23 +354,23 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_IgnoreErrorOnUpdateDLQAckLeve
 	pageToken := []byte{}
 	messageID := 11
 	testError := fmt.Errorf("test")
-	domainAttribute := &replication.DomainTaskAttributes{
+	namespaceAttribute := &replication.NamespaceTaskAttributes{
 		Id: uuid.New(),
 	}
 
 	tasks := []*replication.ReplicationTask{
 		{
-			TaskType:     enums.ReplicationTaskTypeDomain,
+			TaskType:     enums.ReplicationTaskTypeNamespace,
 			SourceTaskId: int64(messageID),
-			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-				DomainTaskAttributes: domainAttribute,
+			Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+				NamespaceTaskAttributes: namespaceAttribute,
 			},
 		},
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil).Times(1)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(ackLevel, lastMessageID, pageSize, pageToken).
 		Return(tasks, nil, nil).Times(1)
-	s.mockReplicationTaskExecutor.EXPECT().Execute(domainAttribute).Return(nil).Times(1)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute).Return(nil).Times(1)
 	s.mockReplicationQueue.EXPECT().RangeDeleteMessagesFromDLQ(ackLevel, messageID).Return(nil).Times(1)
 	s.mockReplicationQueue.EXPECT().UpdateDLQAckLevel(messageID).Return(testError).Times(1)
 

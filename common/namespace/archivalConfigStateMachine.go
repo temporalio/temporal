@@ -18,16 +18,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package domain
+package namespace
 
 import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
-// domainArchivalConfigStateMachine is only used by domainHandler.
-// It is simply meant to simplify the logic around archival domain state changes.
-// Logically this class can be thought of as part of domainHandler.
+// namespaceArchivalConfigStateMachine is only used by namespaceHandler.
+// It is simply meant to simplify the logic around archival namespace state changes.
+// Logically this class can be thought of as part of namespaceHandler.
 
 type (
 	// ArchivalState represents the state of archival config

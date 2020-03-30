@@ -142,29 +142,29 @@ func (s *esCrossDCTestSuite) TearDownSuite() {
 }
 
 func (s *esCrossDCTestSuite) TestSearchAttributes() {
-	domainName := "test-xdc-search-attr-" + common.GenerateRandomString(5)
+	namespace := "test-xdc-search-attr-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
 		Clusters:                               clusterReplicationConfigES,
 		ActiveClusterName:                      clusterNameES[0],
-		IsGlobalDomain:                         true,
+		IsGlobalNamespace:                      true,
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(host.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	}
-	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the change
+	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
-	resp2, err := client2.DescribeDomain(host.NewContext(), descReq)
+	resp2, err := client2.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.Equal(resp, resp2)
@@ -184,7 +184,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domainName,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -205,9 +205,9 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	startFilter.EarliestTime = startTime
 	query := fmt.Sprintf(`WorkflowID = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Domain:   domainName,
-		PageSize: 5,
-		Query:    query,
+		Namespace: namespace,
+		PageSize:  5,
+		Query:     query,
 	}
 
 	testListResult := func(client host.FrontendClient) {
@@ -254,7 +254,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	poller := host.TaskPoller{
 		Engine:          client1,
-		Domain:          domainName,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -269,9 +269,9 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	time.Sleep(waitForESToSettle)
 
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Domain:   domainName,
-		PageSize: int32(2),
-		Query:    fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt),
+		Namespace: namespace,
+		PageSize:  int32(2),
+		Query:     fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt),
 	}
 
 	testListResult = func(client host.FrontendClient) {
@@ -310,7 +310,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	terminateReason := "force terminate to make sure standby process tasks"
 	terminateDetails := []byte("terminate details")
 	_, err = client1.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -323,7 +323,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	// check terminate done
 	executionTerminated := false
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain: domainName,
+		Namespace: namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},

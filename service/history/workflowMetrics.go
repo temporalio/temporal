@@ -32,13 +32,13 @@ import (
 
 func emitWorkflowHistoryStats(
 	metricsClient metrics.Client,
-	domainName string,
+	namespace string,
 	historySize int,
 	historyCount int,
 ) {
 
-	sizeScope := metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.DomainTag(domainName))
-	countScope := metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.DomainTag(domainName))
+	sizeScope := metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespace))
+	countScope := metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespace))
 
 	sizeScope.RecordTimer(metrics.HistorySize, time.Duration(historySize))
 	countScope.RecordTimer(metrics.HistoryCount, time.Duration(historyCount))
@@ -46,7 +46,7 @@ func emitWorkflowHistoryStats(
 
 func emitWorkflowExecutionStats(
 	metricsClient metrics.Client,
-	domainName string,
+	namespace string,
 	stats *persistence.MutableStateStats,
 	executionInfoHistorySize int64,
 ) {
@@ -55,8 +55,8 @@ func emitWorkflowExecutionStats(
 		return
 	}
 
-	sizeScope := metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.DomainTag(domainName))
-	countScope := metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.DomainTag(domainName))
+	sizeScope := metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespace))
+	countScope := metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespace))
 
 	sizeScope.RecordTimer(metrics.HistorySize, time.Duration(executionInfoHistorySize))
 	sizeScope.RecordTimer(metrics.MutableStateSize, time.Duration(stats.MutableStateSize))
@@ -77,7 +77,7 @@ func emitWorkflowExecutionStats(
 
 func emitSessionUpdateStats(
 	metricsClient metrics.Client,
-	domainName string,
+	namespace string,
 	stats *persistence.MutableStateUpdateSessionStats,
 ) {
 
@@ -85,8 +85,8 @@ func emitSessionUpdateStats(
 		return
 	}
 
-	sizeScope := metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.DomainTag(domainName))
-	countScope := metricsClient.Scope(metrics.SessionCountStatsScope, metrics.DomainTag(domainName))
+	sizeScope := metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(namespace))
+	countScope := metricsClient.Scope(metrics.SessionCountStatsScope, metrics.NamespaceTag(namespace))
 
 	sizeScope.RecordTimer(metrics.MutableStateSize, time.Duration(stats.MutableStateSize))
 	sizeScope.RecordTimer(metrics.ExecutionInfoSize, time.Duration(stats.ExecutionInfoSize))
@@ -110,13 +110,13 @@ func emitSessionUpdateStats(
 
 func emitWorkflowCompletionStats(
 	metricsClient metrics.Client,
-	domainName string,
+	namespace string,
 	taskList string,
 	event *commonproto.HistoryEvent,
 ) {
 	scope := metricsClient.Scope(
 		metrics.WorkflowCompletionStatsScope,
-		metrics.DomainTag(domainName),
+		metrics.NamespaceTag(namespace),
 		metrics.TaskListTag(taskList),
 	)
 

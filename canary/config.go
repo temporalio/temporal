@@ -62,8 +62,8 @@ type (
 
 	// Canary contains the configuration for canary tests
 	Canary struct {
-		Domains  []string `yaml:"domains"`
-		Excludes []string `yaml:"excludes"`
+		Namespaces []string `yaml:"namespaces"`
+		Excludes   []string `yaml:"excludes"`
 	}
 
 	// Cadence contains the configuration for cadence service
@@ -75,8 +75,8 @@ type (
 
 // Validate validates canary configration
 func (c *Config) Validate() error {
-	if len(c.Canary.Domains) == 0 {
-		return fmt.Errorf("missing value for domains property")
+	if len(c.Canary.Namespaces) == 0 {
+		return fmt.Errorf("missing value for namespaces property")
 	}
 	return nil
 }

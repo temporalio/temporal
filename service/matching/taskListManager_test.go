@@ -154,10 +154,10 @@ func createTestTaskListManagerWithConfig(controller *gomock.Controller, cfg *Con
 		panic(err)
 	}
 	tm := newTestTaskManager(logger)
-	mockDomainCache := cache.NewMockDomainCache(controller)
-	mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(cache.CreateDomainCacheEntry("domainName"), nil).AnyTimes()
+	mockNamespaceCache := cache.NewMockNamespaceCache(controller)
+	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.CreateNamespaceCacheEntry("namespace"), nil).AnyTimes()
 	me := newMatchingEngine(
-		cfg, tm, nil, logger, mockDomainCache,
+		cfg, tm, nil, logger, mockNamespaceCache,
 	)
 	tl := "tl"
 	dID := "deadbeef-0123-4567-890a-bcdef0123456"

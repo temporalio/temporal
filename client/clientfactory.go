@@ -44,20 +44,20 @@ const (
 )
 
 type (
-	// Factory can be used to create RPC clients for cadence services
+	// Factory can be used to create RPC clients for temporal services
 	Factory interface {
 		NewHistoryClient() (history.Client, error)
-		NewMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error)
+		NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error)
 		NewFrontendClient(rpcAddress string) (frontend.Client, error)
 
 		NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
-		NewMatchingClientWithTimeout(domainIDToName DomainIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
+		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
 		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
 		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration) (admin.Client, error)
 	}
 
-	// DomainIDToNameFunc maps a domainID to domain name. Returns error when mapping is not possible.
-	DomainIDToNameFunc func(string) (string, error)
+	// NamespaceIDToNameFunc maps a namespaceID to namespace name. Returns error when mapping is not possible.
+	NamespaceIDToNameFunc func(string) (string, error)
 
 	rpcClientFactory struct {
 		rpcFactory            common.RPCFactory
@@ -92,8 +92,8 @@ func (cf *rpcClientFactory) NewHistoryClient() (history.Client, error) {
 	return cf.NewHistoryClientWithTimeout(history.DefaultTimeout)
 }
 
-func (cf *rpcClientFactory) NewMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error) {
-	return cf.NewMatchingClientWithTimeout(domainIDToName, matching.DefaultTimeout, matching.DefaultLongPollTimeout)
+func (cf *rpcClientFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error) {
+	return cf.NewMatchingClientWithTimeout(namespaceIDToName, matching.DefaultTimeout, matching.DefaultLongPollTimeout)
 }
 
 func (cf *rpcClientFactory) NewFrontendClient(rpcAddress string) (frontend.Client, error) {
@@ -127,7 +127,7 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 }
 
 func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
-	domainIDToName DomainIDToNameFunc,
+	namespaceIDToName NamespaceIDToNameFunc,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (matching.Client, error) {
@@ -153,7 +153,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		timeout,
 		longPollTimeout,
 		common.NewClientCache(keyResolver, clientProvider),
-		matching.NewLoadBalancer(domainIDToName, cf.dynConfig),
+		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig),
 	)
 
 	if cf.metricsClient != nil {

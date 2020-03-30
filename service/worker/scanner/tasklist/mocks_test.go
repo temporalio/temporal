@@ -34,11 +34,11 @@ import (
 
 type (
 	mockTaskTable struct {
-		domainID   []byte
-		workflowID string
-		runID      []byte
-		nextTaskID int64
-		tasks      []*persistenceblobs.AllocatedTaskInfo
+		namespaceID []byte
+		workflowID  string
+		runID       []byte
+		nextTaskID  int64
+		tasks       []*persistenceblobs.AllocatedTaskInfo
 	}
 	mockTaskListTable struct {
 		sync.Mutex
@@ -48,20 +48,20 @@ type (
 
 func newMockTaskTable() *mockTaskTable {
 	return &mockTaskTable{
-		domainID:   uuid.NewRandom(),
-		workflowID: uuid.New(),
-		runID:      uuid.NewRandom(),
+		namespaceID: uuid.NewRandom(),
+		workflowID:  uuid.New(),
+		runID:       uuid.NewRandom(),
 	}
 }
 
 func (tbl *mockTaskListTable) generate(name string, idle bool) {
 	tl := p.PersistedTaskListInfo{
 		Data: &persistenceblobs.TaskListInfo{
-			DomainID: uuid.NewRandom(),
-			Name:     name,
+			NamespaceID: uuid.NewRandom(),
+			Name:        name,
 			LastUpdated: types.TimestampNow(),
 		},
-		RangeID:     22,
+		RangeID: 22,
 	}
 	if idle {
 		tl.Data.LastUpdated, _ = types.TimestampProto(time.Unix(1000, 1000))
@@ -116,14 +116,13 @@ func (tbl *mockTaskTable) generate(count int, expired bool) {
 		exp, _ := types.TimestampProto(time.Now().Add(time.Hour))
 		ti := &persistenceblobs.AllocatedTaskInfo{
 			Data: &persistenceblobs.TaskInfo{
-				DomainID:   tbl.domainID,
-				WorkflowID: tbl.workflowID,
-				RunID:      tbl.runID,
-				ScheduleID: 3,
-				Expiry: exp,
+				NamespaceID: tbl.namespaceID,
+				WorkflowID:  tbl.workflowID,
+				RunID:       tbl.runID,
+				ScheduleID:  3,
+				Expiry:      exp,
 			},
 			TaskID: tbl.nextTaskID,
-
 		}
 		if expired {
 			ti.Data.Expiry, _ = types.TimestampProto(time.Unix(0, time.Now().UnixNano()-int64(time.Second*33)))

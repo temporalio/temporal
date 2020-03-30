@@ -39,7 +39,7 @@ import (
 
 type (
 	nDCReplicationTask interface {
-		getDomainID() string
+		getNamespaceID() string
 		getExecution() *commonproto.WorkflowExecution
 		getWorkflowID() string
 		getRunID() string
@@ -59,7 +59,7 @@ type (
 
 	nDCReplicationTaskImpl struct {
 		sourceCluster  string
-		domainID       string
+		namespaceID    string
 		execution      *commonproto.WorkflowExecution
 		version        int64
 		firstEvent     *commonproto.HistoryEvent
@@ -75,8 +75,8 @@ type (
 )
 
 var (
-	// ErrInvalidDomainID is returned if domain ID is invalid
-	ErrInvalidDomainID = serviceerror.NewInvalidArgument("invalid domain ID")
+	// ErrInvalidNamespaceID is returned if namespace ID is invalid
+	ErrInvalidNamespaceID = serviceerror.NewInvalidArgument("invalid namespace ID")
 	// ErrInvalidExecution is returned if execution is invalid
 	ErrInvalidExecution = serviceerror.NewInvalidArgument("invalid execution")
 	// ErrInvalidRunID is returned if run ID is invalid
@@ -107,7 +107,7 @@ func newNDCReplicationTask(
 		return nil, err
 	}
 
-	domainID := request.GetDomainUUID()
+	namespaceID := request.GetNamespaceUUID()
 	execution := request.WorkflowExecution
 	versionHistory := &commonproto.VersionHistory{
 		BranchToken: nil,
@@ -143,7 +143,7 @@ func newNDCReplicationTask(
 
 	return &nDCReplicationTaskImpl{
 		sourceCluster:  sourceCluster,
-		domainID:       domainID,
+		namespaceID:    namespaceID,
 		execution:      execution,
 		version:        version,
 		firstEvent:     firstEvent,
@@ -158,8 +158,8 @@ func newNDCReplicationTask(
 	}, nil
 }
 
-func (t *nDCReplicationTaskImpl) getDomainID() string {
-	return t.domainID
+func (t *nDCReplicationTaskImpl) getNamespaceID() string {
+	return t.namespaceID
 }
 
 func (t *nDCReplicationTaskImpl) getExecution() *commonproto.WorkflowExecution {
@@ -270,7 +270,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 
 	newRunTask := &nDCReplicationTaskImpl{
 		sourceCluster: t.sourceCluster,
-		domainID:      t.domainID,
+		namespaceID:   t.namespaceID,
 		execution: &commonproto.WorkflowExecution{
 			WorkflowId: t.execution.WorkflowId,
 			RunId:      newRunID,
@@ -298,8 +298,8 @@ func validateReplicateEventsRequest(
 
 	// TODO add validation on version history
 
-	if valid := validateUUID(request.GetDomainUUID()); !valid {
-		return nil, nil, ErrInvalidDomainID
+	if valid := validateUUID(request.GetNamespaceUUID()); !valid {
+		return nil, nil, ErrInvalidNamespaceID
 	}
 	if request.WorkflowExecution == nil {
 		return nil, nil, ErrInvalidExecution

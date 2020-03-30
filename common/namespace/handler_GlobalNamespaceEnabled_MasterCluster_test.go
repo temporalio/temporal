@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package domain
+package namespace
 
 import (
 	"context"
@@ -48,28 +48,28 @@ import (
 )
 
 type (
-	domainHandlerGlobalDomainEnabledMasterClusterSuite struct {
+	namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite struct {
 		suite.Suite
 		persistencetests.TestBase
 
-		minRetentionDays     int
-		maxBadBinaryCount    int
-		metadataMgr          persistence.MetadataManager
-		mockProducer         *mocks.KafkaProducer
-		mockDomainReplicator Replicator
-		archivalMetadata     archiver.ArchivalMetadata
-		mockArchiverProvider *provider.MockArchiverProvider
+		minRetentionDays        int
+		maxBadBinaryCount       int
+		metadataMgr             persistence.MetadataManager
+		mockProducer            *mocks.KafkaProducer
+		mockNamespaceReplicator Replicator
+		archivalMetadata        archiver.ArchivalMetadata
+		mockArchiverProvider    *provider.MockArchiverProvider
 
 		handler *HandlerImpl
 	}
 )
 
-func TestDomainHandlerGlobalDomainEnabledMasterClusterSuite(t *testing.T) {
-	s := new(domainHandlerGlobalDomainEnabledMasterClusterSuite)
+func TestNamespaceHandlerGlobalNamespaceEnabledMasterClusterSuite(t *testing.T) {
+	s := new(namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite)
 	suite.Run(t, s)
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) SetupSuite() {
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) SetupSuite() {
 	if testing.Verbose() {
 		log.SetOutput(os.Stdout)
 	}
@@ -80,46 +80,46 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) SetupSuite() {
 	s.TestBase.Setup()
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TearDownSuite() {
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TearDownSuite() {
 	s.TestBase.TearDownWorkflowStore()
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) SetupTest() {
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) SetupTest() {
 	logger := loggerimpl.NewNopLogger()
 	dcCollection := dc.NewCollection(dc.NewNopClient(), logger)
 	s.minRetentionDays = 1
 	s.maxBadBinaryCount = 10
 	s.metadataMgr = s.TestBase.MetadataManager
 	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockDomainReplicator = NewDomainReplicator(s.mockProducer, logger)
+	s.mockNamespaceReplicator = NewNamespaceReplicator(s.mockProducer, logger)
 	s.archivalMetadata = archiver.NewArchivalMetadata(
 		dcCollection,
 		"",
 		false,
 		"",
 		false,
-		&config.ArchivalDomainDefaults{},
+		&config.ArchivalNamespaceDefaults{},
 	)
 	s.mockArchiverProvider = &provider.MockArchiverProvider{}
 	s.handler = NewHandler(
 		s.minRetentionDays,
-		dc.GetIntPropertyFilteredByDomain(s.maxBadBinaryCount),
+		dc.GetIntPropertyFilteredByNamespace(s.maxBadBinaryCount),
 		logger,
 		s.metadataMgr,
 		s.ClusterMetadata,
-		s.mockDomainReplicator,
+		s.mockNamespaceReplicator,
 		s.archivalMetadata,
 		s.mockArchiverProvider,
 	)
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TearDownTest() {
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TearDownTest() {
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockArchiverProvider.AssertExpectations(s.T())
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDomain_LocalDomain_InvalidCluster() {
-	domainName := s.getRandomDomainName()
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterGetNamespace_LocalNamespace_InvalidCluster() {
+	namespace := s.getRandomNamespace()
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
@@ -131,10 +131,10 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		},
 	}
 	data := map[string]string{"some random key": "some random value"}
-	isGlobalDomain := false
+	isGlobalNamespace := false
 
-	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
 		Description:                            description,
 		OwnerEmail:                             email,
 		WorkflowExecutionRetentionPeriodInDays: retention,
@@ -142,16 +142,16 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		Clusters:                               clusters,
 		ActiveClusterName:                      activeClusterName,
 		Data:                                   data,
-		IsGlobalDomain:                         isGlobalDomain,
+		IsGlobalNamespace:                      isGlobalNamespace,
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Nil(registerResp)
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDomain_LocalDomain_AllDefault() {
-	domainName := s.getRandomDomainName()
-	isGlobalDomain := false
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterGetNamespace_LocalNamespace_AllDefault() {
+	namespace := s.getRandomNamespace()
+	isGlobalNamespace := false
 	var clusters []*commonproto.ClusterReplicationConfiguration
 	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
@@ -160,30 +160,30 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 	}
 
 	retention := int32(1)
-	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         isGlobalDomain,
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      isGlobalNamespace,
 		WorkflowExecutionRetentionPeriodInDays: retention,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
 
-	resp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	})
 	s.NoError(err)
 
-	s.NotEmpty(resp.DomainInfo.GetUuid())
-	resp.DomainInfo.Uuid = ""
-	s.Equal(&commonproto.DomainInfo{
-		Name:        domainName,
-		Status:      enums.DomainStatusRegistered,
+	s.NotEmpty(resp.NamespaceInfo.GetUuid())
+	resp.NamespaceInfo.Uuid = ""
+	s.Equal(&commonproto.NamespaceInfo{
+		Name:        namespace,
+		Status:      enums.NamespaceStatusRegistered,
 		Description: "",
 		OwnerEmail:  "",
 		Data:        map[string]string{},
 		Uuid:        "",
-	}, resp.DomainInfo)
-	s.Equal(&commonproto.DomainConfiguration{
+	}, resp.NamespaceInfo)
+	s.Equal(&commonproto.NamespaceConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
 		EmitMetric:                             &types.BoolValue{Value: false},
 		HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -192,16 +192,16 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		VisibilityArchivalURI:                  "",
 		BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 	}, resp.Configuration)
-	s.Equal(&commonproto.DomainReplicationConfiguration{
+	s.Equal(&commonproto.NamespaceReplicationConfiguration{
 		ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 		Clusters:          clusters,
 	}, resp.ReplicationConfiguration)
 	s.Equal(common.EmptyVersion, resp.GetFailoverVersion())
-	s.Equal(isGlobalDomain, resp.GetIsGlobalDomain())
+	s.Equal(isGlobalNamespace, resp.GetIsGlobalNamespace())
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDomain_LocalDomain_NoDefault() {
-	domainName := s.getRandomDomainName()
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterGetNamespace_LocalNamespace_NoDefault() {
+	namespace := s.getRandomNamespace()
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
@@ -213,7 +213,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		},
 	}
 	data := map[string]string{"some random key": "some random value"}
-	isGlobalDomain := false
+	isGlobalNamespace := false
 
 	var expectedClusters []*commonproto.ClusterReplicationConfiguration
 	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
@@ -222,8 +222,8 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		})
 	}
 
-	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
 		Description:                            description,
 		OwnerEmail:                             email,
 		WorkflowExecutionRetentionPeriodInDays: retention,
@@ -231,27 +231,27 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		Clusters:                               clusters,
 		ActiveClusterName:                      activeClusterName,
 		Data:                                   data,
-		IsGlobalDomain:                         isGlobalDomain,
+		IsGlobalNamespace:                      isGlobalNamespace,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
 
-	resp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	})
 	s.NoError(err)
 
-	s.NotEmpty(resp.DomainInfo.GetUuid())
-	resp.DomainInfo.Uuid = ""
-	s.Equal(&commonproto.DomainInfo{
-		Name:        domainName,
-		Status:      enums.DomainStatusRegistered,
+	s.NotEmpty(resp.NamespaceInfo.GetUuid())
+	resp.NamespaceInfo.Uuid = ""
+	s.Equal(&commonproto.NamespaceInfo{
+		Name:        namespace,
+		Status:      enums.NamespaceStatusRegistered,
 		Description: description,
 		OwnerEmail:  email,
 		Data:        data,
 		Uuid:        "",
-	}, resp.DomainInfo)
-	s.Equal(&commonproto.DomainConfiguration{
+	}, resp.NamespaceInfo)
+	s.Equal(&commonproto.NamespaceConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
 		EmitMetric:                             &types.BoolValue{Value: emitMetric},
 		HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -260,16 +260,16 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		VisibilityArchivalURI:                  "",
 		BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 	}, resp.Configuration)
-	s.Equal(&commonproto.DomainReplicationConfiguration{
+	s.Equal(&commonproto.NamespaceReplicationConfiguration{
 		ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 		Clusters:          expectedClusters,
 	}, resp.ReplicationConfiguration)
 	s.Equal(common.EmptyVersion, resp.GetFailoverVersion())
-	s.Equal(isGlobalDomain, resp.GetIsGlobalDomain())
+	s.Equal(isGlobalNamespace, resp.GetIsGlobalNamespace())
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain_LocalDomain_NoAttrSet() {
-	domainName := s.getRandomDomainName()
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGetNamespace_LocalNamespace_NoAttrSet() {
+	namespace := s.getRandomNamespace()
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
@@ -281,10 +281,10 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			ClusterName: replicationConfig.ClusterName,
 		})
 	}
-	isGlobalDomain := false
+	isGlobalNamespace := false
 
-	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
 		Description:                            description,
 		OwnerEmail:                             email,
 		WorkflowExecutionRetentionPeriodInDays: retention,
@@ -292,24 +292,24 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 		Clusters:                               clusters,
 		ActiveClusterName:                      s.ClusterMetadata.GetCurrentClusterName(),
 		Data:                                   data,
-		IsGlobalDomain:                         isGlobalDomain,
+		IsGlobalNamespace:                      isGlobalNamespace,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
 
-	fnTest := func(info *commonproto.DomainInfo, config *commonproto.DomainConfiguration,
-		replicationConfig *commonproto.DomainReplicationConfiguration, isGlobalDomain bool, failoverVersion int64) {
+	fnTest := func(info *commonproto.NamespaceInfo, config *commonproto.NamespaceConfiguration,
+		replicationConfig *commonproto.NamespaceReplicationConfiguration, isGlobalNamespace bool, failoverVersion int64) {
 		s.NotEmpty(info.GetUuid())
 		info.Uuid = ""
-		s.Equal(&commonproto.DomainInfo{
-			Name:        domainName,
-			Status:      enums.DomainStatusRegistered,
+		s.Equal(&commonproto.NamespaceInfo{
+			Name:        namespace,
+			Status:      enums.NamespaceStatusRegistered,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
 			Uuid:        "",
 		}, info)
-		s.Equal(&commonproto.DomainConfiguration{
+		s.Equal(&commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -318,45 +318,45 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			VisibilityArchivalURI:                  "",
 			BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 		}, config)
-		s.Equal(&commonproto.DomainReplicationConfiguration{
+		s.Equal(&commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 			Clusters:          clusters,
 		}, replicationConfig)
 		s.Equal(common.EmptyVersion, failoverVersion)
-		s.Equal(isGlobalDomain, isGlobalDomain)
+		s.Equal(isGlobalNamespace, isGlobalNamespace)
 	}
 
-	updateResp, err := s.handler.UpdateDomain(context.Background(), &workflowservice.UpdateDomainRequest{
-		Name: domainName,
+	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
 	})
 	s.NoError(err)
 	fnTest(
-		updateResp.DomainInfo,
+		updateResp.NamespaceInfo,
 		updateResp.Configuration,
 		updateResp.ReplicationConfiguration,
-		updateResp.GetIsGlobalDomain(),
+		updateResp.GetIsGlobalNamespace(),
 		updateResp.GetFailoverVersion(),
 	)
 
-	getResp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	})
 	s.NoError(err)
 	fnTest(
-		getResp.DomainInfo,
+		getResp.NamespaceInfo,
 		getResp.Configuration,
 		getResp.ReplicationConfiguration,
-		getResp.GetIsGlobalDomain(),
+		getResp.GetIsGlobalNamespace(),
 		getResp.GetFailoverVersion(),
 	)
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain_LocalDomain_AllAttrSet() {
-	domainName := s.getRandomDomainName()
-	isGlobalDomain := false
-	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         isGlobalDomain,
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGetNamespace_LocalNamespace_AllAttrSet() {
+	namespace := s.getRandomNamespace()
+	isGlobalNamespace := false
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      isGlobalNamespace,
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	})
 	s.NoError(err)
@@ -374,19 +374,19 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 		})
 	}
 
-	fnTest := func(info *commonproto.DomainInfo, config *commonproto.DomainConfiguration,
-		replicationConfig *commonproto.DomainReplicationConfiguration, isGlobalDomain bool, failoverVersion int64) {
+	fnTest := func(info *commonproto.NamespaceInfo, config *commonproto.NamespaceConfiguration,
+		replicationConfig *commonproto.NamespaceReplicationConfiguration, isGlobalNamespace bool, failoverVersion int64) {
 		s.NotEmpty(info.GetUuid())
 		info.Uuid = ""
-		s.Equal(&commonproto.DomainInfo{
-			Name:        domainName,
-			Status:      enums.DomainStatusRegistered,
+		s.Equal(&commonproto.NamespaceInfo{
+			Name:        namespace,
+			Status:      enums.NamespaceStatusRegistered,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
 			Uuid:        "",
 		}, info)
-		s.Equal(&commonproto.DomainConfiguration{
+		s.Equal(&commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -395,22 +395,22 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			VisibilityArchivalURI:                  "",
 			BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 		}, config)
-		s.Equal(&commonproto.DomainReplicationConfiguration{
+		s.Equal(&commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 			Clusters:          clusters,
 		}, replicationConfig)
 		s.Equal(common.EmptyVersion, failoverVersion)
-		s.Equal(isGlobalDomain, isGlobalDomain)
+		s.Equal(isGlobalNamespace, isGlobalNamespace)
 	}
 
-	updateResp, err := s.handler.UpdateDomain(context.Background(), &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		UpdatedInfo: &commonproto.UpdateDomainInfo{
+	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		UpdatedInfo: &commonproto.UpdateNamespaceInfo{
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
 		},
-		Configuration: &commonproto.DomainConfiguration{
+		Configuration: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -419,36 +419,36 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			VisibilityArchivalURI:                  "",
 			BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 		},
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 			Clusters:          clusters,
 		},
 	})
 	s.NoError(err)
 	fnTest(
-		updateResp.DomainInfo,
+		updateResp.NamespaceInfo,
 		updateResp.Configuration,
 		updateResp.ReplicationConfiguration,
-		updateResp.GetIsGlobalDomain(),
+		updateResp.GetIsGlobalNamespace(),
 		updateResp.GetFailoverVersion(),
 	)
 
-	getResp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	})
 	s.NoError(err)
 	fnTest(
-		getResp.DomainInfo,
+		getResp.NamespaceInfo,
 		getResp.Configuration,
 		getResp.ReplicationConfiguration,
-		getResp.GetIsGlobalDomain(),
+		getResp.GetIsGlobalNamespace(),
 		getResp.GetFailoverVersion(),
 	)
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDomain_GlobalDomain_AllDefault() {
-	domainName := s.getRandomDomainName()
-	isGlobalDomain := true
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterGetNamespace_GlobalNamespace_AllDefault() {
+	namespace := s.getRandomNamespace()
+	isGlobalNamespace := true
 	var clusters []*commonproto.ClusterReplicationConfiguration
 	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
@@ -459,30 +459,30 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 
 	retention := int32(1)
-	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         isGlobalDomain,
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      isGlobalNamespace,
 		WorkflowExecutionRetentionPeriodInDays: retention,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
 
-	resp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	})
 	s.NoError(err)
 
-	s.NotEmpty(resp.DomainInfo.GetUuid())
-	resp.DomainInfo.Uuid = ""
-	s.Equal(&commonproto.DomainInfo{
-		Name:        domainName,
-		Status:      enums.DomainStatusRegistered,
+	s.NotEmpty(resp.NamespaceInfo.GetUuid())
+	resp.NamespaceInfo.Uuid = ""
+	s.Equal(&commonproto.NamespaceInfo{
+		Name:        namespace,
+		Status:      enums.NamespaceStatusRegistered,
 		Description: "",
 		OwnerEmail:  "",
 		Data:        map[string]string{},
 		Uuid:        "",
-	}, resp.DomainInfo)
-	s.Equal(&commonproto.DomainConfiguration{
+	}, resp.NamespaceInfo)
+	s.Equal(&commonproto.NamespaceConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
 		EmitMetric:                             &types.BoolValue{Value: false},
 		HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -491,16 +491,16 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		VisibilityArchivalURI:                  "",
 		BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 	}, resp.Configuration)
-	s.Equal(&commonproto.DomainReplicationConfiguration{
+	s.Equal(&commonproto.NamespaceReplicationConfiguration{
 		ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 		Clusters:          clusters,
 	}, resp.ReplicationConfiguration)
 	s.Equal(s.ClusterMetadata.GetNextFailoverVersion(s.ClusterMetadata.GetCurrentClusterName(), 0), resp.GetFailoverVersion())
-	s.Equal(isGlobalDomain, resp.GetIsGlobalDomain())
+	s.Equal(isGlobalNamespace, resp.GetIsGlobalNamespace())
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDomain_GlobalDomain_NoDefault() {
-	domainName := s.getRandomDomainName()
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterGetNamespace_GlobalNamespace_NoDefault() {
+	namespace := s.getRandomNamespace()
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
@@ -518,12 +518,12 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 	s.True(len(activeClusterName) > 0)
 	s.True(len(clusters) > 1)
 	data := map[string]string{"some random key": "some random value"}
-	isGlobalDomain := true
+	isGlobalNamespace := true
 
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
 
-	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
 		Description:                            description,
 		OwnerEmail:                             email,
 		WorkflowExecutionRetentionPeriodInDays: retention,
@@ -531,27 +531,27 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		Clusters:                               clusters,
 		ActiveClusterName:                      activeClusterName,
 		Data:                                   data,
-		IsGlobalDomain:                         isGlobalDomain,
+		IsGlobalNamespace:                      isGlobalNamespace,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
 
-	resp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	})
 	s.NoError(err)
 
-	s.NotEmpty(resp.DomainInfo.GetUuid())
-	resp.DomainInfo.Uuid = ""
-	s.Equal(&commonproto.DomainInfo{
-		Name:        domainName,
-		Status:      enums.DomainStatusRegistered,
+	s.NotEmpty(resp.NamespaceInfo.GetUuid())
+	resp.NamespaceInfo.Uuid = ""
+	s.Equal(&commonproto.NamespaceInfo{
+		Name:        namespace,
+		Status:      enums.NamespaceStatusRegistered,
 		Description: description,
 		OwnerEmail:  email,
 		Data:        data,
 		Uuid:        "",
-	}, resp.DomainInfo)
-	s.Equal(&commonproto.DomainConfiguration{
+	}, resp.NamespaceInfo)
+	s.Equal(&commonproto.NamespaceConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
 		EmitMetric:                             &types.BoolValue{Value: emitMetric},
 		HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -560,16 +560,16 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		VisibilityArchivalURI:                  "",
 		BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 	}, resp.Configuration)
-	s.Equal(&commonproto.DomainReplicationConfiguration{
+	s.Equal(&commonproto.NamespaceReplicationConfiguration{
 		ActiveClusterName: activeClusterName,
 		Clusters:          clusters,
 	}, resp.ReplicationConfiguration)
 	s.Equal(s.ClusterMetadata.GetNextFailoverVersion(activeClusterName, 0), resp.GetFailoverVersion())
-	s.Equal(isGlobalDomain, resp.GetIsGlobalDomain())
+	s.Equal(isGlobalNamespace, resp.GetIsGlobalNamespace())
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain_GlobalDomain_NoAttrSet() {
-	domainName := s.getRandomDomainName()
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGetNamespace_GlobalNamespace_NoAttrSet() {
+	namespace := s.getRandomNamespace()
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
@@ -587,12 +587,12 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 	}
 	s.True(len(activeClusterName) > 0)
 	s.True(len(clusters) > 1)
-	isGlobalDomain := true
+	isGlobalNamespace := true
 
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Twice()
 
-	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
 		Description:                            description,
 		OwnerEmail:                             email,
 		WorkflowExecutionRetentionPeriodInDays: retention,
@@ -600,24 +600,24 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 		Clusters:                               clusters,
 		ActiveClusterName:                      activeClusterName,
 		Data:                                   data,
-		IsGlobalDomain:                         isGlobalDomain,
+		IsGlobalNamespace:                      isGlobalNamespace,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
 
-	fnTest := func(info *commonproto.DomainInfo, config *commonproto.DomainConfiguration,
-		replicationConfig *commonproto.DomainReplicationConfiguration, isGlobalDomain bool, failoverVersion int64) {
+	fnTest := func(info *commonproto.NamespaceInfo, config *commonproto.NamespaceConfiguration,
+		replicationConfig *commonproto.NamespaceReplicationConfiguration, isGlobalNamespace bool, failoverVersion int64) {
 		s.NotEmpty(info.GetUuid())
 		info.Uuid = ""
-		s.Equal(&commonproto.DomainInfo{
-			Name:        domainName,
-			Status:      enums.DomainStatusRegistered,
+		s.Equal(&commonproto.NamespaceInfo{
+			Name:        namespace,
+			Status:      enums.NamespaceStatusRegistered,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
 			Uuid:        "",
 		}, info)
-		s.Equal(&commonproto.DomainConfiguration{
+		s.Equal(&commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -626,41 +626,41 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			VisibilityArchivalURI:                  "",
 			BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 		}, config)
-		s.Equal(&commonproto.DomainReplicationConfiguration{
+		s.Equal(&commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: activeClusterName,
 			Clusters:          clusters,
 		}, replicationConfig)
 		s.Equal(s.ClusterMetadata.GetNextFailoverVersion(activeClusterName, 0), failoverVersion)
-		s.Equal(isGlobalDomain, isGlobalDomain)
+		s.Equal(isGlobalNamespace, isGlobalNamespace)
 	}
 
-	updateResp, err := s.handler.UpdateDomain(context.Background(), &workflowservice.UpdateDomainRequest{
-		Name: domainName,
+	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
 	})
 	s.NoError(err)
 	fnTest(
-		updateResp.DomainInfo,
+		updateResp.NamespaceInfo,
 		updateResp.Configuration,
 		updateResp.ReplicationConfiguration,
-		updateResp.GetIsGlobalDomain(),
+		updateResp.GetIsGlobalNamespace(),
 		updateResp.GetFailoverVersion(),
 	)
 
-	getResp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	})
 	s.NoError(err)
 	fnTest(
-		getResp.DomainInfo,
+		getResp.NamespaceInfo,
 		getResp.Configuration,
 		getResp.ReplicationConfiguration,
-		getResp.GetIsGlobalDomain(),
+		getResp.GetIsGlobalNamespace(),
 		getResp.GetFailoverVersion(),
 	)
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain_GlobalDomain_AllAttrSet() {
-	domainName := s.getRandomDomainName()
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGetNamespace_GlobalNamespace_AllAttrSet() {
+	namespace := s.getRandomNamespace()
 	activeClusterName := ""
 	clusters := []*commonproto.ClusterReplicationConfiguration{}
 	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
@@ -673,13 +673,13 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 	}
 	s.True(len(activeClusterName) > 0)
 	s.True(len(clusters) > 1)
-	isGlobalDomain := true
+	isGlobalNamespace := true
 
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Twice()
 
-	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
-		IsGlobalDomain:                         isGlobalDomain,
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		IsGlobalNamespace:                      isGlobalNamespace,
 		Clusters:                               clusters,
 		ActiveClusterName:                      activeClusterName,
 		WorkflowExecutionRetentionPeriodInDays: 1,
@@ -693,19 +693,19 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 	emitMetric := true
 	data := map[string]string{"some random key": "some random value"}
 
-	fnTest := func(info *commonproto.DomainInfo, config *commonproto.DomainConfiguration,
-		replicationConfig *commonproto.DomainReplicationConfiguration, isGlobalDomain bool, failoverVersion int64) {
+	fnTest := func(info *commonproto.NamespaceInfo, config *commonproto.NamespaceConfiguration,
+		replicationConfig *commonproto.NamespaceReplicationConfiguration, isGlobalNamespace bool, failoverVersion int64) {
 		s.NotEmpty(info.GetUuid())
 		info.Uuid = ""
-		s.Equal(&commonproto.DomainInfo{
-			Name:        domainName,
-			Status:      enums.DomainStatusRegistered,
+		s.Equal(&commonproto.NamespaceInfo{
+			Name:        namespace,
+			Status:      enums.NamespaceStatusRegistered,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
 			Uuid:        "",
 		}, info)
-		s.Equal(&commonproto.DomainConfiguration{
+		s.Equal(&commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -714,22 +714,22 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			VisibilityArchivalURI:                  "",
 			BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 		}, config)
-		s.Equal(&commonproto.DomainReplicationConfiguration{
+		s.Equal(&commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: activeClusterName,
 			Clusters:          clusters,
 		}, replicationConfig)
 		s.Equal(s.ClusterMetadata.GetNextFailoverVersion(activeClusterName, 0), failoverVersion)
-		s.Equal(isGlobalDomain, isGlobalDomain)
+		s.Equal(isGlobalNamespace, isGlobalNamespace)
 	}
 
-	updateResp, err := s.handler.UpdateDomain(context.Background(), &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		UpdatedInfo: &commonproto.UpdateDomainInfo{
+	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		UpdatedInfo: &commonproto.UpdateNamespaceInfo{
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
 		},
-		Configuration: &commonproto.DomainConfiguration{
+		Configuration: &commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -738,35 +738,35 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			VisibilityArchivalURI:                  "",
 			BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 		},
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: "",
 			Clusters:          clusters,
 		},
 	})
 	s.NoError(err)
 	fnTest(
-		updateResp.DomainInfo,
+		updateResp.NamespaceInfo,
 		updateResp.Configuration,
 		updateResp.ReplicationConfiguration,
-		updateResp.GetIsGlobalDomain(),
+		updateResp.GetIsGlobalNamespace(),
 		updateResp.GetFailoverVersion(),
 	)
 
-	getResp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	})
 	s.NoError(err)
 	fnTest(
-		getResp.DomainInfo,
+		getResp.NamespaceInfo,
 		getResp.Configuration,
 		getResp.ReplicationConfiguration,
-		getResp.GetIsGlobalDomain(),
+		getResp.GetIsGlobalNamespace(),
 		getResp.GetFailoverVersion(),
 	)
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain_GlobalDomain_Failover() {
-	domainName := s.getRandomDomainName()
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGetNamespace_GlobalNamespace_Failover() {
+	namespace := s.getRandomNamespace()
 	description := "some random description"
 	email := "some random email"
 	retention := int32(7)
@@ -785,12 +785,12 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 	}
 	s.True(len(prevActiveClusterName) > 0)
 	s.True(len(clusters) > 1)
-	isGlobalDomain := true
+	isGlobalNamespace := true
 
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Twice()
 
-	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
-		Name:                                   domainName,
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
 		Description:                            description,
 		OwnerEmail:                             email,
 		WorkflowExecutionRetentionPeriodInDays: retention,
@@ -798,24 +798,24 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 		Clusters:                               clusters,
 		ActiveClusterName:                      prevActiveClusterName,
 		Data:                                   data,
-		IsGlobalDomain:                         isGlobalDomain,
+		IsGlobalNamespace:                      isGlobalNamespace,
 	})
 	s.NoError(err)
 	s.Nil(registerResp)
 
-	fnTest := func(info *commonproto.DomainInfo, config *commonproto.DomainConfiguration,
-		replicationConfig *commonproto.DomainReplicationConfiguration, isGlobalDomain bool, failoverVersion int64) {
+	fnTest := func(info *commonproto.NamespaceInfo, config *commonproto.NamespaceConfiguration,
+		replicationConfig *commonproto.NamespaceReplicationConfiguration, isGlobalNamespace bool, failoverVersion int64) {
 		s.NotEmpty(info.GetUuid())
 		info.Uuid = ""
-		s.Equal(&commonproto.DomainInfo{
-			Name:        domainName,
-			Status:      enums.DomainStatusRegistered,
+		s.Equal(&commonproto.NamespaceInfo{
+			Name:        namespace,
+			Status:      enums.NamespaceStatusRegistered,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
 			Uuid:        "",
 		}, info)
-		s.Equal(&commonproto.DomainConfiguration{
+		s.Equal(&commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
 			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
@@ -824,7 +824,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			VisibilityArchivalURI:                  "",
 			BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 		}, config)
-		s.Equal(&commonproto.DomainReplicationConfiguration{
+		s.Equal(&commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: nextActiveClusterName,
 			Clusters:          clusters,
 		}, replicationConfig)
@@ -832,37 +832,37 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestUpdateGetDomain
 			nextActiveClusterName,
 			s.ClusterMetadata.GetNextFailoverVersion(prevActiveClusterName, 0),
 		), failoverVersion)
-		s.Equal(isGlobalDomain, isGlobalDomain)
+		s.Equal(isGlobalNamespace, isGlobalNamespace)
 	}
 
-	updateResp, err := s.handler.UpdateDomain(context.Background(), &workflowservice.UpdateDomainRequest{
-		Name: domainName,
-		ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Name: namespace,
+		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
 		},
 	})
 	s.NoError(err)
 	fnTest(
-		updateResp.DomainInfo,
+		updateResp.NamespaceInfo,
 		updateResp.Configuration,
 		updateResp.ReplicationConfiguration,
-		updateResp.GetIsGlobalDomain(),
+		updateResp.GetIsGlobalNamespace(),
 		updateResp.GetFailoverVersion(),
 	)
 
-	getResp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
-		Name: domainName,
+	getResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Name: namespace,
 	})
 	s.NoError(err)
 	fnTest(
-		getResp.DomainInfo,
+		getResp.NamespaceInfo,
 		getResp.Configuration,
 		getResp.ReplicationConfiguration,
-		getResp.GetIsGlobalDomain(),
+		getResp.GetIsGlobalNamespace(),
 		getResp.GetFailoverVersion(),
 	)
 }
 
-func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) getRandomDomainName() string {
-	return "domain" + uuid.New()
+func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) getRandomNamespace() string {
+	return "namespace" + uuid.New()
 }

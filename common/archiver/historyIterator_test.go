@@ -37,8 +37,8 @@ import (
 )
 
 const (
-	testDomainID                     = "test-domain-id"
-	testDomainName                   = "test-domain-name"
+	testNamespaceID                  = "test-namespace-id"
+	testNamespace                    = "test-namespace"
 	testWorkflowID                   = "test-workflow-id"
 	testRunID                        = "test-run-id"
 	testShardID                      = 1
@@ -352,8 +352,8 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
 	expectedHeader := &archiver.HistoryBlobHeader{
-		DomainName:           testDomainName,
-		DomainID:             testDomainID,
+		Namespace:            testNamespace,
+		NamespaceID:          testNamespaceID,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		IsLast:               true,
@@ -414,8 +414,8 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
 	expectedHeader := &archiver.HistoryBlobHeader{
-		DomainName:           testDomainName,
-		DomainID:             testDomainID,
+		Namespace:            testNamespace,
+		NamespaceID:          testNamespaceID,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		IsLast:               false,
@@ -465,8 +465,8 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		s.NoError(err)
 		s.NotNil(blob)
 		expectedHeader := &archiver.HistoryBlobHeader{
-			DomainName:           testDomainName,
-			DomainID:             testDomainID,
+			Namespace:            testNamespace,
+			NamespaceID:          testNamespaceID,
 			WorkflowID:           testWorkflowID,
 			RunID:                testRunID,
 			IsLast:               false,
@@ -690,8 +690,8 @@ func (s *HistoryIteratorSuite) constructTestHistoryIterator(
 ) *historyIterator {
 	request := &ArchiveHistoryRequest{
 		ShardID:              testShardID,
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,

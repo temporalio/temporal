@@ -45,7 +45,7 @@ type (
 		// resetWorkflow is the new NDC compatible workflow reset logic
 		resetWorkflow(
 			ctx context.Context,
-			domainID string,
+			namespaceID string,
 			workflowID string,
 			baseRunID string,
 			baseBranchToken []byte,
@@ -64,7 +64,7 @@ type (
 
 	workflowResetterImpl struct {
 		shard             ShardContext
-		domainCache       cache.DomainCache
+		namespaceCache    cache.NamespaceCache
 		clusterMetadata   cluster.Metadata
 		historyV2Mgr      persistence.HistoryManager
 		historyCache      *historyCache
@@ -82,7 +82,7 @@ func newWorkflowResetter(
 ) *workflowResetterImpl {
 	return &workflowResetterImpl{
 		shard:           shard,
-		domainCache:     shard.GetDomainCache(),
+		namespaceCache:  shard.GetNamespaceCache(),
 		clusterMetadata: shard.GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryManager(),
 		historyCache:    historyCache,
@@ -95,7 +95,7 @@ func newWorkflowResetter(
 
 func (r *workflowResetterImpl) resetWorkflow(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	baseRunID string,
 	baseBranchToken []byte,
@@ -109,11 +109,11 @@ func (r *workflowResetterImpl) resetWorkflow(
 	additionalReapplyEvents []*commonproto.HistoryEvent,
 ) (retError error) {
 
-	domainEntry, err := r.domainCache.GetDomainByID(domainID)
+	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
-	resetWorkflowVersion := domainEntry.GetFailoverVersion()
+	resetWorkflowVersion := namespaceEntry.GetFailoverVersion()
 
 	currentMutableState := currentWorkflow.getMutableState()
 	currentWorkflowTerminated := false
@@ -130,7 +130,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 
 	resetWorkflow, err := r.prepareResetWorkflow(
 		ctx,
-		domainID,
+		namespaceID,
 		workflowID,
 		baseRunID,
 		baseBranchToken,
@@ -157,7 +157,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 
 func (r *workflowResetterImpl) prepareResetWorkflow(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	baseRunID string,
 	baseBranchToken []byte,
@@ -173,7 +173,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 	resetWorkflow, err := r.replayResetWorkflow(
 		ctx,
-		domainID,
+		namespaceID,
 		workflowID,
 		baseRunID,
 		baseBranchToken,
@@ -230,7 +230,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	if err := r.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		resetMutableState,
-		domainID,
+		namespaceID,
 		workflowID,
 		baseRunID,
 		baseBranchToken,
@@ -297,7 +297,7 @@ func (r *workflowResetterImpl) persistToDB(
 
 func (r *workflowResetterImpl) replayResetWorkflow(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	baseRunID string,
 	baseBranchToken []byte,
@@ -308,7 +308,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 ) (nDCWorkflow, error) {
 
 	resetBranchToken, err := r.generateBranchToken(
-		domainID,
+		namespaceID,
 		workflowID,
 		baseBranchToken,
 		baseRebuildLastEventID+1,
@@ -319,7 +319,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	}
 
 	resetContext := newWorkflowExecutionContext(
-		domainID,
+		namespaceID,
 		commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      resetRunID,
@@ -332,7 +332,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		ctx,
 		r.shard.GetTimeSource().Now(),
 		definition.NewWorkflowIdentifier(
-			domainID,
+			namespaceID,
 			workflowID,
 			baseRunID,
 		),
@@ -340,7 +340,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		definition.NewWorkflowIdentifier(
-			domainID,
+			namespaceID,
 			workflowID,
 			resetRunID,
 		),
@@ -354,7 +354,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	resetContext.setHistorySize(resetHistorySize)
 	return newNDCWorkflow(
 		ctx,
-		r.domainCache,
+		r.namespaceCache,
 		r.clusterMetadata,
 		resetContext,
 		resetMutableState,
@@ -393,7 +393,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 }
 
 func (r *workflowResetterImpl) generateBranchToken(
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	forkBranchToken []byte,
 	forkNodeID int64,
@@ -404,7 +404,7 @@ func (r *workflowResetterImpl) generateBranchToken(
 	resp, err := r.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      forkNodeID,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(domainID, workflowID, resetRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, resetRunID),
 		ShardID:         common.IntPtr(shardID),
 	})
 	if err != nil {
@@ -432,7 +432,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
 	resetMutableState mutableState,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	baseRunID string,
 	baseBranchToken []byte,
@@ -459,7 +459,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
 		context, release, err := r.historyCache.getOrCreateWorkflowExecution(
 			ctx,
-			domainID,
+			namespaceID,
 			commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,

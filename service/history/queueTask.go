@@ -184,7 +184,7 @@ func (t *queueTaskBase) Execute() error {
 	var err error
 	t.shouldProcessTask, err = t.taskFilter(t.queueTaskInfo)
 	if err != nil {
-		time.Sleep(loadDomainEntryForTimerTaskRetryDelay)
+		time.Sleep(loadNamespaceEntryForTimerTaskRetryDelay)
 		return err
 	}
 
@@ -235,8 +235,8 @@ func (t *queueTaskBase) HandleErr(
 	// this is a transient error
 	// TODO remove this error check special case
 	//  since the new task life cycle will not give up until task processed / verified
-	if _, ok := err.(*serviceerror.DomainNotActive); ok {
-		if t.timeSource.Now().Sub(t.submitTime) > 2*cache.DomainCacheRefreshInterval {
+	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
+		if t.timeSource.Now().Sub(t.submitTime) > 2*cache.NamespaceCacheRefreshInterval {
 			t.scope.IncCounter(metrics.TaskNotActiveCounter)
 			return nil
 		}

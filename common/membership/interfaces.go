@@ -51,7 +51,7 @@ type (
 		HostsRemoved []*HostInfo
 	}
 
-	// Monitor provides membership information for all cadence services.
+	// Monitor provides membership information for all temporal services.
 	// It can be used to query which member host of a service is responsible for serving a given key.
 	Monitor interface {
 		common.Daemon
@@ -72,7 +72,7 @@ type (
 		GetReachableMembers() ([]string, error)
 	}
 
-	// ServiceResolver provides membership information for a specific cadence service.
+	// ServiceResolver provides membership information for a specific temporal service.
 	// It can be used to resolve which member host is responsible for serving a given key.
 	ServiceResolver interface {
 		Lookup(key string) (*HostInfo, error)

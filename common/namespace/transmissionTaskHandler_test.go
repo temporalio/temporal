@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package domain
+package namespace
 
 import (
 	"testing"
@@ -38,8 +38,8 @@ import (
 type (
 	transmissionTaskSuite struct {
 		suite.Suite
-		domainReplicator *domainReplicatorImpl
-		kafkaProducer    *mocks.KafkaProducer
+		namespaceReplicator *namespaceReplicatorImpl
+		kafkaProducer       *mocks.KafkaProducer
 	}
 )
 
@@ -57,21 +57,21 @@ func (s *transmissionTaskSuite) TearDownSuite() {
 
 func (s *transmissionTaskSuite) SetupTest() {
 	s.kafkaProducer = &mocks.KafkaProducer{}
-	s.domainReplicator = NewDomainReplicator(
+	s.namespaceReplicator = NewNamespaceReplicator(
 		s.kafkaProducer,
 		loggerimpl.NewDevelopmentForTest(s.Suite),
-	).(*domainReplicatorImpl)
+	).(*namespaceReplicatorImpl)
 }
 
 func (s *transmissionTaskSuite) TearDownTest() {
 	s.kafkaProducer.AssertExpectations(s.T())
 }
 
-func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_IsGlobalDomain() {
-	taskType := enums.ReplicationTaskTypeDomain
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask_IsGlobalNamespace() {
+	taskType := enums.ReplicationTaskTypeNamespace
 	id := uuid.New()
-	name := "some random domain test name"
-	status := enums.DomainStatusRegistered
+	name := "some random namespace test name"
+	status := enums.NamespaceStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -94,16 +94,16 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 		},
 	}
 
-	domainOperation := enums.DomainOperationCreate
-	info := &p.DomainInfo{
+	namespaceOperation := enums.NamespaceOperationCreate
+	info := &p.NamespaceInfo{
 		ID:          id,
 		Name:        name,
-		Status:      p.DomainStatusRegistered,
+		Status:      p.NamespaceStatusRegistered,
 		Description: description,
 		OwnerEmail:  ownerEmail,
 		Data:        data,
 	}
-	config := &p.DomainConfig{
+	config := &p.NamespaceConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
@@ -112,26 +112,26 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 		VisibilityArchivalURI:    visibilityArchivalURI,
 		BadBinaries:              commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 	}
-	replicationConfig := &p.DomainReplicationConfig{
+	replicationConfig := &p.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}
-	isGlobalDomain := true
+	isGlobalNamespace := true
 
 	s.kafkaProducer.On("Publish", &replication.ReplicationTask{
 		TaskType: taskType,
-		Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-			DomainTaskAttributes: &replication.DomainTaskAttributes{
-				DomainOperation: domainOperation,
-				Id:              id,
-				Info: &commonproto.DomainInfo{
+		Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+			NamespaceTaskAttributes: &replication.NamespaceTaskAttributes{
+				NamespaceOperation: namespaceOperation,
+				Id:                 id,
+				Info: &commonproto.NamespaceInfo{
 					Name:        name,
 					Status:      status,
 					Description: description,
 					OwnerEmail:  ownerEmail,
 					Data:        data,
 				},
-				Config: &commonproto.DomainConfiguration{
+				Config: &commonproto.NamespaceConfiguration{
 					WorkflowExecutionRetentionPeriodInDays: retention,
 					EmitMetric:                             &types.BoolValue{Value: emitMetric},
 					HistoryArchivalStatus:                  historyArchivalStatus,
@@ -140,9 +140,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 					VisibilityArchivalURI:                  visibilityArchivalURI,
 					BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 				},
-				ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+				ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 					ActiveClusterName: clusterActive,
-					Clusters:          s.domainReplicator.convertClusterReplicationConfigToProto(clusters),
+					Clusters:          s.namespaceReplicator.convertClusterReplicationConfigToProto(clusters),
 				},
 				ConfigVersion:   configVersion,
 				FailoverVersion: failoverVersion,
@@ -150,13 +150,13 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 		},
 	}).Return(nil).Once()
 
-	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
+	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)
 }
 
-func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_NotGlobalDomain() {
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask_NotGlobalNamespace() {
 	id := uuid.New()
-	name := "some random domain test name"
+	name := "some random namespace test name"
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -179,16 +179,16 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 		},
 	}
 
-	domainOperation := enums.DomainOperationCreate
-	info := &p.DomainInfo{
+	namespaceOperation := enums.NamespaceOperationCreate
+	info := &p.NamespaceInfo{
 		ID:          id,
 		Name:        name,
-		Status:      p.DomainStatusRegistered,
+		Status:      p.NamespaceStatusRegistered,
 		Description: description,
 		OwnerEmail:  ownerEmail,
 		Data:        data,
 	}
-	config := &p.DomainConfig{
+	config := &p.NamespaceConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
@@ -197,21 +197,21 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 		VisibilityArchivalURI:    visibilityArchivalURI,
 		BadBinaries:              commonproto.BadBinaries{},
 	}
-	replicationConfig := &p.DomainReplicationConfig{
+	replicationConfig := &p.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}
-	isGlobalDomain := false
+	isGlobalNamespace := false
 
-	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
+	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)
 }
 
-func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGlobalDomain() {
-	taskType := enums.ReplicationTaskTypeDomain
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_IsGlobalNamespace() {
+	taskType := enums.ReplicationTaskTypeNamespace
 	id := uuid.New()
-	name := "some random domain test name"
-	status, _ := s.domainReplicator.convertDomainStatusToProto(int(enums.DomainStatusDeprecated))
+	name := "some random namespace test name"
+	status, _ := s.namespaceReplicator.convertNamespaceStatusToProto(int(enums.NamespaceStatusDeprecated))
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -234,16 +234,16 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 		},
 	}
 
-	domainOperation := enums.DomainOperationUpdate
-	info := &p.DomainInfo{
+	namespaceOperation := enums.NamespaceOperationUpdate
+	info := &p.NamespaceInfo{
 		ID:          id,
 		Name:        name,
-		Status:      p.DomainStatusDeprecated,
+		Status:      p.NamespaceStatusDeprecated,
 		Description: description,
 		OwnerEmail:  ownerEmail,
 		Data:        data,
 	}
-	config := &p.DomainConfig{
+	config := &p.NamespaceConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
@@ -252,26 +252,26 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 		VisibilityArchivalURI:    visibilityArchivalURI,
 		BadBinaries:              commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 	}
-	replicationConfig := &p.DomainReplicationConfig{
+	replicationConfig := &p.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}
-	isGlobalDomain := true
+	isGlobalNamespace := true
 
 	s.kafkaProducer.On("Publish", &replication.ReplicationTask{
 		TaskType: taskType,
-		Attributes: &replication.ReplicationTask_DomainTaskAttributes{
-			DomainTaskAttributes: &replication.DomainTaskAttributes{
-				DomainOperation: domainOperation,
-				Id:              id,
-				Info: &commonproto.DomainInfo{
+		Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+			NamespaceTaskAttributes: &replication.NamespaceTaskAttributes{
+				NamespaceOperation: namespaceOperation,
+				Id:                 id,
+				Info: &commonproto.NamespaceInfo{
 					Name:        name,
 					Status:      status,
 					Description: description,
 					OwnerEmail:  ownerEmail,
 					Data:        data,
 				},
-				Config: &commonproto.DomainConfiguration{
+				Config: &commonproto.NamespaceConfiguration{
 					WorkflowExecutionRetentionPeriodInDays: retention,
 					EmitMetric:                             &types.BoolValue{Value: emitMetric},
 					HistoryArchivalStatus:                  historyArchivalStatus,
@@ -280,22 +280,22 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 					VisibilityArchivalURI:                  visibilityArchivalURI,
 					BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 				},
-				ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+				ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 					ActiveClusterName: clusterActive,
-					Clusters:          s.domainReplicator.convertClusterReplicationConfigToProto(clusters),
+					Clusters:          s.namespaceReplicator.convertClusterReplicationConfigToProto(clusters),
 				},
 				ConfigVersion:   configVersion,
 				FailoverVersion: failoverVersion},
 		},
 	}).Return(nil).Once()
 
-	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
+	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)
 }
 
-func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_NotGlobalDomain() {
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_NotGlobalNamespace() {
 	id := uuid.New()
-	name := "some random domain test name"
+	name := "some random namespace test name"
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -318,16 +318,16 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_NotG
 		},
 	}
 
-	domainOperation := enums.DomainOperationUpdate
-	info := &p.DomainInfo{
+	namespaceOperation := enums.NamespaceOperationUpdate
+	info := &p.NamespaceInfo{
 		ID:          id,
 		Name:        name,
-		Status:      p.DomainStatusDeprecated,
+		Status:      p.NamespaceStatusDeprecated,
 		Description: description,
 		OwnerEmail:  ownerEmail,
 		Data:        data,
 	}
-	config := &p.DomainConfig{
+	config := &p.NamespaceConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
 		HistoryArchivalStatus:    historyArchivalStatus,
@@ -335,12 +335,12 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_NotG
 		VisibilityArchivalStatus: visibilityArchivalStatus,
 		VisibilityArchivalURI:    visibilityArchivalURI,
 	}
-	replicationConfig := &p.DomainReplicationConfig{
+	replicationConfig := &p.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}
-	isGlobalDomain := false
+	isGlobalNamespace := false
 
-	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
+	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)
 }

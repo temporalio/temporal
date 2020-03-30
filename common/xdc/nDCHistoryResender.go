@@ -52,7 +52,7 @@ type (
 	NDCHistoryResender interface {
 		// SendSingleWorkflowHistory sends multiple run IDs's history events to remote
 		SendSingleWorkflowHistory(
-			domainID string,
+			namespaceID string,
 			workflowID string,
 			runID string,
 			startEventID int64,
@@ -64,7 +64,7 @@ type (
 
 	// NDCHistoryResenderImpl is the implementation of NDCHistoryResender
 	NDCHistoryResenderImpl struct {
-		domainCache          cache.DomainCache
+		namespaceCache       cache.NamespaceCache
 		adminClient          admin.Client
 		historyReplicationFn nDCHistoryReplicationFn
 		serializer           persistence.PayloadSerializer
@@ -79,7 +79,7 @@ type (
 
 // NewNDCHistoryResender create a new NDCHistoryResenderImpl
 func NewNDCHistoryResender(
-	domainCache cache.DomainCache,
+	namespaceCache cache.NamespaceCache,
 	adminClient admin.Client,
 	historyReplicationFn nDCHistoryReplicationFn,
 	serializer persistence.PayloadSerializer,
@@ -87,7 +87,7 @@ func NewNDCHistoryResender(
 ) *NDCHistoryResenderImpl {
 
 	return &NDCHistoryResenderImpl{
-		domainCache:          domainCache,
+		namespaceCache:       namespaceCache,
 		adminClient:          adminClient,
 		historyReplicationFn: historyReplicationFn,
 		serializer:           serializer,
@@ -97,7 +97,7 @@ func NewNDCHistoryResender(
 
 // SendSingleWorkflowHistory sends one run IDs's history events to remote
 func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	startEventID int64,
@@ -107,7 +107,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 ) error {
 
 	historyIterator := collection.NewPagingIterator(n.getPaginationFn(
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		startEventID,
@@ -119,7 +119,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		result, err := historyIterator.Next()
 		if err != nil {
 			n.logger.Error("failed to get history events",
-				tag.WorkflowDomainID(domainID),
+				tag.WorkflowNamespaceID(namespaceID),
 				tag.WorkflowID(workflowID),
 				tag.WorkflowRunID(runID),
 				tag.Error(err))
@@ -128,7 +128,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		historyBatch := result.(*historyBatch)
 
 		replicationRequest := n.createReplicationRawRequest(
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			historyBatch.rawEventBatch,
@@ -137,7 +137,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		err = n.sendReplicationRawRequest(replicationRequest)
 		if err != nil {
 			n.logger.Error("failed to replicate events",
-				tag.WorkflowDomainID(domainID),
+				tag.WorkflowNamespaceID(namespaceID),
 				tag.WorkflowID(workflowID),
 				tag.WorkflowRunID(runID),
 				tag.Error(err))
@@ -148,7 +148,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 }
 
 func (n *NDCHistoryResenderImpl) getPaginationFn(
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	startEventID int64,
@@ -160,7 +160,7 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 
 		response, err := n.getHistory(
-			domainID,
+			namespaceID,
 			workflowID,
 			runID,
 			startEventID,
@@ -188,7 +188,7 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 }
 
 func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	historyBlob *commonproto.DataBlob,
@@ -196,7 +196,7 @@ func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
 ) *historyservice.ReplicateEventsV2Request {
 
 	request := &historyservice.ReplicateEventsV2Request{
-		DomainUUID: domainID,
+		NamespaceUUID: namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -217,7 +217,7 @@ func (n *NDCHistoryResenderImpl) sendReplicationRawRequest(
 }
 
 func (n *NDCHistoryResenderImpl) getHistory(
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	startEventID int64,
@@ -230,17 +230,17 @@ func (n *NDCHistoryResenderImpl) getHistory(
 
 	logger := n.logger.WithTags(tag.WorkflowRunID(runID))
 
-	domainEntry, err := n.domainCache.GetDomainByID(domainID)
+	namespaceEntry, err := n.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
-		logger.Error("error getting domain", tag.Error(err))
+		logger.Error("error getting namespace", tag.Error(err))
 		return nil, err
 	}
-	domainName := domainEntry.GetInfo().Name
+	namespace := namespaceEntry.GetInfo().Name
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(resendContextTimeout)
 	defer cancel()
 	response, err := n.adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Domain: domainName,
+		Namespace: namespace,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

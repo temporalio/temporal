@@ -40,7 +40,7 @@ type (
 	// the sub-system
 	BootstrapParams struct {
 		// Config contains the configuration for scanner
-		// ServiceClient is an instance of cadence service client
+		// ServiceClient is an instance of temporal service client
 		ServiceClient sdkclient.Client
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client

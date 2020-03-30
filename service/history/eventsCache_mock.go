@@ -28,70 +28,69 @@
 package history
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/temporal-proto/common"
+	reflect "reflect"
 )
 
-// MockeventsCache is a mock of eventsCache interface
+// MockeventsCache is a mock of eventsCache interface.
 type MockeventsCache struct {
 	ctrl     *gomock.Controller
 	recorder *MockeventsCacheMockRecorder
 }
 
-// MockeventsCacheMockRecorder is the mock recorder for MockeventsCache
+// MockeventsCacheMockRecorder is the mock recorder for MockeventsCache.
 type MockeventsCacheMockRecorder struct {
 	mock *MockeventsCache
 }
 
-// NewMockeventsCache creates a new mock instance
+// NewMockeventsCache creates a new mock instance.
 func NewMockeventsCache(ctrl *gomock.Controller) *MockeventsCache {
 	mock := &MockeventsCache{ctrl: ctrl}
 	mock.recorder = &MockeventsCacheMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockeventsCache) EXPECT() *MockeventsCacheMockRecorder {
 	return m.recorder
 }
 
-// getEvent mocks base method
-func (m *MockeventsCache) getEvent(domainID, workflowID, runID string, firstEventID, eventID int64, branchToken []byte) (*common.HistoryEvent, error) {
+// getEvent mocks base method.
+func (m *MockeventsCache) getEvent(namespaceID, workflowID, runID string, firstEventID, eventID int64, branchToken []byte) (*common.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getEvent", domainID, workflowID, runID, firstEventID, eventID, branchToken)
+	ret := m.ctrl.Call(m, "getEvent", namespaceID, workflowID, runID, firstEventID, eventID, branchToken)
 	ret0, _ := ret[0].(*common.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// getEvent indicates an expected call of getEvent
-func (mr *MockeventsCacheMockRecorder) getEvent(domainID, workflowID, runID, firstEventID, eventID, branchToken interface{}) *gomock.Call {
+// getEvent indicates an expected call of getEvent.
+func (mr *MockeventsCacheMockRecorder) getEvent(namespaceID, workflowID, runID, firstEventID, eventID, branchToken interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getEvent", reflect.TypeOf((*MockeventsCache)(nil).getEvent), domainID, workflowID, runID, firstEventID, eventID, branchToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getEvent", reflect.TypeOf((*MockeventsCache)(nil).getEvent), namespaceID, workflowID, runID, firstEventID, eventID, branchToken)
 }
 
-// putEvent mocks base method
-func (m *MockeventsCache) putEvent(domainID, workflowID, runID string, eventID int64, event *common.HistoryEvent) {
+// putEvent mocks base method.
+func (m *MockeventsCache) putEvent(namespaceID, workflowID, runID string, eventID int64, event *common.HistoryEvent) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "putEvent", domainID, workflowID, runID, eventID, event)
+	m.ctrl.Call(m, "putEvent", namespaceID, workflowID, runID, eventID, event)
 }
 
-// putEvent indicates an expected call of putEvent
-func (mr *MockeventsCacheMockRecorder) putEvent(domainID, workflowID, runID, eventID, event interface{}) *gomock.Call {
+// putEvent indicates an expected call of putEvent.
+func (mr *MockeventsCacheMockRecorder) putEvent(namespaceID, workflowID, runID, eventID, event interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "putEvent", reflect.TypeOf((*MockeventsCache)(nil).putEvent), domainID, workflowID, runID, eventID, event)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "putEvent", reflect.TypeOf((*MockeventsCache)(nil).putEvent), namespaceID, workflowID, runID, eventID, event)
 }
 
-// deleteEvent mocks base method
-func (m *MockeventsCache) deleteEvent(domainID, workflowID, runID string, eventID int64) {
+// deleteEvent mocks base method.
+func (m *MockeventsCache) deleteEvent(namespaceID, workflowID, runID string, eventID int64) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "deleteEvent", domainID, workflowID, runID, eventID)
+	m.ctrl.Call(m, "deleteEvent", namespaceID, workflowID, runID, eventID)
 }
 
-// deleteEvent indicates an expected call of deleteEvent
-func (mr *MockeventsCacheMockRecorder) deleteEvent(domainID, workflowID, runID, eventID interface{}) *gomock.Call {
+// deleteEvent indicates an expected call of deleteEvent.
+func (mr *MockeventsCacheMockRecorder) deleteEvent(namespaceID, workflowID, runID, eventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "deleteEvent", reflect.TypeOf((*MockeventsCache)(nil).deleteEvent), domainID, workflowID, runID, eventID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "deleteEvent", reflect.TypeOf((*MockeventsCache)(nil).deleteEvent), namespaceID, workflowID, runID, eventID)
 }

@@ -56,8 +56,8 @@ import (
 )
 
 const (
-	testDomainID             = "test-domain-id"
-	testDomainName           = "test-domain-name"
+	testNamespaceID          = "test-namespace-id"
+	testNamespace            = "test-namespace"
 	testWorkflowID           = "test-workflow-id"
 	testRunID                = "test-run-id"
 	testNextEventID          = 1800
@@ -255,8 +255,8 @@ func (s *historyArchiverSuite) TestValidateURI() {
 func (s *historyArchiverSuite) TestArchive_Fail_InvalidURI() {
 	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -272,8 +272,8 @@ func (s *historyArchiverSuite) TestArchive_Fail_InvalidURI() {
 func (s *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
 	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           "", // an invalid request
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -295,8 +295,8 @@ func (s *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -318,8 +318,8 @@ func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -358,8 +358,8 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -381,8 +381,8 @@ func (s *historyArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -437,8 +437,8 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -450,17 +450,17 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 	err = historyArchiver.Archive(context.Background(), URI, request)
 	s.NoError(err)
 
-	expectedkey := constructHistoryKey("", testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion, 0)
+	expectedkey := constructHistoryKey("", testNamespaceID, testWorkflowID, testRunID, testCloseFailoverVersion, 0)
 	s.assertKeyExists(expectedkey)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_InvalidURI() {
 	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
-		DomainID:   testDomainID,
-		WorkflowID: testWorkflowID,
-		RunID:      testRunID,
-		PageSize:   100,
+		NamespaceID: testNamespaceID,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
+		PageSize:    100,
 	}
 	URI, err := archiver.NewURI("wrongscheme://")
 	s.NoError(err)
@@ -472,10 +472,10 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidURI() {
 func (s *historyArchiverSuite) TestGet_Fail_InvalidRequest() {
 	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
-		DomainID:   testDomainID,
-		WorkflowID: testWorkflowID,
-		RunID:      testRunID,
-		PageSize:   0, // pageSize should be greater than 0
+		NamespaceID: testNamespaceID,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
+		PageSize:    0, // pageSize should be greater than 0
 	}
 	response, err := historyArchiver.Get(context.Background(), s.testArchivalURI, request)
 	s.Nil(response)
@@ -486,7 +486,7 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidRequest() {
 func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
-		DomainID:      testDomainID,
+		NamespaceID:   testNamespaceID,
 		WorkflowID:    testWorkflowID,
 		RunID:         testRunID,
 		PageSize:      testPageSize,
@@ -504,7 +504,7 @@ func (s *historyArchiverSuite) TestGet_Fail_KeyNotExist() {
 	historyArchiver := s.newTestHistoryArchiver(nil)
 	testCloseFailoverVersion := testCloseFailoverVersion
 	request := &archiver.GetHistoryRequest{
-		DomainID:             testDomainID,
+		NamespaceID:          testNamespaceID,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		PageSize:             testPageSize,
@@ -521,10 +521,10 @@ func (s *historyArchiverSuite) TestGet_Fail_KeyNotExist() {
 func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 	historyArchiver := s.newTestHistoryArchiver(nil)
 	request := &archiver.GetHistoryRequest{
-		DomainID:   testDomainID,
-		WorkflowID: testWorkflowID,
-		RunID:      testRunID,
-		PageSize:   testPageSize,
+		NamespaceID: testNamespaceID,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
+		PageSize:    testPageSize,
 	}
 	URI, err := archiver.NewURI(testBucketURI)
 	s.NoError(err)
@@ -538,7 +538,7 @@ func (s *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 	historyArchiver := s.newTestHistoryArchiver(nil)
 	testCloseFailoverVersion := int64(1)
 	request := &archiver.GetHistoryRequest{
-		DomainID:             testDomainID,
+		NamespaceID:          testNamespaceID,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		PageSize:             testPageSize,
@@ -556,7 +556,7 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 	historyArchiver := s.newTestHistoryArchiver(nil)
 	testCloseFailoverVersion := testCloseFailoverVersion
 	request := &archiver.GetHistoryRequest{
-		DomainID:             testDomainID,
+		NamespaceID:          testNamespaceID,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		PageSize:             1,
@@ -601,8 +601,8 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	archiveRequest := &archiver.ArchiveHistoryRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,
@@ -615,10 +615,10 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 	s.NoError(err)
 
 	getRequest := &archiver.GetHistoryRequest{
-		DomainID:   testDomainID,
-		WorkflowID: testWorkflowID,
-		RunID:      testRunID,
-		PageSize:   testPageSize,
+		NamespaceID: testNamespaceID,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
+		PageSize:    testPageSize,
 	}
 	response, err := historyArchiver.Get(context.Background(), URI, getRequest)
 	s.NoError(err)
@@ -707,7 +707,7 @@ func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*a
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.Encode(batch)
 		s.Require().NoError(err)
-		key := constructHistoryKey("", testDomainID, testWorkflowID, testRunID, version, i)
+		key := constructHistoryKey("", testNamespaceID, testWorkflowID, testRunID, version, i)
 		_, err = s.s3cli.PutObjectWithContext(context.Background(), &s3.PutObjectInput{
 			Bucket: aws.String(testBucket),
 			Key:    aws.String(key),

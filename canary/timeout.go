@@ -43,7 +43,7 @@ func registerTimeout(r registrar) {
 }
 
 // timeoutWorkflow is the workflow implementation to test for querying workflow status
-func timeoutWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func timeoutWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	profile, err := beginWorkflow(ctx, wfTypeConcurrentExec, scheduledTimeNanos)
 	if err != nil {
 		return err

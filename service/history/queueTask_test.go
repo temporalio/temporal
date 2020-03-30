@@ -140,14 +140,14 @@ func (s *queueTaskSuite) TestHandleErr_ErrTaskDiscarded() {
 	s.NoError(queueTaskBase.HandleErr(err))
 }
 
-func (s *queueTaskSuite) TestHandleErr_ErrDomainNotActive() {
+func (s *queueTaskSuite) TestHandleErr_ErrNamespaceNotActive() {
 	queueTaskBase := s.newTestQueueTaskBase(func(task queueTaskInfo) (bool, error) {
 		return true, nil
 	})
 
-	err := &serviceerror.DomainNotActive{}
+	err := &serviceerror.NamespaceNotActive{}
 
-	queueTaskBase.submitTime = time.Now().Add(-cache.DomainCacheRefreshInterval * time.Duration(2))
+	queueTaskBase.submitTime = time.Now().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(2))
 	s.NoError(queueTaskBase.HandleErr(err))
 
 	queueTaskBase.submitTime = time.Now()

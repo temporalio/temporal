@@ -131,8 +131,8 @@ func (_m *ClusterMetadata) IsVersionFromSameCluster(_a0 int64, _a1 int64) bool {
 	return r0
 }
 
-// IsGlobalDomainEnabled provides a mock function with given fields:
-func (_m *ClusterMetadata) IsGlobalDomainEnabled() bool {
+// IsGlobalNamespaceEnabled provides a mock function with given fields:
+func (_m *ClusterMetadata) IsGlobalNamespaceEnabled() bool {
 	ret := _m.Called()
 
 	var r0 bool

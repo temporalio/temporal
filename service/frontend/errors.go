@@ -23,7 +23,7 @@ package frontend
 import "go.temporal.io/temporal-proto/serviceerror"
 
 var (
-	errDomainNotSet                                       = serviceerror.NewInvalidArgument("Domain not set on request.")
+	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace not set on request.")
 	errTaskTokenNotSet                                    = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errInvalidTaskToken                                   = serviceerror.NewInvalidArgument("Invalid TaskToken.")
 	errTaskListNotSet                                     = serviceerror.NewInvalidArgument("TaskList is not set on request.")
@@ -42,11 +42,11 @@ var (
 	errInvalidRetention                                   = serviceerror.NewInvalidArgument("RetentionDays is invalid.")
 	errInvalidExecutionStartToCloseTimeoutSeconds         = serviceerror.NewInvalidArgument("A valid ExecutionStartToCloseTimeoutSeconds is not set on request.")
 	errInvalidTaskStartToCloseTimeoutSeconds              = serviceerror.NewInvalidArgument("A valid TaskStartToCloseTimeoutSeconds is not set on request.")
-	errQueryDisallowedForDomain                           = serviceerror.NewInvalidArgument("Domain is not allowed to query, please contact cadence team to re-enable queries.")
+	errQueryDisallowedForNamespace                        = serviceerror.NewInvalidArgument("Namespace is not allowed to query, please contact temporal team to re-enable queries.")
 	errClusterNameNotSet                                  = serviceerror.NewInvalidArgument("Cluster name is not set.")
 	errEmptyReplicationInfo                               = serviceerror.NewInvalidArgument("Replication task info is not set.")
 	errHistoryNotFound                                    = serviceerror.NewInvalidArgument("Requested workflow history not found, may have passed retention period.")
-	errDomainTooLong                                      = serviceerror.NewInvalidArgument("Domain length exceeds limit.")
+	errNamespaceTooLong                                   = serviceerror.NewInvalidArgument("Namespace length exceeds limit.")
 	errWorkflowTypeTooLong                                = serviceerror.NewInvalidArgument("WorkflowType length exceeds limit.")
 	errWorkflowIDTooLong                                  = serviceerror.NewInvalidArgument("WorkflowId length exceeds limit.")
 	errSignalNameTooLong                                  = serviceerror.NewInvalidArgument("SignalName length exceeds limit.")
@@ -58,7 +58,7 @@ var (
 	errPageSizeTooBig                                     = serviceerror.NewInvalidArgument("PageSize is larger than allowed %d.")
 	errClusterIsNotConfiguredForVisibilityArchival        = serviceerror.NewInvalidArgument("Cluster is not configured for visibility archival.")
 	errClusterIsNotConfiguredForReadingArchivalVisibility = serviceerror.NewInvalidArgument("Cluster is not configured for reading archived visibility records.")
-	errDomainIsNotConfiguredForVisibilityArchival         = serviceerror.NewInvalidArgument("Domain is not configured for visibility archival.")
+	errNamespaceIsNotConfiguredForVisibilityArchival      = serviceerror.NewInvalidArgument("Namespace is not configured for visibility archival.")
 	errSearchAttributesNotSet                             = serviceerror.NewInvalidArgument("SearchAttributes are not set on request.")
 	errAdvancedVisibilityStoreIsNotConfigured             = serviceerror.NewInvalidArgument("AdvancedVisibilityStore is not configured for this cluster.")
 	errKeyIsReservedBySystem                              = serviceerror.NewInvalidArgument("Key [%s] is reserved by system.")

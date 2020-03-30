@@ -63,7 +63,7 @@ type (
 
 		// other common resources
 
-		DomainCache       *cache.MockDomainCache
+		NamespaceCache    *cache.MockNamespaceCache
 		TimeSource        clock.TimeSource
 		PayloadSerializer persistence.PayloadSerializer
 		MetricsClient     metrics.Client
@@ -90,14 +90,14 @@ type (
 
 		// persistence clients
 
-		MetadataMgr            *mocks.MetadataManager
-		TaskMgr                *mocks.TaskManager
-		VisibilityMgr          *mocks.VisibilityManager
-		DomainReplicationQueue persistence.DomainReplicationQueue
-		ShardMgr               *mocks.ShardManager
-		HistoryMgr             *mocks.HistoryV2Manager
-		ExecutionMgr           *mocks.ExecutionManager
-		PersistenceBean        *persistenceClient.MockBean
+		MetadataMgr               *mocks.MetadataManager
+		TaskMgr                   *mocks.TaskManager
+		VisibilityMgr             *mocks.VisibilityManager
+		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
+		ShardMgr                  *mocks.ShardManager
+		HistoryMgr                *mocks.HistoryV2Manager
+		ExecutionMgr              *mocks.ExecutionManager
+		PersistenceBean           *persistenceClient.MockBean
 
 		Logger log.Logger
 	}
@@ -143,9 +143,9 @@ func NewTest(
 	shardMgr := &mocks.ShardManager{}
 	historyMgr := &mocks.HistoryV2Manager{}
 	executionMgr := &mocks.ExecutionManager{}
-	domainReplicationQueue := persistence.NewMockDomainReplicationQueue(controller)
-	domainReplicationQueue.EXPECT().Start().AnyTimes()
-	domainReplicationQueue.EXPECT().Stop().AnyTimes()
+	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
+	namespaceReplicationQueue.EXPECT().Start().AnyTimes()
+	namespaceReplicationQueue.EXPECT().Stop().AnyTimes()
 	persistenceBean := persistenceClient.NewMockBean(controller)
 	persistenceBean.EXPECT().GetMetadataManager().Return(metadataMgr).AnyTimes()
 	persistenceBean.EXPECT().GetTaskManager().Return(taskMgr).AnyTimes()
@@ -153,7 +153,7 @@ func NewTest(
 	persistenceBean.EXPECT().GetHistoryManager().Return(historyMgr).AnyTimes()
 	persistenceBean.EXPECT().GetShardManager().Return(shardMgr).AnyTimes()
 	persistenceBean.EXPECT().GetExecutionManager(gomock.Any()).Return(executionMgr, nil).AnyTimes()
-	persistenceBean.EXPECT().GetDomainReplicationQueue().Return(domainReplicationQueue).AnyTimes()
+	persistenceBean.EXPECT().GetNamespaceReplicationQueue().Return(namespaceReplicationQueue).AnyTimes()
 
 	membershipMonitor := membership.NewMockMonitor(controller)
 	frontendServiceResolver := membership.NewMockServiceResolver(controller)
@@ -173,7 +173,7 @@ func NewTest(
 
 		// other common resources
 
-		DomainCache:       cache.NewMockDomainCache(controller),
+		NamespaceCache:    cache.NewMockNamespaceCache(controller),
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: persistence.NewPayloadSerializer(),
 		MetricsClient:     metrics.NewClient(scope, serviceMetricsIndex),
@@ -200,14 +200,14 @@ func NewTest(
 
 		// persistence clients
 
-		MetadataMgr:            metadataMgr,
-		TaskMgr:                taskMgr,
-		VisibilityMgr:          visibilityMgr,
-		DomainReplicationQueue: domainReplicationQueue,
-		ShardMgr:               shardMgr,
-		HistoryMgr:             historyMgr,
-		ExecutionMgr:           executionMgr,
-		PersistenceBean:        persistenceBean,
+		MetadataMgr:               metadataMgr,
+		TaskMgr:                   taskMgr,
+		VisibilityMgr:             visibilityMgr,
+		NamespaceReplicationQueue: namespaceReplicationQueue,
+		ShardMgr:                  shardMgr,
+		HistoryMgr:                historyMgr,
+		ExecutionMgr:              executionMgr,
+		PersistenceBean:           persistenceBean,
 
 		// logger
 
@@ -249,9 +249,9 @@ func (s *Test) GetClusterMetadata() cluster.Metadata {
 
 // other common resources
 
-// GetDomainCache for testing
-func (s *Test) GetDomainCache() cache.DomainCache {
-	return s.DomainCache
+// GetNamespaceCache for testing
+func (s *Test) GetNamespaceCache() cache.NamespaceCache {
+	return s.NamespaceCache
 }
 
 // GetTimeSource for testing
@@ -386,10 +386,10 @@ func (s *Test) GetVisibilityManager() persistence.VisibilityManager {
 	return s.VisibilityMgr
 }
 
-// GetDomainReplicationQueue for testing
-func (s *Test) GetDomainReplicationQueue() persistence.DomainReplicationQueue {
+// GetNamespaceReplicationQueue for testing
+func (s *Test) GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue {
 	// user should implement this method for test
-	return s.DomainReplicationQueue
+	return s.NamespaceReplicationQueue
 }
 
 // GetShardManager for testing

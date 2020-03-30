@@ -2,15 +2,15 @@
 ## Configuration
 See https://cloud.google.com/docs/authentication/production to understand how is made the authentication against google cloud storage
 
-Nowdays we support three different ways in order to let Cadence know where your google keyfile credentials are located
+Nowdays we support three different ways in order to let Temporal know where your google keyfile credentials are located
 
-* Cadence archival deployment.yaml configuration file
+* Temporal archival deployment.yaml configuration file
 * `GOOGLE_APPLICATION_CREDENTIALS` environment variable
 *  Google default credentials location
 
-If more than one credentials location is given, then Cadence will resolve the conflicts by the following priority:
+If more than one credentials location is given, then Temporal will resolve the conflicts by the following priority:
 
-`GOOGLE_APPLICATION_CREDENTIALS > Cadencen archival deployment.yaml > Google default credentials`
+`GOOGLE_APPLICATION_CREDENTIALS > Temporal archival deployment.yaml > Google default credentials`
 
 Be sure that you have created your bucket first, and have enought rights in order to read/write over your bucket.
 
@@ -33,18 +33,18 @@ archival:
       gstorage:
         credentialsPath: "/tmp/keyfile.json"
 
-domainDefaults:
+namespaceDefaults:
   archival:
     history:
       status: "enabled"
-      URI: "gs://my-bucket-cad/cadence_archival/development"
+      URI: "gs://my-bucket-cad/temporal_archival/development"
     visibility:
       status: "enabled"
-      URI: "gs://my-bucket-cad/cadence_archival/visibility"
+      URI: "gs://my-bucket-cad/temporal_archival/visibility"
 ```
 
 ## Visibility query syntax
-You can query the visibility store by using the `cadence workflow listarchived` command
+You can query the visibility store by using the `tctl workflow listarchived` command
 
 The syntax for the query is based on SQL
 
@@ -71,7 +71,7 @@ it will search all records starting from `2020-01-21T00:00:00Z` to `2020-01-21T5
 
 *Searches the first 20 records for a given day 2020-01-21*
 
-`./cadence --do samples-domain workflow listarchived -ps="20" -q "StartTime = '2020-01-21T00:00:00Z' AND SearchPrecision='Day'"`
+`./tctl --ns samples-namespace workflow listarchived -ps="20" -q "StartTime = '2020-01-21T00:00:00Z' AND SearchPrecision='Day'"`
 
 ## Archival query syntax
 
@@ -79,4 +79,4 @@ Once you have a workflowId and a runId you can retrieve your workflow history.
 
 example:
 
-`./cadence --do samples-domain  workflow  show  -w workflow-id -r runId`
+`./tctl --ns samples-namespace  workflow  show  -w workflow-id -r runId`

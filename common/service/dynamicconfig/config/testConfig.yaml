@@ -1,38 +1,38 @@
 frontend.validSearchAttributes:
 - value:
-    DomainID: 1
+    NamespaceID: 1
   constraints: {}
 testGetBoolPropertyKey:
 - value: false
   constraints: {}
 - value: true
   constraints:
-    domainName: global-samples-domain
+    namespace: global-samples-namespace
 - value: true
   constraints:
-    domainName: samples-domain
+    namespace: samples-namespace
 testGetDurationPropertyKey:
 - value: 1m
   constraints: {}
 - value: wrong duration string
   constraints:
-    domainName: samples-domain
+    namespace: samples-namespace
     taskListName: longIdleTimeTasklist
 - value: 2
   constraints:
-    domainName: samples-domain
+    namespace: samples-namespace
 testGetFloat64PropertyKey:
 - value: 12
   constraints: {}
 - value: wrong type
   constraints:
-    domainName: samples-domain
+    namespace: samples-namespace
 testGetIntPropertyKey:
 - value: 1000
   constraints: {}
 - value: 1000.1
   constraints:
-    domainName: global-samples-domain
+    namespace: global-samples-namespace
 testGetMapPropertyKey:
 - value:
     key1: "1"
