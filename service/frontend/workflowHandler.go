@@ -765,7 +765,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 		token, _ := wh.tokenSerializer.Serialize(taskToken)
 		workflowExecution := &commonproto.WorkflowExecution{
 			WorkflowId: taskToken.GetWorkflowId(),
-			RunId:      primitives.UUIDString(taskToken.GetNamespaceId()),
+			RunId:      primitives.UUIDString(taskToken.GetRunId()),
 		}
 		matchingResp := common.CreateMatchingPollForDecisionTaskResponse(histResp.StartedResponse, workflowExecution, token)
 
