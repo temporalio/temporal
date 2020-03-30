@@ -689,7 +689,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 				TaskID:             0,
 				Memo:               nil,
 				SearchAttributes: map[string][]byte{
-					definition.CadenceChangeVersion: []byte("dummy"),
+					definition.TemporalChangeVersion: []byte("dummy"),
 				},
 			},
 			expected: nil,

@@ -452,7 +452,7 @@ func processTask(
 		}
 
 		// TODO https://github.com/uber/cadence/issues/2159
-		// By default should use ChildPolicy, but it is totally broken in Cadence, we need to fix it before using
+		// By default should use ChildPolicy, but it is totally broken in Temporal, we need to fix it before using
 		if applyOnChild != nil && *applyOnChild && len(resp.PendingChildren) > 0 {
 			getActivityLogger(ctx).Info("Found more child workflows to process", tag.Number(int64(len(resp.PendingChildren))))
 			for _, ch := range resp.PendingChildren {

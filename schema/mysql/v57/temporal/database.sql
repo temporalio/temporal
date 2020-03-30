@@ -1,1 +1,1 @@
-CREATE DATABASE cadence character set utf8;
+CREATE DATABASE temporal character set utf8;

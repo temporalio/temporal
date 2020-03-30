@@ -39,13 +39,13 @@ const (
 	KafkaKey        = "KafkaKey"
 	BinaryChecksums = "BinaryChecksums"
 
-	CustomStringField    = "CustomStringField"
-	CustomKeywordField   = "CustomKeywordField"
-	CustomIntField       = "CustomIntField"
-	CustomBoolField      = "CustomBoolField"
-	CustomDoubleField    = "CustomDoubleField"
-	CustomDatetimeField  = "CustomDatetimeField"
-	CadenceChangeVersion = "CadenceChangeVersion"
+	CustomStringField     = "CustomStringField"
+	CustomKeywordField    = "CustomKeywordField"
+	CustomIntField        = "CustomIntField"
+	CustomBoolField       = "CustomBoolField"
+	CustomDoubleField     = "CustomDoubleField"
+	CustomDatetimeField   = "CustomDatetimeField"
+	TemporalChangeVersion = "TemporalChangeVersion"
 )
 
 // valid non-indexed fields on ES
@@ -61,14 +61,14 @@ var defaultIndexedKeys = createDefaultIndexedKeys()
 
 func createDefaultIndexedKeys() map[string]interface{} {
 	defaultIndexedKeys := map[string]interface{}{
-		CustomStringField:    enums.IndexedValueTypeString,
-		CustomKeywordField:   enums.IndexedValueTypeKeyword,
-		CustomIntField:       enums.IndexedValueTypeInt,
-		CustomBoolField:      enums.IndexedValueTypeBool,
-		CustomDoubleField:    enums.IndexedValueTypeDouble,
-		CustomDatetimeField:  enums.IndexedValueTypeDatetime,
-		CadenceChangeVersion: enums.IndexedValueTypeKeyword,
-		BinaryChecksums:      enums.IndexedValueTypeKeyword,
+		CustomStringField:     enums.IndexedValueTypeString,
+		CustomKeywordField:    enums.IndexedValueTypeKeyword,
+		CustomIntField:        enums.IndexedValueTypeInt,
+		CustomBoolField:       enums.IndexedValueTypeBool,
+		CustomDoubleField:     enums.IndexedValueTypeDouble,
+		CustomDatetimeField:   enums.IndexedValueTypeDatetime,
+		TemporalChangeVersion: enums.IndexedValueTypeKeyword,
+		BinaryChecksums:       enums.IndexedValueTypeKeyword,
 	}
 	for k, v := range systemIndexedKeys {
 		defaultIndexedKeys[k] = v
@@ -81,7 +81,7 @@ func GetDefaultIndexedKeys() map[string]interface{} {
 	return defaultIndexedKeys
 }
 
-// systemIndexedKeys is Cadence created visibility keys
+// systemIndexedKeys is Temporal created visibility keys
 var systemIndexedKeys = map[string]interface{}{
 	NamespaceID:   enums.IndexedValueTypeKeyword,
 	WorkflowID:    enums.IndexedValueTypeKeyword,

@@ -44,7 +44,7 @@ const (
 )
 
 type (
-	// Factory can be used to create RPC clients for cadence services
+	// Factory can be used to create RPC clients for temporal services
 	Factory interface {
 		NewHistoryClient() (history.Client, error)
 		NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matching.Client, error)

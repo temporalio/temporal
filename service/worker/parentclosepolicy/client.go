@@ -40,10 +40,10 @@ type (
 	}
 
 	clientImpl struct {
-		metricsClient metrics.Client
-		logger        log.Logger
-		cadenceClient sdkclient.Client
-		numWorkflows  int
+		metricsClient  metrics.Client
+		logger         log.Logger
+		temporalClient sdkclient.Client
+		numWorkflows   int
 	}
 )
 
@@ -62,10 +62,10 @@ func NewClient(
 	numWorkflows int,
 ) Client {
 	return &clientImpl{
-		metricsClient: metricsClient,
-		logger:        logger,
-		cadenceClient: publicClient,
-		numWorkflows:  numWorkflows,
+		metricsClient:  metricsClient,
+		logger:         logger,
+		temporalClient: publicClient,
+		numWorkflows:   numWorkflows,
 	}
 }
 
@@ -81,6 +81,6 @@ func (c *clientImpl) SendParentClosePolicyRequest(request Request) error {
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
-	_, err := c.cadenceClient.SignalWithStartWorkflow(signalCtx, workflowID, processorChannelName, request, workflowOptions, processorWFTypeName, nil)
+	_, err := c.temporalClient.SignalWithStartWorkflow(signalCtx, workflowID, processorChannelName, request, workflowOptions, processorWFTypeName, nil)
 	return err
 }

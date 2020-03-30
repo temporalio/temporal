@@ -20,7 +20,7 @@
 
 package membership
 
-// HostInfo is a type that contains the info about a cadence host
+// HostInfo is a type that contains the info about a temporal host
 type HostInfo struct {
 	addr   string // ip:port
 	labels map[string]string

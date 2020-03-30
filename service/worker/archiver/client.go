@@ -91,7 +91,7 @@ type (
 	client struct {
 		metricsScope     metrics.Scope
 		logger           log.Logger
-		cadenceClient    sdkclient.Client
+		temporalClient   sdkclient.Client
 		numWorkflows     dynamicconfig.IntPropertyFn
 		rateLimiter      quotas.Limiter
 		archiverProvider provider.ArchiverProvider
@@ -124,10 +124,10 @@ func NewClient(
 	archiverProvider provider.ArchiverProvider,
 ) Client {
 	return &client{
-		metricsScope:  metricsClient.Scope(metrics.ArchiverClientScope),
-		logger:        logger,
-		cadenceClient: publicClient,
-		numWorkflows:  numWorkflows,
+		metricsScope:   metricsClient.Scope(metrics.ArchiverClientScope),
+		logger:         logger,
+		temporalClient: publicClient,
+		numWorkflows:   numWorkflows,
 		rateLimiter: quotas.NewDynamicRateLimiter(
 			func() float64 {
 				return float64(requestRPS())
@@ -277,7 +277,7 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
-	_, err := c.cadenceClient.SignalWithStartWorkflow(signalCtx, workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
+	_, err := c.temporalClient.SignalWithStartWorkflow(signalCtx, workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
 	if err != nil {
 		taggedLogger = taggedLogger.WithTags(
 			tag.ArchivalRequestNamespaceID(request.NamespaceID),

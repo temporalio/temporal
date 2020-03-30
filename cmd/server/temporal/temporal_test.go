@@ -27,20 +27,20 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type CadenceSuite struct {
+type TemporalSuite struct {
 	*require.Assertions
 	suite.Suite
 }
 
-func TestCadenceSuite(t *testing.T) {
-	suite.Run(t, new(CadenceSuite))
+func TestTemporalSuite(t *testing.T) {
+	suite.Run(t, new(TemporalSuite))
 }
 
-func (s *CadenceSuite) SetupTest() {
+func (s *TemporalSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *CadenceSuite) TestIsValidService() {
+func (s *TemporalSuite) TestIsValidService() {
 	s.True(isValidService("history"))
 	s.True(isValidService("matching"))
 	s.True(isValidService("frontend"))
@@ -50,6 +50,6 @@ func (s *CadenceSuite) TestIsValidService() {
 	s.False(isValidService("foobar"))
 }
 
-func (s *CadenceSuite) TestPath() {
+func (s *TemporalSuite) TestPath() {
 	s.Equal("foo/bar", constructPath("foo", "bar"))
 }

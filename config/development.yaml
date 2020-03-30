@@ -15,7 +15,7 @@ persistence:
         keyspace: "temporal_visibility"
 server:
   ringpop:
-    name: cadence
+    name: temporal
     maxJoinDuration: 30s
     broadcastAddress: "127.0.0.1"
   pprof:
@@ -103,7 +103,7 @@ namespaceDefaults:
       URI: "file:///tmp/temporal_archival/development"
     visibility:
       status: "enabled"
-      URI: "file:///tmp/cadence_vis_archival/development"
+      URI: "file:///tmp/temporal_vis_archival/development"
 
 kafka:
   tls:

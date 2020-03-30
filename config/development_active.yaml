@@ -144,7 +144,7 @@ namespaceDefaults:
       URI: "file:///tmp/temporal_archival/development"
     visibility:
       status: "enabled"
-      URI: "file:///tmp/cadence_vis_archival/development"
+      URI: "file:///tmp/temporal_vis_archival/development"
 
 publicClient:
   hostPort: "localhost:7933"

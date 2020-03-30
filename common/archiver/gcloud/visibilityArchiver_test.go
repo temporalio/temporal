@@ -45,7 +45,7 @@ import (
 
 const (
 	testWorkflowTypeName    = "test-workflow-type"
-	exampleVisibilityRecord = `{"NamespaceID":"test-namespace-id","Namespace":"test-namespace","WorkflowID":"test-workflow-id","RunID":"test-run-id","WorkflowTypeName":"test-workflow-type","StartTimestamp":1580896574804475000,"ExecutionTimestamp":0,"CloseTimestamp":1580896575946478000,"CloseStatus":"WorkflowExecutionCloseStatusCompleted","HistoryLength":36,"Memo":null,"SearchAttributes":{},"HistoryArchivalURI":"gs://my-bucket-cad/cadence_archival/development"}`
+	exampleVisibilityRecord = `{"NamespaceID":"test-namespace-id","Namespace":"test-namespace","WorkflowID":"test-workflow-id","RunID":"test-run-id","WorkflowTypeName":"test-workflow-type","StartTimestamp":1580896574804475000,"ExecutionTimestamp":0,"CloseTimestamp":1580896575946478000,"CloseStatus":"WorkflowExecutionCloseStatusCompleted","HistoryLength":36,"Memo":null,"SearchAttributes":{},"HistoryArchivalURI":"gs://my-bucket-cad/temporal_archival/development"}`
 )
 
 func (s *visibilityArchiverSuite) SetupTest() {
@@ -90,7 +90,7 @@ func (s *visibilityArchiverSuite) TestValidateVisibilityURI() {
 			expectedErr: archiver.ErrURISchemeMismatch,
 		},
 		{
-			URI:         "gs:my-bucket-cad/cadence_archival/visibility",
+			URI:         "gs:my-bucket-cad/temporal_archival/visibility",
 			expectedErr: archiver.ErrInvalidURI,
 		},
 		{
@@ -102,11 +102,11 @@ func (s *visibilityArchiverSuite) TestValidateVisibilityURI() {
 			expectedErr: archiver.ErrInvalidURI,
 		},
 		{
-			URI:         "gs:/my-bucket-cad/cadence_archival/visibility",
+			URI:         "gs:/my-bucket-cad/temporal_archival/visibility",
 			expectedErr: archiver.ErrInvalidURI,
 		},
 		{
-			URI:         "gs://my-bucket-cad/cadence_archival/visibility",
+			URI:         "gs://my-bucket-cad/temporal_archival/visibility",
 			expectedErr: nil,
 		},
 	}
@@ -167,7 +167,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidVisibilityURI() {
 
 func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/visibility")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
 	s.NoError(err)
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", mock.Anything, URI, mock.Anything).Return(false, nil)
@@ -197,7 +197,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/visibility")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
 	s.NoError(err)
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", mock.Anything, URI, mock.Anything).Return(false, nil)
@@ -219,7 +219,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/visibility")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
 	s.NoError(err)
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", mock.Anything, URI, mock.Anything).Return(false, nil)
@@ -247,7 +247,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 
 func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/visibility")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
 	s.NoError(err)
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", mock.Anything, URI, mock.Anything).Return(false, nil)
@@ -287,7 +287,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 
 	pageSize := 2
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/visibility")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
 	s.NoError(err)
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", mock.Anything, URI, mock.Anything).Return(false, nil)

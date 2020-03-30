@@ -29,7 +29,7 @@ namespaceDefaults:
 ```
 
 ## Visibility query syntax
-You can query the visibility store by using the `cadence workflow listarchived` command
+You can query the visibility store by using the `tctl workflow listarchived` command
 
 The syntax for the query is based on SQL
 

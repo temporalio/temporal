@@ -41,7 +41,7 @@ const (
 )
 
 type (
-	// Config contains the configuration for a set of cadence services
+	// Config contains the configuration for a set of temporal services
 	Config struct {
 		// Server is process-wide service-related configuration
 		Server Server `yaml:"server"`
@@ -223,7 +223,7 @@ type (
 		TLS *auth.TLS `yaml:"tls"`
 	}
 
-	// CustomDatastoreConfig is the configuration for connecting to a custom datastore that is not supported by cadence core
+	// CustomDatastoreConfig is the configuration for connecting to a custom datastore that is not supported by temporal core
 	CustomDatastoreConfig struct {
 		// Name of the custom datastore
 		Name string `yaml:"name"`
@@ -380,7 +380,7 @@ type (
 		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
 	}
 
-	// PublicClient is config for connecting to cadence frontend
+	// PublicClient is config for connecting to temporal frontend
 	PublicClient struct {
 		// HostPort is the host port to connect on. Host can be DNS name
 		HostPort string `yaml:"hostPort" validate:"nonzero"`

@@ -114,7 +114,7 @@ func NewWorkflowHandler(
 }
 
 // RegisterNamespace creates a new namespace which can be used as a container for all resources.  Namespace is a top level
-// entity within Cadence, used as a container for all resources like workflow executions, tasklists, etc.  Namespace
+// entity within Temporal, used as a container for all resources like workflow executions, tasklists, etc.  Namespace
 // acts as a sandbox and provides isolation for all resources within the namespace.  All resources belongs to exactly one
 // namespace.
 func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workflowservice.RegisterNamespaceRequest) (_ *workflowservice.RegisterNamespaceResponse, retError error) {
@@ -781,7 +781,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 
 // RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in
 // DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to
-// either clear sticky tasklist or report any panics during DecisionTask processing.  Cadence will only append first
+// either clear sticky tasklist or report any panics during DecisionTask processing.  Temporal will only append first
 // DecisionTaskFailed event to the history of workflow execution for consecutive failures.
 func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, request *workflowservice.RespondDecisionTaskFailedRequest) (_ *workflowservice.RespondDecisionTaskFailedResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)

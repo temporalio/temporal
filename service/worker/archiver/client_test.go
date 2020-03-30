@@ -47,7 +47,7 @@ type clientSuite struct {
 	visibilityArchiver *carchiver.VisibilityArchiverMock
 	metricsClient      *mmocks.Client
 	metricsScope       *mmocks.Scope
-	cadenceClient      *mocks.Client
+	temporalClient     *mocks.Client
 	client             *client
 }
 
@@ -62,7 +62,7 @@ func (s *clientSuite) SetupTest() {
 	s.visibilityArchiver = &carchiver.VisibilityArchiverMock{}
 	s.metricsClient = &mmocks.Client{}
 	s.metricsScope = &mmocks.Scope{}
-	s.cadenceClient = &mocks.Client{}
+	s.temporalClient = &mocks.Client{}
 	s.metricsClient.On("Scope", metrics.ArchiverClientScope, mock.Anything).Return(s.metricsScope).Once()
 	s.client = NewClient(
 		s.metricsClient,
@@ -72,7 +72,7 @@ func (s *clientSuite) SetupTest() {
 		dynamicconfig.GetIntPropertyFn(1000),
 		s.archiverProvider,
 	).(*client)
-	s.client.cadenceClient = s.cadenceClient
+	s.client.temporalClient = s.temporalClient
 }
 
 func (s *clientSuite) TearDownTest() {
@@ -108,7 +108,7 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalSuccess() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveAttemptCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveFailureCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
-	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetVisibility
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 
@@ -132,7 +132,7 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalFail() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveFailureCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalFailureCount).Once()
-	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetVisibility
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("some random error"))
 
@@ -172,7 +172,7 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalSuccess() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryInlineArchiveAttemptCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryInlineArchiveFailureCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
-	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetHistory
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 
@@ -196,7 +196,7 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalFail() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryInlineArchiveFailureCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalFailureCount).Once()
-	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetHistory
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("some random error"))
 
@@ -222,7 +222,7 @@ func (s *clientSuite) TestArchiveInline_HistoryFail_VisibilitySuccess() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityRequestCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveAttemptCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
-	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetHistory
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 
@@ -250,7 +250,7 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistorySuccess() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveAttemptCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveFailureCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
-	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetVisibility
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 
@@ -279,7 +279,7 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistoryFail() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveAttemptCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveFailureCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
-	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 2
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 
@@ -320,7 +320,7 @@ func (s *clientSuite) TestArchiveInline_VisibilitySuccess_HistorySuccess() {
 }
 
 func (s *clientSuite) TestArchiveSendSignal_Success() {
-	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 2
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryRequestCount).Once()

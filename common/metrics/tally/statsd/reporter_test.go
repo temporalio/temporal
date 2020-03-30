@@ -27,7 +27,7 @@ import (
 )
 
 func TestMetricNameWithTags(t *testing.T) {
-	r := cadenceTallyStatsdReporter{
+	r := temporalTallyStatsdReporter{
 		tallystatsd: nil,
 	}
 	tags := map[string]string{
@@ -41,7 +41,7 @@ func TestMetricNameWithTags(t *testing.T) {
 }
 
 func TestMetricNameWithTagsStability(t *testing.T) {
-	r := cadenceTallyStatsdReporter{
+	r := temporalTallyStatsdReporter{
 		tallystatsd: nil,
 	}
 	tags := map[string]string{

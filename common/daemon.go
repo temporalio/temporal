@@ -33,7 +33,7 @@ const (
 
 type (
 	// Daemon is the base interfaces implemented by
-	// background tasks within Cadence
+	// background tasks within Temporal
 	Daemon interface {
 		Start()
 		Stop()

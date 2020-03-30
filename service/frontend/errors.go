@@ -42,7 +42,7 @@ var (
 	errInvalidRetention                                   = serviceerror.NewInvalidArgument("RetentionDays is invalid.")
 	errInvalidExecutionStartToCloseTimeoutSeconds         = serviceerror.NewInvalidArgument("A valid ExecutionStartToCloseTimeoutSeconds is not set on request.")
 	errInvalidTaskStartToCloseTimeoutSeconds              = serviceerror.NewInvalidArgument("A valid TaskStartToCloseTimeoutSeconds is not set on request.")
-	errQueryDisallowedForNamespace                        = serviceerror.NewInvalidArgument("Namespace is not allowed to query, please contact cadence team to re-enable queries.")
+	errQueryDisallowedForNamespace                        = serviceerror.NewInvalidArgument("Namespace is not allowed to query, please contact temporal team to re-enable queries.")
 	errClusterNameNotSet                                  = serviceerror.NewInvalidArgument("Cluster name is not set.")
 	errEmptyReplicationInfo                               = serviceerror.NewInvalidArgument("Replication task info is not set.")
 	errHistoryNotFound                                    = serviceerror.NewInvalidArgument("Requested workflow history not found, may have passed retention period.")

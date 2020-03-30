@@ -42,7 +42,7 @@ type (
 	}
 )
 
-// NewReplayMetricsClient creates a metrics client which is aware of cadence's replay mode
+// NewReplayMetricsClient creates a metrics client which is aware of temporal's replay mode
 func NewReplayMetricsClient(client metrics.Client, ctx workflow.Context) metrics.Client {
 	return &replayMetricsClient{
 		client: client,
@@ -95,7 +95,7 @@ func (r *replayMetricsClient) Scope(scope int, tags ...metrics.Tag) metrics.Scop
 	return NewReplayMetricsScope(r.client.Scope(scope, tags...), r.ctx)
 }
 
-// NewReplayMetricsScope creates a metrics scope which is aware of cadence's replay mode
+// NewReplayMetricsScope creates a metrics scope which is aware of temporal's replay mode
 func NewReplayMetricsScope(scope metrics.Scope, ctx workflow.Context) metrics.Scope {
 	return &replayMetricsScope{
 		scope: scope,

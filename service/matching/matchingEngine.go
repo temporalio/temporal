@@ -63,7 +63,7 @@ type (
 
 	// lockableQueryTaskMap maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 	// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
-	// RespondQueryTaskCompleted() or through an internal service error causing cadence to be unable to dispatch
+	// RespondQueryTaskCompleted() or through an internal service error causing temporal to be unable to dispatch
 	// query task to workflow worker.
 	lockableQueryTaskMap struct {
 		sync.RWMutex

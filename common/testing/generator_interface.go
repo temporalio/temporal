@@ -62,9 +62,9 @@ type (
 		GetVersion() int64
 	}
 
-	// Vertex represents a state in the model. A state represents a type of an Cadence event
+	// Vertex represents a state in the model. A state represents a type of an Temporal event
 	Vertex interface {
-		// The name of the vertex. Usually, this will be the Cadence event type
+		// The name of the vertex. Usually, this will be the Temporal event type
 		SetName(string)
 		GetName() string
 		//Equals(Vertex) bool

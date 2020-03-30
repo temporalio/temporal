@@ -30,7 +30,7 @@ frontend.validSearchAttributes:
       CustomNamespace: 1
       Operator: 1
       RolloutID: 1
-      CadenceChangeVersion: 1
+      TemporalChangeVersion: 1
       BinaryChecksums: 1
 system.minRetentionDays:
     - value: 0
