@@ -294,7 +294,7 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 	defer cancel()
 	resp, err := d.describeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 		Name: namespace,
-		Uuid: namespaceID,
+		Id:   namespaceID,
 	})
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
@@ -307,7 +307,7 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nHistoryArchivalStatus: %v\n"
 	descValues := []interface{}{
 		resp.NamespaceInfo.GetName(),
-		resp.NamespaceInfo.GetUuid(),
+		resp.NamespaceInfo.GetId(),
 		resp.NamespaceInfo.GetDescription(),
 		resp.NamespaceInfo.GetOwnerEmail(),
 		resp.NamespaceInfo.Data,

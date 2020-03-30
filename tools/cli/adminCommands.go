@@ -374,8 +374,8 @@ func AdminRemoveTask(c *cli.Context) {
 
 	req := &adminservice.RemoveTaskRequest{}
 
-	req.ShardID = int32(sid)
-	req.TaskID = taskID
+	req.ShardId = int32(sid)
+	req.TaskId = taskID
 	req.Type = int32(typeID)
 
 	_, err := adminClient.RemoveTask(ctx, req)
@@ -393,7 +393,7 @@ func AdminShardManagement(c *cli.Context) {
 	defer cancel()
 
 	req := &adminservice.CloseShardRequest{}
-	req.ShardID = int32(sid)
+	req.ShardId = int32(sid)
 
 	_, err := adminClient.CloseShard(ctx, req)
 	if err != nil {
@@ -435,7 +435,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 	}
 
 	if !printFully {
-		resp.ShardIDs = nil
+		resp.ShardIds = nil
 	}
 	prettyPrintJSONObject(resp)
 }

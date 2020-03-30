@@ -72,7 +72,7 @@ func AdminDescribeTaskList(c *cli.Context) {
 }
 
 func printTaskListStatus(taskListStatus *commonproto.TaskListStatus) {
-	taskIDBlock := taskListStatus.GetTaskIDBlock()
+	taskIDBlock := taskListStatus.GetTaskIdBlock()
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)

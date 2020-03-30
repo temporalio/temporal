@@ -884,17 +884,17 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	var tmpAct *cliproto.PendingActivityInfo
 	for _, pa := range resp.PendingActivities {
 		tmpAct = &cliproto.PendingActivityInfo{
-			ActivityID:             pa.ActivityID,
-			ActivityType:           pa.ActivityType,
-			State:                  pa.State,
-			ScheduledTimestamp:     convertTime(pa.ScheduledTimestamp, false),
-			LastStartedTimestamp:   convertTime(pa.LastStartedTimestamp, false),
-			LastHeartbeatTimestamp: convertTime(pa.LastHeartbeatTimestamp, false),
-			Attempt:                pa.Attempt,
-			MaximumAttempts:        pa.MaximumAttempts,
-			ExpirationTimestamp:    convertTime(pa.ExpirationTimestamp, false),
-			LastFailureReason:      pa.LastFailureReason,
-			LastWorkerIdentity:     pa.LastWorkerIdentity,
+			ActivityId:             pa.GetActivityId(),
+			ActivityType:           pa.GetActivityType(),
+			State:                  pa.GetState(),
+			ScheduledTimestamp:     convertTime(pa.GetScheduledTimestamp(), false),
+			LastStartedTimestamp:   convertTime(pa.GetLastStartedTimestamp(), false),
+			LastHeartbeatTimestamp: convertTime(pa.GetLastHeartbeatTimestamp(), false),
+			Attempt:                pa.GetAttempt(),
+			MaximumAttempts:        pa.GetMaximumAttempts(),
+			ExpirationTimestamp:    convertTime(pa.GetExpirationTimestamp(), false),
+			LastFailureReason:      pa.GetLastFailureReason(),
+			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
 		}
 		if pa.HeartbeatDetails != nil {
 			tmpAct.HeartbeatDetails = string(pa.HeartbeatDetails)
@@ -1909,9 +1909,9 @@ func CompleteActivity(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	_, err := frontendClient.RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
 		Namespace:  namespace,
-		WorkflowID: wid,
-		RunID:      rid,
-		ActivityID: activityID,
+		WorkflowId: wid,
+		RunId:      rid,
+		ActivityId: activityID,
 		Result:     []byte(result),
 		Identity:   identity,
 	})
@@ -1940,9 +1940,9 @@ func FailActivity(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	_, err := frontendClient.RespondActivityTaskFailedById(ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
 		Namespace:  namespace,
-		WorkflowID: wid,
-		RunID:      rid,
-		ActivityID: activityID,
+		WorkflowId: wid,
+		RunId:      rid,
+		ActivityId: activityID,
 		Reason:     reason,
 		Details:    []byte(detail),
 		Identity:   identity,

@@ -516,9 +516,9 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 
 		exeInfo := resp.State.ExecutionInfo
 		taskTemplate := &persistenceblobs.ReplicationTaskInfo{
-			NamespaceID:         primitives.MustParseUUID(namespaceID),
-			WorkflowID:          wid,
-			RunID:               primitives.MustParseUUID(rid),
+			NamespaceId:         primitives.MustParseUUID(namespaceID),
+			WorkflowId:          wid,
+			RunId:               primitives.MustParseUUID(rid),
 			Version:             currVersion,
 			LastReplicationInfo: repInfo,
 			BranchToken:         exeInfo.BranchToken,
@@ -554,8 +554,8 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 				taskTemplate.NewRunBranchToken = resp.State.ExecutionInfo.BranchToken
 			}
 			taskTemplate.Version = firstEvent.GetVersion()
-			taskTemplate.FirstEventID = firstEvent.GetEventId()
-			taskTemplate.NextEventID = lastEvent.GetEventId() + 1
+			taskTemplate.FirstEventId = firstEvent.GetEventId()
+			taskTemplate.NextEventId = lastEvent.GetEventId() + 1
 			task, _, err := history.GenerateReplicationTask(targets, taskTemplate, historyV2Mgr, nil, batch, common.IntPtr(shardID))
 			if err != nil {
 				ErrorAndExit("GenerateReplicationTask error", err)
