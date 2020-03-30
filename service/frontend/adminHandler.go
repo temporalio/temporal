@@ -412,12 +412,12 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 
 	var blobs []*commonproto.DataBlob
 	for _, historyBatch := range historyBatches {
-		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(historyBatch.Events, common.EncodingTypeThriftRW)
+		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(historyBatch.Events, common.EncodingTypeProto3)
 		if err != nil {
 			return nil, err
 		}
 		blobs = append(blobs, &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         blob.Data,
 		})
 	}

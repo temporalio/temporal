@@ -3244,8 +3244,8 @@ func (wh *WorkflowHandler) getRawHistory(
 		switch data.Encoding {
 		case common.EncodingTypeJSON:
 			encoding = enums.EncodingTypeJSON
-		case common.EncodingTypeThriftRW:
-			encoding = enums.EncodingTypeThriftRW
+		case common.EncodingTypeProto3:
+			encoding = enums.EncodingTypeProto3
 		default:
 			panic(fmt.Sprintf("Invalid encoding type for raw history, encoding type: %s", data.Encoding))
 		}
@@ -3270,7 +3270,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			return nil, nil, err
 		}
 		rawHistory = append(rawHistory, &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         blob.Data,
 		})
 
@@ -3279,7 +3279,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			return nil, nil, err
 		}
 		rawHistory = append(rawHistory, &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         blob.Data,
 		})
 	}

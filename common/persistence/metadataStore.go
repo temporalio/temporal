@@ -149,7 +149,7 @@ func (m *metadataManagerImpl) serializeNamespaceConfig(c *NamespaceConfig) (Inte
 	if c.BadBinaries.Binaries == nil {
 		c.BadBinaries.Binaries = map[string]*commonproto.BadBinaryInfo{}
 	}
-	badBinaries, err := m.serializer.SerializeBadBinaries(&c.BadBinaries, common.EncodingTypeThriftRW)
+	badBinaries, err := m.serializer.SerializeBadBinaries(&c.BadBinaries, common.EncodingTypeProto3)
 	if err != nil {
 		return InternalNamespaceConfig{}, err
 	}

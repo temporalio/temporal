@@ -111,7 +111,7 @@ func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, events)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, events)
@@ -144,7 +144,7 @@ func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*common
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, event)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, event)
@@ -179,7 +179,7 @@ func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
@@ -214,7 +214,7 @@ func (t *serializerImpl) DeserializeBadBinaries(data *serialization.DataBlob) (*
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
@@ -251,7 +251,7 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob)
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
@@ -286,7 +286,7 @@ func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlo
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
@@ -321,7 +321,7 @@ func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, event)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, event)
@@ -345,7 +345,7 @@ func (t *serializerImpl) serializeProto(p serialization.ProtoMarshal, encodingTy
 	var err error
 
 	switch encodingType {
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		data, err = p.Marshal()

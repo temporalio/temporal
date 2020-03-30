@@ -275,9 +275,9 @@ func (d *DataBlob) ToProto() *commonproto.DataBlob {
 			EncodingType: enums.EncodingTypeJSON,
 			Data:         d.Data,
 		}
-	case common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		return &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         d.Data,
 		}
 	default:
@@ -294,8 +294,8 @@ func (d *DataBlob) GetEncoding() common.EncodingType {
 		return common.EncodingTypeGob
 	case common.EncodingTypeJSON:
 		return common.EncodingTypeJSON
-	case common.EncodingTypeThriftRW:
-		return common.EncodingTypeThriftRW
+	case common.EncodingTypeProto3:
+		return common.EncodingTypeProto3
 	case common.EncodingTypeEmpty:
 		return common.EncodingTypeEmpty
 	default:

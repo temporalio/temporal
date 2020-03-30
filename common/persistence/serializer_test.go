@@ -224,7 +224,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			// serialize version histories
 
-			nilHistories, err := serializer.SerializeVersionHistories(nil, common.EncodingTypeThriftRW)
+			nilHistories, err := serializer.SerializeVersionHistories(nil, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.Nil(nilHistories)
 
@@ -232,7 +232,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(historiesJSON)
 
-			historiesThrift, err := serializer.SerializeVersionHistories(histories, common.EncodingTypeThriftRW)
+			historiesThrift, err := serializer.SerializeVersionHistories(histories, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(historiesThrift)
 
@@ -298,7 +298,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			// serialize reset points
 
-			nilResetPoints, err := serializer.SerializeResetPoints(nil, common.EncodingTypeThriftRW)
+			nilResetPoints, err := serializer.SerializeResetPoints(nil, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(nilResetPoints)
 
@@ -311,7 +311,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(resetPointsJSON)
 
-			resetPointsThrift, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeThriftRW)
+			resetPointsThrift, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(resetPointsThrift)
 
@@ -343,7 +343,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			// serialize bad binaries
 
-			nilBadBinaries, err := serializer.SerializeBadBinaries(nil, common.EncodingTypeThriftRW)
+			nilBadBinaries, err := serializer.SerializeBadBinaries(nil, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(nilBadBinaries)
 
@@ -356,7 +356,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(badBinariesJSON)
 
-			badBinariesThrift, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeThriftRW)
+			badBinariesThrift, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(badBinariesThrift)
 

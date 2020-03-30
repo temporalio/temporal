@@ -467,9 +467,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	convertBlob := func(blobs []*commonproto.DataBlob) []*commonproto.HistoryEvent {
 		var events []*commonproto.HistoryEvent
 		for _, blob := range blobs {
-			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
+			s.True(blob.GetEncodingType() == enums.EncodingTypeProto3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeThriftRW,
+				Encoding: common.EncodingTypeProto3,
 				Data:     blob.Data,
 			})
 			s.NoError(err)
@@ -830,9 +830,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	convertBlob := func(blobs []*commonproto.DataBlob) []*commonproto.HistoryEvent {
 		var events []*commonproto.HistoryEvent
 		for _, blob := range blobs {
-			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
+			s.True(blob.GetEncodingType() == enums.EncodingTypeProto3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeThriftRW,
+				Encoding: common.EncodingTypeProto3,
 				Data:     blob.Data,
 			})
 			s.NoError(err)
@@ -1048,9 +1048,9 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 	convertBlob := func(blobs []*commonproto.DataBlob) []*commonproto.HistoryEvent {
 		events := []*commonproto.HistoryEvent{}
 		for _, blob := range blobs {
-			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
+			s.True(blob.GetEncodingType() == enums.EncodingTypeProto3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeThriftRW,
+				Encoding: common.EncodingTypeProto3,
 				Data:     blob.Data,
 			})
 			s.Nil(err)
