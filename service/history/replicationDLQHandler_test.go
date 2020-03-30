@@ -36,7 +36,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common/cluster"
@@ -131,8 +131,8 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	pageToken := []byte{}
 
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
-		Tasks: []*pblobs.ReplicationTaskInfo{
-			&pblobs.ReplicationTaskInfo{
+		Tasks: []*persistenceblobs.ReplicationTaskInfo{
+			&persistenceblobs.ReplicationTaskInfo{
 				NamespaceID: primitives.MustParseUUID(uuid.New()),
 				WorkflowID:  uuid.New(),
 				RunID:       primitives.MustParseUUID(uuid.New()),
@@ -185,8 +185,8 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 	pageToken := []byte{}
 
 	resp := &persistence.GetReplicationTasksFromDLQResponse{
-		Tasks: []*pblobs.ReplicationTaskInfo{
-			&pblobs.ReplicationTaskInfo{
+		Tasks: []*persistenceblobs.ReplicationTaskInfo{
+			&persistenceblobs.ReplicationTaskInfo{
 				NamespaceID: primitives.MustParseUUID(uuid.New()),
 				WorkflowID:  uuid.New(),
 				RunID:       primitives.MustParseUUID(uuid.New()),
