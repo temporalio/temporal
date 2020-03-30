@@ -62,7 +62,7 @@ type (
 )
 
 // newServer returns a new instance of a daemon
-// that represents a cadence service
+// that represents a temporal service
 func newServer(service string, cfg *config.Config) common.Daemon {
 	return &server{
 		cfg:   cfg,

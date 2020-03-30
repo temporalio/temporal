@@ -687,7 +687,7 @@ func (s *cliAppSuite) TestAnyToString() {
 		EventId:   1,
 		EventType: eventType,
 		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonproto.WorkflowType{Name: "code.uber.internal/devexp/cadence-samples.git/cmd/samples/recipes/helloworld.Workflow"},
+			WorkflowType:                        &commonproto.WorkflowType{Name: "helloworldWorkflow"},
 			TaskList:                            &commonproto.TaskList{Name: "taskList"},
 			ExecutionStartToCloseTimeoutSeconds: 60,
 			TaskStartToCloseTimeoutSeconds:      10,

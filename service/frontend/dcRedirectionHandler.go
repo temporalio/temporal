@@ -49,7 +49,7 @@ type (
 	}
 )
 
-// NewDCRedirectionHandler creates a thrift handler for the cadence service, frontend
+// NewDCRedirectionHandler creates a thrift handler for the temporal service, frontend
 func NewDCRedirectionHandler(
 	wfHandler *WorkflowHandler,
 	policy config.DCRedirectionPolicy,

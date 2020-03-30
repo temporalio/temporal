@@ -30,7 +30,7 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 )
 
-// ClientImpl is used for reporting metrics by various Cadence services
+// ClientImpl is used for reporting metrics by various Temporal services
 type ClientImpl struct {
 	//parentReporter is the parent scope for the metrics
 	parentScope tally.Scope

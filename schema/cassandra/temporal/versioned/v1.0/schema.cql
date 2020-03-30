@@ -209,7 +209,7 @@ INSERT INTO namespaces (
 ) VALUES (
    32049b68-7872-4094-8e63-d0dd59896a83,
    {
-       name: 'cadence-system'
+       name: 'temporal-system'
    }
 ) IF NOT EXISTS;
 
@@ -225,12 +225,12 @@ INSERT INTO namespaces_by_name_v2 (
    notification_version
 ) VALUES (
    0,
-   'cadence-system',
+   'temporal-system',
    {
        id: 32049b68-7872-4094-8e63-d0dd59896a83,
-       name: 'cadence-system',
-       description: 'cadence system workflow namespace',
-       owner_email: 'cadence-dev-group@uber.com'
+       name: 'temporal-system',
+       description: 'temporal system workflow namespace',
+       owner_email: 'temporal-core@temporal.io'
    },
    {
        retention:3,

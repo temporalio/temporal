@@ -44,10 +44,10 @@ import (
 const (
 	batcherContextKey = "batcherContext"
 	// BatcherTaskListName is the tasklist name
-	BatcherTaskListName = "cadence-sys-batcher-tasklist"
+	BatcherTaskListName = "temporal-sys-batcher-tasklist"
 	// BatchWFTypeName is the workflow type
-	BatchWFTypeName   = "cadence-sys-batch-workflow"
-	batchActivityName = "cadence-sys-batch-activity"
+	BatchWFTypeName   = "temporal-sys-batch-workflow"
+	batchActivityName = "temporal-sys-batch-activity"
 	// InfiniteDuration is a long duration(20 yrs) we used for infinite workflow running
 	InfiniteDuration = 20 * 365 * 24 * time.Hour
 	pageSize         = 1000
@@ -452,7 +452,7 @@ func processTask(
 		}
 
 		// TODO https://github.com/uber/cadence/issues/2159
-		// By default should use ChildPolicy, but it is totally broken in Cadence, we need to fix it before using
+		// By default should use ChildPolicy, but it is totally broken in Temporal, we need to fix it before using
 		if applyOnChild != nil && *applyOnChild && len(resp.PendingChildren) > 0 {
 			getActivityLogger(ctx).Info("Found more child workflows to process", tag.Number(int64(len(resp.PendingChildren))))
 			for _, ch := range resp.PendingChildren {

@@ -42,7 +42,7 @@ const (
 	handlerStatusDefer = executor.TaskStatusDefer
 )
 
-const scannerTaskListPrefix = "cadence-sys-tl-scanner"
+const scannerTaskListPrefix = "temporal-sys-tl-scanner"
 
 // deleteHandler handles deletions for a given task list
 // this handler limits the amount of tasks deleted to maxTasksPerJob

@@ -14,7 +14,7 @@ persistence:
 
 server:
   ringpop:
-    name: cadence
+    name: temporal
     maxJoinDuration: 30s
   pprof:
     port: 7936
@@ -99,7 +99,7 @@ namespaceDefaults:
       URI: "file:///tmp/temporal_archival/development"
     visibility:
       status: "enabled"
-      URI: "file:///tmp/cadence_vis_archival/development"
+      URI: "file:///tmp/temporal_vis_archival/development"
 
 kafka:
   clusters:

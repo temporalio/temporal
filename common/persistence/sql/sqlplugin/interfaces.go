@@ -770,7 +770,7 @@ type (
 		Rollback() error
 	}
 
-	// DB defines the API for regular SQL operations of a Cadence server
+	// DB defines the API for regular SQL operations of a Temporal server
 	DB interface {
 		tableCRUD
 

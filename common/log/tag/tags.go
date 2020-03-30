@@ -785,7 +785,7 @@ func ArchivalVisibilityQuery(query string) Tag {
 }
 
 // The following logger tags are only used by internal archiver implemention.
-// TODO: move them to internal repo once cadence plugin model is in place.
+// TODO: move them to internal repo once temporal plugin model is in place.
 
 // ArchivalBlobKey returns tag for BlobKey
 func ArchivalBlobKey(blobKey string) Tag {

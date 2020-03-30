@@ -194,7 +194,7 @@ func (c *cadenceImpl) Start() error {
 		hosts[common.WorkerServiceName] = []string{c.WorkerGRPCServiceAddress()}
 	}
 
-	// create cadence-system namespace, this must be created before starting
+	// create temporal-system namespace, this must be created before starting
 	// the services - so directly use the metadataManager to create this
 	if err := c.createSystemNamespace(); err != nil {
 		return err
@@ -704,7 +704,7 @@ func (c *cadenceImpl) createSystemNamespace() error {
 	_, err := c.metadataMgr.CreateNamespace(&persistence.CreateNamespaceRequest{
 		Info: &persistence.NamespaceInfo{
 			ID:          uuid.New(),
-			Name:        "cadence-system",
+			Name:        "temporal-system",
 			Status:      persistence.NamespaceStatusRegistered,
 			Description: "Cadence system namespace",
 		},
@@ -720,7 +720,7 @@ func (c *cadenceImpl) createSystemNamespace() error {
 		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); ok {
 			return nil
 		}
-		return fmt.Errorf("failed to create cadence-system namespace: %v", err)
+		return fmt.Errorf("failed to create temporal-system namespace: %v", err)
 	}
 	return nil
 }

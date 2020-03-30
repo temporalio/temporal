@@ -75,11 +75,11 @@ func (s *TestCluster) SetupTestDatabase() {
 
 	schemaDir := s.schemaDir + "/"
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
-		cadencePackageDir, err := getCadencePackageDir()
+		temporalPackageDir, err := getTemporalPackageDir()
 		if err != nil {
 			log.Fatal(err)
 		}
-		schemaDir = cadencePackageDir + schemaDir
+		schemaDir = temporalPackageDir + schemaDir
 	}
 	s.LoadSchema([]string{"schema.sql"}, schemaDir)
 	s.LoadVisibilitySchema([]string{"schema.sql"}, schemaDir)
@@ -163,14 +163,14 @@ func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string)
 	}
 }
 
-func getCadencePackageDir() (string, error) {
-	cadencePackageDir, err := os.Getwd()
+func getTemporalPackageDir() (string, error) {
+	temporalPackageDir, err := os.Getwd()
 	if err != nil {
 		panic(err)
 	}
-	cadenceIndex := strings.LastIndex(cadencePackageDir, "/temporal/")
-	cadencePackageDir = cadencePackageDir[:cadenceIndex+len("/temporal/")]
-	return cadencePackageDir, err
+	temporalIndex := strings.LastIndex(temporalPackageDir, "/temporal/")
+	temporalPackageDir = temporalPackageDir[:temporalIndex+len("/temporal/")]
+	return temporalPackageDir, err
 }
 
 // loadDatabaseSchema loads the schema from the given .sql files on this database

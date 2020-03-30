@@ -97,16 +97,16 @@ const (
 // disregarded.
 // #nosec
 const (
-	// SystemGlobalNamespace is global namespace name for cadence system workflows running globally
-	SystemGlobalNamespace = "cadence-system-global"
-	// SystemLocalNamespace is namespace name for cadence system workflows running in local cluster
-	SystemLocalNamespace = "cadence-system"
-	// SystemNamespaceID is namespace id for all cadence system workflows
+	// SystemGlobalNamespace is global namespace name for temporal system workflows running globally
+	SystemGlobalNamespace = "temporal-system-global"
+	// SystemLocalNamespace is namespace name for temporal system workflows running in local cluster
+	SystemLocalNamespace = "temporal-system"
+	// SystemNamespaceID is namespace id for all temporal system workflows
 	SystemNamespaceID = "32049b68-7872-4094-8e63-d0dd59896a83"
-	// SystemNamespaceRetentionDays is retention config for all cadence system workflows
+	// SystemNamespaceRetentionDays is retention config for all temporal system workflows
 	SystemNamespaceRetentionDays = 7
 	// DefaultAdminOperationToken is the default dynamic config value for AdminOperationToken
-	DefaultAdminOperationToken = "CadenceTeamONLY"
+	DefaultAdminOperationToken = "TemporalTeamONLY"
 )
 
 const (

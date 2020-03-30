@@ -40,7 +40,7 @@ import (
 )
 
 type (
-	// ClientWorker is a cadence client worker
+	// ClientWorker is a temporal client worker
 	ClientWorker interface {
 		Start() error
 		Stop()
@@ -73,9 +73,9 @@ type (
 )
 
 const (
-	workflowIDPrefix                = "cadence-archival"
-	decisionTaskList                = "cadence-archival-tl"
-	signalName                      = "cadence-archival-signal"
+	workflowIDPrefix                = "temporal-archival"
+	decisionTaskList                = "temporal-archival-tl"
+	signalName                      = "temporal-archival-signal"
 	archivalWorkflowFnName          = "archivalWorkflow"
 	workflowStartToCloseTimeout     = time.Hour * 24 * 30
 	workflowTaskStartToCloseTimeout = time.Minute

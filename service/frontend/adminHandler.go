@@ -570,7 +570,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	return result, nil
 }
 
-// DescribeCluster return information about cadence deployment
+// DescribeCluster return information about temporal deployment
 func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.DescribeClusterRequest) (_ *adminservice.DescribeClusterResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
 

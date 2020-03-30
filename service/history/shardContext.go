@@ -1087,7 +1087,7 @@ func (s *shardContextImpl) allocateTransferIDsLocked(
 }
 
 // NOTE: allocateTimerIDsLocked should always been called after assigning taskID for transferTasks when assigning taskID together,
-// because Cadence Indexer assume timer taskID of deleteWorkflowExecution is larger than transfer taskID of closeWorkflowExecution
+// because Temporal Indexer assume timer taskID of deleteWorkflowExecution is larger than transfer taskID of closeWorkflowExecution
 // for a given workflow.
 func (s *shardContextImpl) allocateTimerIDsLocked(
 	namespaceEntry *cache.NamespaceCacheEntry,

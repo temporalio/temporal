@@ -196,6 +196,6 @@ func NewOperationNotSupportErrorForVis() error {
 
 // IsNopUpsertWorkflowRequest return whether upsert request should be no-op
 func IsNopUpsertWorkflowRequest(request *InternalUpsertWorkflowExecutionRequest) bool {
-	_, exist := request.SearchAttributes[definition.CadenceChangeVersion]
+	_, exist := request.SearchAttributes[definition.TemporalChangeVersion]
 	return exist
 }

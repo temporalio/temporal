@@ -389,7 +389,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int32, isForwarded bool) {
 
 	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
-	forwardedFrom := "/__cadence_sys/makeToast/1"
+	forwardedFrom := "/__temporal_sys/makeToast/1"
 
 	taskList := &commonproto.TaskList{Name: tl}
 

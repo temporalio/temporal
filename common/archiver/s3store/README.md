@@ -29,7 +29,7 @@ namespaceDefaults:
 ```
 
 ## Visibility query syntax
-You can query the visibility store by using the `cadence workflow listarchived` command
+You can query the visibility store by using the `tctl workflow listarchived` command
 
 The syntax for the query is based on SQL
 
@@ -74,7 +74,7 @@ s3://<bucket-name>/<namespace-id>/
 1. Install awscli from [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html)
 2. Install localstack from [here](https://github.com/localstack/localstack#installing)
 3. Launch localstack with `SERVICES=s3 localstack start`
-4. Create a bucket using `aws --endpoint-url=http://localhost:4572 s3 mb s3://cadence-development` 
+4. Create a bucket using `aws --endpoint-url=http://localhost:4572 s3 mb s3://temporal-development` 
 5. Configure archival and namespaceDefaults with the following configuration
 ```
 archival:
@@ -99,8 +99,8 @@ namespaceDefaults:
   archival:
     history:
       status: "enabled"
-      URI: "s3://cadence-development"
+      URI: "s3://temporal-development"
     visibility:
       status: "enabled"
-      URI: "s3://cadence-development"
+      URI: "s3://temporal-development"
 ```

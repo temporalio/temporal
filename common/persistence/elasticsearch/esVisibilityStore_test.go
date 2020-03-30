@@ -520,7 +520,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
           "RunID": "e481009e-14b3-45ae-91af-dce6e2a88365",
           "StartTime": 1547596872371000000,
           "WorkflowID": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
-          "WorkflowType": "code.uber.internal/devexp/cadence-bench/load/basic.stressWorkflowExecute"}`)
+          "WorkflowType": "basic.stressWorkflowExecute"}`)
 	source := (*json.RawMessage)(&data)
 	searchHit := &elastic.SearchHit{
 		Source: source,

@@ -38,7 +38,7 @@ import (
 	"github.com/temporalio/temporal/tools/sql"
 )
 
-// validServices is the list of all valid cadence services
+// validServices is the list of all valid temporal services
 var validServices = []string{primitives.FrontendService, primitives.HistoryService, primitives.MatchingService, primitives.WorkerService}
 
 // startHandler is the handler for the cli start command

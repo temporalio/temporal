@@ -298,7 +298,7 @@ func (s *clientSuite) TestQueryWithFilter() {
 	}).Times(3)
 
 	var fileNames []string
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	fileNames, _, _, err = storageWrapper.QueryWithFilters(ctx, URI, "closeTimeout_2020-02-27T09:42:28Z", 0, 0, []connector.Precondition{newWorkflowIDPrecondition("4418294404690464320")})
 
 	s.Require().NoError(err)

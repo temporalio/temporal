@@ -35,7 +35,7 @@ import (
 )
 
 const constNamespacePartition = 0
-const namespaceMetadataRecordName = "cadence-namespace-metadata"
+const namespaceMetadataRecordName = "temporal-namespace-metadata"
 
 const (
 	templateNamespaceInfoType = `{` +

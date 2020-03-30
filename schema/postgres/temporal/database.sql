@@ -1,1 +1,1 @@
-CREATE DATABASE cadence;
+CREATE DATABASE temporal;

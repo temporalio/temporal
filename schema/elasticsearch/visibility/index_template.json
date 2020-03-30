@@ -1,7 +1,7 @@
 {
   "order": 0,
   "index_patterns": [
-    "cadence-visibility-*"
+    "temporal-visibility-*"
   ],
   "settings": {
     "index": {
@@ -45,7 +45,7 @@
         },
         "Attr": {
           "properties": {
-            "CadenceChangeVersion":  { "type": "keyword" },
+            "TemporalChangeVersion":  { "type": "keyword" },
             "CustomStringField":  { "type": "text" },
             "CustomKeywordField": { "type": "keyword"},
             "CustomIntField": { "type": "long"},

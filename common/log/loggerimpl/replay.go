@@ -37,7 +37,7 @@ var _ log.Logger = (*replayLogger)(nil)
 
 const skipForReplayLogger = skipForDefaultLogger + 1
 
-// NewReplayLogger creates a logger which is aware of cadence's replay mode
+// NewReplayLogger creates a logger which is aware of temporal's replay mode
 func NewReplayLogger(logger log.Logger, ctx workflow.Context, enableLogInReplay bool) log.Logger {
 	lg, ok := logger.(*loggerImpl)
 	if ok {
