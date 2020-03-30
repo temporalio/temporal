@@ -229,7 +229,7 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	blob := &commonproto.DataBlob{
-		EncodingType: enums.EncodingTypeThriftRW,
+		EncodingType: enums.EncodingTypeProto3,
 		Data:         []byte("some random history blob"),
 	}
 	versionHistoryItems := []*commonproto.VersionHistoryItem{
@@ -269,7 +269,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 			RunId:      runID,
 		},
 		Events: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         []byte("some random history blob"),
 		},
 		VersionHistoryItems: []*commonproto.VersionHistoryItem{item},
@@ -294,7 +294,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 			RunId:      runID,
 		},
 		Events: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         []byte("some random history blob"),
 		},
 		VersionHistoryItems: []*commonproto.VersionHistoryItem{item},
@@ -328,7 +328,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 
 	response := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: []*commonproto.DataBlob{{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         blob,
 		}},
 		NextPageToken: nextTokenOut,

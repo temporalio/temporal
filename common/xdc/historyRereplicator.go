@@ -473,7 +473,7 @@ func (c *historyRereplicationContext) deserializeBlob(blob *commonproto.DataBlob
 	switch blob.GetEncodingType() {
 	case enums.EncodingTypeProto3:
 		he, err := c.rereplicator.serializer.DeserializeBatchEvents(&serialization.DataBlob{
-			Encoding: common.EncodingTypeThriftRW,
+			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,
 		})
 		if err != nil {

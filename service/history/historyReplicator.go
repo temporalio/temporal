@@ -1066,11 +1066,11 @@ func (r *historyReplicator) deserializeBlob(
 	blob *commonproto.DataBlob,
 ) ([]*commonproto.HistoryEvent, error) {
 
-	if blob.GetEncodingType() != enums.EncodingTypeThriftRW {
+	if blob.GetEncodingType() != enums.EncodingTypeProto3 {
 		return nil, ErrUnknownEncodingType
 	}
 	historyEvents, err := r.historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
-		Encoding: common.EncodingTypeThriftRW,
+		Encoding: common.EncodingTypeProto3,
 		Data:     blob.Data,
 	})
 	if err != nil {

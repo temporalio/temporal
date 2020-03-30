@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	clusterMetadataEncoding = common.EncodingTypeThriftRW
+	clusterMetadataEncoding = common.EncodingTypeProto3
 )
 
 var (

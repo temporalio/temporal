@@ -755,7 +755,7 @@ func (s *historyRereplicatorSuite) TestCreateReplicationRawRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	blob := &commonproto.DataBlob{
-		EncodingType: enums.EncodingTypeThriftRW,
+		EncodingType: enums.EncodingTypeProto3,
 		Data:         []byte("some random history blob"),
 	}
 	replicationInfo := map[string]*replication.ReplicationInfo{
@@ -794,11 +794,11 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 			},
 		},
 		History: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         []byte("some random history blob"),
 		},
 		NewRunHistory: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         []byte("some random new run history blob"),
 		},
 	}
@@ -825,11 +825,11 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         []byte("some random history blob"),
 		},
 		NewRunHistory: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         []byte("some random new run history blob"),
 		},
 	}
@@ -903,11 +903,11 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         []byte("some random history blob"),
 		},
 		NewRunHistory: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         []byte("some random new run history blob"),
 		},
 	}
@@ -1063,7 +1063,7 @@ func (s *historyRereplicatorSuite) TestGetHistory() {
 
 	response := &adminservice.GetWorkflowExecutionRawHistoryResponse{
 		HistoryBatches: []*commonproto.DataBlob{{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         blob,
 		}},
 		NextPageToken: nextTokenOut,

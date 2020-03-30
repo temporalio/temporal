@@ -1603,7 +1603,7 @@ func pickRandomEncoding() common.EncodingType {
 	case 0:
 		encoding = common.EncodingTypeJSON
 	case 1:
-		encoding = common.EncodingTypeThriftRW
+		encoding = common.EncodingTypeProto3
 	case 2:
 		encoding = common.EncodingType("")
 	}

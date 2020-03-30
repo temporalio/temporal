@@ -231,7 +231,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 			WorkflowId:  workflowID,
 			RunId:       runID.String(),
 			Events: &commonproto.DataBlob{
-				EncodingType: enums.EncodingTypeThriftRW,
+				EncodingType: enums.EncodingTypeProto3,
 				Data:         data.Data,
 			},
 		}},
