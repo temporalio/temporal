@@ -35,3 +35,11 @@ services:
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
     depends_on:
       - postgres
+  temporal-web:
+    image: temporalio/web:0.20.0
+    environment:
+      - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
+    ports:
+      - "8088:8088"
+    depends_on:
+      - temporal
