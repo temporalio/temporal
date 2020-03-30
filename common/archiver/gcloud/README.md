@@ -71,7 +71,7 @@ it will search all records starting from `2020-01-21T00:00:00Z` to `2020-01-21T5
 
 *Searches the first 20 records for a given day 2020-01-21*
 
-`./cadence --do samples-namespace workflow listarchived -ps="20" -q "StartTime = '2020-01-21T00:00:00Z' AND SearchPrecision='Day'"`
+`./tctl --ns samples-namespace workflow listarchived -ps="20" -q "StartTime = '2020-01-21T00:00:00Z' AND SearchPrecision='Day'"`
 
 ## Archival query syntax
 
@@ -79,4 +79,4 @@ Once you have a workflowId and a runId you can retrieve your workflow history.
 
 example:
 
-`./cadence --do samples-namespace  workflow  show  -w workflow-id -r runId`
+`./tctl --ns samples-namespace  workflow  show  -w workflow-id -r runId`

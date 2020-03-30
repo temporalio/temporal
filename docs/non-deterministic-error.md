@@ -423,7 +423,7 @@ To be safe, you may use DryRun option for only printing some logs before actuall
 
 For example, in the case of "Decision State Machine Panic", we might have to reset the workflows by command:
 
-*$nohup tctl --do samples-namespace --env prod wf reset-batch --reason "fix outage" --query “WorkflowType=’SampleWorkflow’ AND CloseTime=missing”  --dry-run --reset-type <A-RESET-TYPE> --non_deterministic_only --skip_base_not_current &> reset.log &*
+*$nohup tctl --ns samples-namespace --env prod wf reset-batch --reason "fix outage" --query “WorkflowType=’SampleWorkflow’ AND CloseTime=missing”  --dry-run --reset-type <A-RESET-TYPE> --non_deterministic_only --skip_base_not_current &> reset.log &*
 
 For reset type, you may try LastDecisionCompleted. Then try FirstDecisionCompleted. We should also provide [firstPanicDecision](https://github.com/uber/temporal/issues/2952) resetType .
 

@@ -55,7 +55,7 @@ it will search all records starting from `2020-01-21T00:00:00Z` to `2020-01-21T5
 
 *Searches for all records done in day 2020-01-21 with the specified workflow id*
 
-`./cadence --do samples-namespace workflow listarchived -q "StartTime = '2020-01-21T00:00:00Z' AND WorkflowID='workflow-id' AND SearchPrecision='Day'"`
+`./tctl --ns samples-namespace workflow listarchived -q "StartTime = '2020-01-21T00:00:00Z' AND WorkflowID='workflow-id' AND SearchPrecision='Day'"`
 ## Storage in S3
 Workflow runs are stored in s3 using the following structure
 ```

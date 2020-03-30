@@ -143,10 +143,10 @@ register_default_namespace() {
     echo "Temporal CLI Address: $TEMPORAL_CLI_ADDRESS"
     sleep 5
     echo "Registering default namespace: $DEFAULT_NAMESPACE"
-    until tctl --do $DEFAULT_NAMESPACE namespace describe < /dev/null; do
+    until tctl --ns $DEFAULT_NAMESPACE namespace describe < /dev/null; do
         echo "Default namespace $DEFAULT_NAMESPACE not found.  Creating..."
         sleep 1
-        tctl --do $DEFAULT_NAMESPACE namespace register --rd $DEFAULT_NAMESPACE_RETENTION --desc "Default namespace for Temporal Server"
+        tctl --ns $DEFAULT_NAMESPACE namespace register --rd $DEFAULT_NAMESPACE_RETENTION --desc "Default namespace for Temporal Server"
     done
     echo "Default namespace registration complete."
 }
