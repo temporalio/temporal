@@ -41,10 +41,10 @@ import (
 const (
 	processorContextKey = "processorContext"
 	// processorTaskListName is the tasklist name
-	processorTaskListName = "cadence-sys-processor-parent-close-policy"
+	processorTaskListName = "temporal-sys-processor-parent-close-policy"
 	// processorWFTypeName is the workflow type
-	processorWFTypeName   = "cadence-sys-parent-close-policy-workflow"
-	processorActivityName = "cadence-sys-parent-close-policy-activity"
+	processorWFTypeName   = "temporal-sys-parent-close-policy-workflow"
+	processorActivityName = "temporal-sys-parent-close-policy-activity"
 	infiniteDuration      = 20 * 365 * 24 * time.Hour
 	processorChannelName  = "ParentClosePolicyProcessorChannelName"
 )

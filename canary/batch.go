@@ -43,8 +43,8 @@ func registerBatch(r registrar) {
 const (
 	// TODO: to get rid of them:
 	//  after batch job has an API, we should use the API: https://github.com/uber/cadence/issues/2225
-	sysBatchWFTypeName        = "cadence-sys-batch-workflow"
-	systemBatcherTaskListName = "cadence-sys-batcher-tasklist"
+	sysBatchWFTypeName        = "temporal-sys-batch-workflow"
+	systemBatcherTaskListName = "temporal-sys-batcher-tasklist"
 
 	// there are two level, so totally 5*5 + 5 == 30 descendants
 	// default batch RPS is 50, so it will takes ~1 seconds to terminate all

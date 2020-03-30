@@ -300,7 +300,7 @@ func (s *Service) ensureSystemNamespaceExists() {
 	case nil:
 		// noop
 	case *serviceerror.NotFound:
-		s.GetLogger().Info("cadence-system namespace does not exist, attempting to register namespace")
+		s.GetLogger().Info("temporal-system namespace does not exist, attempting to register namespace")
 		s.registerSystemNamespace()
 	default:
 		s.GetLogger().Fatal("failed to verify if cadence system namespace exists", tag.Error(err))

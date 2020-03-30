@@ -44,10 +44,10 @@ import (
 const (
 	batcherContextKey = "batcherContext"
 	// BatcherTaskListName is the tasklist name
-	BatcherTaskListName = "cadence-sys-batcher-tasklist"
+	BatcherTaskListName = "temporal-sys-batcher-tasklist"
 	// BatchWFTypeName is the workflow type
-	BatchWFTypeName   = "cadence-sys-batch-workflow"
-	batchActivityName = "cadence-sys-batch-activity"
+	BatchWFTypeName   = "temporal-sys-batch-workflow"
+	batchActivityName = "temporal-sys-batch-activity"
 	// InfiniteDuration is a long duration(20 yrs) we used for infinite workflow running
 	InfiniteDuration = 20 * 365 * 24 * time.Hour
 	pageSize         = 1000

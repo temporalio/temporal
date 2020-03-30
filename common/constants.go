@@ -98,9 +98,9 @@ const (
 // #nosec
 const (
 	// SystemGlobalNamespace is global namespace name for cadence system workflows running globally
-	SystemGlobalNamespace = "cadence-system-global"
+	SystemGlobalNamespace = "temporal-system-global"
 	// SystemLocalNamespace is namespace name for cadence system workflows running in local cluster
-	SystemLocalNamespace = "cadence-system"
+	SystemLocalNamespace = "temporal-system"
 	// SystemNamespaceID is namespace id for all cadence system workflows
 	SystemNamespaceID = "32049b68-7872-4094-8e63-d0dd59896a83"
 	// SystemNamespaceRetentionDays is retention config for all cadence system workflows
