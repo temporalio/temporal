@@ -52,23 +52,23 @@ message DescribeHistoryHostRequest {
 message DescribeHistoryHostResponse {
     int32 numberOfShards = 1;
     repeated int32
-    shardIDs = 2;
+    shardIds = 2;
     common.NamespaceCacheInfo namespaceCache = 3;
     string shardControllerStatus = 4;
     string address = 5;
 }
 
 message CloseShardRequest {
-    int32 shardID = 1;
+    int32 shardId = 1;
 }
 
 message CloseShardResponse {
 }
 
 message RemoveTaskRequest {
-    int32 shardID = 1;
+    int32 shardId = 1;
     int32 type = 2;
-    int64 taskID = 3;
+    int64 taskId = 3;
 }
 
 message RemoveTaskResponse {
@@ -170,9 +170,9 @@ message DescribeClusterResponse {
 
 message ReadDLQMessagesRequest {
     enums.DLQType type = 1;
-    int32 shardID = 2;
+    int32 shardId = 2;
     string sourceCluster = 3;
-    int64 inclusiveEndMessageID = 4;
+    int64 inclusiveEndMessageId = 4;
     int32 maximumPageSize = 5;
     bytes nextPageToken = 6;
 }
@@ -185,9 +185,9 @@ message ReadDLQMessagesResponse {
 
 message PurgeDLQMessagesRequest {
     enums.DLQType type = 1;
-    int32 shardID = 2;
+    int32 shardId = 2;
     string sourceCluster = 3;
-    int64 inclusiveEndMessageID = 4;
+    int64 inclusiveEndMessageId = 4;
 }
 
 message PurgeDLQMessagesResponse {
@@ -195,9 +195,9 @@ message PurgeDLQMessagesResponse {
 
 message MergeDLQMessagesRequest {
     enums.DLQType type = 1;
-    int32 shardID = 2;
+    int32 shardId = 2;
     string sourceCluster = 3;
-    int64 inclusiveEndMessageID = 4;
+    int64 inclusiveEndMessageId = 4;
     int32 maximumPageSize = 5;
     bytes nextPageToken = 6;
 }

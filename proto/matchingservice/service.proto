@@ -65,7 +65,7 @@ service MatchingService {
     // cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not
     // see the cancellation propagated so it can unblock corresponding long-polls on its end.  This results is tasks
     // being dispatched to zombie pollers in this situation.  This API is added so every time frontend makes a long-poll
-    // api call to matching it passes in a pollerID and then calls this API when it detects client connection is closed
+    // api call to matching it passes in a pollerId and then calls this API when it detects client connection is closed
     // to unblock long polls for this poller and prevent tasks being sent to these zombie pollers.
     rpc CancelOutstandingPoll (CancelOutstandingPollRequest) returns (CancelOutstandingPollResponse) {
     }

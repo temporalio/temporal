@@ -50,7 +50,7 @@ message ReplicationTask {
 }
 
 message ReplicationToken {
-    int32 shardID = 1;
+    int32 shardId = 1;
     // lastRetrievedMessageId is where the next fetch should begin with.
     int64 lastRetrievedMessageId = 2;
     // lastProcessedMessageId is the last messageId that is processed on the passive side.
