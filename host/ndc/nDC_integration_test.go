@@ -1595,7 +1595,7 @@ func (s *nDCIntegrationTestSuite) registerNamespace() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.Require().NoError(err)
 	s.Require().NotNil(resp)
-	s.namespaceID = resp.GetNamespaceInfo().GetUuid()
+	s.namespaceID = resp.GetNamespaceInfo().GetId()
 	// Wait for namespace cache to pick the change
 	time.Sleep(2 * cache.NamespaceCacheRefreshInterval)
 
