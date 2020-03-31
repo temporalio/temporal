@@ -23,9 +23,16 @@
 package cli
 
 import (
+	"flag"
 	"testing"
 
 	"github.com/bmizerany/assert"
+	"github.com/golang/mock/gomock"
+	"github.com/urfave/cli"
+
+	serverFrontendTest "github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
+	serverShared "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 )
 
 func TestAdminAddSearchAttribute_isValueTypeValid(t *testing.T) {
@@ -59,4 +66,58 @@ func TestAdminAddSearchAttribute_isValueTypeValid(t *testing.T) {
 	for _, testCase := range testCases {
 		assert.Equal(t, testCase.expected, isValueTypeValid(testCase.input))
 	}
+}
+
+func TestAdminFailover(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	serverFrontendClient := serverFrontendTest.NewMockClient(mockCtrl)
+	domainCLI := &domainCLIImpl{
+		frontendClient: serverFrontendClient,
+	}
+
+	var listDomainsResponse = &serverShared.ListDomainsResponse{
+		Domains: []*serverShared.DescribeDomainResponse{
+			{
+				DomainInfo: &serverShared.DomainInfo{
+					Name:        common.StringPtr("test-domain"),
+					Description: common.StringPtr("a test domain"),
+					OwnerEmail:  common.StringPtr("test@uber.com"),
+					Data: map[string]string{
+						common.DomainDataKeyForManagedFailover: "true",
+					},
+				},
+				ReplicationConfiguration: &serverShared.DomainReplicationConfiguration{
+					ActiveClusterName: common.StringPtr("active"),
+					Clusters: []*serverShared.ClusterReplicationConfiguration{
+						{
+							ClusterName: common.StringPtr("active"),
+						},
+						{
+							ClusterName: common.StringPtr("standby"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	serverFrontendClient.EXPECT().ListDomains(gomock.Any(), gomock.Any()).Return(listDomainsResponse, nil).Times(1)
+	serverFrontendClient.EXPECT().UpdateDomain(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+	set := flag.NewFlagSet("test", 0)
+	set.String(FlagActiveClusterName, "standby", "test flag")
+
+	cliContext := cli.NewContext(nil, set, nil)
+	succeed, failed := domainCLI.failoverDomains(cliContext)
+	assert.Equal(t, []string{"test-domain"}, succeed)
+	assert.Equal(t, 0, len(failed))
+
+	serverFrontendClient.EXPECT().ListDomains(gomock.Any(), gomock.Any()).Return(listDomainsResponse, nil).Times(1)
+	set = flag.NewFlagSet("test", 0)
+	set.String(FlagActiveClusterName, "active", "test flag")
+
+	cliContext = cli.NewContext(nil, set, nil)
+	succeed, failed = domainCLI.failoverDomains(cliContext)
+	assert.Equal(t, 0, len(succeed))
+	assert.Equal(t, 0, len(failed))
 }

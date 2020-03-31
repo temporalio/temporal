@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/olekukonko/tablewriter"
@@ -282,6 +283,81 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 	}
 }
 
+// FailoverDomains is used for managed failover all domains with domain data IsManagedByCadence=true
+func (d *domainCLIImpl) FailoverDomains(c *cli.Context) {
+	// ask user for confirmation
+	prompt("You are trying to failover all managed domains, continue? Y/N")
+	d.failoverDomains(c)
+}
+
+// return succeed and failed domains for testing purpose
+func (d *domainCLIImpl) failoverDomains(c *cli.Context) ([]string, []string) {
+	targetCluster := getRequiredOption(c, FlagActiveClusterName)
+	domains := d.getAllDomains(c)
+	shouldFailover := func(domain *shared.DescribeDomainResponse) bool {
+		isDomainNotActiveInTargetCluster := domain.ReplicationConfiguration.GetActiveClusterName() != targetCluster
+		return isDomainNotActiveInTargetCluster && isDomainFailoverManagedByCadence(domain)
+	}
+	var succeedDomains []string
+	var failedDomains []string
+	for _, domain := range domains {
+		if shouldFailover(domain) {
+			domainName := domain.GetDomainInfo().GetName()
+			err := d.failover(c, domainName, targetCluster)
+			if err != nil {
+				printError(fmt.Sprintf("Failed failover domain: %s\n", domainName), err)
+				failedDomains = append(failedDomains, domainName)
+			} else {
+				fmt.Printf("Success failover domain: %s\n", domainName)
+				succeedDomains = append(succeedDomains, domainName)
+			}
+		}
+	}
+	fmt.Printf("Succeed %d: %v\n", len(succeedDomains), succeedDomains)
+	fmt.Printf("Failed  %d: %v\n", len(failedDomains), failedDomains)
+	return succeedDomains, failedDomains
+}
+
+func (d *domainCLIImpl) getAllDomains(c *cli.Context) []*shared.DescribeDomainResponse {
+	var res []*shared.DescribeDomainResponse
+	pagesize := int32(200)
+	var token []byte
+	ctx, cancel := newContext(c)
+	defer cancel()
+	for more := true; more; more = len(token) > 0 {
+		listRequest := &shared.ListDomainsRequest{
+			PageSize:      common.Int32Ptr(pagesize),
+			NextPageToken: token,
+		}
+		listResp, err := d.listDomains(ctx, listRequest)
+		if err != nil {
+			ErrorAndExit("Error when list domains info", err)
+		}
+		token = listResp.GetNextPageToken()
+		res = append(res, listResp.GetDomains()...)
+	}
+	return res
+}
+
+func isDomainFailoverManagedByCadence(domain *shared.DescribeDomainResponse) bool {
+	domainData := domain.DomainInfo.GetData()
+	return strings.ToLower(strings.TrimSpace(domainData[common.DomainDataKeyForManagedFailover])) == "true"
+}
+
+func (d *domainCLIImpl) failover(c *cli.Context, domainName string, targetCluster string) error {
+	replicationConfig := &shared.DomainReplicationConfiguration{
+		ActiveClusterName: common.StringPtr(targetCluster),
+	}
+	updateRequest := &shared.UpdateDomainRequest{
+		Name:                     common.StringPtr(domainName),
+		ReplicationConfiguration: replicationConfig,
+	}
+	ctx, cancel := newContext(c)
+	defer cancel()
+	_, err := d.updateDomain(ctx, updateRequest)
+	return err
+}
+
 // DescribeDomain updates a domain
 func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 	domainName := c.GlobalString(FlagDomain)
@@ -347,6 +423,18 @@ func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 		}
 		table.Render()
 	}
+}
+
+func (d *domainCLIImpl) listDomains(
+	ctx context.Context,
+	request *shared.ListDomainsRequest,
+) (*shared.ListDomainsResponse, error) {
+
+	if d.frontendClient != nil {
+		return d.frontendClient.ListDomains(ctx, request)
+	}
+
+	return d.domainHandler.ListDomains(ctx, request)
 }
 
 func (d *domainCLIImpl) registerDomain(

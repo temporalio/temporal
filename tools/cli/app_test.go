@@ -525,6 +525,11 @@ func (s *cliAppSuite) TestAdminAddSearchAttribute() {
 	s.Nil(err)
 }
 
+func (s *cliAppSuite) TestAdminFailover() {
+	err := s.app.Run([]string{"", "admin", "cl", "fo", "--ac", "standby"})
+	s.Nil(err)
+}
+
 func (s *cliAppSuite) TestDescribeTaskList() {
 	resp := describeTaskListResponse
 	s.clientFrontendClient.EXPECT().DescribeTaskList(gomock.Any(), gomock.Any(), callOptions...).Return(resp, nil)

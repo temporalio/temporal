@@ -811,6 +811,20 @@ func newAdminClusterCommands() []cli.Command {
 				AdminDescribeCluster(c)
 			},
 		},
+		{
+			Name:    "failover",
+			Aliases: []string{"fo"},
+			Usage:   "Failover domains with domain data IsManagedByCadence=true to target cluster",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagActiveClusterNameWithAlias,
+					Usage: "Target active cluster name",
+				},
+			},
+			Action: func(c *cli.Context) {
+				newDomainCLI(c, false).FailoverDomains(c)
+			},
+		},
 	}
 }
 

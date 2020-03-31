@@ -139,3 +139,6 @@ const (
 	// AdvancedVisibilityWritingModeDual means write to both normal visibility and advanced visibility store
 	AdvancedVisibilityWritingModeDual = "dual"
 )
+
+// DomainDataKeyForManagedFailover is key of DomainData for managed failover
+const DomainDataKeyForManagedFailover = "IsManagedByCadence"
