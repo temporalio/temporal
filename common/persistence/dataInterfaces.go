@@ -1199,6 +1199,7 @@ type (
 		ConfigVersion               int64
 		FailoverVersion             int64
 		FailoverNotificationVersion int64
+		FailoverEndTime             *int64
 		NotificationVersion         int64
 	}
 
@@ -1210,6 +1211,7 @@ type (
 		ConfigVersion               int64
 		FailoverVersion             int64
 		FailoverNotificationVersion int64
+		FailoverEndTime             *int64
 		NotificationVersion         int64
 	}
 

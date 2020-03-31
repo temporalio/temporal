@@ -215,6 +215,11 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqlplugin.Domai
 		badBinaries = persistence.NewDataBlob(domainInfo.BadBinaries, common.EncodingType(*domainInfo.BadBinariesEncoding))
 	}
 
+	var failoverEndTime *int64
+	if domainInfo.IsSetFailoverEndTime() {
+		failoverEndTime = domainInfo.FailoverEndTime
+	}
+
 	return &persistence.InternalGetDomainResponse{
 		Info: &persistence.DomainInfo{
 			ID:          row.ID.String(),
@@ -244,10 +249,14 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqlplugin.Domai
 		ConfigVersion:               domainInfo.GetConfigVersion(),
 		NotificationVersion:         domainInfo.GetNotificationVersion(),
 		FailoverNotificationVersion: domainInfo.GetFailoverNotificationVersion(),
+		FailoverEndTime:             failoverEndTime,
 	}, nil
 }
 
-func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateDomainRequest) error {
+func (m *sqlMetadataManagerV2) UpdateDomain(
+	request *persistence.InternalUpdateDomainRequest,
+) error {
+
 	clusters := make([]string, len(request.ReplicationConfig.Clusters))
 	for i := range clusters {
 		clusters[i] = request.ReplicationConfig.Clusters[i].ClusterName
@@ -259,6 +268,12 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateD
 		badBinaries = request.Config.BadBinaries.Data
 		badBinariesEncoding = common.StringPtr(string(request.Config.BadBinaries.GetEncoding()))
 	}
+
+	var failoverEndTime *int64
+	if request.FailoverEndTime != nil {
+		failoverEndTime = request.FailoverEndTime
+	}
+
 	domainInfo := &sqlblobs.DomainInfo{
 		Status:                      common.Int32Ptr(int32(request.Info.Status)),
 		Description:                 &request.Info.Description,
@@ -278,6 +293,7 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateD
 		FailoverVersion:             common.Int64Ptr(request.FailoverVersion),
 		NotificationVersion:         common.Int64Ptr(request.NotificationVersion),
 		FailoverNotificationVersion: common.Int64Ptr(request.FailoverNotificationVersion),
+		FailoverEndTime:             failoverEndTime,
 		BadBinaries:                 badBinaries,
 		BadBinariesEncoding:         badBinariesEncoding,
 	}

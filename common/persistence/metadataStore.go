@@ -85,6 +85,7 @@ func (m *metadataManagerImpl) GetDomain(request *GetDomainRequest) (*GetDomainRe
 		ConfigVersion:               resp.ConfigVersion,
 		FailoverVersion:             resp.FailoverVersion,
 		FailoverNotificationVersion: resp.FailoverNotificationVersion,
+		FailoverEndTime:             resp.FailoverEndTime,
 		NotificationVersion:         resp.NotificationVersion,
 	}, nil
 }
@@ -101,6 +102,7 @@ func (m *metadataManagerImpl) UpdateDomain(request *UpdateDomainRequest) error {
 		ConfigVersion:               request.ConfigVersion,
 		FailoverVersion:             request.FailoverVersion,
 		FailoverNotificationVersion: request.FailoverNotificationVersion,
+		FailoverEndTime:             request.FailoverEndTime,
 		NotificationVersion:         request.NotificationVersion,
 	})
 }
