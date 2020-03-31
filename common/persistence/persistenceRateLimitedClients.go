@@ -763,7 +763,7 @@ func (p *queueRateLimitedPersistenceClient) EnqueueMessage(message []byte) error
 	return p.persistence.EnqueueMessage(message)
 }
 
-func (p *queueRateLimitedPersistenceClient) ReadMessages(lastMessageID int, maxCount int) ([]*QueueMessage, error) {
+func (p *queueRateLimitedPersistenceClient) ReadMessages(lastMessageID int64, maxCount int) ([]*QueueMessage, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -771,7 +771,7 @@ func (p *queueRateLimitedPersistenceClient) ReadMessages(lastMessageID int, maxC
 	return p.persistence.ReadMessages(lastMessageID, maxCount)
 }
 
-func (p *queueRateLimitedPersistenceClient) UpdateAckLevel(messageID int, clusterName string) error {
+func (p *queueRateLimitedPersistenceClient) UpdateAckLevel(messageID int64, clusterName string) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -779,7 +779,7 @@ func (p *queueRateLimitedPersistenceClient) UpdateAckLevel(messageID int, cluste
 	return p.persistence.UpdateAckLevel(messageID, clusterName)
 }
 
-func (p *queueRateLimitedPersistenceClient) GetAckLevels() (map[string]int, error) {
+func (p *queueRateLimitedPersistenceClient) GetAckLevels() (map[string]int64, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -787,7 +787,7 @@ func (p *queueRateLimitedPersistenceClient) GetAckLevels() (map[string]int, erro
 	return p.persistence.GetAckLevels()
 }
 
-func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(messageID int) error {
+func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(messageID int64) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -795,7 +795,7 @@ func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(messageID int) 
 	return p.persistence.DeleteMessagesBefore(messageID)
 }
 
-func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(message []byte) (int, error) {
+func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(message []byte) (int64, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return emptyMessageID, ErrPersistenceLimitExceeded
 	}
@@ -803,7 +803,7 @@ func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(message []byte) 
 	return p.persistence.EnqueueMessageToDLQ(message)
 }
 
-func (p *queueRateLimitedPersistenceClient) ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error) {
+func (p *queueRateLimitedPersistenceClient) ReadMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, nil, ErrPersistenceLimitExceeded
 	}
@@ -811,14 +811,14 @@ func (p *queueRateLimitedPersistenceClient) ReadMessagesFromDLQ(firstMessageID i
 	return p.persistence.ReadMessagesFromDLQ(firstMessageID, lastMessageID, pageSize, pageToken)
 }
 
-func (p *queueRateLimitedPersistenceClient) RangeDeleteMessagesFromDLQ(firstMessageID int, lastMessageID int) error {
+func (p *queueRateLimitedPersistenceClient) RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
 	return p.persistence.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)
 }
-func (p *queueRateLimitedPersistenceClient) UpdateDLQAckLevel(messageID int, clusterName string) error {
+func (p *queueRateLimitedPersistenceClient) UpdateDLQAckLevel(messageID int64, clusterName string) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -826,7 +826,7 @@ func (p *queueRateLimitedPersistenceClient) UpdateDLQAckLevel(messageID int, clu
 	return p.persistence.UpdateDLQAckLevel(messageID, clusterName)
 }
 
-func (p *queueRateLimitedPersistenceClient) GetDLQAckLevels() (map[string]int, error) {
+func (p *queueRateLimitedPersistenceClient) GetDLQAckLevels() (map[string]int64, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -834,7 +834,7 @@ func (p *queueRateLimitedPersistenceClient) GetDLQAckLevels() (map[string]int, e
 	return p.persistence.GetDLQAckLevels()
 }
 
-func (p *queueRateLimitedPersistenceClient) DeleteMessageFromDLQ(messageID int) error {
+func (p *queueRateLimitedPersistenceClient) DeleteMessageFromDLQ(messageID int64) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}

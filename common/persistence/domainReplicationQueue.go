@@ -82,14 +82,14 @@ type (
 		common.Daemon
 		Publish(message interface{}) error
 		PublishToDLQ(message interface{}) error
-		GetReplicationMessages(lastMessageID int, maxCount int) ([]*replicator.ReplicationTask, int, error)
-		UpdateAckLevel(lastProcessedMessageID int, clusterName string) error
-		GetAckLevels() (map[string]int, error)
-		GetMessagesFromDLQ(firstMessageID int, lastMessageID int, pageSize int, pageToken []byte) ([]*replicator.ReplicationTask, []byte, error)
-		UpdateDLQAckLevel(lastProcessedMessageID int) error
-		GetDLQAckLevel() (int, error)
-		RangeDeleteMessagesFromDLQ(firstMessageID int, lastMessageID int) error
-		DeleteMessageFromDLQ(messageID int) error
+		GetReplicationMessages(lastMessageID int64, maxCount int) ([]*replicator.ReplicationTask, int64, error)
+		UpdateAckLevel(lastProcessedMessageID int64, clusterName string) error
+		GetAckLevels() (map[string]int64, error)
+		GetMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*replicator.ReplicationTask, []byte, error)
+		UpdateDLQAckLevel(lastProcessedMessageID int64) error
+		GetDLQAckLevel() (int64, error)
+		RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error
+		DeleteMessageFromDLQ(messageID int64) error
 	}
 )
 
@@ -145,9 +145,9 @@ func (q *domainReplicationQueueImpl) PublishToDLQ(message interface{}) error {
 }
 
 func (q *domainReplicationQueueImpl) GetReplicationMessages(
-	lastMessageID int,
+	lastMessageID int64,
 	maxCount int,
-) ([]*replicator.ReplicationTask, int, error) {
+) ([]*replicator.ReplicationTask, int64, error) {
 
 	messages, err := q.queue.ReadMessages(lastMessageID, maxCount)
 	if err != nil {
@@ -170,7 +170,7 @@ func (q *domainReplicationQueueImpl) GetReplicationMessages(
 }
 
 func (q *domainReplicationQueueImpl) UpdateAckLevel(
-	lastProcessedMessageID int,
+	lastProcessedMessageID int64,
 	clusterName string,
 ) error {
 
@@ -187,13 +187,13 @@ func (q *domainReplicationQueueImpl) UpdateAckLevel(
 	return nil
 }
 
-func (q *domainReplicationQueueImpl) GetAckLevels() (map[string]int, error) {
+func (q *domainReplicationQueueImpl) GetAckLevels() (map[string]int64, error) {
 	return q.queue.GetAckLevels()
 }
 
 func (q *domainReplicationQueueImpl) GetMessagesFromDLQ(
-	firstMessageID int,
-	lastMessageID int,
+	firstMessageID int64,
+	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
 ) ([]*replicator.ReplicationTask, []byte, error) {
@@ -220,7 +220,7 @@ func (q *domainReplicationQueueImpl) GetMessagesFromDLQ(
 }
 
 func (q *domainReplicationQueueImpl) UpdateDLQAckLevel(
-	lastProcessedMessageID int,
+	lastProcessedMessageID int64,
 ) error {
 
 	if err := q.queue.UpdateDLQAckLevel(
@@ -239,7 +239,7 @@ func (q *domainReplicationQueueImpl) UpdateDLQAckLevel(
 	return nil
 }
 
-func (q *domainReplicationQueueImpl) GetDLQAckLevel() (int, error) {
+func (q *domainReplicationQueueImpl) GetDLQAckLevel() (int64, error) {
 	dlqMetadata, err := q.queue.GetDLQAckLevels()
 	if err != nil {
 		return emptyMessageID, err
@@ -253,8 +253,8 @@ func (q *domainReplicationQueueImpl) GetDLQAckLevel() (int, error) {
 }
 
 func (q *domainReplicationQueueImpl) RangeDeleteMessagesFromDLQ(
-	firstMessageID int,
-	lastMessageID int,
+	firstMessageID int64,
+	lastMessageID int64,
 ) error {
 
 	if err := q.queue.RangeDeleteMessagesFromDLQ(
@@ -268,7 +268,7 @@ func (q *domainReplicationQueueImpl) RangeDeleteMessagesFromDLQ(
 }
 
 func (q *domainReplicationQueueImpl) DeleteMessageFromDLQ(
-	messageID int,
+	messageID int64,
 ) error {
 
 	return q.queue.DeleteMessageFromDLQ(messageID)
@@ -284,7 +284,7 @@ func (q *domainReplicationQueueImpl) purgeAckedMessages() error {
 		return nil
 	}
 
-	minAckLevel := math.MaxInt64
+	minAckLevel := int64(math.MaxInt64)
 	for _, ackLevel := range ackLevelByCluster {
 		if ackLevel < minAckLevel {
 			minAckLevel = ackLevel

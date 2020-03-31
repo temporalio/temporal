@@ -688,7 +688,7 @@ func (adh *AdminHandler) GetDomainReplicationMessages(
 
 	lastMessageID := defaultLastMessageID
 	if request.IsSetLastRetrievedMessageId() {
-		lastMessageID = int(request.GetLastRetrievedMessageId())
+		lastMessageID = request.GetLastRetrievedMessageId()
 	}
 
 	if lastMessageID == defaultLastMessageID {
@@ -708,7 +708,7 @@ func (adh *AdminHandler) GetDomainReplicationMessages(
 
 	lastProcessedMessageID := defaultLastMessageID
 	if request.IsSetLastProcessedMessageId() {
-		lastProcessedMessageID = int(request.GetLastProcessedMessageId())
+		lastProcessedMessageID = request.GetLastProcessedMessageId()
 	}
 
 	if lastProcessedMessageID != defaultLastMessageID {
@@ -832,7 +832,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 			default:
 				var err error
 				tasks, token, err = adh.domainDLQHandler.Read(
-					int(request.GetInclusiveEndMessageID()),
+					request.GetInclusiveEndMessageID(),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken())
 				return err
@@ -885,7 +885,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 				return ctx.Err()
 			default:
 				return adh.domainDLQHandler.Purge(
-					int(request.GetInclusiveEndMessageID()),
+					request.GetInclusiveEndMessageID(),
 				)
 			}
 		}
@@ -936,7 +936,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 			default:
 				var err error
 				token, err = adh.domainDLQHandler.Merge(
-					int(request.GetInclusiveEndMessageID()),
+					request.GetInclusiveEndMessageID(),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken(),
 				)

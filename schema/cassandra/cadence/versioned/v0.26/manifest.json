@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.26",
+  "MinCompatibleVersion": "0.26",
+  "Description": "Alter domain DLQ message ID type to big integer",
+  "SchemaUpdateCqlFiles": [
+    "domain_dlq_id.cql"
+  ]
+}

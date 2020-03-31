@@ -111,11 +111,11 @@ func (mr *MockDomainReplicationQueueMockRecorder) PublishToDLQ(message interface
 }
 
 // GetReplicationMessages mocks base method
-func (m *MockDomainReplicationQueue) GetReplicationMessages(lastMessageID, maxCount int) ([]*replicator.ReplicationTask, int, error) {
+func (m *MockDomainReplicationQueue) GetReplicationMessages(lastMessageID int64, maxCount int) ([]*replicator.ReplicationTask, int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationMessages", lastMessageID, maxCount)
 	ret0, _ := ret[0].([]*replicator.ReplicationTask)
-	ret1, _ := ret[1].(int)
+	ret1, _ := ret[1].(int64)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -127,7 +127,7 @@ func (mr *MockDomainReplicationQueueMockRecorder) GetReplicationMessages(lastMes
 }
 
 // UpdateAckLevel mocks base method
-func (m *MockDomainReplicationQueue) UpdateAckLevel(lastProcessedMessageID int, clusterName string) error {
+func (m *MockDomainReplicationQueue) UpdateAckLevel(lastProcessedMessageID int64, clusterName string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateAckLevel", lastProcessedMessageID, clusterName)
 	ret0, _ := ret[0].(error)
@@ -141,10 +141,10 @@ func (mr *MockDomainReplicationQueueMockRecorder) UpdateAckLevel(lastProcessedMe
 }
 
 // GetAckLevels mocks base method
-func (m *MockDomainReplicationQueue) GetAckLevels() (map[string]int, error) {
+func (m *MockDomainReplicationQueue) GetAckLevels() (map[string]int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAckLevels")
-	ret0, _ := ret[0].(map[string]int)
+	ret0, _ := ret[0].(map[string]int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -156,7 +156,7 @@ func (mr *MockDomainReplicationQueueMockRecorder) GetAckLevels() *gomock.Call {
 }
 
 // GetMessagesFromDLQ mocks base method
-func (m *MockDomainReplicationQueue) GetMessagesFromDLQ(firstMessageID, lastMessageID, pageSize int, pageToken []byte) ([]*replicator.ReplicationTask, []byte, error) {
+func (m *MockDomainReplicationQueue) GetMessagesFromDLQ(firstMessageID, lastMessageID int64, pageSize int, pageToken []byte) ([]*replicator.ReplicationTask, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMessagesFromDLQ", firstMessageID, lastMessageID, pageSize, pageToken)
 	ret0, _ := ret[0].([]*replicator.ReplicationTask)
@@ -172,7 +172,7 @@ func (mr *MockDomainReplicationQueueMockRecorder) GetMessagesFromDLQ(firstMessag
 }
 
 // UpdateDLQAckLevel mocks base method
-func (m *MockDomainReplicationQueue) UpdateDLQAckLevel(lastProcessedMessageID int) error {
+func (m *MockDomainReplicationQueue) UpdateDLQAckLevel(lastProcessedMessageID int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateDLQAckLevel", lastProcessedMessageID)
 	ret0, _ := ret[0].(error)
@@ -186,10 +186,10 @@ func (mr *MockDomainReplicationQueueMockRecorder) UpdateDLQAckLevel(lastProcesse
 }
 
 // GetDLQAckLevel mocks base method
-func (m *MockDomainReplicationQueue) GetDLQAckLevel() (int, error) {
+func (m *MockDomainReplicationQueue) GetDLQAckLevel() (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDLQAckLevel")
-	ret0, _ := ret[0].(int)
+	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -201,7 +201,7 @@ func (mr *MockDomainReplicationQueueMockRecorder) GetDLQAckLevel() *gomock.Call 
 }
 
 // RangeDeleteMessagesFromDLQ mocks base method
-func (m *MockDomainReplicationQueue) RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID int) error {
+func (m *MockDomainReplicationQueue) RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RangeDeleteMessagesFromDLQ", firstMessageID, lastMessageID)
 	ret0, _ := ret[0].(error)
@@ -215,7 +215,7 @@ func (mr *MockDomainReplicationQueueMockRecorder) RangeDeleteMessagesFromDLQ(fir
 }
 
 // DeleteMessageFromDLQ mocks base method
-func (m *MockDomainReplicationQueue) DeleteMessageFromDLQ(messageID int) error {
+func (m *MockDomainReplicationQueue) DeleteMessageFromDLQ(messageID int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteMessageFromDLQ", messageID)
 	ret0, _ := ret[0].(error)
