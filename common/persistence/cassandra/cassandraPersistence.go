@@ -1012,11 +1012,11 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 				msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v",
 					executionInfo.WorkflowID, executionInfo.RunID, request.RangeID)
 				lastWriteVersion = common.EmptyVersion
-				if replMeta, replMetaIsPresent := previous["replication_metadata"].([]byte); replMetaIsPresent && len(replMeta) > 0 {
-					protoReplVersions, err := ProtoReplicationVersionsFromResultMap(previous)
-					if err != nil {
-						return nil, err
-					}
+				protoReplVersions, err := ProtoReplicationVersionsFromResultMap(previous)
+				if err != nil {
+					return nil, err
+				}
+				if protoReplVersions != nil {
 					lastWriteVersion = protoReplVersions.LastWriteVersion
 				}
 				return nil, &p.WorkflowExecutionAlreadyStartedError{
@@ -2723,19 +2723,21 @@ func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflo
 	}
 
 	info := p.ProtoWorkflowExecutionToPartialInternalExecution(protoInfo, protoState, nextEventID)
-	if replMeta, replMetaIsPresent := result["replication_metadata"].([]byte); replMetaIsPresent && len(replMeta) > 0 {
-		protoReplVersions, err := ProtoReplicationVersionsFromResultMap(result)
-		if err != nil {
-			return nil, nil, err
-		}
-		state := ReplicationStateFromProtos(protoInfo, protoReplVersions)
-		return info, state, nil
+
+	protoReplVersions, err := ProtoReplicationVersionsFromResultMap(result)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return info, nil, nil
+	state := ReplicationStateFromProtos(protoInfo, protoReplVersions)
+	return info, state, nil
 }
 
 func ProtoReplicationVersionsFromResultMap(result map[string]interface{}) (*persistenceblobs.ReplicationVersions, error) {
+	if replMeta, replMetaIsPresent := result["replication_metadata"].([]byte); !replMetaIsPresent || len(replMeta) == 0 {
+		return nil, nil
+	}
+
 	rmBytes, ok := result["replication_metadata"].([]byte)
 	if !ok {
 		return nil, newPersistedTypeMismatchError("replication_metadata", "", rmBytes, result)

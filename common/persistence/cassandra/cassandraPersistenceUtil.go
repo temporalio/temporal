@@ -1540,11 +1540,17 @@ func updateBufferedEvents(
 }
 
 func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv *persistenceblobs.ReplicationVersions) *p.ReplicationState {
+	if rv == nil && wei.ReplicationData == nil {
+		return nil
+	}
+
 	info := &p.ReplicationState{}
 	info.CurrentVersion = wei.CurrentVersion
 
-	info.StartVersion = rv.StartVersion
-	info.LastWriteVersion = rv.LastWriteVersion
+	if rv != nil {
+		info.StartVersion = rv.StartVersion
+		info.LastWriteVersion = rv.LastWriteVersion
+	}
 
 	if wei.ReplicationData != nil {
 		info.LastReplicationInfo = wei.ReplicationData.LastReplicationInfo
