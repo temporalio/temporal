@@ -25,11 +25,11 @@ import (
 	"fmt"
 
 	"github.com/Shopify/sarama"
+	"github.com/gogo/protobuf/proto"
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -78,7 +78,7 @@ func (p *kafkaProducer) Close() error {
 	return p.convertErr(p.producer.Close())
 }
 
-func (p *kafkaProducer) serializeProto(input codec.ProtoObject) ([]byte, error) {
+func (p *kafkaProducer) serializeProto(input proto.Marshaler) ([]byte, error) {
 	payload, err := input.Marshal()
 	if err != nil {
 		p.logger.Error("Failed to serialize proto object", tag.Error(err))

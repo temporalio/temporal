@@ -1070,13 +1070,13 @@ func updateActivityInfos(
 
 	for _, a := range activityInfos {
 		if a.StartedEvent != nil && a.ScheduledEvent.Encoding != a.StartedEvent.Encoding {
-			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
+			return p.NewSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
 		}
 
 		protoActivityInfo := a.ToProto()
 		activityBlob, err := serialization.ActivityInfoToBlob(protoActivityInfo)
 		if err != nil {
-			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
+			return p.NewSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
 		}
 
 		batch.Query(templateUpdateActivityInfoQuery,
@@ -1235,7 +1235,7 @@ func updateChildExecutionInfos(
 
 	for _, c := range childExecutionInfos {
 		if c.StartedEvent != nil && c.InitiatedEvent.Encoding != c.StartedEvent.Encoding {
-			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, c.StartedEvent.Encoding))
+			return p.NewSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, c.StartedEvent.Encoding))
 		}
 
 		datablob, err := serialization.ChildExecutionInfoToBlob(c.ToProto())
@@ -1576,12 +1576,12 @@ func resetActivityInfoMap(
 	aMap := make(map[int64][]byte)
 	for _, a := range activityInfos {
 		if a.StartedEvent != nil && a.ScheduledEvent.Encoding != a.StartedEvent.Encoding {
-			return nil, common.EncodingTypeUnknown, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
+			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
 		}
 
 		aBlob, err := serialization.ActivityInfoToBlob(a.ToProto())
 		if err != nil {
-			return nil, common.EncodingTypeUnknown, p.NewCadenceSerializationError(fmt.Sprintf("failed to serialize activity infos - ActivityId: %v", a.ActivityID))
+			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("failed to serialize activity infos - ActivityId: %v", a.ActivityID))
 		}
 
 		aMap[a.ScheduleID] = aBlob.Data
@@ -1620,12 +1620,12 @@ func resetChildExecutionInfoMap(
 	encoding := common.EncodingTypeUnknown
 	for _, c := range childExecutionInfos {
 		if c.StartedEvent != nil && c.InitiatedEvent.Encoding != c.StartedEvent.Encoding {
-			return nil, common.EncodingTypeUnknown, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, c.StartedEvent.Encoding))
+			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, c.StartedEvent.Encoding))
 		}
 
 		datablob, err := serialization.ChildExecutionInfoToBlob(c.ToProto())
 		if err != nil {
-			return nil, common.EncodingTypeUnknown, p.NewCadenceSerializationError(fmt.Sprintf("failed to serialize child execution infos - Execution: %v", c.InitiatedID))
+			return nil, common.EncodingTypeUnknown, p.NewSerializationError(fmt.Sprintf("failed to serialize child execution infos - Execution: %v", c.InitiatedID))
 		}
 		cMap[c.InitiatedID] = datablob.Data
 		encoding = datablob.Encoding

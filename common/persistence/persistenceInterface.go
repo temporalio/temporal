@@ -739,7 +739,7 @@ func NewDataBlobFromProto(blob *commonproto.DataBlob) *serialization.DataBlob {
 			Data:     blob.Data,
 		}
 	default:
-		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))
+		panic(fmt.Sprintf("NewDataBlobFromProto seeing unsupported enconding type: %v", blob.GetEncodingType()))
 	}
 }
 

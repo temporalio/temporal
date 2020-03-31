@@ -209,7 +209,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	for _, branchToken := range branchTokens {
 		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, common.EncodingTypeProto3.String())
 		if err != nil {
-			ErrorAndExit("thriftrwEncoder.Decode err", err)
+			ErrorAndExit("HistoryBranchFromBlob decoder err", err)
 		}
 		fmt.Println("deleting history events for ...")
 		prettyPrintJSONObject(branchInfo)
