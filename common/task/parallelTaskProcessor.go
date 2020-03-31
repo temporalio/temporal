@@ -59,7 +59,7 @@ var (
 // NewParallelTaskProcessor creates a new PriorityTaskProcessor
 func NewParallelTaskProcessor(
 	logger log.Logger,
-	metricsScope metrics.Scope,
+	metricsClient metrics.Client,
 	options *ParallelTaskProcessorOptions,
 ) Processor {
 	return &parallelTaskProcessorImpl{
@@ -67,7 +67,7 @@ func NewParallelTaskProcessor(
 		tasksCh:      make(chan Task, options.QueueSize),
 		shutdownCh:   make(chan struct{}),
 		logger:       logger,
-		metricsScope: metricsScope,
+		metricsScope: metricsClient.Scope(metrics.ParallelTaskProcessingScope),
 		options:      options,
 	}
 }

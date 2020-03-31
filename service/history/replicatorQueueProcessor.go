@@ -125,7 +125,9 @@ func newReplicatorQueueProcessor(
 		processor,
 		nil, // replicator queue processor will soon be deprecated and won't use priority task processor
 		queueAckMgr,
+		nil, // replicator queue processor will soon be deprecated and won't use redispatch queue
 		historyCache,
+		nil, // there's no queueTask implementation for replication task
 		logger,
 	)
 	processor.queueAckMgr = queueAckMgr

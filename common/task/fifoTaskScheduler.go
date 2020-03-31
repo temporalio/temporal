@@ -58,18 +58,18 @@ type (
 // This scheduler is only for development purpose.
 func NewFIFOTaskScheduler(
 	logger log.Logger,
-	metricsScope metrics.Scope,
+	metricsClient metrics.Client,
 	options *FIFOTaskSchedulerOptions,
 ) Scheduler {
 	return &fifoTaskSchedulerImpl{
 		status:       common.DaemonStatusInitialized,
 		logger:       logger,
-		metricsScope: metricsScope,
+		metricsScope: metricsClient.Scope(metrics.TaskSchedulerScope),
 		taskCh:       make(chan PriorityTask, options.QueueSize),
 		shutdownCh:   make(chan struct{}),
 		processor: NewParallelTaskProcessor(
 			logger,
-			metricsScope,
+			metricsClient,
 			&ParallelTaskProcessorOptions{
 				QueueSize:   options.QueueSize,
 				WorkerCount: options.WorkerCount,

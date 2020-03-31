@@ -47,10 +47,10 @@ type (
 		*require.Assertions
 
 		controller            *gomock.Controller
+		mockShard             *shardContextTest
 		mockQueueTaskExecutor *MockqueueTaskExecutor
 		mockQueueTaskInfo     *MockqueueTaskInfo
 
-		sharID        int
 		scope         metrics.Scope
 		logger        log.Logger
 		timeSource    clock.TimeSource
@@ -67,10 +67,17 @@ func (s *queueTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID: 10,
+			RangeID: 1,
+		},
+		NewDynamicConfigForTest(),
+	)
 	s.mockQueueTaskExecutor = NewMockqueueTaskExecutor(s.controller)
 	s.mockQueueTaskInfo = NewMockqueueTaskInfo(s.controller)
 
-	s.sharID = 0
 	s.scope = metrics.NewClient(tally.NoopScope, metrics.History).Scope(0)
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.timeSource = clock.NewRealTimeSource()
@@ -79,6 +86,7 @@ func (s *queueTaskSuite) SetupTest() {
 
 func (s *queueTaskSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.Finish(s.T())
 }
 
 func (s *queueTaskSuite) TestExecute_TaskFilterErr() {
@@ -200,7 +208,7 @@ func (s *queueTaskSuite) newTestQueueTaskBase(
 	taskFilter taskFilter,
 ) *queueTaskBase {
 	return newQueueTaskBase(
-		s.sharID,
+		s.mockShard,
 		s.mockQueueTaskInfo,
 		s.scope,
 		s.logger,

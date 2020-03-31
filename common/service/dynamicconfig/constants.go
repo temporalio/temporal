@@ -69,6 +69,7 @@ var keys = map[Key]string{
 	EnableBatcher:                       "worker.enableBatcher",
 	EnableParentClosePolicyWorker:       "system.enableParentClosePolicyWorker",
 	EnableStickyQuery:                   "system.enableStickyQuery",
+	EnablePriorityTaskProcessor:         "system.enablePriorityTaskProcessor",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -145,6 +146,10 @@ var keys = map[Key]string{
 	StandbyTaskMissingEventsResendDelay:                    "history.standbyTaskMissingEventsResendDelay",
 	StandbyTaskMissingEventsDiscardDelay:                   "history.standbyTaskMissingEventsDiscardDelay",
 	TaskProcessRPS:                                         "history.taskProcessRPS",
+	TaskSchedulerType:                                      "history.taskSchedulerType",
+	TaskSchedulerWorkerCount:                               "history.taskSchedulerWorkerCount",
+	TaskSchedulerQueueSize:                                 "history.taskSchedulerQueueSize",
+	TaskSchedulerRoundRobinWeights:                         "history.taskSchedulerRoundRobinWeight",
 	TimerTaskBatchSize:                                     "history.timerTaskBatchSize",
 	TimerTaskWorkerCount:                                   "history.timerTaskWorkerCount",
 	TimerTaskMaxRetryCount:                                 "history.timerTaskMaxRetryCount",
@@ -311,6 +316,8 @@ const (
 	MaxDecisionStartToCloseSeconds
 	// DisallowQuery is the key to disallow query for a domain
 	DisallowQuery
+	// EnablePriorityTaskProcessor is the key for enabling priority task processor
+	EnablePriorityTaskProcessor
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
@@ -458,6 +465,14 @@ const (
 	StandbyTaskMissingEventsDiscardDelay
 	// TaskProcessRPS is the task processing rate per second for each domain
 	TaskProcessRPS
+	// TaskSchedulerType is the task scheduler type for priority task processor
+	TaskSchedulerType
+	// TaskSchedulerWorkerCount is the number of workers per shard in task scheduler
+	TaskSchedulerWorkerCount
+	// TaskSchedulerQueueSize is the size of task channel size in task scheduler
+	TaskSchedulerQueueSize
+	// TaskSchedulerRoundRobinWeights is the priority weight for weighted round robin task scheduler
+	TaskSchedulerRoundRobinWeights
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize
 	// TimerTaskWorkerCount is number of task workers for timer processor

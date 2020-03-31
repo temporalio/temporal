@@ -169,9 +169,9 @@ func (t *taskProcessor) addTask(
 	select {
 	case t.tasksCh <- task:
 	case <-t.shutdownCh:
-		return true
+		return false
 	}
-	return false
+	return true
 }
 
 func (t *taskProcessor) processTaskAndAck(

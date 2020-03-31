@@ -65,7 +65,7 @@ func (s *parallelTaskProcessorSuite) SetupTest() {
 
 	s.processor = NewParallelTaskProcessor(
 		loggerimpl.NewDevelopmentForTest(s.Suite),
-		metrics.NewClient(tally.NoopScope, metrics.Common).Scope(metrics.ParallelTaskProcessingScope),
+		metrics.NewClient(tally.NoopScope, metrics.Common),
 		&ParallelTaskProcessorOptions{
 			QueueSize:   0,
 			WorkerCount: 1,

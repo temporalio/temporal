@@ -55,19 +55,22 @@ type (
 		MetricScope                         int
 	}
 
+	queueTaskInitializer func(queueTaskInfo) queueTask
+
 	queueProcessorBase struct {
-		clusterName        string
-		shard              ShardContext
-		timeSource         clock.TimeSource
-		options            *QueueProcessorOptions
-		processor          processor
-		logger             log.Logger
-		metricsClient      metrics.Client
-		rateLimiter        quotas.Limiter // Read rate limiter
-		ackMgr             queueAckMgr
-		taskProcessor      *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
-		queueTaskProcessor queueTaskProcessor
-		redispatchQueue    collection.Queue
+		clusterName          string
+		shard                ShardContext
+		timeSource           clock.TimeSource
+		options              *QueueProcessorOptions
+		processor            processor
+		logger               log.Logger
+		metricsClient        metrics.Client
+		rateLimiter          quotas.Limiter // Read rate limiter
+		ackMgr               queueAckMgr
+		taskProcessor        *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
+		queueTaskProcessor   queueTaskProcessor
+		redispatchQueue      collection.Queue
+		queueTaskInitializer queueTaskInitializer
 
 		lastPollTime time.Time
 
@@ -91,19 +94,21 @@ func newQueueProcessorBase(
 	processor processor,
 	queueTaskProcessor queueTaskProcessor,
 	queueAckMgr queueAckMgr,
+	redispatchQueue collection.Queue,
 	historyCache *historyCache,
+	queueTaskInitializer queueTaskInitializer,
 	logger log.Logger,
 ) *queueProcessorBase {
 
-	if queueTaskProcessor != nil || options.EnablePriorityTaskProcessor() {
-		panic("Implementation for priority task processor has not been wired up yet.")
+	var taskProcessor *taskProcessor
+	if !options.EnablePriorityTaskProcessor() {
+		taskProcessorOptions := taskProcessorOptions{
+			queueSize:   options.BatchSize(),
+			workerCount: options.WorkerCount(),
+		}
+		taskProcessor = newTaskProcessor(taskProcessorOptions, shard, historyCache, logger)
 	}
 
-	taskProcessorOptions := taskProcessorOptions{
-		queueSize:   options.BatchSize(),
-		workerCount: options.WorkerCount(),
-	}
-	taskProcessor := newTaskProcessor(taskProcessorOptions, shard, historyCache, logger)
 	p := &queueProcessorBase{
 		clusterName: clusterName,
 		shard:       shard,
@@ -115,16 +120,17 @@ func newQueueProcessorBase(
 				return float64(options.MaxPollRPS())
 			},
 		),
-		status:             common.DaemonStatusInitialized,
-		notifyCh:           make(chan struct{}, 1),
-		shutdownCh:         make(chan struct{}),
-		metricsClient:      shard.GetMetricsClient(),
-		logger:             logger,
-		ackMgr:             queueAckMgr,
-		lastPollTime:       time.Time{},
-		taskProcessor:      taskProcessor,
-		queueTaskProcessor: queueTaskProcessor,
-		redispatchQueue:    collection.NewConcurrentQueue(),
+		status:               common.DaemonStatusInitialized,
+		notifyCh:             make(chan struct{}, 1),
+		shutdownCh:           make(chan struct{}),
+		metricsClient:        shard.GetMetricsClient(),
+		logger:               logger,
+		ackMgr:               queueAckMgr,
+		lastPollTime:         time.Time{},
+		taskProcessor:        taskProcessor,
+		queueTaskProcessor:   queueTaskProcessor,
+		redispatchQueue:      redispatchQueue,
+		queueTaskInitializer: queueTaskInitializer,
 	}
 
 	return p
@@ -138,7 +144,9 @@ func (p *queueProcessorBase) Start() {
 	p.logger.Info("", tag.LifeCycleStarting, tag.ComponentTransferQueue)
 	defer p.logger.Info("", tag.LifeCycleStarted, tag.ComponentTransferQueue)
 
-	p.taskProcessor.start()
+	if p.taskProcessor != nil {
+		p.taskProcessor.start()
+	}
 	p.shutdownWG.Add(1)
 	p.notifyNewTask()
 	go p.processorPump()
@@ -158,7 +166,10 @@ func (p *queueProcessorBase) Stop() {
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
 		p.logger.Warn("", tag.LifeCycleStopTimedout, tag.ComponentTransferQueue)
 	}
-	p.taskProcessor.stop()
+
+	if p.taskProcessor != nil {
+		p.taskProcessor.stop()
+	}
 }
 
 func (p *queueProcessorBase) notifyNewTask() {
@@ -189,8 +200,6 @@ func (p *queueProcessorBase) processorPump() {
 		p.options.RedispatchIntervalJitterCoefficient(),
 	))
 	defer redispatchTimer.Stop()
-
-	priorityTaskProcessorEnabled := p.options.EnablePriorityTaskProcessor()
 
 processorPumpLoop:
 	for {
@@ -225,9 +234,6 @@ processorPumpLoop:
 				p.options.RedispatchInterval(),
 				p.options.RedispatchIntervalJitterCoefficient(),
 			))
-			if !priorityTaskProcessorEnabled {
-				continue
-			}
 			p.redispatchTasks()
 		}
 	}
@@ -259,15 +265,8 @@ func (p *queueProcessorBase) processBatch() {
 	}
 
 	for _, task := range tasks {
-		// TODO: new queueTask and try submit to queueTaskProcessor
-		// if priorityTaskProcessor is enabled.
-		if shutdown := p.taskProcessor.addTask(
-			newTaskInfo(
-				p.processor,
-				task,
-				initializeLoggerForTask(p.shard.GetShardID(), task, p.logger),
-			),
-		); shutdown {
+		if submitted := p.submitTask(task); !submitted {
+			// submitted since processor has been shutdown
 			return
 		}
 		select {
@@ -286,6 +285,31 @@ func (p *queueProcessorBase) processBatch() {
 	return
 }
 
+func (p *queueProcessorBase) submitTask(
+	taskInfo queueTaskInfo,
+) bool {
+	if !p.isPriorityTaskProcessorEnabled() {
+		return p.taskProcessor.addTask(
+			newTaskInfo(
+				p.processor,
+				taskInfo,
+				initializeLoggerForTask(p.shard.GetShardID(), taskInfo, p.logger),
+			),
+		)
+	}
+
+	queueTask := p.queueTaskInitializer(taskInfo)
+	submitted, err := p.queueTaskProcessor.TrySubmit(queueTask)
+	if err != nil {
+		return false
+	}
+	if !submitted {
+		p.redispatchQueue.Add(queueTask)
+	}
+
+	return true
+}
+
 func (p *queueProcessorBase) redispatchTasks() {
 	redispatchQueueTasks(
 		p.redispatchQueue,
@@ -296,11 +320,19 @@ func (p *queueProcessorBase) redispatchTasks() {
 }
 
 func (p *queueProcessorBase) retryTasks() {
-	p.taskProcessor.retryTasks()
+	if p.taskProcessor != nil {
+		p.taskProcessor.retryTasks()
+	}
 }
 
-func (p *queueProcessorBase) complete(task queueTaskInfo) {
+func (p *queueProcessorBase) complete(
+	task queueTaskInfo,
+) {
 	p.ackMgr.completeQueueTask(task.GetTaskID())
+}
+
+func (p *queueProcessorBase) isPriorityTaskProcessorEnabled() bool {
+	return p.taskProcessor == nil
 }
 
 func redispatchQueueTasks(

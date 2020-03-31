@@ -69,6 +69,7 @@ type (
 		isStarted              int32
 		isStopped              int32
 		shutdownChan           chan struct{}
+		queueTaskProcessor     queueTaskProcessor
 		activeTimerProcessor   *timerQueueActiveProcessorImpl
 		standbyTimerProcessors map[string]*timerQueueStandbyProcessorImpl
 	}
@@ -78,6 +79,7 @@ func newTimerQueueProcessor(
 	shard ShardContext,
 	historyService *historyEngineImpl,
 	matchingClient matching.Client,
+	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) timerQueueProcessor {
 
@@ -120,24 +122,33 @@ func newTimerQueueProcessor(
 				taskAllocator,
 				historyRereplicator,
 				nDCHistoryResender,
+				queueTaskProcessor,
 				logger,
 			)
 		}
 	}
 
 	return &timerQueueProcessorImpl{
-		isGlobalDomainEnabled:  shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled(),
-		currentClusterName:     currentClusterName,
-		shard:                  shard,
-		taskAllocator:          taskAllocator,
-		config:                 shard.GetConfig(),
-		metricsClient:          historyService.metricsClient,
-		historyService:         historyService,
-		ackLevel:               timerKey{VisibilityTimestamp: shard.GetTimerAckLevel()},
-		logger:                 logger,
-		matchingClient:         matchingClient,
-		shutdownChan:           make(chan struct{}),
-		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, taskAllocator, logger),
+		isGlobalDomainEnabled: shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled(),
+		currentClusterName:    currentClusterName,
+		shard:                 shard,
+		taskAllocator:         taskAllocator,
+		config:                shard.GetConfig(),
+		metricsClient:         historyService.metricsClient,
+		historyService:        historyService,
+		ackLevel:              timerKey{VisibilityTimestamp: shard.GetTimerAckLevel()},
+		logger:                logger,
+		matchingClient:        matchingClient,
+		shutdownChan:          make(chan struct{}),
+		queueTaskProcessor:    queueTaskProcessor,
+		activeTimerProcessor: newTimerQueueActiveProcessor(
+			shard,
+			historyService,
+			matchingClient,
+			taskAllocator,
+			queueTaskProcessor,
+			logger,
+		),
 		standbyTimerProcessors: standbyTimerProcessors,
 	}
 }
@@ -222,6 +233,7 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 		maxLevel,
 		t.matchingClient,
 		t.taskAllocator,
+		t.queueTaskProcessor,
 		t.logger,
 	)
 

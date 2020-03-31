@@ -398,18 +398,18 @@ func (mr *MockqueueTaskMockRecorder) GetQueueType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueType", reflect.TypeOf((*MockqueueTask)(nil).GetQueueType))
 }
 
-// GetShardID mocks base method
-func (m *MockqueueTask) GetShardID() int {
+// GetShard mocks base method
+func (m *MockqueueTask) GetShard() ShardContext {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetShardID")
-	ret0, _ := ret[0].(int)
+	ret := m.ctrl.Call(m, "GetShard")
+	ret0, _ := ret[0].(ShardContext)
 	return ret0
 }
 
-// GetShardID indicates an expected call of GetShardID
-func (mr *MockqueueTaskMockRecorder) GetShardID() *gomock.Call {
+// GetShard indicates an expected call of GetShard
+func (mr *MockqueueTaskMockRecorder) GetShard() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShardID", reflect.TypeOf((*MockqueueTask)(nil).GetShardID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockqueueTask)(nil).GetShard))
 }
 
 // MockqueueTaskExecutor is a mock of queueTaskExecutor interface
@@ -497,7 +497,7 @@ func (mr *MockqueueTaskProcessorMockRecorder) Stop() *gomock.Call {
 }
 
 // StopShardProcessor mocks base method
-func (m *MockqueueTaskProcessor) StopShardProcessor(arg0 int) {
+func (m *MockqueueTaskProcessor) StopShardProcessor(arg0 ShardContext) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "StopShardProcessor", arg0)
 }

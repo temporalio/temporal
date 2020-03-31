@@ -71,6 +71,7 @@ type (
 		isStarted             int32
 		isStopped             int32
 		shutdownChan          chan struct{}
+		queueTaskProcessor    queueTaskProcessor
 		activeTaskProcessor   *transferQueueActiveProcessorImpl
 		standbyTaskProcessors map[string]*transferQueueStandbyProcessorImpl
 	}
@@ -82,6 +83,7 @@ func newTransferQueueProcessor(
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
 	historyClient history.Client,
+	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) *transferQueueProcessorImpl {
 
@@ -125,6 +127,7 @@ func newTransferQueueProcessor(
 				taskAllocator,
 				historyRereplicator,
 				nDCHistoryResender,
+				queueTaskProcessor,
 				logger,
 			)
 		}
@@ -144,6 +147,7 @@ func newTransferQueueProcessor(
 		ackLevel:              shard.GetTransferAckLevel(),
 		logger:                logger,
 		shutdownChan:          make(chan struct{}),
+		queueTaskProcessor:    queueTaskProcessor,
 		activeTaskProcessor: newTransferQueueActiveProcessor(
 			shard,
 			historyService,
@@ -151,6 +155,7 @@ func newTransferQueueProcessor(
 			matchingClient,
 			historyClient,
 			taskAllocator,
+			queueTaskProcessor,
 			logger,
 		),
 		standbyTaskProcessors: standbyTaskProcessors,
@@ -243,6 +248,7 @@ func (t *transferQueueProcessorImpl) FailoverDomain(
 		minLevel,
 		maxLevel,
 		t.taskAllocator,
+		t.queueTaskProcessor,
 		t.logger,
 	)
 

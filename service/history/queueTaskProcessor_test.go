@@ -23,7 +23,6 @@ package history
 import (
 	"errors"
 	"fmt"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -36,6 +35,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/task"
 )
 
@@ -45,6 +45,7 @@ type (
 		*require.Assertions
 
 		controller           *gomock.Controller
+		mockShard            *shardContextTest
 		mockPriorityAssigner *MocktaskPriorityAssigner
 
 		metricsClient metrics.Client
@@ -67,6 +68,14 @@ func (s *queueTaskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID: 10,
+			RangeID: 1,
+		},
+		NewDynamicConfigForTest(),
+	)
 	s.mockPriorityAssigner = NewMocktaskPriorityAssigner(s.controller)
 
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
@@ -77,6 +86,7 @@ func (s *queueTaskProcessorSuite) SetupTest() {
 
 func (s *queueTaskProcessorSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.Finish(s.T())
 }
 
 func (s *queueTaskProcessorSuite) TestIsRunning() {
@@ -101,10 +111,8 @@ func (s *queueTaskProcessorSuite) TestPrepareSubmit_AssignPriorityFailed() {
 }
 
 func (s *queueTaskProcessorSuite) TestPrepareSubmit_ProcessorNotRunning() {
-	shardID := 0
-
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetShardID().Return(shardID).Times(1)
+	mockTask.EXPECT().GetShard().Return(s.mockShard).Times(1)
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	scheduler, err := s.processor.prepareSubmit(mockTask)
@@ -113,14 +121,12 @@ func (s *queueTaskProcessorSuite) TestPrepareSubmit_ProcessorNotRunning() {
 }
 
 func (s *queueTaskProcessorSuite) TestPrepareSubmit_ShardProcessorAlreadyExists() {
-	shardID := 0
-
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetShardID().Return(shardID).Times(1)
+	mockTask.EXPECT().GetShard().Return(s.mockShard).Times(1)
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	mockScheduler := task.NewMockScheduler(s.controller)
-	s.processor.schedulers[shardID] = mockScheduler
+	s.processor.schedulers[s.mockShard] = mockScheduler
 
 	s.processor.Start()
 	scheduler, err := s.processor.prepareSubmit(mockTask)
@@ -129,10 +135,8 @@ func (s *queueTaskProcessorSuite) TestPrepareSubmit_ShardProcessorAlreadyExists(
 }
 
 func (s *queueTaskProcessorSuite) TestPrepareSubmit_ShardProcessorNotExist() {
-	shardID := 0
-
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetShardID().Return(shardID).Times(1)
+	mockTask.EXPECT().GetShard().Return(s.mockShard).Times(1)
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	s.Empty(s.processor.schedulers)
@@ -146,25 +150,30 @@ func (s *queueTaskProcessorSuite) TestPrepareSubmit_ShardProcessorNotExist() {
 }
 
 func (s *queueTaskProcessorSuite) TestStopShardProcessor() {
-	shardID := 0
-
 	s.Empty(s.processor.schedulers)
-	s.processor.StopShardProcessor(shardID)
+	s.processor.StopShardProcessor(s.mockShard)
 
 	mockScheduler := task.NewMockScheduler(s.controller)
 	mockScheduler.EXPECT().Stop().Times(1)
-	s.processor.schedulers[shardID] = mockScheduler
+	s.processor.schedulers[s.mockShard] = mockScheduler
 
-	s.processor.StopShardProcessor(shardID)
+	s.processor.StopShardProcessor(s.mockShard)
 	s.Empty(s.processor.schedulers)
 }
 
 func (s *queueTaskProcessorSuite) TestStop() {
 	for i := 0; i != 10; i++ {
-		shardID := rand.Int()
+		mockShard := newTestShardContext(
+			s.controller,
+			&persistence.ShardInfo{
+				ShardID: 10,
+				RangeID: 1,
+			},
+			NewDynamicConfigForTest(),
+		)
 		mockScheduler := task.NewMockScheduler(s.controller)
 		mockScheduler.EXPECT().Stop().Times(1)
-		s.processor.schedulers[shardID] = mockScheduler
+		s.processor.schedulers[mockShard] = mockScheduler
 	}
 
 	s.processor.Start()
@@ -174,15 +183,13 @@ func (s *queueTaskProcessorSuite) TestStop() {
 }
 
 func (s *queueTaskProcessorSuite) TestSubmit() {
-	shardID := 0
-
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetShardID().Return(shardID).Times(1)
+	mockTask.EXPECT().GetShard().Return(s.mockShard).Times(1)
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	mockScheduler := task.NewMockScheduler(s.controller)
 	mockScheduler.EXPECT().Submit(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
-	s.processor.schedulers[shardID] = mockScheduler
+	s.processor.schedulers[s.mockShard] = mockScheduler
 
 	s.processor.Start()
 	err := s.processor.Submit(mockTask)
@@ -190,16 +197,14 @@ func (s *queueTaskProcessorSuite) TestSubmit() {
 }
 
 func (s *queueTaskProcessorSuite) TestTrySubmit_Fail() {
-	shardID := 0
-
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetShardID().Return(shardID).Times(1)
+	mockTask.EXPECT().GetShard().Return(s.mockShard).Times(1)
 	s.mockPriorityAssigner.EXPECT().Assign(newMockQueueTaskMatcher(mockTask)).Return(nil).Times(1)
 
 	errTrySubmit := errors.New("some randome error")
 	mockScheduler := task.NewMockScheduler(s.controller)
 	mockScheduler.EXPECT().TrySubmit(newMockQueueTaskMatcher(mockTask)).Return(false, errTrySubmit).Times(1)
-	s.processor.schedulers[shardID] = mockScheduler
+	s.processor.schedulers[s.mockShard] = mockScheduler
 
 	s.processor.Start()
 	submitted, err := s.processor.TrySubmit(mockTask)

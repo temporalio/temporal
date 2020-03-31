@@ -22,6 +22,7 @@ package history
 
 import (
 	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -54,6 +55,7 @@ func newTransferQueueStandbyProcessor(
 	taskAllocator taskAllocator,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
+	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) *transferQueueStandbyProcessorImpl {
 
@@ -125,16 +127,39 @@ func newTransferQueueStandbyProcessor(
 		shard.GetTransferClusterAckLevel(clusterName),
 		logger,
 	)
+
+	redispatchQueue := collection.NewConcurrentQueue()
+
+	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
+		return newTransferQueueTask(
+			shard,
+			taskInfo,
+			historyService.metricsClient.Scope(
+				getTransferTaskMetricsScope(taskInfo.GetTaskType(), false),
+			),
+			logger,
+			transferTaskFilter,
+			processor.taskExecutor,
+			redispatchQueue,
+			shard.GetTimeSource(),
+			options.MaxRetryCount,
+			queueAckMgr,
+		)
+	}
+
 	queueProcessorBase := newQueueProcessorBase(
 		clusterName,
 		shard,
 		options,
 		processor,
-		nil, // TODO: @yycptt wire up implementations for priority task processor
+		queueTaskProcessor,
 		queueAckMgr,
+		redispatchQueue,
 		historyService.historyCache,
+		transferQueueTaskInitializer,
 		logger,
 	)
+
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 
@@ -160,6 +185,6 @@ func (t *transferQueueStandbyProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := t.getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), false)
+	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), false)
 	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
 }

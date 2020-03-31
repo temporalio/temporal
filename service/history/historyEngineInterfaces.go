@@ -79,7 +79,7 @@ type (
 		task.PriorityTask
 		queueTaskInfo
 		GetQueueType() queueType
-		GetShardID() int
+		GetShard() ShardContext
 	}
 
 	queueTaskExecutor interface {
@@ -88,7 +88,7 @@ type (
 
 	queueTaskProcessor interface {
 		common.Daemon
-		StopShardProcessor(int)
+		StopShardProcessor(ShardContext)
 		Submit(queueTask) error
 		TrySubmit(queueTask) (bool, error)
 	}

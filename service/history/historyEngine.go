@@ -139,6 +139,7 @@ type (
 		archivalClient            warchiver.Client
 		resetor                   workflowResetor
 		workflowResetter          workflowResetter
+		queueTaskProcessor        queueTaskProcessor
 		replicationTaskProcessors []ReplicationTaskProcessor
 		publicClient              workflowserviceclient.Interface
 		eventsReapplier           nDCEventsReapplier
@@ -211,6 +212,7 @@ func NewEngineWithShardContext(
 	config *Config,
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matching.Client,
+	queueTaskProcessor queueTaskProcessor,
 ) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
@@ -241,14 +243,15 @@ func NewEngineWithShardContext(
 			shard.GetConfig().ArchiveRequestRPS,
 			shard.GetService().GetArchiverProvider(),
 		),
-		publicClient:      publicClient,
-		matchingClient:    matching,
-		rawMatchingClient: rawMatchingClient,
-		clientChecker:     client.NewVersionChecker(),
+		publicClient:       publicClient,
+		matchingClient:     matching,
+		rawMatchingClient:  rawMatchingClient,
+		queueTaskProcessor: queueTaskProcessor,
+		clientChecker:      client.NewVersionChecker(),
 	}
 
-	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
-	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
+	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
+	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	// Only start the replicator processor if valid publisher is passed in
@@ -375,6 +378,10 @@ func (e *historyEngineImpl) Stop() {
 
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
 		replicationTaskProcessor.Stop()
+	}
+
+	if e.queueTaskProcessor != nil {
+		e.queueTaskProcessor.StopShardProcessor(e.shard)
 	}
 
 	// unset the failover callback

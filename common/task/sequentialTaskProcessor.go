@@ -25,12 +25,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
-
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/metrics"
 )
 
 type (
@@ -44,15 +43,19 @@ type (
 		taskQueueFactory SequentialTaskQueueFactory
 		taskqueueChan    chan SequentialTaskQueue
 
-		metricsScope  int
-		metricsClient metrics.Client
-		logger        log.Logger
+		metricsScope metrics.Scope
+		logger       log.Logger
 	}
 )
 
 // NewSequentialTaskProcessor create a new sequential tasks processor
-func NewSequentialTaskProcessor(coroutineSize int, taskQueueHashFn collection.HashFunc, taskQueueFactory SequentialTaskQueueFactory,
-	metricsClient metrics.Client, logger log.Logger) Processor {
+func NewSequentialTaskProcessor(
+	coroutineSize int,
+	taskQueueHashFn collection.HashFunc,
+	taskQueueFactory SequentialTaskQueueFactory,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) Processor {
 
 	return &sequentialTaskProcessorImpl{
 		status:           common.DaemonStatusInitialized,
@@ -61,10 +64,8 @@ func NewSequentialTaskProcessor(coroutineSize int, taskQueueHashFn collection.Ha
 		taskqueues:       collection.NewShardedConcurrentTxMap(1024, taskQueueHashFn),
 		taskQueueFactory: taskQueueFactory,
 		taskqueueChan:    make(chan SequentialTaskQueue, coroutineSize),
-
-		metricsScope:  metrics.SequentialTaskProcessingScope,
-		metricsClient: metricsClient,
-		logger:        logger,
+		metricsScope:     metricsClient.Scope(metrics.SequentialTaskProcessingScope),
+		logger:           logger,
 	}
 }
 
@@ -94,8 +95,8 @@ func (t *sequentialTaskProcessorImpl) Stop() {
 
 func (t *sequentialTaskProcessorImpl) Submit(task Task) error {
 
-	t.metricsClient.IncCounter(t.metricsScope, metrics.SequentialTaskSubmitRequest)
-	metricsTimer := t.metricsClient.StartTimer(t.metricsScope, metrics.SequentialTaskSubmitLatency)
+	t.metricsScope.IncCounter(metrics.SequentialTaskSubmitRequest)
+	metricsTimer := t.metricsScope.StartTimer(metrics.SequentialTaskSubmitLatency)
 	defer metricsTimer.Stop()
 
 	taskqueue := t.taskQueueFactory(task)
@@ -116,12 +117,12 @@ func (t *sequentialTaskProcessorImpl) Submit(task Task) error {
 	// if function evaluated, meaning that the task set is
 	// already dispatched
 	if fnEvaluated {
-		t.metricsClient.IncCounter(t.metricsScope, metrics.SequentialTaskSubmitRequestTaskQueueExist)
+		t.metricsScope.IncCounter(metrics.SequentialTaskSubmitRequestTaskQueueExist)
 		return nil
 	}
 
 	// need to dispatch this task set
-	t.metricsClient.IncCounter(t.metricsScope, metrics.SequentialTaskSubmitRequestTaskQueueMissing)
+	t.metricsScope.IncCounter(metrics.SequentialTaskSubmitRequestTaskQueueMissing)
 	select {
 	case <-t.shutdownChan:
 	case t.taskqueueChan <- taskqueue:
@@ -138,7 +139,7 @@ func (t *sequentialTaskProcessorImpl) pollAndProcessTaskQueue() {
 		case <-t.shutdownChan:
 			return
 		case taskqueue := <-t.taskqueueChan:
-			metricsTimer := t.metricsClient.StartTimer(t.metricsScope, metrics.SequentialTaskQueueProcessingLatency)
+			metricsTimer := t.metricsScope.StartTimer(metrics.SequentialTaskQueueProcessingLatency)
 			t.processTaskQueue(taskqueue)
 			metricsTimer.Stop()
 		}
@@ -152,7 +153,7 @@ func (t *sequentialTaskProcessorImpl) processTaskQueue(taskqueue SequentialTaskQ
 			return
 		default:
 			queueSize := taskqueue.Len()
-			t.metricsClient.RecordTimer(t.metricsScope, metrics.SequentialTaskQueueSize, time.Duration(queueSize))
+			t.metricsScope.RecordTimer(metrics.SequentialTaskQueueSize, time.Duration(queueSize))
 			if queueSize > 0 {
 				t.processTaskOnce(taskqueue)
 			} else {
@@ -171,7 +172,7 @@ func (t *sequentialTaskProcessorImpl) processTaskQueue(taskqueue SequentialTaskQ
 }
 
 func (t *sequentialTaskProcessorImpl) processTaskOnce(taskqueue SequentialTaskQueue) {
-	metricsTimer := t.metricsClient.StartTimer(t.metricsScope, metrics.SequentialTaskTaskProcessingLatency)
+	metricsTimer := t.metricsScope.StartTimer(metrics.SequentialTaskTaskProcessingLatency)
 	defer metricsTimer.Stop()
 
 	task := taskqueue.Remove()
