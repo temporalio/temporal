@@ -169,11 +169,8 @@ const (
 		`}`
 
 	templateReplicationStateType = `{` +
-		`current_version: ?, ` +
 		`start_version: ?, ` +
-		`last_write_version: ?, ` +
-		`last_write_event_id: ?, ` +
-		`last_replication_info: ?` +
+		`last_write_version: ? ` +
 		`}`
 
 	templateActivityInfoType = `{` +
