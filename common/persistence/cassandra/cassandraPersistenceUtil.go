@@ -1548,20 +1548,10 @@ func createReplicationState(
 	info := &p.ReplicationState{}
 	for k, v := range result {
 		switch k {
-		case "current_version":
-			info.CurrentVersion = v.(int64)
 		case "start_version":
 			info.StartVersion = v.(int64)
 		case "last_write_version":
 			info.LastWriteVersion = v.(int64)
-		case "last_write_event_id":
-			info.LastWriteEventID = v.(int64)
-		case "last_replication_info":
-			info.LastReplicationInfo = make(map[string]*replication.ReplicationInfo)
-			replicationInfoMap := v.(map[string]map[string]interface{})
-			for key, value := range replicationInfoMap {
-				info.LastReplicationInfo[key] = createReplicationInfo(value)
-			}
 		}
 	}
 

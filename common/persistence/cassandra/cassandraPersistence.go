@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cassandra"
 	checksum "github.com/temporalio/temporal/common/checksum"
@@ -1183,14 +1184,14 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		return nil, convertCommonErrors("GetWorkflowExecution", err)
 	}
 
-	info, err := workflowExecutionFromRow(result)
+	info, replicationState, err := workflowExecutionFromRow(result)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 	}
 
 	state := &p.InternalWorkflowMutableState{
 		ExecutionInfo:    info,
-		ReplicationState: createReplicationState(result["replication_state"].(map[string]interface{})),
+		ReplicationState: replicationState,
 		VersionHistories: p.NewDataBlob(result["version_histories"].([]byte), common.EncodingType(result["version_histories_encoding"].(string))),
 	}
 
@@ -1319,34 +1320,53 @@ func protoActivityInfoFromRow(result map[string]interface{}) (*persistenceblobs.
 	return protoState, nil
 }
 
-func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflowExecutionInfo, error) {
+func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflowExecutionInfo, *p.ReplicationState, error) {
 	eiBytes, ok := result["execution"].([]byte)
 	if !ok {
-		return nil, newPersistedTypeMismatchError("execution", "", eiBytes, result)
+		return nil, nil, newPersistedTypeMismatchError("execution", "", eiBytes, result)
 	}
 
 	eiEncoding, ok := result["execution_encoding"].(string)
 	if !ok {
-		return nil, newPersistedTypeMismatchError("execution_encoding", "", eiEncoding, result)
+		return nil, nil, newPersistedTypeMismatchError("execution_encoding", "", eiEncoding, result)
 	}
 
 	protoInfo, err := serialization.WorkflowExecutionInfoFromBlob(eiBytes, eiEncoding)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	nextEventID, ok := result["next_event_id"].(int64)
 	if !ok {
-		return nil, newPersistedTypeMismatchError("next_event_id", "", nextEventID, result)
+		return nil, nil, newPersistedTypeMismatchError("next_event_id", "", nextEventID, result)
 	}
 
 	protoState, err := protoExecutionStateFromRow(result)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
+	partialReplState := ReplicationStateFromResultAndExecutionInfo(result, protoInfo)
+
 	info := p.ProtoWorkflowExecutionToPartialInternalExecution(protoInfo, protoState, nextEventID)
-	return info, nil
+	return info, partialReplState, nil
+}
+
+func ReplicationStateFromResultAndExecutionInfo(result map[string]interface{}, protoInfo *persistenceblobs.WorkflowExecutionInfo) *p.ReplicationState {
+	partialReplState := createReplicationState(result["replication_state"].(map[string]interface{}))
+
+	if partialReplState == nil {
+		return nil
+	}
+
+	if protoInfo.LastReplicationInfo == nil {
+		partialReplState.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, 0)
+	} else {
+		partialReplState.LastReplicationInfo = protoInfo.LastReplicationInfo
+	}
+	partialReplState.CurrentVersion = protoInfo.CurrentVersion
+	partialReplState.LastWriteEventID = protoInfo.LastWriteEventID.GetValue()
+	return partialReplState
 }
 
 func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdateWorkflowExecutionRequest) error {
