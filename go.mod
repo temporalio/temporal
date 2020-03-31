@@ -5,7 +5,7 @@ go 1.14
 require (
 	cloud.google.com/go v0.38.0
 	github.com/Shopify/sarama v1.23.0
-	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
+	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
 	github.com/aws/aws-sdk-go v1.29.4
 	github.com/benbjohnson/clock v1.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect

@@ -23,6 +23,7 @@ package serialization
 import (
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -31,11 +32,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 )
-
-type ProtoMarshal interface {
-	Marshal() ([]byte, error)
-	Unmarshal([]byte) error
-}
 
 func validateProto(p string, expected common.EncodingType) error {
 	if common.EncodingType(p) != expected {
@@ -58,7 +54,7 @@ func decodeErr(encoding common.EncodingType, err error) error {
 	return fmt.Errorf("error deserializing blob to blob using encoding - %v - : %v", encoding, err)
 }
 
-func protoRWEncode(m ProtoMarshal) (DataBlob, error) {
+func proto3Encode(m proto.Marshaler) (DataBlob, error) {
 	blob := DataBlob{Encoding: common.EncodingTypeProto3}
 	data, err := m.Marshal()
 	if err != nil {
@@ -68,7 +64,7 @@ func protoRWEncode(m ProtoMarshal) (DataBlob, error) {
 	return blob, nil
 }
 
-func protoRWDecode(b []byte, proto string, result ProtoMarshal) error {
+func proto3Decode(b []byte, proto string, result proto.Unmarshaler) error {
 	if err := validateProto(proto, common.EncodingTypeProto3); err != nil {
 		return err
 	}
@@ -76,12 +72,12 @@ func protoRWDecode(b []byte, proto string, result ProtoMarshal) error {
 }
 
 func ShardInfoToBlob(info *persistenceblobs.ShardInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistenceblobs.ShardInfo, error) {
 	shardInfo := &persistenceblobs.ShardInfo{}
-	err := protoRWDecode(b, proto, shardInfo)
+	err := proto3Decode(b, proto, shardInfo)
 
 	if err != nil {
 		return nil, err
@@ -111,147 +107,147 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 }
 
 func NamespaceInfoToBlob(info *persistenceblobs.NamespaceInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func NamespaceInfoFromBlob(b []byte, proto string) (*persistenceblobs.NamespaceInfo, error) {
 	result := &persistenceblobs.NamespaceInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func HistoryTreeInfoToBlob(info *persistenceblobs.HistoryTreeInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func HistoryTreeInfoFromBlob(b []byte, proto string) (*persistenceblobs.HistoryTreeInfo, error) {
 	result := &persistenceblobs.HistoryTreeInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func HistoryBranchToBlob(info *persistenceblobs.HistoryBranch) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func HistoryBranchFromBlob(b []byte, proto string) (*persistenceblobs.HistoryBranch, error) {
 	result := &persistenceblobs.HistoryBranch{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func WorkflowExecutionInfoToBlob(info *persistenceblobs.WorkflowExecutionInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func WorkflowExecutionInfoFromBlob(b []byte, proto string) (*persistenceblobs.WorkflowExecutionInfo, error) {
 	result := &persistenceblobs.WorkflowExecutionInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func WorkflowExecutionStateToBlob(info *persistenceblobs.WorkflowExecutionState) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func WorkflowExecutionStateFromBlob(b []byte, proto string) (*persistenceblobs.WorkflowExecutionState, error) {
 	result := &persistenceblobs.WorkflowExecutionState{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func ActivityInfoToBlob(info *persistenceblobs.ActivityInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func ActivityInfoFromBlob(b []byte, proto string) (*persistenceblobs.ActivityInfo, error) {
 	result := &persistenceblobs.ActivityInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func ChildExecutionInfoToBlob(info *persistenceblobs.ChildExecutionInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func ChildExecutionInfoFromBlob(b []byte, proto string) (*persistenceblobs.ChildExecutionInfo, error) {
 	result := &persistenceblobs.ChildExecutionInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func SignalInfoToBlob(info *persistenceblobs.SignalInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func SignalInfoFromBlob(b []byte, proto string) (*persistenceblobs.SignalInfo, error) {
 	result := &persistenceblobs.SignalInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func RequestCancelInfoToBlob(info *persistenceblobs.RequestCancelInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func RequestCancelInfoFromBlob(b []byte, proto string) (*persistenceblobs.RequestCancelInfo, error) {
 	result := &persistenceblobs.RequestCancelInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func TimerInfoToBlob(info *persistenceblobs.TimerInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func TimerInfoFromBlob(b []byte, proto string) (*persistenceblobs.TimerInfo, error) {
 	result := &persistenceblobs.TimerInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func TaskInfoToBlob(info *persistenceblobs.AllocatedTaskInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func TaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.AllocatedTaskInfo, error) {
 	result := &persistenceblobs.AllocatedTaskInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func TaskListInfoToBlob(info *persistenceblobs.TaskListInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func TaskListInfoFromBlob(b []byte, proto string) (*persistenceblobs.TaskListInfo, error) {
 	result := &persistenceblobs.TaskListInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func TransferTaskInfoToBlob(info *persistenceblobs.TransferTaskInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func TransferTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.TransferTaskInfo, error) {
 	result := &persistenceblobs.TransferTaskInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func TimerTaskInfoToBlob(info *persistenceblobs.TimerTaskInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func TimerTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.TimerTaskInfo, error) {
 	result := &persistenceblobs.TimerTaskInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func ReplicationTaskInfoToBlob(info *persistenceblobs.ReplicationTaskInfo) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func ReplicationTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.ReplicationTaskInfo, error) {
 	result := &persistenceblobs.ReplicationTaskInfo{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 func ChecksumToBlob(info *persistenceblobs.Checksum) (DataBlob, error) {
-	return protoRWEncode(info)
+	return proto3Encode(info)
 }
 
 func ChecksumFromBlob(b []byte, proto string) (*persistenceblobs.Checksum, error) {
 	result := &persistenceblobs.Checksum{}
-	return result, protoRWDecode(b, proto, result)
+	return result, proto3Decode(b, proto, result)
 }
 
 type DataBlob struct {
