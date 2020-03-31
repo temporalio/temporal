@@ -381,6 +381,10 @@ func (t *timerQueueProcessorBase) submitTask(
 }
 
 func (t *timerQueueProcessorBase) redispatchTasks() {
+	if !t.isPriorityTaskProcessorEnabled() {
+		return
+	}
+
 	redispatchQueueTasks(
 		t.redispatchQueue,
 		t.queueTaskProcessor,

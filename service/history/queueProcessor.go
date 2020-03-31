@@ -311,6 +311,10 @@ func (p *queueProcessorBase) submitTask(
 }
 
 func (p *queueProcessorBase) redispatchTasks() {
+	if !p.isPriorityTaskProcessorEnabled() {
+		return
+	}
+
 	redispatchQueueTasks(
 		p.redispatchQueue,
 		p.queueTaskProcessor,
