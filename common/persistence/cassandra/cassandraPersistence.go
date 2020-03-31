@@ -2734,10 +2734,6 @@ func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflo
 }
 
 func ProtoReplicationVersionsFromResultMap(result map[string]interface{}) (*persistenceblobs.ReplicationVersions, error) {
-	if replMeta, replMetaIsPresent := result["replication_metadata"].([]byte); !replMetaIsPresent || len(replMeta) == 0 {
-		return nil, nil
-	}
-
 	rmBytes, ok := result["replication_metadata"].([]byte)
 	if !ok {
 		return nil, newPersistedTypeMismatchError("replication_metadata", "", rmBytes, result)
