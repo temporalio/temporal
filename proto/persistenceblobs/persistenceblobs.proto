@@ -343,6 +343,6 @@ message ReplicationData {
 }
 
 message ReplicationVersions {
-    int64 startVersion = 15;
-    int64 lastWriteVersion = 16;
+    google.protobuf.Int64Value startVersion = 15;
+    google.protobuf.Int64Value lastWriteVersion = 16;
 }

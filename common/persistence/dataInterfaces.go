@@ -2338,8 +2338,8 @@ func NewGetReplicationTasksFromDLQRequest(
 
 func (r *ReplicationState) GenerateVersionProto() *persistenceblobs.ReplicationVersions {
 	return &persistenceblobs.ReplicationVersions{
-		StartVersion:     r.StartVersion,
-		LastWriteVersion: r.LastWriteVersion,
+		StartVersion: &types.Int64Value{Value: r.StartVersion},
+		LastWriteVersion: &types.Int64Value{ Value: r.LastWriteVersion},
 	}
 }
 

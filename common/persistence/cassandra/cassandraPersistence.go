@@ -980,7 +980,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 					if err != nil {
 						return nil, err
 					}
-					lastWriteVersion := protoReplVersions.LastWriteVersion
+					lastWriteVersion := protoReplVersions.LastWriteVersion.GetValue()
 
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
 						executionInfo.WorkflowID, primitives.UUIDString(protoState.RunID), request.RangeID, strings.Join(columns, ","))
@@ -1017,7 +1017,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 					return nil, err
 				}
 				if protoReplVersions != nil {
-					lastWriteVersion = protoReplVersions.LastWriteVersion
+					lastWriteVersion = protoReplVersions.LastWriteVersion.GetValue()
 				}
 				return nil, &p.WorkflowExecutionAlreadyStartedError{
 					Msg:              msg,
@@ -1266,8 +1266,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 
 			replicationVersions, err := serialization.ReplicationVersionsToBlob(
 				&persistenceblobs.ReplicationVersions{
-					StartVersion: startVersion,
-					LastWriteVersion: lastWriteVersion,
+					StartVersion: &types.Int64Value{Value: startVersion},
+					LastWriteVersion: &types.Int64Value{ Value: lastWriteVersion},
 				})
 
 			if err != nil {
@@ -1381,8 +1381,8 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 
 	replicationVersions, err := serialization.ReplicationVersionsToBlob(
 		&persistenceblobs.ReplicationVersions{
-			StartVersion: startVersion,
-			LastWriteVersion: lastWriteVersion,
+			StartVersion: &types.Int64Value{Value: startVersion},
+			LastWriteVersion: &types.Int64Value{ Value: lastWriteVersion},
 		})
 	if err != nil {
 		return err
@@ -1540,8 +1540,8 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 
 		replicationVersions, err := serialization.ReplicationVersionsToBlob(
 			&persistenceblobs.ReplicationVersions{
-				StartVersion: startVersion,
-				LastWriteVersion: lastWriteVersion,
+				StartVersion: &types.Int64Value{Value: startVersion},
+				LastWriteVersion: &types.Int64Value{ Value: lastWriteVersion},
 			})
 		if err != nil {
 			return err
@@ -1908,7 +1908,7 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 		StartRequestID:   executionInfo.CreateRequestID,
 		State:            int(executionInfo.State),
 		CloseStatus:      int(executionInfo.CloseStatus),
-		LastWriteVersion: replicationVersions.LastWriteVersion,
+		LastWriteVersion: replicationVersions.LastWriteVersion.GetValue(),
 	}, nil
 }
 
@@ -2724,18 +2724,22 @@ func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflo
 
 	info := p.ProtoWorkflowExecutionToPartialInternalExecution(protoInfo, protoState, nextEventID)
 
-	protoReplVersions, err := ProtoReplicationVersionsFromResultMap(result)
-	if err != nil {
-		return nil, nil, err
+	var state *p.ReplicationState
+	if protoInfo.ReplicationData != nil {
+		protoReplVersions, err := ProtoReplicationVersionsFromResultMap(result)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		state = ReplicationStateFromProtos(protoInfo, protoReplVersions)
 	}
 
-	state := ReplicationStateFromProtos(protoInfo, protoReplVersions)
 	return info, state, nil
 }
 
 func ProtoReplicationVersionsFromResultMap(result map[string]interface{}) (*persistenceblobs.ReplicationVersions, error) {
 	if replMeta, replMetaIsPresent := result["replication_metadata"].([]byte); !replMetaIsPresent || len(replMeta) == 0 {
-		return &persistenceblobs.ReplicationVersions{}, nil
+		return nil, nil
 	}
 
 	rmBytes, ok := result["replication_metadata"].([]byte)

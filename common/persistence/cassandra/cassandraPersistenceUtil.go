@@ -989,8 +989,8 @@ func createOrUpdateCurrentExecution(
 
 	replicationVersions, err := serialization.ReplicationVersionsToBlob(
 		&persistenceblobs.ReplicationVersions{
-			StartVersion: startVersion,
-			LastWriteVersion: lastWriteVersion,
+			StartVersion: &types.Int64Value{Value: startVersion},
+			LastWriteVersion: &types.Int64Value{Value: startVersion},
 		})
 
 	if err != nil {
@@ -1548,8 +1548,8 @@ func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv 
 	info.CurrentVersion = wei.CurrentVersion
 
 	if rv != nil {
-		info.StartVersion = rv.StartVersion
-		info.LastWriteVersion = rv.LastWriteVersion
+		info.StartVersion = rv.GetStartVersion().GetValue()
+		info.LastWriteVersion = rv.GetLastWriteVersion().GetValue()
 	}
 
 	if wei.ReplicationData != nil {
