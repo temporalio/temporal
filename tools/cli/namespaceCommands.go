@@ -288,7 +288,7 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 	namespaceID := c.String(FlagNamespaceID)
 
 	if namespaceID == "" && namespace == "" {
-		ErrorAndExit("At least namespaceID or namespace must be provided.", nil)
+		ErrorAndExit("At least namespaceId or namespace must be provided.", nil)
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
@@ -303,7 +303,7 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 		ErrorAndExit(fmt.Sprintf("Namespace %s does not exist.", namespace), err)
 	}
 
-	var formatStr = "Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nStatus: %v\nRetentionInDays: %v\n" +
+	var formatStr = "Name: %v\nId: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nStatus: %v\nRetentionInDays: %v\n" +
 		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nHistoryArchivalStatus: %v\n"
 	descValues := []interface{}{
 		resp.NamespaceInfo.GetName(),

@@ -215,11 +215,11 @@ const (
 var flagsForExecution = []cli.Flag{
 	cli.StringFlag{
 		Name:  FlagWorkflowIDWithAlias,
-		Usage: "WorkflowID",
+		Usage: "WorkflowId",
 	},
 	cli.StringFlag{
 		Name:  FlagRunIDWithAlias,
-		Usage: "RunID",
+		Usage: "RunId",
 	},
 }
 
@@ -273,7 +273,7 @@ func getFlagsForStart() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,
-			Usage: "WorkflowID",
+			Usage: "WorkflowId",
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowTypeWithAlias,
@@ -301,7 +301,7 @@ func getFlagsForStart() []cli.Flag {
 		},
 		cli.IntFlag{
 			Name: FlagWorkflowIDReusePolicyAlias,
-			Usage: "Optional input to configure if the same workflow ID is allow to use for new workflow execution. " +
+			Usage: "Optional input to configure if the same workflow Id is allow to use for new workflow execution. " +
 				"Available options: 0: AllowDuplicate, 1: AllowDuplicateFailedOnly, 2: RejectDuplicate",
 		},
 		cli.StringFlag{
@@ -421,7 +421,7 @@ func getFlagsForListAll() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,
-			Usage: "WorkflowID",
+			Usage: "WorkflowId",
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowTypeWithAlias,
@@ -490,11 +490,11 @@ func getFlagsForQuery() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,
-			Usage: "WorkflowID",
+			Usage: "WorkflowId",
 		},
 		cli.StringFlag{
 			Name:  FlagRunIDWithAlias,
-			Usage: "RunID",
+			Usage: "RunId",
 		},
 		cli.StringFlag{
 			Name:  FlagQueryTypeWithAlias,

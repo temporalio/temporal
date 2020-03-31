@@ -373,9 +373,9 @@ func GenerateReport(c *cli.Context) {
 	// record the column position in the table of each returned item
 	ids := make(map[string]int)
 	// We want these 3 columns shows at leftmost of the table in temporal report usage. It can be changed in future.
-	primaryCols := []string{"group_NamespaceID", "group_WorkflowType", "group_CloseStatus"}
+	primaryCols := []string{"group_NamespaceId", "group_WorkflowType", "group_CloseStatus"}
 	primaryColsMap := map[string]int{
-		"group_NamespaceID":  1,
+		"group_NamespaceId":  1,
 		"group_WorkflowType": 1,
 		"group_CloseStatus":  1,
 	}

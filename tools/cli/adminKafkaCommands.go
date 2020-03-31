@@ -564,7 +564,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 			if err != nil {
 				ErrorAndExit("Publish task error", err)
 			}
-			fmt.Printf("publish task successfully firstEventID %v, lastEventID %v \n", firstEvent.GetEventId(), lastEvent.GetEventId())
+			fmt.Printf("publish task successfully firstEventId %v, lastEventId %v \n", firstEvent.GetEventId(), lastEvent.GetEventId())
 		}
 
 		fmt.Printf("Done rereplicate for wid: %v, rid:%v \n", wid, rid)
@@ -741,7 +741,7 @@ func AdminMergeDLQ(c *cli.Context) {
 				fmt.Printf("cannot publish task %v to topic \n", idx)
 				ErrorAndExit("", err)
 			} else {
-				fmt.Printf("replication task sent: %v firstID %v, nextID %v \n", idx, t.GetHistoryTaskAttributes().GetFirstEventId(), t.GetHistoryTaskAttributes().GetNextEventId())
+				fmt.Printf("replication task sent: %v firstId %v, nextId %v \n", idx, t.GetHistoryTaskAttributes().GetFirstEventId(), t.GetHistoryTaskAttributes().GetNextEventId())
 			}
 		}
 	} else {

@@ -167,7 +167,7 @@ var (
 	describeNamespaceFlags = []cli.Flag{
 		cli.StringFlag{
 			Name:  FlagNamespaceID,
-			Usage: "Namespace UUID (required if not specify namespace)",
+			Usage: "Namespace Id (required if not specify namespace)",
 		},
 	}
 

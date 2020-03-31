@@ -54,8 +54,8 @@ type (
 
 // All allowed fields for filtering
 const (
-	WorkflowID      = "WorkflowID"
-	RunID           = "RunID"
+	WorkflowID      = "WorkflowId"
+	RunID           = "RunId"
 	WorkflowType    = "WorkflowType"
 	CloseTime       = "CloseTime"
 	StartTime       = "StartTime"

@@ -77,7 +77,7 @@ func printTaskListStatus(taskListStatus *commonproto.TaskListStatus) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	table.SetHeader([]string{"Read Level", "Ack Level", "Backlog", "Lease Start TaskID", "Lease End TaskID"})
+	table.SetHeader([]string{"Read Level", "Ack Level", "Backlog", "Lease Start TaskId", "Lease End TaskId"})
 	table.SetHeaderLine(false)
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue)
 	table.Append([]string{strconv.FormatInt(taskListStatus.GetReadLevel(), 10),
