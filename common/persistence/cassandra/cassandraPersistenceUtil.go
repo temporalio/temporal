@@ -1540,18 +1540,17 @@ func updateBufferedEvents(
 }
 
 func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv *persistenceblobs.ReplicationVersions) *p.ReplicationState {
-	if wei.ReplicationData == nil {
-		return nil
-	}
-
 	info := &p.ReplicationState{}
-	info.StartVersion = rv.StartVersion
-	// todo, is 2dc and currentVersion deprecated yet?
 	info.CurrentVersion = wei.CurrentVersion
+
+	info.StartVersion = rv.StartVersion
 	info.LastWriteVersion = rv.LastWriteVersion
 
-	info.LastReplicationInfo = wei.ReplicationData.LastReplicationInfo
-	info.LastWriteEventID = wei.ReplicationData.LastWriteEventID
+	if wei.ReplicationData != nil {
+		info.LastReplicationInfo = wei.ReplicationData.LastReplicationInfo
+		info.LastWriteEventID = wei.ReplicationData.LastWriteEventID
+	}
+
 	if info.LastReplicationInfo == nil {
 		info.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, 0)
 	}
