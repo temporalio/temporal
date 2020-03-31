@@ -45,7 +45,7 @@ import (
 
 const (
 	testWorkflowTypeName    = "test-workflow-type"
-	exampleVisibilityRecord = `{"NamespaceID":"test-namespace-id","Namespace":"test-namespace","WorkflowID":"test-workflow-id","RunID":"test-run-id","WorkflowTypeName":"test-workflow-type","StartTimestamp":1580896574804475000,"ExecutionTimestamp":0,"CloseTimestamp":1580896575946478000,"CloseStatus":"WorkflowExecutionCloseStatusCompleted","HistoryLength":36,"Memo":null,"SearchAttributes":{},"HistoryArchivalURI":"gs://my-bucket-cad/temporal_archival/development"}`
+	exampleVisibilityRecord = `{"NamespaceId":"test-namespace-id","Namespace":"test-namespace","WorkflowId":"test-workflow-id","RunId":"test-run-id","WorkflowTypeName":"test-workflow-type","StartTimestamp":1580896574804475000,"ExecutionTimestamp":0,"CloseTimestamp":1580896575946478000,"CloseStatus":"WorkflowExecutionCloseStatusCompleted","HistoryLength":36,"Memo":null,"SearchAttributes":{},"HistoryArchivalURI":"gs://my-bucket-cad/temporal_archival/development"}`
 )
 
 func (s *visibilityArchiverSuite) SetupTest() {
@@ -303,7 +303,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	defer mockCtrl.Finish()
 
 	mockParser := NewMockQueryParser(mockCtrl)
-	dayPrecision := string("Day")
+	dayPrecision := "Day"
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       int64(101),
 		searchPrecision: &dayPrecision,

@@ -151,7 +151,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	blob := s.serializeEvents(eventBatch)
 	versionHistoryItems := []*commonproto.VersionHistoryItem{
 		{
-			EventID: 1,
+			EventId: 1,
 			Version: 1,
 		},
 	}
@@ -234,7 +234,7 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 	}
 	versionHistoryItems := []*commonproto.VersionHistoryItem{
 		{
-			EventID: 1,
+			EventId: 1,
 			Version: 1,
 		},
 	}
@@ -259,7 +259,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	item := &commonproto.VersionHistoryItem{
-		EventID: 1,
+		EventId: 1,
 		Version: 1,
 	}
 	request := &historyservice.ReplicateEventsV2Request{
@@ -284,7 +284,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	item := &commonproto.VersionHistoryItem{
-		EventID: 1,
+		EventId: 1,
 		Version: 1,
 	}
 	request := &historyservice.ReplicateEventsV2Request{

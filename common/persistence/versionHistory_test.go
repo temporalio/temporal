@@ -258,10 +258,10 @@ func (s *versionHistoriesSuite) TestContainsItem_True() {
 
 	prevEventID := common.FirstEventID - 1
 	for _, item := range Items {
-		for EventID := prevEventID + 1; EventID <= item.GetEventId(); EventID++ {
+		for EventID := prevEventID + 1; EventID <= item.GetEventID(); EventID++ {
 			s.True(history.ContainsItem(NewVersionHistoryItem(EventID, item.GetVersion())))
 		}
-		prevEventID = item.GetEventId()
+		prevEventID = item.GetEventID()
 	}
 }
 

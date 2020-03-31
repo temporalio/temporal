@@ -439,9 +439,9 @@ retry:
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
 			_, err := p.Engine.RespondActivityTaskCanceledById(NewContext(), &workflowservice.RespondActivityTaskCanceledByIdRequest{
 				Namespace:  p.Namespace,
-				WorkflowID: response.WorkflowExecution.GetWorkflowId(),
-				RunID:      response.WorkflowExecution.GetRunId(),
-				ActivityID: response.GetActivityId(),
+				WorkflowId: response.WorkflowExecution.GetWorkflowId(),
+				RunId:      response.WorkflowExecution.GetRunId(),
+				ActivityId: response.GetActivityId(),
 				Details:    []byte("details"),
 				Identity:   p.Identity,
 			})
@@ -451,9 +451,9 @@ retry:
 		if err2 != nil {
 			_, err := p.Engine.RespondActivityTaskFailedById(NewContext(), &workflowservice.RespondActivityTaskFailedByIdRequest{
 				Namespace:  p.Namespace,
-				WorkflowID: response.WorkflowExecution.GetWorkflowId(),
-				RunID:      response.WorkflowExecution.GetRunId(),
-				ActivityID: response.GetActivityId(),
+				WorkflowId: response.WorkflowExecution.GetWorkflowId(),
+				RunId:      response.WorkflowExecution.GetRunId(),
+				ActivityId: response.GetActivityId(),
 				Reason:     err2.Error(),
 				Details:    []byte(err2.Error()),
 				Identity:   p.Identity,
@@ -463,9 +463,9 @@ retry:
 
 		_, err := p.Engine.RespondActivityTaskCompletedById(NewContext(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
 			Namespace:  p.Namespace,
-			WorkflowID: response.WorkflowExecution.GetWorkflowId(),
-			RunID:      response.WorkflowExecution.GetRunId(),
-			ActivityID: response.GetActivityId(),
+			WorkflowId: response.WorkflowExecution.GetWorkflowId(),
+			RunId:      response.WorkflowExecution.GetRunId(),
+			ActivityId: response.GetActivityId(),
 			Identity:   p.Identity,
 			Result:     result,
 		})

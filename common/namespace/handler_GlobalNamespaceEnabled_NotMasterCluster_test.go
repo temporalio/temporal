@@ -142,15 +142,15 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 	})
 	s.NoError(err)
 
-	s.NotEmpty(resp.NamespaceInfo.GetUuid())
-	resp.NamespaceInfo.Uuid = ""
+	s.NotEmpty(resp.NamespaceInfo.GetId())
+	resp.NamespaceInfo.Id = ""
 	s.Equal(&commonproto.NamespaceInfo{
 		Name:        namespace,
 		Status:      enums.NamespaceStatusRegistered,
 		Description: "",
 		OwnerEmail:  "",
 		Data:        map[string]string{},
-		Uuid:        "",
+		Id:          "",
 	}, resp.NamespaceInfo)
 	s.Equal(&commonproto.NamespaceConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
@@ -210,15 +210,15 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 	})
 	s.NoError(err)
 
-	s.NotEmpty(resp.NamespaceInfo.GetUuid())
-	resp.NamespaceInfo.Uuid = ""
+	s.NotEmpty(resp.NamespaceInfo.GetId())
+	resp.NamespaceInfo.Id = ""
 	s.Equal(&commonproto.NamespaceInfo{
 		Name:        namespace,
 		Status:      enums.NamespaceStatusRegistered,
 		Description: description,
 		OwnerEmail:  email,
 		Data:        data,
-		Uuid:        "",
+		Id:          "",
 	}, resp.NamespaceInfo)
 	s.Equal(&commonproto.NamespaceConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
@@ -268,15 +268,15 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 
 	fnTest := func(info *commonproto.NamespaceInfo, config *commonproto.NamespaceConfiguration,
 		replicationConfig *commonproto.NamespaceReplicationConfiguration, isGlobalNamespace bool, failoverVersion int64) {
-		s.NotEmpty(info.GetUuid())
-		info.Uuid = ""
+		s.NotEmpty(info.GetId())
+		info.Id = ""
 		s.Equal(&commonproto.NamespaceInfo{
 			Name:        namespace,
 			Status:      enums.NamespaceStatusRegistered,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
-			Uuid:        "",
+			Id:          "",
 		}, info)
 		s.Equal(&commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
@@ -345,15 +345,15 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 
 	fnTest := func(info *commonproto.NamespaceInfo, config *commonproto.NamespaceConfiguration,
 		replicationConfig *commonproto.NamespaceReplicationConfiguration, isGlobalNamespace bool, failoverVersion int64) {
-		s.NotEmpty(info.GetUuid())
-		info.Uuid = ""
+		s.NotEmpty(info.GetId())
+		info.Id = ""
 		s.Equal(&commonproto.NamespaceInfo{
 			Name:        namespace,
 			Status:      enums.NamespaceStatusRegistered,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
-			Uuid:        "",
+			Id:          "",
 		}, info)
 		s.Equal(&commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
@@ -677,15 +677,15 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 
 	fnTest := func(info *commonproto.NamespaceInfo, config *commonproto.NamespaceConfiguration,
 		replicationConfig *commonproto.NamespaceReplicationConfiguration, isGlobalNamespace bool, failoverVersion int64) {
-		s.NotEmpty(info.GetUuid())
-		info.Uuid = ""
+		s.NotEmpty(info.GetId())
+		info.Id = ""
 		s.Equal(&commonproto.NamespaceInfo{
 			Name:        namespace,
 			Status:      enums.NamespaceStatusRegistered,
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
-			Uuid:        "",
+			Id:          "",
 		}, info)
 		s.Equal(&commonproto.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
