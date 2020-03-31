@@ -1461,16 +1461,16 @@ func isMessageIDConflictError(err error) bool {
 
 // GetReplicationMessages is a utility method to get messages from the queue
 func (s *TestBase) GetReplicationMessages(
-	lastMessageID int,
+	lastMessageID int64,
 	maxCount int,
-) ([]*replicator.ReplicationTask, int, error) {
+) ([]*replicator.ReplicationTask, int64, error) {
 
 	return s.DomainReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
 }
 
 // UpdateAckLevel updates replication queue ack level
 func (s *TestBase) UpdateAckLevel(
-	lastProcessedMessageID int,
+	lastProcessedMessageID int64,
 	clusterName string,
 ) error {
 
@@ -1478,7 +1478,7 @@ func (s *TestBase) UpdateAckLevel(
 }
 
 // GetAckLevels returns replication queue ack levels
-func (s *TestBase) GetAckLevels() (map[string]int, error) {
+func (s *TestBase) GetAckLevels() (map[string]int64, error) {
 	return s.DomainReplicationQueue.GetAckLevels()
 }
 
@@ -1503,8 +1503,8 @@ func (s *TestBase) PublishToDomainDLQ(
 
 // GetMessagesFromDomainDLQ is a utility method to get messages from the domain DLQ
 func (s *TestBase) GetMessagesFromDomainDLQ(
-	firstMessageID int,
-	lastMessageID int,
+	firstMessageID int64,
+	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
 ) ([]*replicator.ReplicationTask, []byte, error) {
@@ -1519,20 +1519,20 @@ func (s *TestBase) GetMessagesFromDomainDLQ(
 
 // UpdateDomainDLQAckLevel updates domain dlq ack level
 func (s *TestBase) UpdateDomainDLQAckLevel(
-	lastProcessedMessageID int,
+	lastProcessedMessageID int64,
 ) error {
 
 	return s.DomainReplicationQueue.UpdateDLQAckLevel(lastProcessedMessageID)
 }
 
 // GetDomainDLQAckLevel returns domain dlq ack level
-func (s *TestBase) GetDomainDLQAckLevel() (int, error) {
+func (s *TestBase) GetDomainDLQAckLevel() (int64, error) {
 	return s.DomainReplicationQueue.GetDLQAckLevel()
 }
 
 // DeleteMessageFromDomainDLQ deletes one message from domain DLQ
 func (s *TestBase) DeleteMessageFromDomainDLQ(
-	messageID int,
+	messageID int64,
 ) error {
 
 	return s.DomainReplicationQueue.DeleteMessageFromDLQ(messageID)
@@ -1540,8 +1540,8 @@ func (s *TestBase) DeleteMessageFromDomainDLQ(
 
 // RangeDeleteMessagesFromDomainDLQ deletes messages from domain DLQ
 func (s *TestBase) RangeDeleteMessagesFromDomainDLQ(
-	firstMessageID int,
-	lastMessageID int,
+	firstMessageID int64,
+	lastMessageID int64,
 ) error {
 
 	return s.DomainReplicationQueue.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)

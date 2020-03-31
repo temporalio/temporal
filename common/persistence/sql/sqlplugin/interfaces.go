@@ -484,7 +484,7 @@ type (
 	// QueueRow represents a row in queue table
 	QueueRow struct {
 		QueueType      persistence.QueueType
-		MessageID      int
+		MessageID      int64
 		MessagePayload []byte
 	}
 
@@ -691,15 +691,15 @@ type (
 		DeleteFromVisibility(filter *VisibilityFilter) (sql.Result, error)
 
 		InsertIntoQueue(row *QueueRow) (sql.Result, error)
-		GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int, error)
-		GetMessagesFromQueue(queueType persistence.QueueType, lastMessageID, maxRows int) ([]QueueRow, error)
-		GetMessagesBetween(queueType persistence.QueueType, firstMessageID int, lastMessageID int, maxRows int) ([]QueueRow, error)
-		DeleteMessagesBefore(queueType persistence.QueueType, messageID int) (sql.Result, error)
-		RangeDeleteMessages(queueType persistence.QueueType, exclusiveBeginMessageID int, inclusiveEndMessageID int) (sql.Result, error)
-		DeleteMessage(queueType persistence.QueueType, messageID int) (sql.Result, error)
-		InsertAckLevel(queueType persistence.QueueType, messageID int, clusterName string) error
-		UpdateAckLevels(queueType persistence.QueueType, clusterAckLevels map[string]int) error
-		GetAckLevels(queueType persistence.QueueType, forUpdate bool) (map[string]int, error)
+		GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int64, error)
+		GetMessagesFromQueue(queueType persistence.QueueType, lastMessageID int64, maxRows int) ([]QueueRow, error)
+		GetMessagesBetween(queueType persistence.QueueType, firstMessageID int64, lastMessageID int64, maxRows int) ([]QueueRow, error)
+		DeleteMessagesBefore(queueType persistence.QueueType, messageID int64) (sql.Result, error)
+		RangeDeleteMessages(queueType persistence.QueueType, exclusiveBeginMessageID int64, inclusiveEndMessageID int64) (sql.Result, error)
+		DeleteMessage(queueType persistence.QueueType, messageID int64) (sql.Result, error)
+		InsertAckLevel(queueType persistence.QueueType, messageID int64, clusterName string) error
+		UpdateAckLevels(queueType persistence.QueueType, clusterAckLevels map[string]int64) error
+		GetAckLevels(queueType persistence.QueueType, forUpdate bool) (map[string]int64, error)
 	}
 
 	// adminCRUD defines admin operations for CLI and test suites

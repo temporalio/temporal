@@ -56,7 +56,7 @@ import (
 
 const (
 	getDomainReplicationMessageBatchSize = 100
-	defaultLastMessageID                 = -1
+	defaultLastMessageID                 = int64(-1)
 )
 
 var _ workflowserviceserver.Interface = (*WorkflowHandler)(nil)

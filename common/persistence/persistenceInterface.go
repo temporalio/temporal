@@ -140,21 +140,21 @@ type (
 	Queue interface {
 		Closeable
 		EnqueueMessage(messagePayload []byte) error
-		ReadMessages(lastMessageID int, maxCount int) ([]*QueueMessage, error)
-		DeleteMessagesBefore(messageID int) error
-		UpdateAckLevel(messageID int, clusterName string) error
-		GetAckLevels() (map[string]int, error)
-		EnqueueMessageToDLQ(messagePayload []byte) (int, error)
-		ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
-		DeleteMessageFromDLQ(messageID int) error
-		RangeDeleteMessagesFromDLQ(firstMessageID int, lastMessageID int) error
-		UpdateDLQAckLevel(messageID int, clusterName string) error
-		GetDLQAckLevels() (map[string]int, error)
+		ReadMessages(lastMessageID int64, maxCount int) ([]*QueueMessage, error)
+		DeleteMessagesBefore(messageID int64) error
+		UpdateAckLevel(messageID int64, clusterName string) error
+		GetAckLevels() (map[string]int64, error)
+		EnqueueMessageToDLQ(messagePayload []byte) (int64, error)
+		ReadMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
+		DeleteMessageFromDLQ(messageID int64) error
+		RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error
+		UpdateDLQAckLevel(messageID int64, clusterName string) error
+		GetDLQAckLevels() (map[string]int64, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
 	QueueMessage struct {
-		ID        int       `json:"message_id"`
+		ID        int64     `json:"message_id"`
 		QueueType QueueType `json:"queue_type"`
 		Payload   []byte    `json:"message_payload"`
 	}

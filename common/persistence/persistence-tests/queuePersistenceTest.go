@@ -99,7 +99,7 @@ func (s *QueuePersistenceSuite) TestDomainReplicationQueue() {
 	result, lastRetrievedMessageID, err := s.GetReplicationMessages(-1, numMessages)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Len(result, numMessages)
-	s.Equal(numMessages-1, lastRetrievedMessageID)
+	s.Equal(int64(numMessages-1), lastRetrievedMessageID)
 }
 
 // TestQueueMetadataOperations tests queue metadata operations
@@ -114,7 +114,7 @@ func (s *QueuePersistenceSuite) TestQueueMetadataOperations() {
 	clusterAckLevels, err = s.GetAckLevels()
 	s.Require().NoError(err)
 	s.Assert().Len(clusterAckLevels, 1)
-	s.Assert().Equal(10, clusterAckLevels["test1"])
+	s.Assert().Equal(int64(10), clusterAckLevels["test1"])
 
 	err = s.UpdateAckLevel(20, "test1")
 	s.Require().NoError(err)
@@ -122,7 +122,7 @@ func (s *QueuePersistenceSuite) TestQueueMetadataOperations() {
 	clusterAckLevels, err = s.GetAckLevels()
 	s.Require().NoError(err)
 	s.Assert().Len(clusterAckLevels, 1)
-	s.Assert().Equal(20, clusterAckLevels["test1"])
+	s.Assert().Equal(int64(20), clusterAckLevels["test1"])
 
 	err = s.UpdateAckLevel(25, "test2")
 	s.Require().NoError(err)
@@ -130,12 +130,13 @@ func (s *QueuePersistenceSuite) TestQueueMetadataOperations() {
 	clusterAckLevels, err = s.GetAckLevels()
 	s.Require().NoError(err)
 	s.Assert().Len(clusterAckLevels, 2)
-	s.Assert().Equal(20, clusterAckLevels["test1"])
-	s.Assert().Equal(25, clusterAckLevels["test2"])
+	s.Assert().Equal(int64(20), clusterAckLevels["test1"])
+	s.Assert().Equal(int64(25), clusterAckLevels["test2"])
 }
 
 // TestDomainReplicationDLQ tests domain DLQ operations
 func (s *QueuePersistenceSuite) TestDomainReplicationDLQ() {
+	maxMessageID := int64(100)
 	numMessages := 100
 	concurrentSenders := 10
 
@@ -169,25 +170,28 @@ func (s *QueuePersistenceSuite) TestDomainReplicationDLQ() {
 
 	wg.Wait()
 
-	result1, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages/2, nil)
+	result1, token, err := s.GetMessagesFromDomainDLQ(-1, maxMessageID, numMessages/2, nil)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.NotNil(token)
-	result2, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages, token)
+	result2, token, err := s.GetMessagesFromDomainDLQ(-1, maxMessageID, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result1)+len(result2), numMessages)
+	_, _, err = s.GetMessagesFromDomainDLQ(-1, 1<<63-1, numMessages, nil)
+	s.NoError(err, "GetReplicationMessages failed.")
+	s.Equal(len(token), 0)
 
 	lastMessageID := result2[len(result2)-1].SourceTaskId
-	err = s.DeleteMessageFromDomainDLQ(int(*lastMessageID))
+	err = s.DeleteMessageFromDomainDLQ(*lastMessageID)
 	s.NoError(err)
-	result3, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages, token)
+	result3, token, err := s.GetMessagesFromDomainDLQ(-1, maxMessageID, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result3), numMessages-1)
 
-	err = s.RangeDeleteMessagesFromDomainDLQ(-1, int(*lastMessageID))
+	err = s.RangeDeleteMessagesFromDomainDLQ(-1, *lastMessageID)
 	s.NoError(err)
-	result4, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages, token)
+	result4, token, err := s.GetMessagesFromDomainDLQ(-1, maxMessageID, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result4), 0)
@@ -197,19 +201,19 @@ func (s *QueuePersistenceSuite) TestDomainReplicationDLQ() {
 func (s *QueuePersistenceSuite) TestDomainDLQMetadataOperations() {
 	ackLevel, err := s.GetDomainDLQAckLevel()
 	s.Require().NoError(err)
-	s.Equal(-1, ackLevel)
+	s.Equal(int64(-1), ackLevel)
 
 	err = s.UpdateDomainDLQAckLevel(10)
 	s.NoError(err)
 
 	ackLevel, err = s.GetDomainDLQAckLevel()
 	s.Require().NoError(err)
-	s.Equal(10, ackLevel)
+	s.Equal(int64(10), ackLevel)
 
 	err = s.UpdateDomainDLQAckLevel(1)
 	s.NoError(err)
 
 	ackLevel, err = s.GetDomainDLQAckLevel()
 	s.Require().NoError(err)
-	s.Equal(10, ackLevel)
+	s.Equal(int64(10), ackLevel)
 }

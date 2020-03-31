@@ -62,7 +62,7 @@ type (
 	// of the CAS operation). Consider moving this to persistence interface if we end up having
 	// more shared fields.
 	queueMetadata struct {
-		clusterAckLevels map[string]int
+		clusterAckLevels map[string]int64
 		// version is used for CAS operation.
 		version int
 	}
@@ -138,7 +138,7 @@ func (q *cassandraQueue) EnqueueMessage(
 
 func (q *cassandraQueue) EnqueueMessageToDLQ(
 	messagePayload []byte,
-) (int, error) {
+) (int64, error) {
 	// Use negative queue type as the dlq type
 	lastMessageID, err := q.getLastMessageID(q.getDLQTypeFromQueueType())
 	if err != nil {
@@ -151,9 +151,9 @@ func (q *cassandraQueue) EnqueueMessageToDLQ(
 
 func (q *cassandraQueue) tryEnqueue(
 	queueType persistence.QueueType,
-	messageID int,
+	messageID int64,
 	messagePayload []byte,
-) (int, error) {
+) (int64, error) {
 	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, messagePayload)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
@@ -177,7 +177,7 @@ func (q *cassandraQueue) tryEnqueue(
 
 func (q *cassandraQueue) getLastMessageID(
 	queueType persistence.QueueType,
-) (int, error) {
+) (int64, error) {
 
 	query := q.session.Query(templateGetLastMessageIDQuery, queueType)
 	result := make(map[string]interface{})
@@ -196,11 +196,11 @@ func (q *cassandraQueue) getLastMessageID(
 		}
 	}
 
-	return result["message_id"].(int), nil
+	return result["message_id"].(int64), nil
 }
 
 func (q *cassandraQueue) ReadMessages(
-	lastMessageID int,
+	lastMessageID int64,
 	maxCount int,
 ) ([]*persistence.QueueMessage, error) {
 	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
@@ -236,8 +236,8 @@ func (q *cassandraQueue) ReadMessages(
 }
 
 func (q *cassandraQueue) ReadMessagesFromDLQ(
-	firstMessageID int,
-	lastMessageID int,
+	firstMessageID int64,
+	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
 ) ([]*persistence.QueueMessage, []byte, error) {
@@ -286,13 +286,13 @@ func getMessagePayload(
 
 func getMessageID(
 	message map[string]interface{},
-) int {
+) int64 {
 
-	return message["message_id"].(int)
+	return message["message_id"].(int64)
 }
 
 func (q *cassandraQueue) DeleteMessagesBefore(
-	messageID int,
+	messageID int64,
 ) error {
 
 	query := q.session.Query(templateDeleteMessagesQuery, q.queueType, messageID)
@@ -306,7 +306,7 @@ func (q *cassandraQueue) DeleteMessagesBefore(
 }
 
 func (q *cassandraQueue) DeleteMessageFromDLQ(
-	messageID int,
+	messageID int64,
 ) error {
 
 	// Use negative queue type as the dlq type
@@ -321,8 +321,8 @@ func (q *cassandraQueue) DeleteMessageFromDLQ(
 }
 
 func (q *cassandraQueue) RangeDeleteMessagesFromDLQ(
-	firstMessageID int,
-	lastMessageID int,
+	firstMessageID int64,
+	lastMessageID int64,
 ) error {
 
 	// Use negative queue type as the dlq type
@@ -341,7 +341,7 @@ func (q *cassandraQueue) insertInitialQueueMetadataRecord(
 ) error {
 
 	version := 0
-	clusterAckLevels := map[string]int{}
+	clusterAckLevels := map[string]int64{}
 	query := q.session.Query(templateInsertQueueMetadataQuery, queueType, clusterAckLevels, version)
 	_, err := query.ScanCAS()
 	if err != nil {
@@ -352,14 +352,14 @@ func (q *cassandraQueue) insertInitialQueueMetadataRecord(
 }
 
 func (q *cassandraQueue) UpdateAckLevel(
-	messageID int,
+	messageID int64,
 	clusterName string,
 ) error {
 
 	return q.updateAckLevel(messageID, clusterName, q.queueType)
 }
 
-func (q *cassandraQueue) GetAckLevels() (map[string]int, error) {
+func (q *cassandraQueue) GetAckLevels() (map[string]int64, error) {
 	queueMetadata, err := q.getQueueMetadata(q.queueType)
 	if err != nil {
 		return nil, err
@@ -369,14 +369,14 @@ func (q *cassandraQueue) GetAckLevels() (map[string]int, error) {
 }
 
 func (q *cassandraQueue) UpdateDLQAckLevel(
-	messageID int,
+	messageID int64,
 	clusterName string,
 ) error {
 
 	return q.updateAckLevel(messageID, clusterName, q.getDLQTypeFromQueueType())
 }
 
-func (q *cassandraQueue) GetDLQAckLevels() (map[string]int, error) {
+func (q *cassandraQueue) GetDLQAckLevels() (map[string]int64, error) {
 
 	// Use negative queue type as the dlq type
 	queueMetadata, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
@@ -392,7 +392,7 @@ func (q *cassandraQueue) getQueueMetadata(
 ) (*queueMetadata, error) {
 
 	query := q.session.Query(templateGetQueueMetadataQuery, queueType)
-	var ackLevels map[string]int
+	var ackLevels map[string]int64
 	var version int
 	err := query.Scan(&ackLevels, &version)
 	if err != nil {
@@ -405,7 +405,7 @@ func (q *cassandraQueue) getQueueMetadata(
 
 	// if record exist but ackLevels is empty, we initialize the map
 	if ackLevels == nil {
-		ackLevels = make(map[string]int)
+		ackLevels = make(map[string]int64)
 	}
 
 	return &queueMetadata{clusterAckLevels: ackLevels, version: version}, nil
@@ -442,7 +442,7 @@ func (q *cassandraQueue) getDLQTypeFromQueueType() persistence.QueueType {
 }
 
 func (q *cassandraQueue) updateAckLevel(
-	messageID int,
+	messageID int64,
 	clusterName string,
 	queueType persistence.QueueType,
 ) error {

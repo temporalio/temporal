@@ -59,7 +59,7 @@ func (m *MockDLQMessageHandler) EXPECT() *MockDLQMessageHandlerMockRecorder {
 }
 
 // Read mocks base method
-func (m *MockDLQMessageHandler) Read(lastMessageID, pageSize int, pageToken []byte) ([]*replicator.ReplicationTask, []byte, error) {
+func (m *MockDLQMessageHandler) Read(lastMessageID int64, pageSize int, pageToken []byte) ([]*replicator.ReplicationTask, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", lastMessageID, pageSize, pageToken)
 	ret0, _ := ret[0].([]*replicator.ReplicationTask)
@@ -75,7 +75,7 @@ func (mr *MockDLQMessageHandlerMockRecorder) Read(lastMessageID, pageSize, pageT
 }
 
 // Purge mocks base method
-func (m *MockDLQMessageHandler) Purge(lastMessageID int) error {
+func (m *MockDLQMessageHandler) Purge(lastMessageID int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Purge", lastMessageID)
 	ret0, _ := ret[0].(error)
@@ -89,7 +89,7 @@ func (mr *MockDLQMessageHandlerMockRecorder) Purge(lastMessageID interface{}) *g
 }
 
 // Merge mocks base method
-func (m *MockDLQMessageHandler) Merge(lastMessageID, pageSize int, pageToken []byte) ([]byte, error) {
+func (m *MockDLQMessageHandler) Merge(lastMessageID int64, pageSize int, pageToken []byte) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Merge", lastMessageID, pageSize, pageToken)
 	ret0, _ := ret[0].([]byte)
