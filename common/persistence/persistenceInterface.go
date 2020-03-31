@@ -708,7 +708,7 @@ func NewDataBlob(data []byte, encodingType common.EncodingType) *serialization.D
 	if data == nil || len(data) == 0 {
 		return nil
 	}
-	if encodingType != common.EncodingTypeThriftRW && data[0] == 'Y' {
+	if encodingType != common.EncodingTypeProto3 && data[0] == 'Y' {
 		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingType))
 	}
 	return &serialization.DataBlob{
@@ -733,13 +733,11 @@ func NewDataBlobFromProto(blob *commonproto.DataBlob) *serialization.DataBlob {
 			Encoding: common.EncodingTypeJSON,
 			Data:     blob.Data,
 		}
-	case enums.EncodingTypeThriftRW:
+	case enums.EncodingTypeProto3:
 		return &serialization.DataBlob{
-			Encoding: common.EncodingTypeThriftRW,
+			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,
 		}
-	case enums.EncodingTypeProto3:
-		panic("EncodingTypeProto is not supported")
 	default:
 		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))
 	}

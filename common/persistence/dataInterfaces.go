@@ -36,7 +36,7 @@ import (
 
 	"github.com/temporalio/temporal/common/primitives"
 
-	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/temporalio/temporal/common/checksum"
 
@@ -251,7 +251,7 @@ type (
 
 	// ShardInfoWithFailover describes a shard
 	ShardInfoWithFailover struct {
-		*pblobs.ShardInfo
+		*persistenceblobs.ShardInfo
 		TransferFailoverLevels map[string]TransferFailoverLevel // uuid -> TransferFailoverLevel
 		TimerFailoverLevels    map[string]TimerFailoverLevel    // uuid -> TimerFailoverLevel
 	}
@@ -351,7 +351,7 @@ type (
 
 	// ReplicationTaskInfoWrapper describes a replication task.
 	ReplicationTaskInfoWrapper struct {
-		*pblobs.ReplicationTaskInfo
+		*persistenceblobs.ReplicationTaskInfo
 	}
 
 	// Task is the generic interface for workflow tasks
@@ -561,10 +561,10 @@ type (
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
 		ActivityInfos       map[int64]*ActivityInfo
-		TimerInfos          map[string]*pblobs.TimerInfo
+		TimerInfos          map[string]*persistenceblobs.TimerInfo
 		ChildExecutionInfos map[int64]*ChildExecutionInfo
-		RequestCancelInfos  map[int64]*pblobs.RequestCancelInfo
-		SignalInfos         map[int64]*pblobs.SignalInfo
+		RequestCancelInfos  map[int64]*persistenceblobs.RequestCancelInfo
+		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
 		ExecutionStats      *ExecutionStats
@@ -632,7 +632,7 @@ type (
 
 	// CreateShardRequest is used to create a shard in executions table
 	CreateShardRequest struct {
-		ShardInfo *pblobs.ShardInfo
+		ShardInfo *persistenceblobs.ShardInfo
 	}
 
 	// GetShardRequest is used to get shard information
@@ -642,12 +642,12 @@ type (
 
 	// GetShardResponse is the response to GetShard
 	GetShardResponse struct {
-		ShardInfo *pblobs.ShardInfo
+		ShardInfo *persistenceblobs.ShardInfo
 	}
 
 	// UpdateShardRequest  is used to update shard information
 	UpdateShardRequest struct {
-		ShardInfo       *pblobs.ShardInfo
+		ShardInfo       *persistenceblobs.ShardInfo
 		PreviousRangeID int64
 	}
 
@@ -776,13 +776,13 @@ type (
 
 		UpsertActivityInfos       []*ActivityInfo
 		DeleteActivityInfos       []int64
-		UpsertTimerInfos          []*pblobs.TimerInfo
+		UpsertTimerInfos          []*persistenceblobs.TimerInfo
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
-		UpsertRequestCancelInfos  []*pblobs.RequestCancelInfo
+		UpsertRequestCancelInfos  []*persistenceblobs.RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
-		UpsertSignalInfos         []*pblobs.SignalInfo
+		UpsertSignalInfos         []*persistenceblobs.SignalInfo
 		DeleteSignalInfo          *int64
 		UpsertSignalRequestedIDs  []string
 		DeleteSignalRequestedID   string
@@ -805,10 +805,10 @@ type (
 		VersionHistories *VersionHistories
 
 		ActivityInfos       []*ActivityInfo
-		TimerInfos          []*pblobs.TimerInfo
+		TimerInfos          []*persistenceblobs.TimerInfo
 		ChildExecutionInfos []*ChildExecutionInfo
-		RequestCancelInfos  []*pblobs.RequestCancelInfo
-		SignalInfos         []*pblobs.SignalInfo
+		RequestCancelInfos  []*persistenceblobs.RequestCancelInfo
+		SignalInfos         []*persistenceblobs.SignalInfo
 		SignalRequestedIDs  []string
 
 		TransferTasks    []Task
@@ -851,7 +851,7 @@ type (
 
 	// GetTransferTasksResponse is the response to GetTransferTasksRequest
 	GetTransferTasksResponse struct {
-		Tasks         []*pblobs.TransferTaskInfo
+		Tasks         []*persistenceblobs.TransferTaskInfo
 		NextPageToken []byte
 	}
 
@@ -865,7 +865,7 @@ type (
 
 	// GetReplicationTasksResponse is the response to GetReplicationTask
 	GetReplicationTasksResponse struct {
-		Tasks         []*pblobs.ReplicationTaskInfo
+		Tasks         []*persistenceblobs.ReplicationTaskInfo
 		NextPageToken []byte
 	}
 
@@ -893,7 +893,7 @@ type (
 	// PutReplicationTaskToDLQRequest is used to put a replication task to dlq
 	PutReplicationTaskToDLQRequest struct {
 		SourceClusterName string
-		TaskInfo          *pblobs.ReplicationTaskInfo
+		TaskInfo          *persistenceblobs.ReplicationTaskInfo
 	}
 
 	// GetReplicationTasksFromDLQRequest is used to get replication tasks from dlq
@@ -947,7 +947,7 @@ type (
 	// UpdateTaskListRequest is used to update task list implementation information
 	UpdateTaskListRequest struct {
 		RangeID      int64
-		TaskListInfo *pblobs.TaskListInfo
+		TaskListInfo *persistenceblobs.TaskListInfo
 	}
 
 	// UpdateTaskListResponse is the response to UpdateTaskList
@@ -975,7 +975,7 @@ type (
 	// CreateTasksRequest is used to create a new task for a workflow execution
 	CreateTasksRequest struct {
 		TaskListInfo *PersistedTaskListInfo
-		Tasks        []*pblobs.AllocatedTaskInfo
+		Tasks        []*persistenceblobs.AllocatedTaskInfo
 	}
 
 	// CreateTasksResponse is the response to CreateTasksRequest
@@ -983,7 +983,7 @@ type (
 	}
 
 	PersistedTaskListInfo struct {
-		Data    *pblobs.TaskListInfo
+		Data    *persistenceblobs.TaskListInfo
 		RangeID int64
 	}
 
@@ -999,7 +999,7 @@ type (
 
 	// GetTasksResponse is the response to GetTasksRequests
 	GetTasksResponse struct {
-		Tasks []*pblobs.AllocatedTaskInfo
+		Tasks []*persistenceblobs.AllocatedTaskInfo
 	}
 
 	// CompleteTaskRequest is used to complete a task
@@ -1028,7 +1028,7 @@ type (
 
 	// GetTimerIndexTasksResponse is the response for GetTimerIndexTasks
 	GetTimerIndexTasksResponse struct {
-		Timers        []*pblobs.TimerTaskInfo
+		Timers        []*persistenceblobs.TimerTaskInfo
 		NextPageToken []byte
 	}
 
@@ -1331,7 +1331,7 @@ type (
 	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
 	GetHistoryTreeResponse struct {
 		// all branches of a tree
-		Branches []*pblobs.HistoryBranch
+		Branches []*persistenceblobs.HistoryBranch
 	}
 
 	// GetAllHistoryTreeBranchesRequest is a request of GetAllHistoryTreeBranches
@@ -1353,19 +1353,19 @@ type (
 	// InitializeImmutableClusterMetadataRequest is a request of InitializeImmutableClusterMetadata
 	// These values can only be set a single time upon cluster initialization.
 	InitializeImmutableClusterMetadataRequest struct {
-		pblobs.ImmutableClusterMetadata
+		persistenceblobs.ImmutableClusterMetadata
 	}
 
 	// InitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
 	InitializeImmutableClusterMetadataResponse struct {
-		PersistedImmutableData pblobs.ImmutableClusterMetadata
+		PersistedImmutableData persistenceblobs.ImmutableClusterMetadata
 		RequestApplied         bool
 	}
 
 	// GetImmutableClusterMetadataResponse is the response to GetImmutableClusterMetadata
 	// These values are set a single time upon cluster initialization.
 	GetImmutableClusterMetadataResponse struct {
-		pblobs.ImmutableClusterMetadata
+		persistenceblobs.ImmutableClusterMetadata
 	}
 
 	// GetClusterMembersRequest is the response to GetClusterMembers
@@ -2270,10 +2270,10 @@ func UnixNanoToDBTimestamp(timestamp int64) int64 {
 // NewHistoryBranchToken return a new branch token
 func NewHistoryBranchToken(treeID []byte) ([]byte, error) {
 	branchID := uuid.NewRandom()
-	bi := &pblobs.HistoryBranch{
+	bi := &persistenceblobs.HistoryBranch{
 		TreeId:    treeID,
 		BranchId:  branchID,
-		Ancestors: []*pblobs.HistoryBranchRange{},
+		Ancestors: []*persistenceblobs.HistoryBranchRange{},
 	}
 	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {
@@ -2285,10 +2285,10 @@ func NewHistoryBranchToken(treeID []byte) ([]byte, error) {
 
 // NewHistoryBranchTokenByBranchID return a new branch token with treeID/branchID
 func NewHistoryBranchTokenByBranchID(treeID, branchID []byte) ([]byte, error) {
-	bi := &pblobs.HistoryBranch{
+	bi := &persistenceblobs.HistoryBranch{
 		TreeId:    treeID,
 		BranchId:  branchID,
-		Ancestors: []*pblobs.HistoryBranchRange{},
+		Ancestors: []*persistenceblobs.HistoryBranchRange{},
 	}
 	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {

@@ -20,41 +20,10 @@
 
 package codec
 
-import (
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.uber.org/thriftrw/wire"
-)
-
 type (
-	// BinaryEncoder represent the encoder which can serialize or deserialize object
-	BinaryEncoder interface {
-		Encode(obj ThriftObject) ([]byte, error)
-		Decode(payload []byte, val ThriftObject) error
-	}
-
-	// ThriftObject represents a thrift object
-	ThriftObject interface {
-		FromWire(w wire.Value) error
-		ToWire() (wire.Value, error)
-	}
-
 	// ProtoObject represents a proto object.
 	ProtoObject interface {
 		Marshal() (dAtA []byte, err error)
 		Unmarshal(dAtA []byte) error
 	}
-)
-
-const (
-	// used by thriftrw binary codec
-	preambleVersion0 byte = 0x59
-)
-
-var (
-	// MissingBinaryEncodingVersion indicate that the encoding version is missing
-	MissingBinaryEncodingVersion = serviceerror.NewInvalidArgument("Missing binary encoding version.")
-	// InvalidBinaryEncodingVersion indicate that the encoding version is incorrect
-	InvalidBinaryEncodingVersion = serviceerror.NewInvalidArgument("Invalid binary encoding version.")
-	// MsgPayloadNotThriftEncoded indicate message is not thrift encoded
-	MsgPayloadNotThriftEncoded = serviceerror.NewInvalidArgument("Message payload is not thrift encoded.")
 )

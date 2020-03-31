@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -97,7 +97,7 @@ func (s *engine3Suite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&p.ShardInfoWithFailover{ShardInfo: &pblobs.ShardInfo{
+		&p.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{
 			ShardId:          0,
 			RangeId:          1,
 			TransferAckLevel: 0,

@@ -25,20 +25,12 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	"go.uber.org/thriftrw/wire"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 )
-
-// thriftRWType represents an thrift auto generated type
-type thriftRWType interface {
-	ToWire() (wire.Value, error)
-	FromWire(w wire.Value) error
-}
 
 type ProtoMarshal interface {
 	Marshal() ([]byte, error)
@@ -275,9 +267,9 @@ func (d *DataBlob) ToProto() *commonproto.DataBlob {
 			EncodingType: enums.EncodingTypeJSON,
 			Data:         d.Data,
 		}
-	case common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		return &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         d.Data,
 		}
 	default:
@@ -294,8 +286,8 @@ func (d *DataBlob) GetEncoding() common.EncodingType {
 		return common.EncodingTypeGob
 	case common.EncodingTypeJSON:
 		return common.EncodingTypeJSON
-	case common.EncodingTypeThriftRW:
-		return common.EncodingTypeThriftRW
+	case common.EncodingTypeProto3:
+		return common.EncodingTypeProto3
 	case common.EncodingTypeEmpty:
 		return common.EncodingTypeEmpty
 	default:

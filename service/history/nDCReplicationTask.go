@@ -374,7 +374,7 @@ func deserializeBlob(
 	}
 
 	events, err := historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
-		Encoding: common.EncodingTypeThriftRW,
+		Encoding: common.EncodingTypeProto3,
 		Data:     blob.Data,
 	})
 

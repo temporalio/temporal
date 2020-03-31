@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
@@ -2067,14 +2067,14 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	s.NoError(err)
 }
 
-func (s *ExecutionManagerSuite) validateTransferTaskHighLevel(task1 *pblobs.TransferTaskInfo, taskType int32, namespaceID string, workflowExecution commonproto.WorkflowExecution) {
+func (s *ExecutionManagerSuite) validateTransferTaskHighLevel(task1 *persistenceblobs.TransferTaskInfo, taskType int32, namespaceID string, workflowExecution commonproto.WorkflowExecution) {
 	s.EqualValues(taskType, task1.TaskType)
 	s.Equal(namespaceID, primitives.UUID(task1.GetNamespaceId()).String())
 	s.Equal(workflowExecution.GetWorkflowId(), task1.GetWorkflowId())
 	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task1.GetRunId()).String())
 }
 
-func (s *ExecutionManagerSuite) validateTransferTaskTargetInfo(task2 *pblobs.TransferTaskInfo, targetNamespaceID string, targetWorkflowID string, targetRunID string) {
+func (s *ExecutionManagerSuite) validateTransferTaskTargetInfo(task2 *persistenceblobs.TransferTaskInfo, targetNamespaceID string, targetWorkflowID string, targetRunID string) {
 	s.Equal(targetNamespaceID, primitives.UUID(task2.GetTargetNamespaceId()).String())
 	s.Equal(targetWorkflowID, task2.GetTargetWorkflowId())
 	s.Equal(targetRunID, primitives.UUID(task2.GetTargetRunId()).String())
@@ -2708,7 +2708,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 	updatedInfo.LastProcessedEvent = int64(2)
 	currentTime := types.TimestampNow()
 	timerID := "id_1"
-	timerInfos := []*pblobs.TimerInfo{{
+	timerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    3345,
 		TimerId:    timerID,
 		ExpiryTime: currentTime,
@@ -2827,13 +2827,13 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateRequestCancel() {
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	requestCancelInfo := &pblobs.RequestCancelInfo{
+	requestCancelInfo := &persistenceblobs.RequestCancelInfo{
 		Version:               456,
 		InitiatedId:           2,
 		InitiatedEventBatchId: 1,
 		CancelRequestId:       uuid.New(),
 	}
-	err2 := s.UpsertRequestCancelState(updatedInfo, updatedStats, nil, int64(3), []*pblobs.RequestCancelInfo{requestCancelInfo})
+	err2 := s.UpsertRequestCancelState(updatedInfo, updatedStats, nil, int64(3), []*persistenceblobs.RequestCancelInfo{requestCancelInfo})
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
@@ -2876,7 +2876,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	signalInfo := &pblobs.SignalInfo{
+	signalInfo := &persistenceblobs.SignalInfo{
 		Version:               123,
 		InitiatedId:           2,
 		InitiatedEventBatchId: 1,
@@ -2885,7 +2885,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 		Input:                 []byte("test signal input"),
 		Control:               []byte(uuid.New()),
 	}
-	err2 := s.UpsertSignalInfoState(updatedInfo, updatedStats, nil, int64(3), []*pblobs.SignalInfo{signalInfo})
+	err2 := s.UpsertSignalInfoState(updatedInfo, updatedStats, nil, int64(3), []*persistenceblobs.SignalInfo{signalInfo})
 	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
@@ -3666,7 +3666,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 				TimerTaskStatus:          1,
 			}},
 
-		TimerInfos: map[string]*pblobs.TimerInfo{
+		TimerInfos: map[string]*persistenceblobs.TimerInfo{
 			"t1": {
 				Version:    2333,
 				TimerId:    "t1",
@@ -3701,7 +3701,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			},
 		},
 
-		RequestCancelInfos: map[int64]*pblobs.RequestCancelInfo{
+		RequestCancelInfos: map[int64]*persistenceblobs.RequestCancelInfo{
 			19: {
 				Version:               2335,
 				InitiatedId:           19,
@@ -3710,7 +3710,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			},
 		},
 
-		SignalInfos: map[int64]*pblobs.SignalInfo{
+		SignalInfos: map[int64]*persistenceblobs.SignalInfo{
 			39: {
 				Version:               2336,
 				InitiatedId:           39,
@@ -3887,7 +3887,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			TimerTaskStatus:          1,
 		}}
 
-	resetTimerInfos := []*pblobs.TimerInfo{
+	resetTimerInfos := []*persistenceblobs.TimerInfo{
 		{
 			Version:    3333,
 			TimerId:    "t1_new",
@@ -3913,14 +3913,14 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			CreateRequestID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 		}}
 
-	resetRequestCancelInfos := []*pblobs.RequestCancelInfo{
+	resetRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{
 		{
 			Version:         3335,
 			InitiatedId:     29,
 			CancelRequestId: "new_cancel_requested_id",
 		}}
 
-	resetSignalInfos := []*pblobs.SignalInfo{
+	resetSignalInfos := []*persistenceblobs.SignalInfo{
 		{
 			Version:     3336,
 			InitiatedId: 39,
@@ -4111,10 +4111,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASCurre
 	}
 	resetStats := &p.ExecutionStats{}
 	resetActivityInfos := []*p.ActivityInfo{}
-	resetTimerInfos := []*pblobs.TimerInfo{}
+	resetTimerInfos := []*persistenceblobs.TimerInfo{}
 	resetChildExecutionInfos := []*p.ChildExecutionInfo{}
-	resetRequestCancelInfos := []*pblobs.RequestCancelInfo{}
-	resetSignalInfos := []*pblobs.SignalInfo{}
+	resetRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{}
+	resetSignalInfos := []*persistenceblobs.SignalInfo{}
 	rState := &p.ReplicationState{
 		CurrentVersion: int64(8789),
 		StartVersion:   int64(8780),
@@ -4243,10 +4243,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASMisma
 	}
 	resetStats := &p.ExecutionStats{}
 	resetActivityInfos := []*p.ActivityInfo{}
-	resetTimerInfos := []*pblobs.TimerInfo{}
+	resetTimerInfos := []*persistenceblobs.TimerInfo{}
 	resetChildExecutionInfos := []*p.ChildExecutionInfo{}
-	resetRequestCancelInfos := []*pblobs.RequestCancelInfo{}
-	resetSignalInfos := []*pblobs.SignalInfo{}
+	resetRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{}
+	resetSignalInfos := []*persistenceblobs.SignalInfo{}
 	rState := &p.ReplicationState{
 		CurrentVersion: int64(8789),
 		StartVersion:   int64(8780),
@@ -4367,10 +4367,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        int64(5),
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*pblobs.TimerInfo{},
+			TimerInfos:          []*persistenceblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
-			RequestCancelInfos:  []*pblobs.RequestCancelInfo{},
-			SignalInfos:         []*pblobs.SignalInfo{},
+			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
 		},
 		NewWorkflowSnapshot: nil,
@@ -4381,10 +4381,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        int64(3),
 
 			UpsertActivityInfos:       []*p.ActivityInfo{},
-			UpsertTimerInfos:          []*pblobs.TimerInfo{},
+			UpsertTimerInfos:          []*persistenceblobs.TimerInfo{},
 			UpsertChildExecutionInfos: []*p.ChildExecutionInfo{},
-			UpsertRequestCancelInfos:  []*pblobs.RequestCancelInfo{},
-			UpsertSignalInfos:         []*pblobs.SignalInfo{},
+			UpsertRequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+			UpsertSignalInfos:         []*persistenceblobs.SignalInfo{},
 			UpsertSignalRequestedIDs:  []string{},
 		},
 		CurrentWorkflowCAS: nil,
@@ -4524,10 +4524,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition: int64(5),
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*pblobs.TimerInfo{},
+			TimerInfos:          []*persistenceblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
-			RequestCancelInfos:  []*pblobs.RequestCancelInfo{},
-			SignalInfos:         []*pblobs.SignalInfo{},
+			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
 		},
 		NewWorkflowSnapshot: &p.WorkflowSnapshot{
@@ -4537,10 +4537,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        0,
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*pblobs.TimerInfo{},
+			TimerInfos:          []*persistenceblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
-			RequestCancelInfos:  []*pblobs.RequestCancelInfo{},
-			SignalInfos:         []*pblobs.SignalInfo{},
+			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
 		},
 		CurrentWorkflowMutation: &p.WorkflowMutation{
@@ -4550,10 +4550,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        int64(3),
 
 			UpsertActivityInfos:       []*p.ActivityInfo{},
-			UpsertTimerInfos:          []*pblobs.TimerInfo{},
+			UpsertTimerInfos:          []*persistenceblobs.TimerInfo{},
 			UpsertChildExecutionInfos: []*p.ChildExecutionInfo{},
-			UpsertRequestCancelInfos:  []*pblobs.RequestCancelInfo{},
-			UpsertSignalInfos:         []*pblobs.SignalInfo{},
+			UpsertRequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+			UpsertSignalInfos:         []*persistenceblobs.SignalInfo{},
 			UpsertSignalRequestedIDs:  []string{},
 		},
 		CurrentWorkflowCAS: nil,
@@ -4670,10 +4670,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        nextEventID,
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*pblobs.TimerInfo{},
+			TimerInfos:          []*persistenceblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
-			RequestCancelInfos:  []*pblobs.RequestCancelInfo{},
-			SignalInfos:         []*pblobs.SignalInfo{},
+			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
 		},
 		NewWorkflowSnapshot:     nil,
@@ -4783,10 +4783,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition: nextEventID,
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*pblobs.TimerInfo{},
+			TimerInfos:          []*persistenceblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
-			RequestCancelInfos:  []*pblobs.RequestCancelInfo{},
-			SignalInfos:         []*pblobs.SignalInfo{},
+			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
 		},
 		NewWorkflowSnapshot: &p.WorkflowSnapshot{
@@ -4796,10 +4796,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        0,
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*pblobs.TimerInfo{},
+			TimerInfos:          []*persistenceblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
-			RequestCancelInfos:  []*pblobs.RequestCancelInfo{},
-			SignalInfos:         []*pblobs.SignalInfo{},
+			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
 		},
 		CurrentWorkflowMutation: nil,
@@ -4926,10 +4926,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        int64(5),
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*pblobs.TimerInfo{},
+			TimerInfos:          []*persistenceblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
-			RequestCancelInfos:  []*pblobs.RequestCancelInfo{},
-			SignalInfos:         []*pblobs.SignalInfo{},
+			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
 		},
 		NewWorkflowSnapshot:     nil,
@@ -5052,10 +5052,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition: int64(5),
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*pblobs.TimerInfo{},
+			TimerInfos:          []*persistenceblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
-			RequestCancelInfos:  []*pblobs.RequestCancelInfo{},
-			SignalInfos:         []*pblobs.SignalInfo{},
+			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
 		},
 		NewWorkflowSnapshot: &p.WorkflowSnapshot{
@@ -5065,10 +5065,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        0,
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*pblobs.TimerInfo{},
+			TimerInfos:          []*persistenceblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
-			RequestCancelInfos:  []*pblobs.RequestCancelInfo{},
-			SignalInfos:         []*pblobs.SignalInfo{},
+			RequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
+			SignalInfos:         []*persistenceblobs.SignalInfo{},
 			SignalRequestedIDs:  []string{},
 		},
 		CurrentWorkflowMutation: nil,
@@ -5117,7 +5117,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	currentReplicationAck := int64(27)
 	currentClusterTransferAck := int64(21)
 	currentClusterTimerAck := timestampConvertor(time.Now().Add(-10 * time.Second))
-	shardInfo := &pblobs.ShardInfo{
+	shardInfo := &persistenceblobs.ShardInfo{
 		ShardId:                 shardID,
 		Owner:                   "some random owner",
 		RangeId:                 rangeID,
@@ -5165,7 +5165,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	currentClusterTimerAck := timestampConvertor(time.Now().Add(-10 * time.Second))
 	alternativeClusterTimerAck := timestampConvertor(time.Now().Add(-20 * time.Second))
 	namespaceNotificationVersion := int64(8192)
-	shardInfo := &pblobs.ShardInfo{
+	shardInfo := &persistenceblobs.ShardInfo{
 		ShardId:             shardID,
 		Owner:               "some random owner",
 		RangeId:             rangeID,
@@ -5209,7 +5209,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	currentClusterTimerAck = timestampConvertor(time.Now().Add(-100 * time.Second))
 	alternativeClusterTimerAck = timestampConvertor(time.Now().Add(-200 * time.Second))
 	namespaceNotificationVersion = int64(16384)
-	shardInfo = &pblobs.ShardInfo{
+	shardInfo = &persistenceblobs.ShardInfo{
 		ShardId:             shardID,
 		Owner:               "some random owner",
 		RangeId:             int64(28),
@@ -5252,7 +5252,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 // TestReplicationDLQ test
 func (s *ExecutionManagerSuite) TestReplicationDLQ() {
 	sourceCluster := "test"
-	taskInfo := &pblobs.ReplicationTaskInfo{
+	taskInfo := &persistenceblobs.ReplicationTaskInfo{
 		NamespaceId: primitives.MustParseUUID(uuid.New()),
 		WorkflowId:  uuid.New(),
 		RunId:       primitives.MustParseUUID(uuid.New()),
@@ -5270,14 +5270,14 @@ func (s *ExecutionManagerSuite) TestReplicationDLQ() {
 	s.NoError(err)
 	s.Len(resp.Tasks, 0)
 
-	taskInfo1 := &pblobs.ReplicationTaskInfo{
+	taskInfo1 := &persistenceblobs.ReplicationTaskInfo{
 		NamespaceId: primitives.MustParseUUID(uuid.New()),
 		WorkflowId:  uuid.New(),
 		RunId:       primitives.MustParseUUID(uuid.New()),
 		TaskId:      1,
 		TaskType:    0,
 	}
-	taskInfo2 := &pblobs.ReplicationTaskInfo{
+	taskInfo2 := &persistenceblobs.ReplicationTaskInfo{
 		NamespaceId: primitives.MustParseUUID(uuid.New()),
 		WorkflowId:  uuid.New(),
 		RunId:       primitives.MustParseUUID(uuid.New()),

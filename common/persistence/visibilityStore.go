@@ -42,7 +42,7 @@ type (
 )
 
 // VisibilityEncoding is default encoding for visibility data
-const VisibilityEncoding = common.EncodingTypeThriftRW
+const VisibilityEncoding = common.EncodingTypeProto3
 
 var _ VisibilityManager = (*visibilityManagerImpl)(nil)
 

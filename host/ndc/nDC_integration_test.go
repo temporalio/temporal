@@ -1651,7 +1651,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 		}},
 	}
 
-	eventBlob, err := s.serializer.SerializeBatchEvents([]*commonproto.HistoryEvent{newRunFirstEvent}, common.EncodingTypeThriftRW)
+	eventBlob, err := s.serializer.SerializeBatchEvents([]*commonproto.HistoryEvent{newRunFirstEvent}, common.EncodingTypeProto3)
 	s.NoError(err)
 
 	return eventBlob
@@ -1667,8 +1667,8 @@ func (s *nDCIntegrationTestSuite) toProtoDataBlob(
 
 	var encodingType enums.EncodingType
 	switch blob.GetEncoding() {
-	case common.EncodingTypeThriftRW:
-		encodingType = enums.EncodingTypeThriftRW
+	case common.EncodingTypeProto3:
+		encodingType = enums.EncodingTypeProto3
 	case common.EncodingTypeJSON,
 		common.EncodingTypeGob,
 		common.EncodingTypeUnknown,
@@ -1699,7 +1699,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	)
 	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
 	// modify the NewExecutionRunId attr
-	eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, common.EncodingTypeThriftRW)
+	eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, common.EncodingTypeProto3)
 	s.NoError(err)
 	return eventBlob, newRunEventBlob
 }
