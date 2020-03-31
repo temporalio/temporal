@@ -85,8 +85,8 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          0,
-				RangeID:          1,
+				ShardId:          0,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		config,
@@ -125,14 +125,14 @@ func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 
 func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 	task := &persistenceblobs.TimerTaskInfo{
-		TaskID:              12345,
+		TaskId:              12345,
 		VisibilityTimestamp: types.TimestampNow(),
 	}
 	executionInfo := commonproto.WorkflowExecution{
-		WorkflowId: task.WorkflowID,
-		RunId:      primitives.UUIDString(task.RunID),
+		WorkflowId: task.GetWorkflowId(),
+		RunId:      primitives.UUIDString(task.GetRunId()),
 	}
-	ctx := newWorkflowExecutionContext(primitives.UUIDString(task.NamespaceID), executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
+	ctx := newWorkflowExecutionContext(primitives.UUIDString(task.GetNamespaceId()), executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()

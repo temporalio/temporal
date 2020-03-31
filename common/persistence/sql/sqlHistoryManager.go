@@ -69,8 +69,8 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	}
 
 	nodeRow := &sqlplugin.HistoryNodeRow{
-		TreeID:       branchInfo.GetTreeID(),
-		BranchID:     branchInfo.GetBranchID(),
+		TreeID:       branchInfo.GetTreeId(),
+		BranchID:     branchInfo.GetBranchId(),
 		NodeID:       request.NodeID,
 		TxnID:        &request.TransactionID,
 		Data:         request.Events.Data,
@@ -92,8 +92,8 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 
 		treeRow := &sqlplugin.HistoryTreeRow{
 			ShardID:      request.ShardID,
-			TreeID:       branchInfo.GetTreeID(),
-			BranchID:     branchInfo.GetBranchID(),
+			TreeID:       branchInfo.GetTreeId(),
+			BranchID:     branchInfo.GetBranchId(),
 			Data:         blob.Data,
 			DataEncoding: blob.Encoding.String(),
 		}
@@ -276,18 +276,18 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 ) (*p.InternalForkHistoryBranchResponse, error) {
 
 	forkB := request.ForkBranchInfo
-	treeID := forkB.TreeID
+	treeID := forkB.TreeId
 	newAncestors := make([]*persistenceblobs.HistoryBranchRange, 0, len(forkB.Ancestors)+1)
 
 	beginNodeID := p.GetBeginNodeID(forkB)
 	if beginNodeID >= request.ForkNodeID {
 		// this is the case that new branch's ancestors doesn't include the forking branch
 		for _, br := range forkB.Ancestors {
-			if br.EndNodeID >= request.ForkNodeID {
+			if br.GetEndNodeId() >= request.ForkNodeID {
 				newAncestors = append(newAncestors, &persistenceblobs.HistoryBranchRange{
-					BranchID:    br.BranchID,
-					BeginNodeID: br.BeginNodeID,
-					EndNodeID:   request.ForkNodeID,
+					BranchId:    br.GetBranchId(),
+					BeginNodeId: br.GetBeginNodeId(),
+					EndNodeId:   request.ForkNodeID,
 				})
 				break
 			} else {
@@ -298,16 +298,16 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 		// this is the case the new branch will inherit all ancestors from forking branch
 		newAncestors = forkB.Ancestors
 		newAncestors = append(newAncestors, &persistenceblobs.HistoryBranchRange{
-			BranchID:    forkB.BranchID,
-			BeginNodeID: beginNodeID,
-			EndNodeID:   request.ForkNodeID,
+			BranchId:    forkB.BranchId,
+			BeginNodeId: beginNodeID,
+			EndNodeId:   request.ForkNodeID,
 		})
 	}
 
 	treeInfo := &persistenceblobs.HistoryTreeInfo{
 		BranchInfo: &persistenceblobs.HistoryBranch{
-			TreeID:    treeID,
-			BranchID:  request.NewBranchID,
+			TreeId:    treeID,
+			BranchId:  request.NewBranchID,
 			Ancestors: newAncestors,
 		},
 		Info:     request.Info,
@@ -348,12 +348,12 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 ) error {
 
 	branch := request.BranchInfo
-	treeID := branch.TreeID
+	treeID := branch.TreeId
 	brsToDelete := branch.Ancestors
 	beginNodeID := p.GetBeginNodeID(branch)
 	brsToDelete = append(brsToDelete, &persistenceblobs.HistoryBranchRange{
-		BranchID:    branch.BranchID,
-		BeginNodeID: beginNodeID,
+		BranchId:    branch.BranchId,
+		BeginNodeId: beginNodeID,
 	})
 
 	rsp, err := m.GetHistoryTree(&p.GetHistoryTreeRequest{
@@ -368,15 +368,15 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 	validBRsMaxEndNode := map[string]int64{}
 	for _, b := range rsp.Branches {
 		for _, br := range b.Ancestors {
-			curr, ok := validBRsMaxEndNode[string(br.BranchID)]
-			if !ok || curr < br.EndNodeID {
-				validBRsMaxEndNode[string(br.BranchID)] = br.EndNodeID
+			curr, ok := validBRsMaxEndNode[string(br.GetBranchId())]
+			if !ok || curr < br.GetEndNodeId() {
+				validBRsMaxEndNode[string(br.GetBranchId())] = br.GetEndNodeId()
 			}
 		}
 	}
 
 	return m.txExecute("DeleteHistoryBranch", func(tx sqlplugin.Tx) error {
-		branchID := branch.BranchID
+		branchID := branch.BranchId
 		treeFilter := &sqlplugin.HistoryTreeFilter{
 			TreeID:   treeID,
 			BranchID: primitives.UUIDPtr(branchID),
@@ -391,10 +391,10 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 		// for each branch range to delete, we iterate from bottom to up, and delete up to the point according to validBRsEndNode
 		for i := len(brsToDelete) - 1; i >= 0; i-- {
 			br := brsToDelete[i]
-			maxReferredEndNodeID, ok := validBRsMaxEndNode[string(br.BranchID)]
+			maxReferredEndNodeID, ok := validBRsMaxEndNode[string(br.GetBranchId())]
 			nodeFilter := &sqlplugin.HistoryNodeFilter{
 				TreeID:   treeID,
-				BranchID: br.BranchID,
+				BranchID: br.GetBranchId(),
 				ShardID:  request.ShardID,
 			}
 
@@ -404,7 +404,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 				done = true
 			} else {
 				// No any branch is using this range, we can delete all of it
-				nodeFilter.MinNodeID = &br.BeginNodeID
+				nodeFilter.MinNodeID = &br.BeginNodeId
 			}
 			_, err := tx.DeleteFromHistoryNode(nodeFilter)
 			if err != nil {

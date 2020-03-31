@@ -474,13 +474,13 @@ func randomTaskInfo() *persistenceblobs.AllocatedTaskInfo {
 
 	return &persistenceblobs.AllocatedTaskInfo{
 		Data: &persistenceblobs.TaskInfo{
-			NamespaceID: uuid.NewRandom(),
-			WorkflowID:  uuid.New(),
-			RunID:       uuid.NewRandom(),
-			ScheduleID:  rand.Int63(),
+			NamespaceId: uuid.NewRandom(),
+			WorkflowId:  uuid.New(),
+			RunId:       uuid.NewRandom(),
+			ScheduleId:  rand.Int63(),
 			CreatedTime: timestamp.TimestampFromTime(&rt1).ToProto(),
 			Expiry:      timestamp.TimestampFromTime(&rt2).ToProto(),
 		},
-		TaskID: rand.Int63(),
+		TaskId: rand.Int63(),
 	}
 }

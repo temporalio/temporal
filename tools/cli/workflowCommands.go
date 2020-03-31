@@ -845,7 +845,7 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(true)
 	table.SetColumnSeparator("|")
-	header := []string{"Binary Checksum", "Create Time", "RunID", "EventID"}
+	header := []string{"Binary Checksum", "Create Time", "RunId", "EventId"}
 	headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
 	table.SetHeader(header)
 	table.SetHeaderColor(headerColor...)
@@ -884,17 +884,17 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	var tmpAct *cliproto.PendingActivityInfo
 	for _, pa := range resp.PendingActivities {
 		tmpAct = &cliproto.PendingActivityInfo{
-			ActivityID:             pa.ActivityID,
-			ActivityType:           pa.ActivityType,
-			State:                  pa.State,
-			ScheduledTimestamp:     convertTime(pa.ScheduledTimestamp, false),
-			LastStartedTimestamp:   convertTime(pa.LastStartedTimestamp, false),
-			LastHeartbeatTimestamp: convertTime(pa.LastHeartbeatTimestamp, false),
-			Attempt:                pa.Attempt,
-			MaximumAttempts:        pa.MaximumAttempts,
-			ExpirationTimestamp:    convertTime(pa.ExpirationTimestamp, false),
-			LastFailureReason:      pa.LastFailureReason,
-			LastWorkerIdentity:     pa.LastWorkerIdentity,
+			ActivityId:             pa.GetActivityId(),
+			ActivityType:           pa.GetActivityType(),
+			State:                  pa.GetState(),
+			ScheduledTimestamp:     convertTime(pa.GetScheduledTimestamp(), false),
+			LastStartedTimestamp:   convertTime(pa.GetLastStartedTimestamp(), false),
+			LastHeartbeatTimestamp: convertTime(pa.GetLastHeartbeatTimestamp(), false),
+			Attempt:                pa.GetAttempt(),
+			MaximumAttempts:        pa.GetMaximumAttempts(),
+			ExpirationTimestamp:    convertTime(pa.GetExpirationTimestamp(), false),
+			LastFailureReason:      pa.GetLastFailureReason(),
+			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
 		}
 		if pa.HeartbeatDetails != nil {
 			tmpAct.HeartbeatDetails = string(pa.HeartbeatDetails)
@@ -967,7 +967,7 @@ func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *t
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	header := []string{"Workflow Type", "Workflow ID", "Run ID", "Start Time", "Execution Time"}
+	header := []string{"Workflow Type", "Workflow Id", "Run Id", "Start Time", "Execution Time"}
 	headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
 	if !queryOpen {
 		header = append(header, "End Time")
@@ -1362,7 +1362,7 @@ func ResetWorkflow(c *cli.Context) {
 	resetType := c.String(FlagResetType)
 	extraForResetType, ok := resetTypesMap[resetType]
 	if !ok && eventID <= 0 {
-		ErrorAndExit("Must specify valid eventID or valid resetType", nil)
+		ErrorAndExit("Must specify valid eventId or valid resetType", nil)
 	}
 	if ok && len(extraForResetType) > 0 {
 		getRequiredOption(c, extraForResetType)
@@ -1645,7 +1645,7 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 	fmt.Println("DecisionFinishEventId for reset:", wid, rid, resetBaseRunID, decisionFinishID)
 
 	if params.dryRun {
-		fmt.Printf("dry run to reset wid: %v, rid:%v to baseRunID:%v, eventID:%v \n", wid, rid, resetBaseRunID, decisionFinishID)
+		fmt.Printf("dry run to reset wid: %v, rid:%v to baseRunId:%v, eventId:%v \n", wid, rid, resetBaseRunID, decisionFinishID)
 	} else {
 		resp2, err := frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 			Namespace: namespace,
@@ -1661,7 +1661,7 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 		if err != nil {
 			return printErrorAndReturn("ResetWorkflowExecution failed", err)
 		}
-		fmt.Println("new runID for wid/rid is ,", wid, rid, resp2.GetRunId())
+		fmt.Println("new runId for wid/rid is ,", wid, rid, resp2.GetRunId())
 	}
 
 	return nil
@@ -1899,7 +1899,7 @@ func CompleteActivity(c *cli.Context) {
 	rid := getRequiredOption(c, FlagRunID)
 	activityID := getRequiredOption(c, FlagActivityID)
 	if len(activityID) == 0 {
-		ErrorAndExit("Invalid activityID", fmt.Errorf("activityID cannot be empty"))
+		ErrorAndExit("Invalid activityId", fmt.Errorf("activityId cannot be empty"))
 	}
 	result := getRequiredOption(c, FlagResult)
 	identity := getRequiredOption(c, FlagIdentity)
@@ -1907,11 +1907,11 @@ func CompleteActivity(c *cli.Context) {
 	defer cancel()
 
 	frontendClient := cFactory.FrontendClient(c)
-	_, err := frontendClient.RespondActivityTaskCompletedByID(ctx, &workflowservice.RespondActivityTaskCompletedByIDRequest{
+	_, err := frontendClient.RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
 		Namespace:  namespace,
-		WorkflowID: wid,
-		RunID:      rid,
-		ActivityID: activityID,
+		WorkflowId: wid,
+		RunId:      rid,
+		ActivityId: activityID,
 		Result:     []byte(result),
 		Identity:   identity,
 	})
@@ -1929,7 +1929,7 @@ func FailActivity(c *cli.Context) {
 	rid := getRequiredOption(c, FlagRunID)
 	activityID := getRequiredOption(c, FlagActivityID)
 	if len(activityID) == 0 {
-		ErrorAndExit("Invalid activityID", fmt.Errorf("activityID cannot be empty"))
+		ErrorAndExit("Invalid activityId", fmt.Errorf("activityId cannot be empty"))
 	}
 	reason := getRequiredOption(c, FlagReason)
 	detail := getRequiredOption(c, FlagDetail)
@@ -1938,11 +1938,11 @@ func FailActivity(c *cli.Context) {
 	defer cancel()
 
 	frontendClient := cFactory.FrontendClient(c)
-	_, err := frontendClient.RespondActivityTaskFailedByID(ctx, &workflowservice.RespondActivityTaskFailedByIDRequest{
+	_, err := frontendClient.RespondActivityTaskFailedById(ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
 		Namespace:  namespace,
-		WorkflowID: wid,
-		RunID:      rid,
-		ActivityID: activityID,
+		WorkflowId: wid,
+		RunId:      rid,
+		ActivityId: activityID,
 		Reason:     reason,
 		Details:    []byte(detail),
 		Identity:   identity,

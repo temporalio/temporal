@@ -151,7 +151,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	blob := s.serializeEvents(eventBatch)
 	versionHistoryItems := []*commonproto.VersionHistoryItem{
 		{
-			EventID: 1,
+			EventId: 1,
 			Version: 1,
 		},
 	}
@@ -203,7 +203,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	s.mockHistoryClient.EXPECT().ReplicateEventsV2(
 		gomock.Any(),
 		&historyservice.ReplicateEventsV2Request{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -234,13 +234,13 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 	}
 	versionHistoryItems := []*commonproto.VersionHistoryItem{
 		{
-			EventID: 1,
+			EventId: 1,
 			Version: 1,
 		},
 	}
 
 	s.Equal(&historyservice.ReplicateEventsV2Request{
-		NamespaceUUID: s.namespaceID,
+		NamespaceId: s.namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -259,11 +259,11 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	item := &commonproto.VersionHistoryItem{
-		EventID: 1,
+		EventId: 1,
 		Version: 1,
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceUUID: s.namespaceID,
+		NamespaceId: s.namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -284,11 +284,11 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	item := &commonproto.VersionHistoryItem{
-		EventID: 1,
+		EventId: 1,
 		Version: 1,
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceUUID: s.namespaceID,
+		NamespaceId: s.namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

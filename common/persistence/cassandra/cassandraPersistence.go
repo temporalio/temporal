@@ -870,7 +870,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 	}
 
 	query := d.session.Query(templateCreateShardQuery,
-		shardInfo.ShardID,
+		shardInfo.GetShardId(),
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
@@ -879,7 +879,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 		rowTypeShardTaskID,
 		data.Data,
 		data.Encoding,
-		shardInfo.RangeID)
+		shardInfo.GetRangeId())
 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
@@ -894,7 +894,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 
 		return &p.ShardAlreadyExistError{
 			Msg: fmt.Sprintf("Shard already exists in executions table.  ShardId: %v, RangeId: %v",
-				shard.ShardID, shard.RangeID),
+				shard.GetShardId(), shard.GetRangeId()),
 		}
 	}
 
@@ -939,8 +939,8 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 	query := d.session.Query(templateUpdateShardQuery,
 		data.Data,
 		data.Encoding,
-		shardInfo.RangeID,
-		shardInfo.ShardID, // Where
+		shardInfo.GetRangeId(),
+		shardInfo.GetShardId(), // Where
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
@@ -1098,13 +1098,13 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 					lastWriteVersion := replicationState.LastWriteVersion
 
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
-						executionInfo.WorkflowID, primitives.UUIDString(protoState.RunID), request.RangeID, strings.Join(columns, ","))
+						executionInfo.WorkflowID, primitives.UUIDString(protoState.RunId), request.RangeID, strings.Join(columns, ","))
 					if request.Mode == p.CreateWorkflowModeBrandNew {
 						// todo: Look at moving these errors upstream to manager
 						return nil, &p.WorkflowExecutionAlreadyStartedError{
 							Msg:              msg,
-							StartRequestID:   protoState.CreateRequestID,
-							RunID:            primitives.UUIDString(protoState.RunID),
+							StartRequestID:   protoState.CreateRequestId,
+							RunID:            primitives.UUIDString(protoState.RunId),
 							State:            int(protoState.State),
 							CloseStatus:      enums.WorkflowExecutionCloseStatus(protoState.CloseStatus),
 							LastWriteVersion: lastWriteVersion,
@@ -1414,8 +1414,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			lastWriteVersion := updateWorkflow.LastWriteVersion
 
 			executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
-				RunID:           primitives.MustParseUUID(runID),
-				CreateRequestID: executionInfo.CreateRequestID,
+				RunId:           primitives.MustParseUUID(runID),
+				CreateRequestId: executionInfo.CreateRequestID,
 				State:           int32(executionInfo.State),
 				CloseStatus:     int32(executionInfo.CloseStatus),
 			})
@@ -1520,10 +1520,10 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	lastWriteVersion := request.NewWorkflowSnapshot.LastWriteVersion
 
 	stateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
-		CreateRequestID: newExecutionInfo.CreateRequestID,
+		CreateRequestId: newExecutionInfo.CreateRequestID,
 		State:           int32(newExecutionInfo.State),
 		CloseStatus:     int32(newExecutionInfo.CloseStatus),
-		RunID:           primitives.MustParseUUID(newRunID),
+		RunId:           primitives.MustParseUUID(newRunID),
 	})
 	if err != nil {
 		return err
@@ -1673,8 +1673,8 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		closeStatus := executionInfo.CloseStatus
 
 		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
-			RunID:           primitives.MustParseUUID(runID),
-			CreateRequestID: createRequestID,
+			RunId:           primitives.MustParseUUID(runID),
+			CreateRequestId: createRequestID,
 			State:           int32(state),
 			CloseStatus:     int32(closeStatus),
 		})
@@ -2034,7 +2034,7 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 	replicationState := createReplicationState(result["replication_state"].(map[string]interface{}))
 	return &p.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
-		StartRequestID:   executionInfo.CreateRequestID,
+		StartRequestID:   executionInfo.CreateRequestId,
 		State:            int(executionInfo.State),
 		CloseStatus:      int(executionInfo.CloseStatus),
 		LastWriteVersion: replicationState.LastWriteVersion,
@@ -2292,7 +2292,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 		if err == gocql.ErrNotFound { // First time task list is used
 			tl = &p.PersistedTaskListInfo{
 				Data: &persistenceblobs.TaskListInfo{
-					NamespaceID: request.NamespaceID,
+					NamespaceId: request.NamespaceID,
 					Name:        request.TaskList,
 					TaskType:    request.TaskType,
 					Kind:        request.TaskListKind,
@@ -2395,7 +2395,7 @@ func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) 
 		}
 
 		query := d.session.Query(templateUpdateTaskListQueryWithTTL,
-			tli.NamespaceID,
+			tli.GetNamespaceId(),
 			&tli.Name,
 			tli.TaskType,
 			rowTypeTaskList,
@@ -2423,7 +2423,7 @@ func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) 
 		request.RangeID,
 		datablob.Data,
 		datablob.Encoding,
-		tli.NamespaceID,
+		tli.GetNamespaceId(),
 		&tli.Name,
 		tli.TaskType,
 		rowTypeTaskList,
@@ -2481,14 +2481,14 @@ func (d *cassandraPersistence) DeleteTaskList(request *p.DeleteTaskListRequest) 
 func MintAllocatedTaskInfo(taskID *int64, info *persistenceblobs.TaskInfo) *persistenceblobs.AllocatedTaskInfo {
 	return &persistenceblobs.AllocatedTaskInfo{
 		Data:   info,
-		TaskID: *taskID,
+		TaskId: *taskID,
 	}
 }
 
 // From TaskManager interface
 func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.CreateTasksResponse, error) {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	namespaceID := request.TaskListInfo.Data.NamespaceID
+	namespaceID := request.TaskListInfo.Data.GetNamespaceId()
 	taskList := request.TaskListInfo.Data.Name
 	taskListType := request.TaskListInfo.Data.TaskType
 
@@ -2505,7 +2505,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				taskList,
 				taskListType,
 				rowTypeTask,
-				task.TaskID,
+				task.GetTaskId(),
 				datablob.Data,
 				datablob.Encoding)
 		} else {
@@ -2518,7 +2518,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				taskList,
 				taskListType,
 				rowTypeTask,
-				task.TaskID,
+				task.GetTaskId(),
 				datablob.Data,
 				datablob.Encoding,
 				ttl)
@@ -2748,7 +2748,7 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplication
 		datablob.Data,
 		datablob.Encoding,
 		defaultVisibilityTimestamp,
-		task.GetTaskID())
+		task.GetTaskId())
 
 	err = query.Exec()
 	if err != nil {

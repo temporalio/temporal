@@ -867,7 +867,7 @@ func (s *shardContextImpl) GetThrottledLogger() log.Logger {
 }
 
 func (s *shardContextImpl) getRangeID() int64 {
-	return s.shardInfo.RangeID
+	return s.shardInfo.GetRangeId()
 }
 
 func (s *shardContextImpl) closeShard() {
@@ -880,8 +880,8 @@ func (s *shardContextImpl) closeShard() {
 	go s.shardItem.stopEngine()
 
 	// fails any writes that may start after this point.
-	s.shardInfo.RangeID = -1
-	atomic.StoreInt64(&s.rangeID, s.shardInfo.RangeID)
+	s.shardInfo.RangeId = -1
+	atomic.StoreInt64(&s.rangeID, s.shardInfo.GetRangeId())
 
 	if s.closeCh != nil {
 		// This is the channel passed in by shard controller to monitor if a shard needs to be unloaded
@@ -911,14 +911,14 @@ func (s *shardContextImpl) updateRangeIfNeededLocked() error {
 
 func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	updatedShardInfo := copyShardInfo(s.shardInfo)
-	updatedShardInfo.RangeID++
+	updatedShardInfo.RangeId++
 	if isStealing {
 		updatedShardInfo.StolenSinceRenew++
 	}
 
 	err := s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
-		PreviousRangeID: s.shardInfo.RangeID})
+		PreviousRangeID: s.shardInfo.GetRangeId()})
 	if err != nil {
 		// Shard is stolen, trigger history engine shutdown
 		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
@@ -928,22 +928,22 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 			s.logger.Error("Persistent store operation failure",
 				tag.StoreOperationUpdateShard,
 				tag.Error(err),
-				tag.ShardRangeID(updatedShardInfo.RangeID),
-				tag.PreviousShardRangeID(s.shardInfo.RangeID))
+				tag.ShardRangeID(updatedShardInfo.GetRangeId()),
+				tag.PreviousShardRangeID(s.shardInfo.GetRangeId()))
 		}
 		return err
 	}
 
 	// Range is successfully updated in cassandra now update shard context to reflect new range
-	s.transferSequenceNumber = updatedShardInfo.RangeID << s.config.RangeSizeBits
-	s.maxTransferSequenceNumber = (updatedShardInfo.RangeID + 1) << s.config.RangeSizeBits
+	s.transferSequenceNumber = updatedShardInfo.GetRangeId() << s.config.RangeSizeBits
+	s.maxTransferSequenceNumber = (updatedShardInfo.GetRangeId() + 1) << s.config.RangeSizeBits
 	s.transferMaxReadLevel = s.transferSequenceNumber - 1
-	atomic.StoreInt64(&s.rangeID, updatedShardInfo.RangeID)
+	atomic.StoreInt64(&s.rangeID, updatedShardInfo.GetRangeId())
 	s.shardInfo = updatedShardInfo
 
 	s.logger.Info("Range updated for shardID",
-		tag.ShardID(int(s.shardInfo.ShardID)),
-		tag.ShardRangeID(s.shardInfo.RangeID),
+		tag.ShardID(int(s.shardInfo.GetShardId())),
+		tag.ShardRangeID(s.shardInfo.GetRangeId()),
 		tag.Number(s.transferSequenceNumber),
 		tag.NextNumber(s.maxTransferSequenceNumber))
 	return nil
@@ -967,7 +967,7 @@ func (s *shardContextImpl) updateShardInfoLocked() error {
 
 	err = s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
-		PreviousRangeID: s.shardInfo.RangeID,
+		PreviousRangeID: s.shardInfo.GetRangeId(),
 	})
 
 	if err != nil {
@@ -1191,8 +1191,8 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		// EntityNotExistsError error
 		shardInfo = &persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          int32(shardItem.shardID),
-				RangeID:          0,
+				ShardId:          int32(shardItem.shardID),
+				RangeId:          0,
 				TransferAckLevel: 0,
 			},
 		}
@@ -1282,9 +1282,9 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 	}
 	shardInfoCopy := &persistence.ShardInfoWithFailover{
 		ShardInfo: &persistenceblobs.ShardInfo{
-			ShardID:                      shardInfo.ShardID,
+			ShardId:                      shardInfo.GetShardId(),
 			Owner:                        shardInfo.Owner,
-			RangeID:                      shardInfo.RangeID,
+			RangeId:                      shardInfo.GetRangeId(),
 			StolenSinceRenew:             shardInfo.StolenSinceRenew,
 			ReplicationAckLevel:          shardInfo.ReplicationAckLevel,
 			TransferAckLevel:             shardInfo.TransferAckLevel,

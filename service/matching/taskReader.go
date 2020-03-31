@@ -237,7 +237,7 @@ func (tr *taskReader) addTasksToBuffer(tasks []*persistenceblobs.AllocatedTaskIn
 			tr.scope().IncCounter(metrics.ExpiredTasksCounter)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
-			tr.tlMgr.taskAckManager.setReadLevel(t.TaskID)
+			tr.tlMgr.taskAckManager.setReadLevel(t.GetTaskId())
 			continue
 		}
 		if !tr.addSingleTaskToBuffer(t, lastWriteTime, idleTimer) {
@@ -249,7 +249,7 @@ func (tr *taskReader) addTasksToBuffer(tasks []*persistenceblobs.AllocatedTaskIn
 
 func (tr *taskReader) addSingleTaskToBuffer(
 	task *persistenceblobs.AllocatedTaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
-	tr.tlMgr.taskAckManager.addTask(task.TaskID)
+	tr.tlMgr.taskAckManager.addTask(task.GetTaskId())
 	for {
 		select {
 		case tr.taskBuffer <- task:

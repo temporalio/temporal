@@ -119,15 +119,15 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	taskInfo := make([]*replication.ReplicationTaskInfo, len(resp.Tasks))
 	for _, task := range resp.Tasks {
 		taskInfo = append(taskInfo, &replication.ReplicationTaskInfo{
-			NamespaceId:  primitives.UUIDString(task.NamespaceID),
-			WorkflowId:   task.GetWorkflowID(),
-			RunId:        primitives.UUIDString(task.GetRunID()),
+			NamespaceId:  primitives.UUIDString(task.GetNamespaceId()),
+			WorkflowId:   task.GetWorkflowId(),
+			RunId:        primitives.UUIDString(task.GetRunId()),
 			TaskType:     task.GetTaskType(),
-			TaskId:       task.GetTaskID(),
+			TaskId:       task.GetTaskId(),
 			Version:      task.GetVersion(),
-			FirstEventId: task.GetFirstEventID(),
-			NextEventId:  task.GetNextEventID(),
-			ScheduledId:  task.GetScheduledID(),
+			FirstEventId: task.GetFirstEventId(),
+			NextEventId:  task.GetNextEventId(),
+			ScheduledId:  task.GetScheduledId(),
 		})
 	}
 	dlqResponse, err := remoteAdminClient.GetDLQReplicationMessages(

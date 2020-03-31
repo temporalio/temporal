@@ -106,8 +106,8 @@ func (s *resetorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          int32(shardID),
-				RangeID:          1,
+				ShardId:          int32(shardID),
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		s.config,
@@ -162,7 +162,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	request := &historyservice.ResetWorkflowExecutionRequest{}
 	namespaceID := testNamespaceID
-	request.NamespaceUUID = namespaceID
+	request.NamespaceId = namespaceID
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
@@ -811,7 +811,7 @@ func (s *resetorSuite) assertTimerIDs(ids []string, timers []*persistenceblobs.T
 	}
 
 	for _, t := range timers {
-		delete(m, t.TimerID)
+		delete(m, t.GetTimerId())
 	}
 
 	s.Equal(0, len(m))
@@ -839,7 +839,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 
 	request := &historyservice.ResetWorkflowExecutionRequest{}
 	namespaceID := testNamespaceID
-	request.NamespaceUUID = namespaceID
+	request.NamespaceId = namespaceID
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
@@ -1427,7 +1427,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	request := &historyservice.ResetWorkflowExecutionRequest{}
 	namespaceID := testNamespaceID
-	request.NamespaceUUID = namespaceID
+	request.NamespaceId = namespaceID
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
@@ -2133,7 +2133,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 
 	request := &historyservice.ResetWorkflowExecutionRequest{}
 	namespaceID := testNamespaceID
-	request.NamespaceUUID = namespaceID
+	request.NamespaceId = namespaceID
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
@@ -2733,7 +2733,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	request := &historyservice.ResetWorkflowExecutionRequest{}
 	namespaceID := testNamespaceID
-	request.NamespaceUUID = namespaceID
+	request.NamespaceId = namespaceID
 	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
@@ -3383,7 +3383,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	compareRepState.LastWriteEventID = 34
 	compareRepState.LastWriteVersion = afterResetVersion
 	compareRepState.LastReplicationInfo = map[string]*replication.ReplicationInfo{
-		"standby": &replication.ReplicationInfo{
+		"standby": {
 			LastEventId: 29,
 			Version:     beforeResetVersion,
 		},
@@ -3920,7 +3920,7 @@ func (s *resetorSuite) TestApplyReset() {
 
 	historyAfterReset := &commonproto.History{
 		Events: []*commonproto.HistoryEvent{
-			&commonproto.HistoryEvent{
+			{
 				EventId:   30,
 				Version:   afterResetVersion,
 				EventType: enums.EventTypeDecisionTaskFailed,
@@ -3981,7 +3981,7 @@ func (s *resetorSuite) TestApplyReset() {
 
 	request := &historyservice.ReplicateEventsRequest{
 		SourceCluster:     "standby",
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &we,
 		FirstEventId:      30,
 		NextEventId:       35,
@@ -4067,7 +4067,7 @@ func (s *resetorSuite) TestApplyReset() {
 	compareRepState.LastWriteEventID = 34
 	compareRepState.LastWriteVersion = afterResetVersion
 	compareRepState.LastReplicationInfo = map[string]*replication.ReplicationInfo{
-		"standby": &replication.ReplicationInfo{
+		"standby": {
 			LastEventId: 29,
 			Version:     beforeResetVersion,
 		},

@@ -121,7 +121,7 @@ func (s *ScavengerTestSuite) TestExpiredTasksFollowedByAlive() {
 	for tl, tbl := range s.taskTables {
 		tasks := tbl.get(100)
 		s.Equal(nTasks/2, len(tasks), "scavenger deleted non-expired tasks")
-		s.Equal(int64(nTasks/2), tasks[0].TaskID, "scavenger deleted wrong set of tasks")
+		s.Equal(int64(nTasks/2), tasks[0].GetTaskId(), "scavenger deleted wrong set of tasks")
 		s.NotNil(s.taskListTable.get(tl), "scavenger deleted a non-expired executorTask list")
 	}
 }

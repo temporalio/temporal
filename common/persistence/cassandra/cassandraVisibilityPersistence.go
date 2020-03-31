@@ -177,7 +177,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 
 	if ttl > maxCassandraTTL {
 		query = v.session.Query(templateCreateWorkflowExecutionStarted,
-			request.NamespaceUUID,
+			request.NamespaceID,
 			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
@@ -189,7 +189,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 		)
 	} else {
 		query = v.session.Query(templateCreateWorkflowExecutionStartedWithTTL,
-			request.NamespaceUUID,
+			request.NamespaceID,
 			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
@@ -219,7 +219,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 
 	// First, remove execution from the open table
 	batch.Query(templateDeleteWorkflowExecutionStarted,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.StartTimestamp),
 		request.RunID,
@@ -235,7 +235,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 
 	if retention > maxCassandraTTL {
 		batch.Query(templateCreateWorkflowExecutionClosed,
-			request.NamespaceUUID,
+			request.NamespaceID,
 			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
@@ -250,7 +250,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		)
 		// duplicate write to v2 to order by close time
 		batch.Query(templateCreateWorkflowExecutionClosedV2,
-			request.NamespaceUUID,
+			request.NamespaceID,
 			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
@@ -265,7 +265,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		)
 	} else {
 		batch.Query(templateCreateWorkflowExecutionClosedWithTTL,
-			request.NamespaceUUID,
+			request.NamespaceID,
 			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
@@ -281,7 +281,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		)
 		// duplicate write to v2 to order by close time
 		batch.Query(templateCreateWorkflowExecutionClosedWithTTLV2,
-			request.NamespaceUUID,
+			request.NamespaceID,
 			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
@@ -329,7 +329,7 @@ func (v *cassandraVisibilityPersistence) UpsertWorkflowExecution(
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutions,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
@@ -363,7 +363,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutions,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
@@ -397,7 +397,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutionsByType,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
@@ -432,7 +432,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByType,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
@@ -467,7 +467,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutionsByID,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
@@ -502,7 +502,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowID(
 	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByID,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
@@ -537,7 +537,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 	request *p.ListClosedWorkflowExecutionsByStatusRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByStatus,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
@@ -573,7 +573,7 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 	request *p.GetClosedWorkflowExecutionRequest) (*p.InternalGetClosedWorkflowExecutionResponse, error) {
 	execution := request.Execution
 	query := v.session.Query(templateGetClosedWorkflowExecution,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		execution.GetWorkflowId(),
 		execution.GetRunId())

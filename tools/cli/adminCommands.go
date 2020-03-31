@@ -73,7 +73,7 @@ func AdminShowWorkflow(c *cli.Context) {
 
 		history = resp.History
 	} else {
-		ErrorAndExit("need to specify TreeID/BranchID/ShardID", nil)
+		ErrorAndExit("need to specify TreeId/BranchId/ShardId", nil)
 	}
 
 	if len(history) == 0 {
@@ -308,7 +308,7 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 	namespaceID := c.String(FlagNamespaceID)
 	namespace := c.String(FlagNamespace)
 	if len(namespaceID) == 0 && len(namespace) == 0 {
-		ErrorAndExit("Need either namespace or namespaceID", nil)
+		ErrorAndExit("Need either namespace or namespaceId", nil)
 	}
 
 	session := connectToCassandra(c)
@@ -322,7 +322,7 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 		}
 		namespace := res["namespace"].(map[string]interface{})
 		namespaceName := namespace["name"].(string)
-		fmt.Printf("namespace for namespaceID %v is %v \n", namespaceID, namespaceName)
+		fmt.Printf("namespace for namespaceId %v is %v \n", namespaceID, namespaceName)
 	} else {
 		tmpl := "select namespace from namespaces_by_name where name = ?"
 		tmplV2 := "select namespace from namespaces_by_name_v2 where namespaces_partition=0 and name = ?"
@@ -339,11 +339,11 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 			}
 			namespace := res["namespace"].(map[string]interface{})
 			namespaceID := namespace["id"].(gocql.UUID).String()
-			fmt.Printf("namespaceID for namespace %v is %v \n", namespace, namespaceID)
+			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
 		} else {
 			namespace := res["namespace"].(map[string]interface{})
 			namespaceID := namespace["id"].(gocql.UUID).String()
-			fmt.Printf("namespaceID for namespace %v is %v \n", namespace, namespaceID)
+			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
 		}
 	}
 }
@@ -358,7 +358,7 @@ func AdminGetShardID(c *cli.Context) {
 		return
 	}
 	shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-	fmt.Printf("ShardID for workflowID: %v is %v \n", wid, shardID)
+	fmt.Printf("ShardId for workflowId: %v is %v \n", wid, shardID)
 }
 
 // AdminRemoveTask describes history host
@@ -374,8 +374,8 @@ func AdminRemoveTask(c *cli.Context) {
 
 	req := &adminservice.RemoveTaskRequest{}
 
-	req.ShardID = int32(sid)
-	req.TaskID = taskID
+	req.ShardId = int32(sid)
+	req.TaskId = taskID
 	req.Type = int32(typeID)
 
 	_, err := adminClient.RemoveTask(ctx, req)
@@ -393,7 +393,7 @@ func AdminShardManagement(c *cli.Context) {
 	defer cancel()
 
 	req := &adminservice.CloseShardRequest{}
-	req.ShardID = int32(sid)
+	req.ShardId = int32(sid)
 
 	_, err := adminClient.CloseShard(ctx, req)
 	if err != nil {
@@ -411,7 +411,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 	printFully := c.Bool(FlagPrintFullyDetail)
 
 	if len(wid) == 0 && !c.IsSet(FlagShardID) && len(addr) == 0 {
-		ErrorAndExit("at least one of them is required to provide to lookup host: workflowID, shardID and host address", nil)
+		ErrorAndExit("at least one of them is required to provide to lookup host: workflowId, shardId and host address", nil)
 		return
 	}
 
@@ -435,7 +435,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 	}
 
 	if !printFully {
-		resp.ShardIDs = nil
+		resp.ShardIds = nil
 	}
 	prettyPrintJSONObject(resp)
 }

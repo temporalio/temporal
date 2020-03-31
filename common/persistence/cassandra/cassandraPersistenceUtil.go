@@ -765,18 +765,18 @@ func createTransferTasks(
 
 		// todo ~~~ come back for record visibility
 		p := &persistenceblobs.TransferTaskInfo{
-			NamespaceID:             primitives.MustParseUUID(namespaceID),
-			WorkflowID:              workflowID,
-			RunID:                   primitives.MustParseUUID(runID),
+			NamespaceId:             primitives.MustParseUUID(namespaceID),
+			WorkflowId:              workflowID,
+			RunId:                   primitives.MustParseUUID(runID),
 			TaskType:                int32(task.GetType()),
-			TargetNamespaceID:       primitives.MustParseUUID(targetNamespaceID),
-			TargetWorkflowID:        targetWorkflowID,
-			TargetRunID:             primitives.MustParseUUID(targetRunID),
+			TargetNamespaceId:       primitives.MustParseUUID(targetNamespaceID),
+			TargetWorkflowId:        targetWorkflowID,
+			TargetRunId:             primitives.MustParseUUID(targetRunID),
 			TaskList:                taskList,
 			TargetChildWorkflowOnly: targetChildWorkflowOnly,
-			ScheduleID:              scheduleID,
+			ScheduleId:              scheduleID,
 			Version:                 task.GetVersion(),
-			TaskID:                  task.GetTaskID(),
+			TaskId:                  task.GetTaskID(),
 			VisibilityTimestamp:     taskVisTs,
 			RecordVisibility:        recordVisibility,
 		}
@@ -844,15 +844,15 @@ func createReplicationTasks(
 		}
 
 		datablob, err := serialization.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
-			NamespaceID:             primitives.MustParseUUID(namespaceID),
-			WorkflowID:              workflowID,
-			RunID:                   primitives.MustParseUUID(runID),
-			TaskID:                  task.GetTaskID(),
+			NamespaceId:             primitives.MustParseUUID(namespaceID),
+			WorkflowId:              workflowID,
+			RunId:                   primitives.MustParseUUID(runID),
+			TaskId:                  task.GetTaskID(),
 			TaskType:                int32(task.GetType()),
 			Version:                 version,
-			FirstEventID:            firstEventID,
-			NextEventID:             nextEventID,
-			ScheduledID:             activityScheduleID,
+			FirstEventId:            firstEventID,
+			NextEventId:             nextEventID,
+			ScheduledId:             activityScheduleID,
 			EventStoreVersion:       p.EventStoreVersion,
 			NewRunBranchToken:       newRunBranchToken,
 			NewRunEventStoreVersion: p.EventStoreVersion,
@@ -937,15 +937,15 @@ func createTimerTasks(
 		}
 
 		datablob, err := serialization.TimerTaskInfoToBlob(&persistenceblobs.TimerTaskInfo{
-			NamespaceID:         primitives.MustParseUUID(namespaceID),
-			WorkflowID:          workflowID,
-			RunID:               primitives.MustParseUUID(runID),
+			NamespaceId:         primitives.MustParseUUID(namespaceID),
+			WorkflowId:          workflowID,
+			RunId:               primitives.MustParseUUID(runID),
 			TaskType:            int32(task.GetType()),
 			TimeoutType:         int32(timeoutType),
 			Version:             task.GetVersion(),
 			ScheduleAttempt:     attempt,
-			EventID:             eventID,
-			TaskID:              task.GetTaskID(),
+			EventId:             eventID,
+			TaskId:              task.GetTaskID(),
 			VisibilityTimestamp: protoTs,
 		})
 
@@ -985,8 +985,8 @@ func createOrUpdateCurrentExecution(
 ) error {
 
 	executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
-		RunID:           primitives.MustParseUUID(runID),
-		CreateRequestID: createRequestID,
+		RunId:           primitives.MustParseUUID(runID),
+		CreateRequestId: createRequestID,
 		State:           int32(state),
 		CloseStatus:     int32(closeStatus),
 	})
@@ -1168,7 +1168,7 @@ func updateTimerInfos(
 		}
 
 		batch.Query(templateUpdateTimerInfoQuery,
-			a.TimerID,         // timermap key
+			a.GetTimerId(),    // timermap key
 			datablob.Data,     // timermap data
 			datablob.Encoding, // timermap encoding
 			shardID,           // where ...
@@ -1314,7 +1314,7 @@ func updateRequestCancelInfos(
 		}
 
 		batch.Query(templateUpdateRequestCancelInfoQuery,
-			c.InitiatedID,
+			c.GetInitiatedId(),
 			datablob.Data,
 			datablob.Encoding,
 			shardID,
@@ -1388,7 +1388,7 @@ func updateSignalInfos(
 		}
 
 		batch.Query(templateUpdateSignalInfoQuery,
-			c.InitiatedID,
+			c.GetInitiatedId(),
 			datablob.Data,
 			datablob.Encoding,
 			shardID,
@@ -1606,7 +1606,7 @@ func resetTimerInfoMap(
 
 		encoding = datablob.Encoding
 
-		tMap[t.TimerID] = datablob.Data
+		tMap[t.GetTimerId()] = datablob.Data
 	}
 
 	return tMap, encoding, nil
@@ -1649,7 +1649,7 @@ func resetRequestCancelInfoMap(
 
 		encoding = datablob.Encoding
 
-		rcMap[rc.InitiatedID] = datablob.Data
+		rcMap[rc.GetInitiatedId()] = datablob.Data
 	}
 
 	return rcMap, encoding, nil
@@ -1670,7 +1670,7 @@ func resetSignalInfoMap(
 
 		encoding = datablob.Encoding
 
-		sMap[s.InitiatedID] = datablob.Data
+		sMap[s.GetInitiatedId()] = datablob.Data
 	}
 
 	return sMap, encoding, nil

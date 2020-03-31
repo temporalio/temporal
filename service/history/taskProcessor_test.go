@@ -79,8 +79,8 @@ func (s *taskProcessorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          0,
-				RangeID:          1,
+				ShardId:          0,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
@@ -123,7 +123,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
+	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskId: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	var taskFilterErr taskFilter = func(task queueTaskInfo) (bool, error) {
 		return false, errors.New("some random error")
 	}
@@ -142,7 +142,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoEr
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
+	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskId: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	task.shouldProcessTask = false
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return false, nil
@@ -158,7 +158,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr()
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
+	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskId: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
 	}
@@ -174,7 +174,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() 
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr() {
 	err := errors.New("some random err")
-	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
+	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskId: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
 	}

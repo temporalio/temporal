@@ -233,7 +233,7 @@ func (s *Scavenger) startTaskProcessor(
 			// this checks if the mutableState still exists
 			// if not then the history branch is garbage, we need to delete the history branch
 			_, err = s.client.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
-				NamespaceUUID: task.namespaceID,
+				NamespaceId: task.namespaceID,
 				Execution: &commonproto.WorkflowExecution{
 					WorkflowId: task.workflowID,
 					RunId:      task.runID,

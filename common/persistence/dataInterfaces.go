@@ -2271,8 +2271,8 @@ func UnixNanoToDBTimestamp(timestamp int64) int64 {
 func NewHistoryBranchToken(treeID []byte) ([]byte, error) {
 	branchID := uuid.NewRandom()
 	bi := &persistenceblobs.HistoryBranch{
-		TreeID:    treeID,
-		BranchID:  branchID,
+		TreeId:    treeID,
+		BranchId:  branchID,
 		Ancestors: []*persistenceblobs.HistoryBranchRange{},
 	}
 	datablob, err := serialization.HistoryBranchToBlob(bi)
@@ -2286,8 +2286,8 @@ func NewHistoryBranchToken(treeID []byte) ([]byte, error) {
 // NewHistoryBranchTokenByBranchID return a new branch token with treeID/branchID
 func NewHistoryBranchTokenByBranchID(treeID, branchID []byte) ([]byte, error) {
 	bi := &persistenceblobs.HistoryBranch{
-		TreeID:    treeID,
-		BranchID:  branchID,
+		TreeId:    treeID,
+		BranchId:  branchID,
 		Ancestors: []*persistenceblobs.HistoryBranchRange{},
 	}
 	datablob, err := serialization.HistoryBranchToBlob(bi)

@@ -167,7 +167,7 @@ writerLoop:
 				var tasks []*persistenceblobs.AllocatedTaskInfo
 				for i, req := range reqs {
 					tasks = append(tasks, &persistenceblobs.AllocatedTaskInfo{
-						TaskID: taskIDs[i],
+						TaskId: taskIDs[i],
 						Data:   req.taskInfo,
 					})
 					maxReadLevel = taskIDs[i]

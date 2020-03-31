@@ -58,7 +58,7 @@ service AdminService {
     rpc GetReplicationMessages (GetReplicationMessagesRequest) returns (GetReplicationMessagesResponse) {
     }
 
-    // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
+    // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task Id.
     rpc GetNamespaceReplicationMessages (GetNamespaceReplicationMessagesRequest) returns (GetNamespaceReplicationMessagesResponse) {
     }
 

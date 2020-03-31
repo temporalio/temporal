@@ -145,7 +145,7 @@ func (p *kafkaProducer) getProducerMessage(message interface{}) (*sarama.Produce
 		}
 		msg := &sarama.ProducerMessage{
 			Topic: p.topic,
-			Key:   sarama.StringEncoder(message.GetWorkflowID()),
+			Key:   sarama.StringEncoder(message.GetWorkflowId()),
 			Value: sarama.ByteEncoder(payload),
 		}
 		return msg, nil

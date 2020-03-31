@@ -104,8 +104,8 @@ func (s *engine2Suite) SetupTest() {
 		s.controller,
 		&p.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          0,
-				RangeID:          1,
+				ShardId:          0,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		s.config,
@@ -186,7 +186,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	}, nil).Once()
 
 	request := historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &we,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -255,7 +255,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	}, nil).Once()
 
 	request := historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &we,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -309,7 +309,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -339,7 +339,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, errors.New("FAILED")).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -372,7 +372,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -409,7 +409,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -456,7 +456,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 	}, nil).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -500,7 +500,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -545,7 +545,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -588,7 +588,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 		&p.ConditionFailedError{}).Times(conditionalRetryCount)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -639,7 +639,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 	release(nil)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -678,7 +678,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	response, err := s.historyEngine.RecordActivityTaskStarted(context.Background(), &historyservice.RecordActivityTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        5,
 		TaskId:            100,
@@ -731,7 +731,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 		decisionCompletedEvent.GetEventId(), scheduledEvent.GetEventId(), gomock.Any(),
 	).Return(scheduledEvent, nil)
 	response, err := s.historyEngine.RecordActivityTaskStarted(context.Background(), &historyservice.RecordActivityTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        5,
 		TaskId:            100,
@@ -769,7 +769,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 	}, nil).Once()
 
 	err := s.historyEngine.RequestCancelWorkflowExecution(context.Background(), &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowExecution.WorkflowId,
@@ -802,7 +802,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
 
 	err := s.historyEngine.RequestCancelWorkflowExecution(context.Background(), &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowExecution.WorkflowId,
@@ -874,7 +874,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	}, nil).Once()
 
 	_, err := s.historyEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        serializedTaskToken,
 			Decisions:        decisions,
@@ -902,7 +902,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 
 	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
@@ -939,7 +939,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 	}).Once()
 
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
@@ -975,7 +975,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 	}).Once()
 
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
@@ -1038,7 +1038,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		}
 
 		resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: namespaceID,
+			NamespaceId: namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				Namespace:                           namespaceID,
 				WorkflowId:                          workflowID,
@@ -1119,7 +1119,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 			}
 
 			resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
-				NamespaceUUID: namespaceID,
+				NamespaceId: namespaceID,
 				StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 					Namespace:                           namespaceID,
 					WorkflowId:                          workflowID,
@@ -1158,7 +1158,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	signalName := "my signal name"
 	input := []byte("test input")
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:  namespaceID,
 			WorkflowId: workflowID,
@@ -1201,7 +1201,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	requestID := uuid.New()
 
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
@@ -1242,7 +1242,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 	requestID := uuid.New()
 
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
@@ -1283,7 +1283,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	input := []byte("test input")
 	requestID := uuid.New()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
@@ -1335,7 +1335,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	input := []byte("test input")
 	requestID := "testRequestID"
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
@@ -1395,7 +1395,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	input := []byte("test input")
 	requestID := "testRequestID"
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,

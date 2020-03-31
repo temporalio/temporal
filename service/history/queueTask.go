@@ -169,7 +169,7 @@ func (t *timerQueueTask) GetQueueType() queueType {
 func (t *transferQueueTask) Ack() {
 	t.queueTaskBase.Ack()
 
-	t.ackMgr.completeQueueTask(t.GetTaskID())
+	t.ackMgr.completeQueueTask(t.GetTaskId())
 }
 
 func (t *transferQueueTask) GetQueueType() queueType {

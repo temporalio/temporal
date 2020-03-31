@@ -236,28 +236,28 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 	}, nil).Once()
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: "namespaceID1",
+		NamespaceId: "namespaceID1",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID1",
 			RunId:      "runID1",
 		},
 	}).Return(nil, nil)
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: "namespaceID2",
+		NamespaceId: "namespaceID2",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
 	}).Return(nil, nil)
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: "namespaceID3",
+		NamespaceId: "namespaceID3",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
 	}).Return(nil, nil)
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: "namespaceID4",
+		NamespaceId: "namespaceID4",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
@@ -316,28 +316,28 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	}, nil).Once()
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: "namespaceID1",
+		NamespaceId: "namespaceID1",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID1",
 			RunId:      "runID1",
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: "namespaceID2",
+		NamespaceId: "namespaceID2",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: "namespaceID3",
+		NamespaceId: "namespaceID3",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: "namespaceID4",
+		NamespaceId: "namespaceID4",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
@@ -432,7 +432,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	}, nil).Once()
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: "namespaceID3",
+		NamespaceId: "namespaceID3",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
@@ -440,14 +440,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	}).Return(nil, serviceerror.NewNotFound(""))
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: "namespaceID4",
+		NamespaceId: "namespaceID4",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceUUID: "namespaceID5",
+		NamespaceId: "namespaceID5",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID5",
 			RunId:      "runID5",

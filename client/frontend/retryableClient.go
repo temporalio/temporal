@@ -332,15 +332,15 @@ func (c *retryableClient) RecordActivityTaskHeartbeat(
 	return resp, err
 }
 
-func (c *retryableClient) RecordActivityTaskHeartbeatByID(
+func (c *retryableClient) RecordActivityTaskHeartbeatById(
 	ctx context.Context,
-	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
+	request *workflowservice.RecordActivityTaskHeartbeatByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RecordActivityTaskHeartbeatByIDResponse, error) {
-	var resp *workflowservice.RecordActivityTaskHeartbeatByIDResponse
+) (*workflowservice.RecordActivityTaskHeartbeatByIdResponse, error) {
+	var resp *workflowservice.RecordActivityTaskHeartbeatByIdResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RecordActivityTaskHeartbeatByID(ctx, request, opts...)
+		resp, err = c.client.RecordActivityTaskHeartbeatById(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -422,15 +422,15 @@ func (c *retryableClient) RespondActivityTaskCanceled(
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) RespondActivityTaskCanceledByID(
+func (c *retryableClient) RespondActivityTaskCanceledById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
+	request *workflowservice.RespondActivityTaskCanceledByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCanceledByIDResponse, error) {
-	var resp *workflowservice.RespondActivityTaskCanceledByIDResponse
+) (*workflowservice.RespondActivityTaskCanceledByIdResponse, error) {
+	var resp *workflowservice.RespondActivityTaskCanceledByIdResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RespondActivityTaskCanceledByID(ctx, request, opts...)
+		resp, err = c.client.RespondActivityTaskCanceledById(ctx, request, opts...)
 		return err
 	}
 
@@ -452,15 +452,15 @@ func (c *retryableClient) RespondActivityTaskCompleted(
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) RespondActivityTaskCompletedByID(
+func (c *retryableClient) RespondActivityTaskCompletedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
+	request *workflowservice.RespondActivityTaskCompletedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCompletedByIDResponse, error) {
-	var resp *workflowservice.RespondActivityTaskCompletedByIDResponse
+) (*workflowservice.RespondActivityTaskCompletedByIdResponse, error) {
+	var resp *workflowservice.RespondActivityTaskCompletedByIdResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RespondActivityTaskCompletedByID(ctx, request, opts...)
+		resp, err = c.client.RespondActivityTaskCompletedById(ctx, request, opts...)
 		return err
 	}
 
@@ -482,15 +482,15 @@ func (c *retryableClient) RespondActivityTaskFailed(
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) RespondActivityTaskFailedByID(
+func (c *retryableClient) RespondActivityTaskFailedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskFailedByIDRequest,
+	request *workflowservice.RespondActivityTaskFailedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskFailedByIDResponse, error) {
-	var resp *workflowservice.RespondActivityTaskFailedByIDResponse
+) (*workflowservice.RespondActivityTaskFailedByIdResponse, error) {
+	var resp *workflowservice.RespondActivityTaskFailedByIdResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RespondActivityTaskFailedByID(ctx, request, opts...)
+		resp, err = c.client.RespondActivityTaskFailedById(ctx, request, opts...)
 		return err
 	}
 

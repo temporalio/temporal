@@ -167,7 +167,7 @@ func updateTimerInfos(
 				NamespaceID:  namespaceID,
 				WorkflowID:   workflowID,
 				RunID:        runID,
-				TimerID:      v.TimerID,
+				TimerID:      v.GetTimerId(),
 				Data:         blob.Data,
 				DataEncoding: string(blob.Encoding),
 			}
@@ -372,7 +372,7 @@ func updateRequestCancelInfos(
 				NamespaceID:  namespaceID,
 				WorkflowID:   workflowID,
 				RunID:        runID,
-				InitiatedID:  v.InitiatedID,
+				InitiatedID:  v.GetInitiatedId(),
 				Data:         blob.Data,
 				DataEncoding: string(blob.Encoding),
 			}
@@ -431,9 +431,9 @@ func getRequestCancelInfoMap(
 		}
 		ret[v.InitiatedID] = &persistenceblobs.RequestCancelInfo{
 			Version:               rowInfo.GetVersion(),
-			InitiatedID:           v.InitiatedID,
-			InitiatedEventBatchID: rowInfo.GetInitiatedEventBatchID(),
-			CancelRequestID:       rowInfo.GetCancelRequestID(),
+			InitiatedId:           v.InitiatedID,
+			InitiatedEventBatchId: rowInfo.GetInitiatedEventBatchId(),
+			CancelRequestId:       rowInfo.GetCancelRequestId(),
 		}
 	}
 
@@ -481,7 +481,7 @@ func updateSignalInfos(
 				NamespaceID:  namespaceID,
 				WorkflowID:   workflowID,
 				RunID:        runID,
-				InitiatedID:  v.InitiatedID,
+				InitiatedID:  v.GetInitiatedId(),
 				Data:         blob.Data,
 				DataEncoding: string(blob.Encoding),
 			}

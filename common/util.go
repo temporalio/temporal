@@ -383,8 +383,8 @@ func CreateHistoryStartWorkflowRequest(
 ) *historyservice.StartWorkflowExecutionRequest {
 	now := time.Now()
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
-		StartRequest:  startRequest,
+		NamespaceId:  namespaceID,
+		StartRequest: startRequest,
 	}
 	if startRequest.RetryPolicy != nil && startRequest.RetryPolicy.GetExpirationIntervalInSeconds() > 0 {
 		expirationInSeconds := startRequest.RetryPolicy.GetExpirationIntervalInSeconds()

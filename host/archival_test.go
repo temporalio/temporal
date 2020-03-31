@@ -155,7 +155,7 @@ func (s *integrationSuite) getNamespaceID(namespace string) string {
 		Name: s.archivalNamespace,
 	})
 	s.NoError(err)
-	return namespaceResp.NamespaceInfo.GetUuid()
+	return namespaceResp.NamespaceInfo.GetId()
 }
 
 func (s *integrationSuite) isHistoryArchived(namespace string, execution *commonproto.WorkflowExecution) bool {

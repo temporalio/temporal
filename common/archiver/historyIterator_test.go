@@ -353,14 +353,14 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	s.NotNil(blob)
 	expectedHeader := &archiver.HistoryBlobHeader{
 		Namespace:            testNamespace,
-		NamespaceID:          testNamespaceID,
-		WorkflowID:           testWorkflowID,
-		RunID:                testRunID,
+		NamespaceId:          testNamespaceID,
+		WorkflowId:           testWorkflowID,
+		RunId:                testRunID,
 		IsLast:               true,
 		FirstFailoverVersion: 1,
 		LastFailoverVersion:  5,
-		FirstEventID:         common.FirstEventID,
-		LastEventID:          16,
+		FirstEventId:         common.FirstEventID,
+		LastEventId:          16,
 		EventCount:           16,
 	}
 	s.Equal(expectedHeader, blob.Header)
@@ -415,14 +415,14 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	s.NotNil(blob)
 	expectedHeader := &archiver.HistoryBlobHeader{
 		Namespace:            testNamespace,
-		NamespaceID:          testNamespaceID,
-		WorkflowID:           testWorkflowID,
-		RunID:                testRunID,
+		NamespaceId:          testNamespaceID,
+		WorkflowId:           testWorkflowID,
+		RunId:                testRunID,
 		IsLast:               false,
 		FirstFailoverVersion: 1,
 		LastFailoverVersion:  1,
-		FirstEventID:         common.FirstEventID,
-		LastEventID:          6,
+		FirstEventId:         common.FirstEventID,
+		LastEventId:          6,
 		EventCount:           6,
 	}
 	s.Equal(expectedHeader, blob.Header)
@@ -466,14 +466,14 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		s.NotNil(blob)
 		expectedHeader := &archiver.HistoryBlobHeader{
 			Namespace:            testNamespace,
-			NamespaceID:          testNamespaceID,
-			WorkflowID:           testWorkflowID,
-			RunID:                testRunID,
+			NamespaceId:          testNamespaceID,
+			WorkflowId:           testWorkflowID,
+			RunId:                testRunID,
 			IsLast:               false,
 			FirstFailoverVersion: 1,
 			LastFailoverVersion:  1,
-			FirstEventID:         common.FirstEventID + int64(i*200),
-			LastEventID:          int64(200 + (i * 200)),
+			FirstEventId:         common.FirstEventID + int64(i*200),
+			LastEventId:          int64(200 + (i * 200)),
 			EventCount:           200,
 		}
 		if i == 9 {

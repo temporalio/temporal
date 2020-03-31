@@ -285,7 +285,7 @@ func (c *historyRereplicationContext) createReplicationRawRequest(
 ) *historyservice.ReplicateRawEventsRequest {
 
 	request := &historyservice.ReplicateRawEventsRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

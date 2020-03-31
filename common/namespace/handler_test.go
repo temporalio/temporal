@@ -328,8 +328,8 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		token = resp.NextPageToken
 		s.True(len(resp.Namespaces) <= int(pagesize))
 		if len(resp.Namespaces) > 0 {
-			s.NotEmpty(resp.Namespaces[0].NamespaceInfo.GetUuid())
-			resp.Namespaces[0].NamespaceInfo.Uuid = ""
+			s.NotEmpty(resp.Namespaces[0].NamespaceInfo.GetId())
+			resp.Namespaces[0].NamespaceInfo.Id = ""
 			namespaces[resp.Namespaces[0].NamespaceInfo.GetName()] = resp.Namespaces[0]
 		}
 	}
@@ -342,7 +342,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 				Description: description1,
 				OwnerEmail:  email1,
 				Data:        data1,
-				Uuid:        "",
+				Id:          "",
 			},
 			Configuration: &commonproto.NamespaceConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention1,
@@ -367,7 +367,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 				Description: description2,
 				OwnerEmail:  email2,
 				Data:        data2,
-				Uuid:        "",
+				Id:          "",
 			},
 			Configuration: &commonproto.NamespaceConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention2,

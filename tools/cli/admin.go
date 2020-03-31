@@ -32,11 +32,11 @@ func newAdminWorkflowCommands() []cli.Command {
 				// v2 history events
 				cli.StringFlag{
 					Name:  FlagTreeID,
-					Usage: "TreeID",
+					Usage: "TreeId",
 				},
 				cli.StringFlag{
 					Name:  FlagBranchID,
-					Usage: "BranchID",
+					Usage: "BranchId",
 				},
 				cli.StringFlag{
 					Name:  FlagOutputFilenameWithAlias,
@@ -90,7 +90,7 @@ func newAdminWorkflowCommands() []cli.Command {
 				// support mysql query
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
-					Usage: "ShardID",
+					Usage: "ShardId",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -104,11 +104,11 @@ func newAdminWorkflowCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
+					Usage: "WorkflowId",
 				},
 				cli.StringFlag{
 					Name:  FlagRunIDWithAlias,
-					Usage: "RunID",
+					Usage: "RunId",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -122,11 +122,11 @@ func newAdminWorkflowCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
+					Usage: "WorkflowId",
 				},
 				cli.StringFlag{
 					Name:  FlagRunIDWithAlias,
-					Usage: "RunID",
+					Usage: "RunId",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -140,11 +140,11 @@ func newAdminWorkflowCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
+					Usage: "WorkflowId",
 				},
 				cli.StringFlag{
 					Name:  FlagRunIDWithAlias,
-					Usage: "RunID",
+					Usage: "RunId",
 				},
 				cli.BoolFlag{
 					Name:  FlagSkipErrorModeWithAlias,
@@ -211,7 +211,7 @@ func newAdminShardManagementCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.IntFlag{
 					Name:  FlagShardID,
-					Usage: "ShardID for the temporal cluster to manage",
+					Usage: "ShardId for the temporal cluster to manage",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -221,11 +221,11 @@ func newAdminShardManagementCommands() []cli.Command {
 		{
 			Name:    "removeTask",
 			Aliases: []string{"rmtk"},
-			Usage:   "remove a task based on shardID, typeID and taskID",
+			Usage:   "remove a task based on shardId, typeId and taskId",
 			Flags: []cli.Flag{
 				cli.IntFlag{
 					Name:  FlagShardID,
-					Usage: "ShardID for the temporal cluster to manage",
+					Usage: "ShardId for the temporal cluster to manage",
 				},
 				cli.Int64Flag{
 					Name:  FlagRemoveTaskID,
@@ -252,7 +252,7 @@ func newAdminHistoryHostCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
+					Usage: "WorkflowId",
 				},
 				cli.StringFlag{
 					Name:  FlagHistoryAddressWithAlias,
@@ -260,7 +260,7 @@ func newAdminHistoryHostCommands() []cli.Command {
 				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
-					Usage: "ShardID",
+					Usage: "ShardId",
 				},
 				cli.BoolFlag{
 					Name:  FlagPrintFullyDetailWithAlias,
@@ -274,11 +274,11 @@ func newAdminHistoryHostCommands() []cli.Command {
 		{
 			Name:    "getshard",
 			Aliases: []string{"gsh"},
-			Usage:   "Get shardID for a workflowID",
+			Usage:   "Get shardId for a workflowId",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
+					Usage: "WorkflowId",
 				},
 				cli.IntFlag{
 					Name:  FlagNumberOfShards,
@@ -324,7 +324,7 @@ func newAdminNamespaceCommands() []cli.Command {
 		{
 			Name:    "getnamespaceidorname",
 			Aliases: []string{"getdn"},
-			Usage:   "Get namespaceID or namespace",
+			Usage:   "Get namespaceId or namespace",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagNamespace,
@@ -332,7 +332,7 @@ func newAdminNamespaceCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagNamespaceID,
-					Usage: "Namespace ID(uuid)",
+					Usage: "Namespace Id(uuid)",
 				},
 
 				// for persistence connection
@@ -399,11 +399,11 @@ func newAdminKafkaCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID, if not provided then no filters by WorkflowID are applied",
+					Usage: "WorkflowId, if not provided then no filters by WorkflowId are applied",
 				},
 				cli.StringFlag{
 					Name:  FlagRunIDWithAlias,
-					Usage: "RunID, if not provided then no filters by RunID are applied",
+					Usage: "RunId, if not provided then no filters by RunId are applied",
 				},
 				cli.StringFlag{
 					Name:  FlagOutputFilenameWithAlias,
@@ -415,7 +415,7 @@ func newAdminKafkaCommands() []cli.Command {
 				},
 				cli.BoolFlag{
 					Name:  FlagHeadersModeWithAlias,
-					Usage: "Output headers of messages in format: NamespaceID, WorkflowID, RunID, FirstEventID, NextEventID",
+					Usage: "Output headers of messages in format: NamespaceId, WorkflowId, RunId, FirstEventId, NextEventId",
 				},
 				cli.IntFlag{
 					Name:  FlagMessageTypeWithAlias,
@@ -527,35 +527,35 @@ clusters:
 				},
 				cli.IntFlag{
 					Name:  FlagNumberOfShards,
-					Usage: "NumberOfShards is required to calculate shardID. (see server config for numHistoryShards)",
+					Usage: "NumberOfShards is required to calculate shardId. (see server config for numHistoryShards)",
 				},
 
 				// for multiple workflow
 				cli.StringFlag{
 					Name:  FlagInputFileWithAlias,
-					Usage: "Input file to read multiple workflow line by line. For each line: namespaceID,workflowID,runID,minEventID,maxEventID (minEventID/maxEventID are optional.)",
+					Usage: "Input file to read multiple workflow line by line. For each line: namespaceId workflowId,runId,minEventId,maxEventId (minEventId/maxEventId are optional.)",
 				},
 
 				// for one workflow
 				cli.Int64Flag{
 					Name:  FlagMinEventID,
-					Usage: "MinEventID. Optional, default to all events",
+					Usage: "MinEventId. Optional, default to all events",
 				},
 				cli.Int64Flag{
 					Name:  FlagMaxEventID,
-					Usage: "MaxEventID Optional, default to all events",
+					Usage: "MaxEventId Optional, default to all events",
 				},
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
+					Usage: "WorkflowId",
 				},
 				cli.StringFlag{
 					Name:  FlagRunIDWithAlias,
-					Usage: "RunID",
+					Usage: "RunId",
 				},
 				cli.StringFlag{
 					Name:  FlagNamespaceID,
-					Usage: "NamespaceID",
+					Usage: "NamespaceId",
 				},
 
 				// for persistence connection
@@ -815,7 +815,7 @@ func newAdminDLQCommands() []cli.Command {
 				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
-					Usage: "ShardID",
+					Usage: "ShardId",
 				},
 				cli.IntFlag{
 					Name:  FlagMaxMessageCountWithAlias,
@@ -845,7 +845,7 @@ func newAdminDLQCommands() []cli.Command {
 				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
-					Usage: "ShardID",
+					Usage: "ShardId",
 				},
 				cli.IntFlag{
 					Name:  FlagLastMessageID,
@@ -867,7 +867,7 @@ func newAdminDLQCommands() []cli.Command {
 				},
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
-					Usage: "ShardID",
+					Usage: "ShardId",
 				},
 				cli.IntFlag{
 					Name:  FlagLastMessageID,

@@ -153,9 +153,9 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	s.NoError(err)
 	request := &archiverproto.ArchiveVisibilityRequest{
 		Namespace:          testNamespace,
-		NamespaceID:        testNamespaceID,
-		WorkflowID:         testWorkflowID,
-		RunID:              testRunID,
+		NamespaceId:        testNamespaceID,
+		WorkflowId:         testWorkflowID,
+		RunId:              testRunID,
 		WorkflowTypeName:   testWorkflowTypeName,
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
@@ -180,7 +180,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
 		context.Background(),
 		s.testArchivalURI,
 		&archiverproto.ArchiveVisibilityRequest{
-			NamespaceID: testNamespaceID,
+			NamespaceId: testNamespaceID,
 		},
 		archiver.GetNonRetriableErrorOption(nonRetriableErr),
 	)
@@ -191,10 +191,10 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	closeTimestamp := time.Now()
 	request := &archiverproto.ArchiveVisibilityRequest{
-		NamespaceID:        testNamespaceID,
+		NamespaceId:        testNamespaceID,
 		Namespace:          testNamespace,
-		WorkflowID:         testWorkflowID,
-		RunID:              testRunID,
+		WorkflowId:         testWorkflowID,
+		RunId:              testRunID,
 		WorkflowTypeName:   testWorkflowTypeName,
 		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
@@ -423,10 +423,10 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 	for i, testData := range precisionTests {
 		record := archiverproto.ArchiveVisibilityRequest{
-			NamespaceID:      testNamespaceID,
+			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
-			WorkflowID:       testWorkflowID,
-			RunID:            fmt.Sprintf("%s-%d", testRunID, i),
+			WorkflowId:       testWorkflowID,
+			RunId:            fmt.Sprintf("%s-%d", testRunID, i),
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   testData.day*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
 			CloseTimestamp:   (testData.day+30)*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
@@ -560,10 +560,10 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 	s.visibilityRecords = []*archiverproto.ArchiveVisibilityRequest{
 		{
-			NamespaceID:      testNamespaceID,
+			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
-			WorkflowID:       testWorkflowID,
-			RunID:            testRunID,
+			WorkflowId:       testWorkflowID,
+			RunId:            testRunID,
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(1 * time.Hour),
@@ -571,10 +571,10 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			HistoryLength:    101,
 		},
 		{
-			NamespaceID:      testNamespaceID,
+			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
-			WorkflowID:       testWorkflowID,
-			RunID:            testRunID + "1",
+			WorkflowId:       testWorkflowID,
+			RunId:            testRunID + "1",
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(1*time.Hour + 30*time.Minute),
@@ -582,10 +582,10 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			HistoryLength:    101,
 		},
 		{
-			NamespaceID:      testNamespaceID,
+			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
-			WorkflowID:       testWorkflowID,
-			RunID:            testRunID + "1",
+			WorkflowId:       testWorkflowID,
+			RunId:            testRunID + "1",
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(3 * time.Hour),

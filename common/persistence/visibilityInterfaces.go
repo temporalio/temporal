@@ -38,7 +38,7 @@ type (
 	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly
 	// started execution
 	RecordWorkflowExecutionStartedRequest struct {
-		NamespaceUUID      string
+		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
 		Execution          commonproto.WorkflowExecution
 		WorkflowTypeName   string
@@ -53,7 +53,7 @@ type (
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a newly
 	// closed execution
 	RecordWorkflowExecutionClosedRequest struct {
-		NamespaceUUID      string
+		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
 		Execution          commonproto.WorkflowExecution
 		WorkflowTypeName   string
@@ -70,7 +70,7 @@ type (
 
 	// UpsertWorkflowExecutionRequest is used to upsert workflow execution
 	UpsertWorkflowExecutionRequest struct {
-		NamespaceUUID      string
+		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
 		Execution          commonproto.WorkflowExecution
 		WorkflowTypeName   string
@@ -84,7 +84,7 @@ type (
 
 	// ListWorkflowExecutionsRequest is used to list executions in a namespace
 	ListWorkflowExecutionsRequest struct {
-		NamespaceUUID     string
+		NamespaceID       string
 		Namespace         string // namespace name is not persisted, but used as config filter key
 		EarliestStartTime int64
 		LatestStartTime   int64
@@ -97,9 +97,9 @@ type (
 
 	// ListWorkflowExecutionsRequestV2 is used to list executions in a namespace
 	ListWorkflowExecutionsRequestV2 struct {
-		NamespaceUUID string
-		Namespace     string // namespace name is not persisted, but used as config filter key
-		PageSize      int    // Maximum number of workflow executions per page
+		NamespaceID string
+		Namespace   string // namespace name is not persisted, but used as config filter key
+		PageSize    int    // Maximum number of workflow executions per page
 		// Token to continue reading next page of workflow executions.
 		// Pass in empty slice for first page.
 		NextPageToken []byte
@@ -116,9 +116,9 @@ type (
 
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions
 	CountWorkflowExecutionsRequest struct {
-		NamespaceUUID string
-		Namespace     string // namespace name is not persisted, but used as config filter key
-		Query         string
+		NamespaceID string
+		Namespace   string // namespace name is not persisted, but used as config filter key
+		Query       string
 	}
 
 	// CountWorkflowExecutionsResponse is response to CountWorkflowExecutions
@@ -149,9 +149,9 @@ type (
 
 	// GetClosedWorkflowExecutionRequest is used retrieve the record for a specific execution
 	GetClosedWorkflowExecutionRequest struct {
-		NamespaceUUID string
-		Namespace     string // namespace name is not persisted, but used as config filter key
-		Execution     commonproto.WorkflowExecution
+		NamespaceID string
+		Namespace   string // namespace name is not persisted, but used as config filter key
+		Execution   commonproto.WorkflowExecution
 	}
 
 	// GetClosedWorkflowExecutionResponse is the response to GetClosedWorkflowExecutionRequest

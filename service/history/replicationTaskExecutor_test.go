@@ -106,8 +106,8 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 		shardID:  0,
 		Resource: s.mockResource,
 		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{
-			ShardID:                0,
-			RangeID:                1,
+			ShardId:                0,
+			RangeId:                1,
 			ReplicationAckLevel:    0,
 			ReplicationDLQAckLevel: map[string]int64{"test": -1},
 		}},
@@ -255,7 +255,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 		},
 	}
 	request := &historyservice.ReplicateEventsRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -289,7 +289,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 		},
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

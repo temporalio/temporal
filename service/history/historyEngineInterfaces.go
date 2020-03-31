@@ -69,12 +69,12 @@ type (
 
 	queueTaskInfo interface {
 		GetVersion() int64
-		GetTaskID() int64
+		GetTaskId() int64
 		GetTaskType() int32
 		GetVisibilityTimestamp() *types.Timestamp
-		GetWorkflowID() string
-		GetRunID() []byte
-		GetNamespaceID() []byte
+		GetWorkflowId() string
+		GetRunId() []byte
+		GetNamespaceId() []byte
 	}
 
 	queueTask interface {

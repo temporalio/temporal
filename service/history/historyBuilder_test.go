@@ -70,8 +70,8 @@ func (s *historyBuilderSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          0,
-				RangeID:          1,
+				ShardId:          0,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
@@ -271,7 +271,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 	_, err := s.msBuilder.AddWorkflowExecutionStartedEvent(
 		we,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
+			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowId:                          we.WorkflowId,
 				WorkflowType:                        &commonproto.WorkflowType{Name: wt},
@@ -722,8 +722,8 @@ func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we commonproto.Wo
 	event, err := s.msBuilder.AddWorkflowExecutionStartedEvent(
 		we,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceUUID: s.namespaceID,
-			StartRequest:  request,
+			NamespaceId:  s.namespaceID,
+			StartRequest: request,
 		},
 	)
 	s.Nil(err)

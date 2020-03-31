@@ -123,13 +123,13 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 
 		batch := h.session.NewBatch(gocql.LoggedBatch)
 		batch.Query(v2templateInsertTree,
-			branchInfo.TreeID, branchInfo.BranchID, treeInfoDataBlob.Data, treeInfoDataBlob.Encoding)
+			branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.Encoding)
 		batch.Query(v2templateUpsertData,
-			branchInfo.TreeID, branchInfo.BranchID, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding)
+			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding)
 		err = h.session.ExecuteBatch(batch)
 	} else {
 		query := h.session.Query(v2templateUpsertData,
-			branchInfo.TreeID, branchInfo.BranchID, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding)
+			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.Encoding)
 		err = query.Exec()
 	}
 
@@ -268,11 +268,11 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 	if beginNodeID >= request.ForkNodeID {
 		// this is the case that new branch's ancestors doesn't include the forking branch
 		for _, br := range forkB.Ancestors {
-			if br.EndNodeID >= request.ForkNodeID {
+			if br.GetEndNodeId() >= request.ForkNodeID {
 				newAncestors = append(newAncestors, &persistenceblobs.HistoryBranchRange{
-					BranchID:    br.BranchID,
-					BeginNodeID: br.BeginNodeID,
-					EndNodeID:   request.ForkNodeID,
+					BranchId:    br.GetBranchId(),
+					BeginNodeId: br.GetBeginNodeId(),
+					EndNodeId:   request.ForkNodeID,
 				})
 				break
 			} else {
@@ -283,16 +283,16 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 		// this is the case the new branch will inherit all ancestors from forking branch
 		newAncestors = forkB.Ancestors
 		newAncestors = append(newAncestors, &persistenceblobs.HistoryBranchRange{
-			BranchID:    forkB.BranchID,
-			BeginNodeID: beginNodeID,
-			EndNodeID:   request.ForkNodeID,
+			BranchId:    forkB.GetBranchId(),
+			BeginNodeId: beginNodeID,
+			EndNodeId:   request.ForkNodeID,
 		})
 	}
 
 	hti := &persistenceblobs.HistoryTreeInfo{
 		BranchInfo: &persistenceblobs.HistoryBranch{
-			TreeID:    forkB.TreeID,
-			BranchID:  request.NewBranchID,
+			TreeId:    forkB.TreeId,
+			BranchId:  request.NewBranchID,
 			Ancestors: newAncestors,
 		},
 		ForkTime: types.TimestampNow(),
@@ -304,7 +304,7 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 		return nil, err
 	}
 
-	cqlTreeID, err := gocql.UUIDFromBytes(forkB.TreeID)
+	cqlTreeID, err := gocql.UUIDFromBytes(forkB.TreeId)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
@@ -330,15 +330,15 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 ) error {
 
 	branch := request.BranchInfo
-	treeID, err := gocql.UUIDFromBytes(branch.TreeID)
+	treeID, err := gocql.UUIDFromBytes(branch.TreeId)
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
 	brsToDelete := branch.Ancestors
 	beginNodeID := p.GetBeginNodeID(branch)
 	brsToDelete = append(brsToDelete, &persistenceblobs.HistoryBranchRange{
-		BranchID:    branch.BranchID,
-		BeginNodeID: beginNodeID,
+		BranchId:    branch.GetBranchId(),
+		BeginNodeId: beginNodeID,
 	})
 
 	rsp, err := h.GetHistoryTree(&p.GetHistoryTreeRequest{
@@ -349,16 +349,16 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	}
 
 	batch := h.session.NewBatch(gocql.LoggedBatch)
-	batch.Query(v2templateDeleteBranch, treeID, branch.BranchID)
+	batch.Query(v2templateDeleteBranch, treeID, branch.BranchId)
 
 	// validBRsMaxEndNode is to know each branch range that is being used, we want to know what is the max nodeID referred by other valid branch
 	validBRsMaxEndNode := map[string]int64{}
 	for _, b := range rsp.Branches {
 		for _, br := range b.Ancestors {
 			// These string casts are safe and optimized away -- https://github.com/golang/go/issues/3512
-			curr, ok := validBRsMaxEndNode[string(br.BranchID)]
-			if !ok || curr < br.EndNodeID {
-				validBRsMaxEndNode[string(br.BranchID)] = br.EndNodeID
+			curr, ok := validBRsMaxEndNode[string(br.GetBranchId())]
+			if !ok || curr < br.GetEndNodeId() {
+				validBRsMaxEndNode[string(br.GetBranchId())] = br.GetEndNodeId()
 			}
 		}
 	}
@@ -366,14 +366,14 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	// for each branch range to delete, we iterate from bottom to up, and delete up to the point according to validBRsEndNode
 	for i := len(brsToDelete) - 1; i >= 0; i-- {
 		br := brsToDelete[i]
-		maxReferredEndNodeID, ok := validBRsMaxEndNode[string(br.BranchID)]
+		maxReferredEndNodeID, ok := validBRsMaxEndNode[string(br.GetBranchId())]
 		if ok {
 			// we can only delete from the maxEndNode and stop here
-			h.deleteBranchRangeNodes(batch, treeID[:], br.BranchID, maxReferredEndNodeID)
+			h.deleteBranchRangeNodes(batch, treeID[:], br.GetBranchId(), maxReferredEndNodeID)
 			break
 		} else {
 			// No any branch is using this range, we can delete all of it
-			h.deleteBranchRangeNodes(batch, treeID[:], br.BranchID, br.BeginNodeID)
+			h.deleteBranchRangeNodes(batch, treeID[:], br.GetBranchId(), br.GetBeginNodeId())
 		}
 	}
 
@@ -504,10 +504,10 @@ func (h *cassandraHistoryV2Persistence) sortAncestors(
 ) {
 	if len(*ans) > 0 {
 		// sort ans based onf EndNodeID so that we can set BeginNodeID
-		sort.Slice(ans, func(i, j int) bool { return (*ans)[i].EndNodeID < (*ans)[j].EndNodeID })
-		(*ans)[0].BeginNodeID = int64(1)
+		sort.Slice(ans, func(i, j int) bool { return (*ans)[i].GetEndNodeId() < (*ans)[j].GetEndNodeId() })
+		(*ans)[0].BeginNodeId = int64(1)
 		for i := 1; i < len(*ans); i++ {
-			(*ans)[i].BeginNodeID = (*ans)[i-1].EndNodeID
+			(*ans)[i].BeginNodeId = (*ans)[i-1].GetEndNodeId()
 		}
 	}
 }

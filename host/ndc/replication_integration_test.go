@@ -136,7 +136,7 @@ Loop:
 			token = response.NextPageToken
 
 			for _, task := range response.Tasks {
-				firstEventID := task.FirstEventID
+				firstEventID := task.GetFirstEventId()
 				actualDLQMsgs[firstEventID] = true
 			}
 		}

@@ -161,27 +161,27 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	switch fwdr.taskListID.taskType {
 	case persistence.TaskListTypeDecision:
 		_, err = fwdr.client.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
-			NamespaceUUID: primitives.UUIDString(task.event.Data.NamespaceID),
-			Execution:     task.workflowExecution(),
+			NamespaceId: primitives.UUIDString(task.event.Data.GetNamespaceId()),
+			Execution:   task.workflowExecution(),
 			TaskList: &commonproto.TaskList{
 				Name: name,
 				Kind: enums.TaskListKind(fwdr.taskListKind),
 			},
-			ScheduleId:                    task.event.Data.ScheduleID,
+			ScheduleId:                    task.event.Data.GetScheduleId(),
 			Source:                        task.source,
 			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
 			ForwardedFrom:                 fwdr.taskListID.name,
 		})
 	case persistence.TaskListTypeActivity:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-			NamespaceUUID:       fwdr.taskListID.namespaceID,
-			SourceNamespaceUUID: primitives.UUIDString(task.event.Data.NamespaceID),
-			Execution:           task.workflowExecution(),
+			NamespaceId:       fwdr.taskListID.namespaceID,
+			SourceNamespaceId: primitives.UUIDString(task.event.Data.GetNamespaceId()),
+			Execution:         task.workflowExecution(),
 			TaskList: &commonproto.TaskList{
 				Name: name,
 				Kind: enums.TaskListKind(fwdr.taskListKind),
 			},
-			ScheduleId:                    task.event.Data.ScheduleID,
+			ScheduleId:                    task.event.Data.GetScheduleId(),
 			Source:                        task.source,
 			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
 			ForwardedFrom:                 fwdr.taskListID.name,
@@ -209,7 +209,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 	}
 
 	resp, err := fwdr.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
-		NamespaceUUID: task.query.request.GetNamespaceUUID(),
+		NamespaceId: task.query.request.GetNamespaceId(),
 		TaskList: &commonproto.TaskList{
 			Name: name,
 			Kind: fwdr.taskListKind,
@@ -238,8 +238,8 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 	switch fwdr.taskListID.taskType {
 	case persistence.TaskListTypeDecision:
 		resp, err := fwdr.client.PollForDecisionTask(ctx, &matchingservice.PollForDecisionTaskRequest{
-			NamespaceUUID: fwdr.taskListID.namespaceID,
-			PollerID:      pollerID,
+			NamespaceId: fwdr.taskListID.namespaceID,
+			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollForDecisionTaskRequest{
 				TaskList: &commonproto.TaskList{
 					Name: name,
@@ -255,8 +255,8 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 		return newInternalStartedTask(&startedTaskInfo{decisionTaskInfo: resp}), nil
 	case persistence.TaskListTypeActivity:
 		resp, err := fwdr.client.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
-			NamespaceUUID: fwdr.taskListID.namespaceID,
-			PollerID:      pollerID,
+			NamespaceId: fwdr.taskListID.namespaceID,
+			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
 				TaskList: &commonproto.TaskList{
 					Name: name,

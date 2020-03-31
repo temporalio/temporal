@@ -128,13 +128,13 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
-	filename := constructVisibilityFilename(request.NamespaceID, request.WorkflowTypeName, request.WorkflowID, request.RunID, indexKeyCloseTimeout, request.CloseTimestamp)
+	filename := constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyCloseTimeout, request.CloseTimestamp)
 	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetriable
 	}
 
-	filename = constructVisibilityFilename(request.NamespaceID, request.WorkflowTypeName, request.WorkflowID, request.RunID, indexKeyStartTimeout, request.StartTimestamp)
+	filename = constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyStartTimeout, request.StartTimestamp)
 	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetriable

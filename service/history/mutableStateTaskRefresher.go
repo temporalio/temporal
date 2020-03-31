@@ -414,8 +414,8 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWork
 			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
-			requestCancelInfo.InitiatedEventBatchID,
-			requestCancelInfo.InitiatedID,
+			requestCancelInfo.GetInitiatedEventBatchId(),
+			requestCancelInfo.GetInitiatedId(),
 			currentBranchToken,
 		)
 		if err != nil {
@@ -452,8 +452,8 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 			executionInfo.NamespaceID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
-			signalInfo.InitiatedEventBatchID,
-			signalInfo.InitiatedID,
+			signalInfo.GetInitiatedEventBatchId(),
+			signalInfo.GetInitiatedId(),
 			currentBranchToken,
 		)
 		if err != nil {

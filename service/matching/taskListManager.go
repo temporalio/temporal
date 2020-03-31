@@ -212,7 +212,7 @@ func (c *taskListManagerImpl) AddTask(ctx context.Context, params addTaskParams)
 	_, err := c.executeWithRetry(func() (interface{}, error) {
 		td := params.taskInfo
 
-		namespaceEntry, err := c.namespaceCache.GetNamespaceByID(primitives.UUIDString(td.NamespaceID))
+		namespaceEntry, err := c.namespaceCache.GetNamespaceByID(primitives.UUIDString(td.GetNamespaceId()))
 		if err != nil {
 			return nil, err
 		}
@@ -354,9 +354,9 @@ func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *matc
 		AckLevel:         c.taskAckManager.getAckLevel(),
 		BacklogCountHint: c.taskAckManager.getBacklogCountHint(),
 		RatePerSecond:    c.matcher.Rate(),
-		TaskIDBlock: &commonproto.TaskIDBlock{
-			StartID: taskIDBlock.start,
-			EndID:   taskIDBlock.end,
+		TaskIdBlock: &commonproto.TaskIdBlock{
+			StartId: taskIDBlock.start,
+			EndId:   taskIDBlock.end,
 		},
 	}
 
@@ -394,7 +394,7 @@ func (c *taskListManagerImpl) completeTask(task *persistenceblobs.AllocatedTaskI
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
 		_, err = c.executeWithRetry(func() (interface{}, error) {
-			wf := &commonproto.WorkflowExecution{WorkflowId: task.Data.WorkflowID, RunId: primitives.UUIDString(task.Data.RunID)}
+			wf := &commonproto.WorkflowExecution{WorkflowId: task.Data.GetWorkflowId(), RunId: primitives.UUIDString(task.Data.GetRunId())}
 			return c.taskWriter.appendTask(wf, task.Data)
 		})
 
@@ -413,7 +413,7 @@ func (c *taskListManagerImpl) completeTask(task *persistenceblobs.AllocatedTaskI
 		c.taskReader.Signal()
 	}
 
-	ackLevel := c.taskAckManager.completeTask(task.TaskID)
+	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
 	c.taskGC.Run(ackLevel)
 }
 
@@ -485,7 +485,7 @@ func (c *taskListManagerImpl) trySyncMatch(ctx context.Context, params addTaskPa
 	// Mocking out TaskId for syncmatch as it hasn't been allocated yet
 	fakeTaskIdWrapper := &persistenceblobs.AllocatedTaskInfo{
 		Data:   params.taskInfo,
-		TaskID: syncMatchTaskId,
+		TaskId: syncMatchTaskId,
 	}
 
 	task := newInternalTask(fakeTaskIdWrapper, c.completeTask, params.source, params.forwardedFrom, true)

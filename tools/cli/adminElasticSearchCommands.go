@@ -147,7 +147,7 @@ func AdminIndex(c *cli.Context) {
 		}
 	}
 	for i, message := range messages {
-		docID := message.GetWorkflowID() + esDocIDDelimiter + message.GetRunID()
+		docID := message.GetWorkflowId() + esDocIDDelimiter + message.GetRunId()
 		var req elastic.BulkableRequest
 		switch message.GetMessageType() {
 		case enums.MessageTypeIndex:
@@ -273,9 +273,9 @@ func parseIndexerMessage(fileName string) (messages []*indexer.Message, err erro
 
 func generateESDoc(msg *indexer.Message) map[string]interface{} {
 	doc := make(map[string]interface{})
-	doc[es.NamespaceID] = msg.GetNamespaceID()
-	doc[es.WorkflowID] = msg.GetWorkflowID()
-	doc[es.RunID] = msg.GetRunID()
+	doc[es.NamespaceID] = msg.GetNamespaceId()
+	doc[es.WorkflowID] = msg.GetWorkflowId()
+	doc[es.RunID] = msg.GetRunId()
 
 	for k, v := range msg.Fields {
 		switch v.GetType() {
@@ -373,9 +373,9 @@ func GenerateReport(c *cli.Context) {
 	// record the column position in the table of each returned item
 	ids := make(map[string]int)
 	// We want these 3 columns shows at leftmost of the table in temporal report usage. It can be changed in future.
-	primaryCols := []string{"group_NamespaceID", "group_WorkflowType", "group_CloseStatus"}
+	primaryCols := []string{"group_NamespaceId", "group_WorkflowType", "group_CloseStatus"}
 	primaryColsMap := map[string]int{
-		"group_NamespaceID":  1,
+		"group_NamespaceId":  1,
 		"group_WorkflowType": 1,
 		"group_CloseStatus":  1,
 	}

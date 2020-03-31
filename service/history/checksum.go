@@ -59,7 +59,7 @@ func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableState
 		CancelRequested:      executionInfo.CancelRequested,
 		State:                int32(executionInfo.State),
 		LastFirstEventId:     executionInfo.LastFirstEventID,
-		NextEventID:          executionInfo.NextEventID,
+		NextEventId:          executionInfo.NextEventID,
 		LastProcessedEventId: executionInfo.LastProcessedEvent,
 		SignalCount:          int64(executionInfo.SignalCount),
 		DecisionAttempt:      int32(executionInfo.DecisionAttempt),
@@ -83,7 +83,7 @@ func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableState
 	// same serialized bytes can be generated during verification
 	pendingTimerIDs := make([]int64, 0, len(ms.GetPendingTimerInfos()))
 	for _, ti := range ms.GetPendingTimerInfos() {
-		pendingTimerIDs = append(pendingTimerIDs, ti.StartedID)
+		pendingTimerIDs = append(pendingTimerIDs, ti.GetStartedId())
 	}
 	common.SortInt64Slice(pendingTimerIDs)
 	payload.PendingTimerStartedIds = pendingTimerIDs

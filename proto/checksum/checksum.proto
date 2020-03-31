@@ -33,7 +33,7 @@ message MutableStateChecksumPayload {
     int64 lastWriteVersion = 4;
     int64 lastWriteEventId = 5;
     int64 lastFirstEventId = 6;
-    int64 nextEventID = 7;
+    int64 nextEventId = 7;
     int64 lastProcessedEventId = 8;
     int64 signalCount = 9;
 

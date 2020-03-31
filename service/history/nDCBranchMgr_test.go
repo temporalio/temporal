@@ -80,8 +80,8 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          10,
-				RangeID:          1,
+				ShardId:          10,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),

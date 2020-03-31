@@ -103,7 +103,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 	req *historyservice.ScheduleDecisionTaskRequest,
 ) error {
 
-	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.NamespaceUUID)
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	req *historyservice.RecordDecisionTaskStartedRequest,
 ) (*historyservice.RecordDecisionTaskStartedResponse, error) {
 
-	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.NamespaceUUID)
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +227,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 	req *historyservice.RespondDecisionTaskFailedRequest,
 ) (retError error) {
 
-	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.NamespaceUUID)
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	req *historyservice.RespondDecisionTaskCompletedRequest,
 ) (resp *historyservice.RespondDecisionTaskCompletedResponse, retError error) {
 
-	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.NamespaceUUID)
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}

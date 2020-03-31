@@ -457,8 +457,8 @@ func processTask(
 			getActivityLogger(ctx).Info("Found more child workflows to process", tag.Number(int64(len(resp.PendingChildren))))
 			for _, ch := range resp.PendingChildren {
 				wfs = append(wfs, commonproto.WorkflowExecution{
-					WorkflowId: ch.WorkflowID,
-					RunId:      ch.RunID,
+					WorkflowId: ch.GetWorkflowId(),
+					RunId:      ch.GetRunId(),
 				})
 			}
 		}
