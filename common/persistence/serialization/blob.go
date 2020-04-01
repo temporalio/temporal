@@ -241,6 +241,15 @@ func ReplicationTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.Repl
 	return result, proto3Decode(b, proto, result)
 }
 
+func ReplicationVersionsToBlob(info *persistenceblobs.ReplicationVersions) (DataBlob, error) {
+	return proto3Encode(info)
+}
+
+func ReplicationVersionsFromBlob(b []byte, proto string) (*persistenceblobs.ReplicationVersions, error) {
+	result := &persistenceblobs.ReplicationVersions{}
+	return result, proto3Decode(b, proto, result)
+}
+
 func ChecksumToBlob(info *persistenceblobs.Checksum) (DataBlob, error) {
 	return proto3Encode(info)
 }
@@ -255,7 +264,7 @@ type DataBlob struct {
 	Data     []byte
 }
 
-// ToProto convert data blob to thrift representation
+// ToProto convert data blob to proto representation
 func (d *DataBlob) ToProto() *commonproto.DataBlob {
 	switch d.Encoding {
 	case common.EncodingTypeJSON:
@@ -278,12 +287,12 @@ func (d *DataBlob) GetEncoding() common.EncodingType {
 	encodingStr := string(d.Encoding)
 
 	switch common.EncodingType(encodingStr) {
+	case common.EncodingTypeProto3:
+		return common.EncodingTypeProto3
 	case common.EncodingTypeGob:
 		return common.EncodingTypeGob
 	case common.EncodingTypeJSON:
 		return common.EncodingTypeJSON
-	case common.EncodingTypeProto3:
-		return common.EncodingTypeProto3
 	case common.EncodingTypeEmpty:
 		return common.EncodingTypeEmpty
 	default:
