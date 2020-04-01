@@ -30,8 +30,8 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/.gen/proto/token"
@@ -69,7 +69,7 @@ var (
 	_ EngineFactory                       = (*Handler)(nil)
 	_ historyservice.HistoryServiceServer = (*Handler)(nil)
 
-	errDomainNotSet            = serviceerror.NewInvalidArgument("Domain not set on request.")
+	errNamespaceNotSet         = serviceerror.NewInvalidArgument("Namespace not set on request.")
 	errWorkflowExecutionNotSet = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
 	errTaskListNotSet          = serviceerror.NewInvalidArgument("Task list not set.")
 	errWorkflowIDNotSet        = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
@@ -105,7 +105,7 @@ func NewHandler(
 
 // Start starts the handler
 func (h *Handler) Start() {
-	if h.GetClusterMetadata().IsGlobalDomainEnabled() {
+	if h.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		var err error
 		h.publisher, err = h.GetMessagingClient().NewProducerWithClusterName(h.GetClusterMetadata().GetCurrentClusterName())
 		if err != nil {
@@ -160,12 +160,17 @@ func (h *Handler) CreateEngine(
 	)
 }
 
-// Health is for health check
-func (h *Handler) Health(context.Context, *healthservice.HealthRequest) (_ *healthservice.HealthStatus, retError error) {
+// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+func (h *Handler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	h.startWG.Wait()
 	h.GetLogger().Debug("History service health check endpoint (gRPC) reached.")
-	hs := &healthservice.HealthStatus{Ok: true, Msg: "History service is healthy."}
+	hs := &healthpb.HealthCheckResponse{
+		Status: healthpb.HealthCheckResponse_SERVING,
+	}
 	return hs, nil
+}
+func (h *Handler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
+	return serviceerror.NewUnimplemented("Watch is not implemented.")
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
@@ -179,35 +184,35 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	heartbeatRequest := request.HeartbeatRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
 	}
 
 	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
-		return nil, h.error(err0, scope, domainID, "")
+		return nil, h.error(err0, scope, namespaceID, "")
 	}
 	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	response, err2 := engine.RecordActivityTaskHeartbeat(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return response, nil
@@ -224,25 +229,25 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
+	namespaceID := request.GetNamespaceId()
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	if request.GetDomainUUID() == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, workflowID)
+	if request.GetNamespaceId() == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, workflowID)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, workflowID)
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, workflowID)
 	}
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	response, err2 := engine.RecordActivityTaskStarted(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return response, nil
@@ -254,7 +259,7 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context, request *histor
 	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 	h.GetLogger().Debug("RecordDecisionTaskStarted",
-		tag.WorkflowDomainID(request.GetDomainUUID()),
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
 		tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
 		tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
 		tag.WorkflowScheduleID(request.GetScheduleId()))
@@ -264,19 +269,19 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context, request *histor
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
+	namespaceID := request.GetNamespaceId()
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, workflowID)
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, workflowID)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, workflowID)
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, workflowID)
 	}
 
 	if request.PollRequest == nil || request.PollRequest.TaskList.GetName() == "" {
-		return nil, h.error(errTaskListNotSet, scope, domainID, workflowID)
+		return nil, h.error(errTaskListNotSet, scope, namespaceID, workflowID)
 	}
 
 	engine, err1 := h.controller.GetEngine(workflowID)
@@ -287,12 +292,12 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context, request *histor
 			tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
 			tag.WorkflowScheduleID(request.GetScheduleId()),
 		)
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	response, err2 := engine.RecordDecisionTaskStarted(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return response, nil
@@ -309,35 +314,35 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	completeRequest := request.CompleteRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
 	}
 
 	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
-		return nil, h.error(err0, scope, domainID, "")
+		return nil, h.error(err0, scope, namespaceID, "")
 	}
 	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.RespondActivityTaskCompleted(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
@@ -353,35 +358,35 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	failRequest := request.FailedRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
 	}
 
 	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
-		return nil, h.error(err0, scope, domainID, "")
+		return nil, h.error(err0, scope, namespaceID, "")
 	}
 	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.RespondActivityTaskFailed(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
@@ -397,35 +402,35 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	cancelRequest := request.CancelRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
 	}
 
 	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
-		return nil, h.error(err0, scope, domainID, "")
+		return nil, h.error(err0, scope, namespaceID, "")
 	}
 	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.RespondActivityTaskCanceled(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
@@ -441,13 +446,13 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	completeRequest := request.CompleteRequest
@@ -456,29 +461,29 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 	}
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskCompleted",
-		tag.WorkflowDomainIDBytes(token.GetDomainId()),
+		tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
 		tag.WorkflowRunIDBytes(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
 	err0 = validateTaskToken(token)
 	if err0 != nil {
-		return nil, h.error(err0, scope, domainID, "")
+		return nil, h.error(err0, scope, namespaceID, "")
 	}
 	workflowID := token.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	response, err2 := engine.RespondDecisionTaskCompleted(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return response, nil
@@ -495,54 +500,54 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	failedRequest := request.FailedRequest
 	token, err0 := h.tokenSerializer.Deserialize(failedRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, namespaceID, "")
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskFailed",
-		tag.WorkflowDomainIDBytes(token.GetDomainId()),
+		tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
 		tag.WorkflowRunIDBytes(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
 	if failedRequest != nil && failedRequest.GetCause() == enums.DecisionTaskFailedCauseUnhandledDecision {
-		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowDomainIDBytes(token.GetDomainId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunIDBytes(token.GetRunId()))
-		domainName, err := h.GetDomainCache().GetDomainName(primitives.UUIDString(token.GetDomainId()))
-		var domainTag metrics.Tag
+		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunIDBytes(token.GetRunId()))
+		namespace, err := h.GetNamespaceCache().GetNamespaceName(primitives.UUIDString(token.GetNamespaceId()))
+		var namespaceTag metrics.Tag
 
 		if err == nil {
-			domainTag = metrics.DomainTag(domainName)
+			namespaceTag = metrics.NamespaceTag(namespace)
 		} else {
-			domainTag = metrics.DomainUnknownTag()
+			namespaceTag = metrics.NamespaceUnknownTag()
 		}
 
-		h.GetMetricsClient().Scope(scope, domainTag).IncCounter(metrics.ServiceErrNonDeterministicCounter)
+		h.GetMetricsClient().Scope(scope, namespaceTag).IncCounter(metrics.ServiceErrNonDeterministicCounter)
 	}
 	err0 = validateTaskToken(token)
 	if err0 != nil {
-		return nil, h.error(err0, scope, domainID, "")
+		return nil, h.error(err0, scope, namespaceID, "")
 	}
 	workflowID := token.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.RespondDecisionTaskFailed(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.RespondDecisionTaskFailedResponse{}, nil
@@ -559,25 +564,25 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	startRequest := request.StartRequest
 	workflowID := startRequest.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	response, err2 := engine.StartWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return response, nil
@@ -588,7 +593,7 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	numOfItemsInCacheByID, numOfItemsInCacheByName := h.GetDomainCache().GetCacheSize()
+	numOfItemsInCacheByID, numOfItemsInCacheByName := h.GetNamespaceCache().GetCacheSize()
 	status := ""
 	switch atomic.LoadInt32(&h.controller.status) {
 	case common.DaemonStatusInitialized:
@@ -601,9 +606,9 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 
 	resp := &historyservice.DescribeHistoryHostResponse{
 		NumberOfShards: int32(h.controller.numShards()),
-		ShardIDs:       h.controller.shardIDs(),
-		DomainCache: &commonproto.DomainCacheInfo{
-			NumOfItemsInCacheByID:   numOfItemsInCacheByID,
+		ShardIds:       h.controller.shardIDs(),
+		NamespaceCache: &commonproto.NamespaceCacheInfo{
+			NumOfItemsInCacheById:   numOfItemsInCacheByID,
 			NumOfItemsInCacheByName: numOfItemsInCacheByName,
 		},
 		ShardControllerStatus: status,
@@ -614,14 +619,14 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 
 // RemoveTask returns information about the internal states of a history host
 func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
-	executionMgr, err := h.GetExecutionManager(int(request.GetShardID()))
+	executionMgr, err := h.GetExecutionManager(int(request.GetShardId()))
 	if err != nil {
 		return nil, err
 	}
 	deleteTaskRequest := &persistence.DeleteTaskRequest{
-		TaskID:  request.GetTaskID(),
+		TaskID:  request.GetTaskId(),
 		Type:    int(request.GetType()),
-		ShardID: int(request.GetShardID()),
+		ShardID: int(request.GetShardId()),
 	}
 	err = executionMgr.DeleteTask(deleteTaskRequest)
 	return &historyservice.RemoveTaskResponse{}, err
@@ -630,7 +635,7 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 // CloseShard returns information about the internal states of a history host
 func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseShardRequest) (_ *historyservice.CloseShardResponse, retError error) {
 	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
-	h.controller.removeEngineForShard(int(request.GetShardID()))
+	h.controller.removeEngineForShard(int(request.GetShardId()))
 	return &historyservice.CloseShardResponse{}, nil
 }
 
@@ -644,21 +649,21 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	resp, err2 := engine.DescribeMutableState(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 	return resp, nil
 }
@@ -673,25 +678,25 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	resp, err2 := engine.GetMutableState(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 	return resp, nil
 }
@@ -706,25 +711,25 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	resp, err2 := engine.PollMutableState(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 	return resp, nil
 }
@@ -739,25 +744,25 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.Request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	resp, err2 := engine.DescribeWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 	return resp, nil
 }
@@ -772,31 +777,31 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" || request.CancelRequest.GetDomain() == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" || request.CancelRequest.GetNamespace() == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	cancelRequest := request.CancelRequest
 	h.GetLogger().Debug("RequestCancelWorkflowExecution",
-		tag.WorkflowDomainName(cancelRequest.GetDomain()),
-		tag.WorkflowDomainID(request.GetDomainUUID()),
+		tag.WorkflowNamespace(cancelRequest.GetNamespace()),
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
 		tag.WorkflowID(cancelRequest.WorkflowExecution.GetWorkflowId()),
 		tag.WorkflowRunID(cancelRequest.WorkflowExecution.GetRunId()))
 
 	workflowID := cancelRequest.WorkflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.RequestCancelWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.RequestCancelWorkflowExecutionResponse{}, nil
@@ -813,25 +818,25 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.SignalRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.SignalWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.SignalWorkflowExecutionResponse{}, nil
@@ -851,25 +856,25 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	signalWithStartRequest := request.SignalWithStartRequest
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	resp, err2 := engine.SignalWithStartWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return resp, nil
@@ -886,25 +891,25 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.RemoveSignalMutableState(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.RemoveSignalMutableStateResponse{}, nil
@@ -921,25 +926,25 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.TerminateRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.TerminateWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.TerminateWorkflowExecutionResponse{}, nil
@@ -956,25 +961,25 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.ResetRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	resp, err2 := engine.ResetWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return resp, nil
@@ -990,24 +995,24 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowID := request.GetRequest().GetExecution().GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	resp, err2 := engine.QueryWorkflow(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return resp, nil
@@ -1026,29 +1031,29 @@ func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *historyserv
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	if request.WorkflowExecution == nil {
-		return nil, h.error(errWorkflowExecutionNotSet, scope, domainID, "")
+		return nil, h.error(errWorkflowExecutionNotSet, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.ScheduleDecisionTask(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.ScheduleDecisionTaskResponse{}, nil
@@ -1065,29 +1070,29 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	if request.WorkflowExecution == nil {
-		return nil, h.error(errWorkflowExecutionNotSet, scope, domainID, "")
+		return nil, h.error(errWorkflowExecutionNotSet, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.RecordChildExecutionCompleted(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.RecordChildExecutionCompletedResponse{}, nil
@@ -1110,30 +1115,30 @@ func (h *Handler) ResetStickyTaskList(ctx context.Context, request *historyservi
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowID := request.Execution.GetWorkflowId()
 	engine, err := h.controller.GetEngine(workflowID)
 	if err != nil {
-		return nil, h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 
 	resp, err := engine.ResetStickyTaskList(ctx, request)
 	if err != nil {
-		return nil, h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 
 	return resp, nil
 }
 
-// ReplicateEvents is called by processor to replicate history events for passive domains
+// ReplicateEvents is called by processor to replicate history events for passive namespaces
 func (h *Handler) ReplicateEvents(ctx context.Context, request *historyservice.ReplicateEventsRequest) (_ *historyservice.ReplicateEventsResponse, retError error) {
 	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
@@ -1143,31 +1148,31 @@ func (h *Handler) ReplicateEvents(ctx context.Context, request *historyservice.R
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.ReplicateEvents(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.ReplicateEventsResponse{}, nil
 }
 
-// ReplicateRawEvents is called by processor to replicate history raw events for passive domains
+// ReplicateRawEvents is called by processor to replicate history raw events for passive namespaces
 func (h *Handler) ReplicateRawEvents(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) (_ *historyservice.ReplicateRawEventsResponse, retError error) {
 	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
@@ -1177,31 +1182,31 @@ func (h *Handler) ReplicateRawEvents(ctx context.Context, request *historyservic
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.ReplicateRawEvents(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.ReplicateRawEventsResponse{}, nil
 }
 
-// ReplicateEventsV2 is called by processor to replicate history events for passive domains
+// ReplicateEventsV2 is called by processor to replicate history events for passive namespaces
 func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) (_ *historyservice.ReplicateEventsV2Response, retError error) {
 	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
@@ -1211,25 +1216,25 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
-	if domainID == "" {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if namespaceID == "" {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return nil, h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, namespaceID, workflowID)
 	}
 
 	err2 := engine.ReplicateEventsV2(ctx, request)
 	if err2 != nil {
-		return nil, h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.ReplicateEventsV2Response{}, nil
@@ -1285,32 +1290,32 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainId()
-	if request.GetDomainId() == "" || uuid.Parse(request.GetDomainId()) == nil {
-		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	namespaceID := request.GetNamespaceId()
+	if request.GetNamespaceId() == "" || uuid.Parse(request.GetNamespaceId()) == nil {
+		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, namespaceID, "")
 	}
 
 	if request.GetWorkflowId() == "" {
-		return nil, h.error(errWorkflowIDNotSet, scope, domainID, "")
+		return nil, h.error(errWorkflowIDNotSet, scope, namespaceID, "")
 	}
 
 	if request.GetRunId() == "" || uuid.Parse(request.GetRunId()) == nil {
-		return nil, h.error(errRunIDNotValid, scope, domainID, "")
+		return nil, h.error(errRunIDNotValid, scope, namespaceID, "")
 	}
 
 	workflowID := request.GetWorkflowId()
 	engine, err := h.controller.GetEngine(workflowID)
 	if err != nil {
-		return nil, h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 
 	err = engine.SyncActivity(ctx, request)
 	if err != nil {
-		return nil, h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 
 	return &historyservice.SyncActivityResponse{}, nil
@@ -1336,7 +1341,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 		go func(token *replication.ReplicationToken) {
 			defer wg.Done()
 
-			engine, err := h.controller.getEngineForShard(int(token.GetShardID()))
+			engine, err := h.controller.getEngineForShard(int(token.GetShardId()))
 			if err != nil {
 				h.GetLogger().Warn("History engine not found for shard", tag.Error(err))
 				return
@@ -1351,7 +1356,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 				return
 			}
 
-			result.Store(token.GetShardID(), tasks)
+			result.Store(token.GetShardId(), tasks)
 		}(token)
 	}
 
@@ -1384,7 +1389,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	// do batch based on workflow ID and run ID
 	for _, taskInfo := range request.GetTaskInfos() {
 		identity := definition.NewWorkflowIdentifier(
-			taskInfo.GetDomainId(),
+			taskInfo.GetNamespaceId(),
 			taskInfo.GetWorkflowId(),
 			taskInfo.GetRunId(),
 		)
@@ -1450,30 +1455,30 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	domainID := request.GetDomainUUID()
+	namespaceID := request.GetNamespaceId()
 	workflowID := request.GetRequest().GetWorkflowExecution().GetWorkflowId()
 	engine, err := h.controller.GetEngine(workflowID)
 	if err != nil {
-		return nil, h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 	// deserialize history event object
 	historyEvents, err := h.GetPayloadSerializer().DeserializeBatchEvents(&serialization.DataBlob{
-		Encoding: common.EncodingTypeThriftRW,
+		Encoding: common.EncodingTypeProto3,
 		Data:     request.GetRequest().GetEvents().GetData(),
 	})
 	if err != nil {
-		return nil, h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 
 	execution := request.GetRequest().GetWorkflowExecution()
 	if err := engine.ReapplyEvents(
 		ctx,
-		request.GetDomainUUID(),
+		request.GetNamespaceId(),
 		execution.GetWorkflowId(),
 		execution.GetRunId(),
 		historyEvents,
 	); err != nil {
-		return nil, h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, namespaceID, workflowID)
 	}
 	return &historyservice.ReapplyEventsResponse{}, nil
 }
@@ -1488,7 +1493,7 @@ func (h *Handler) ReadDLQMessages(ctx context.Context, request *historyservice.R
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	engine, err := h.controller.getEngineForShard(int(request.GetShardID()))
+	engine, err := h.controller.getEngineForShard(int(request.GetShardId()))
 	if err != nil {
 		err = h.error(err, scope, "", "")
 		return nil, err
@@ -1513,7 +1518,7 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	engine, err := h.controller.getEngineForShard(int(request.GetShardID()))
+	engine, err := h.controller.getEngineForShard(int(request.GetShardId()))
 	if err != nil {
 		err = h.error(err, scope, "", "")
 		return nil, err
@@ -1537,7 +1542,7 @@ func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
-	engine, err := h.controller.getEngineForShard(int(request.GetShardID()))
+	engine, err := h.controller.getEngineForShard(int(request.GetShardId()))
 	if err != nil {
 		err = h.error(err, scope, "", "")
 		return nil, err
@@ -1561,18 +1566,18 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
-	domainID := request.GetDomainUUID()
+	namespaceID := request.GetNamespaceId()
 	execution := request.GetRequest().GetExecution()
 	workflowID := execution.GetWorkflowId()
 	engine, err := h.controller.GetEngine(workflowID)
 	if err != nil {
-		err = h.error(err, scope, domainID, workflowID)
+		err = h.error(err, scope, namespaceID, workflowID)
 		return nil, err
 	}
 
 	err = engine.RefreshWorkflowTasks(
 		ctx,
-		domainID,
+		namespaceID,
 		commonproto.WorkflowExecution{
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
@@ -1580,7 +1585,7 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	)
 
 	if err != nil {
-		err = h.error(err, scope, domainID, workflowID)
+		err = h.error(err, scope, namespaceID, workflowID)
 		return nil, err
 	}
 
@@ -1615,7 +1620,7 @@ func (h *Handler) convertError(err error) error {
 
 func (h *Handler) updateErrorMetric(
 	scope int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	err error,
 ) {
@@ -1632,7 +1637,7 @@ func (h *Handler) updateErrorMetric(
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrEventAlreadyStartedCounter)
 	case *serviceerror.InvalidArgument:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
-	case *serviceerror.DomainNotActive:
+	case *serviceerror.NamespaceNotActive:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
@@ -1653,34 +1658,34 @@ func (h *Handler) updateErrorMetric(
 		h.GetLogger().Error("Internal service error",
 			tag.Error(err),
 			tag.WorkflowID(workflowID),
-			tag.WorkflowDomainID(domainID))
+			tag.WorkflowNamespaceID(namespaceID))
 	default:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceFailures)
-		h.getLoggerWithTags(domainID, workflowID).Error("Uncategorized error", tag.Error(err))
+		h.getLoggerWithTags(namespaceID, workflowID).Error("Uncategorized error", tag.Error(err))
 	}
 }
 
 func (h *Handler) error(
 	err error,
 	scope int,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 ) error {
 
 	err = h.convertError(err)
-	h.updateErrorMetric(scope, domainID, workflowID, err)
+	h.updateErrorMetric(scope, namespaceID, workflowID, err)
 
 	return err
 }
 
 func (h *Handler) getLoggerWithTags(
-	domainID string,
+	namespaceID string,
 	workflowID string,
 ) log.Logger {
 
 	logger := h.GetLogger()
-	if domainID != "" {
-		logger = logger.WithTags(tag.WorkflowDomainID(domainID))
+	if namespaceID != "" {
+		logger = logger.WithTags(tag.WorkflowNamespaceID(namespaceID))
 	}
 
 	if workflowID != "" {

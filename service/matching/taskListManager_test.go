@@ -108,14 +108,14 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
 				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
-			TaskID: 11,
+			TaskId: 11,
 		},
 		{
 			Data: &persistenceblobs.TaskInfo{
 				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
 				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
-			TaskID: 12,
+			TaskId: 12,
 		},
 	}
 
@@ -130,14 +130,14 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
 				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
-			TaskID: 13,
+			TaskId: 13,
 		},
 		{
 			Data: &persistenceblobs.TaskInfo{
 				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
 				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
 			},
-			TaskID: 14,
+			TaskId: 14,
 		},
 	}, time.Now(), time.NewTimer(time.Minute)))
 	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
@@ -154,10 +154,10 @@ func createTestTaskListManagerWithConfig(controller *gomock.Controller, cfg *Con
 		panic(err)
 	}
 	tm := newTestTaskManager(logger)
-	mockDomainCache := cache.NewMockDomainCache(controller)
-	mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(cache.CreateDomainCacheEntry("domainName"), nil).AnyTimes()
+	mockNamespaceCache := cache.NewMockNamespaceCache(controller)
+	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.CreateNamespaceCacheEntry("namespace"), nil).AnyTimes()
 	me := newMatchingEngine(
-		cfg, tm, nil, logger, mockDomainCache,
+		cfg, tm, nil, logger, mockNamespaceCache,
 	)
 	tl := "tl"
 	dID := "deadbeef-0123-4567-890a-bcdef0123456"
@@ -212,9 +212,9 @@ func TestDescribeTaskList(t *testing.T) {
 	require.Equal(t, taskCount, taskListStatus.GetBacklogCountHint())
 	require.True(t, taskListStatus.GetRatePerSecond() > (_defaultTaskDispatchRPS-1))
 	require.True(t, taskListStatus.GetRatePerSecond() < (_defaultTaskDispatchRPS+1))
-	taskIDBlock := taskListStatus.GetTaskIDBlock()
-	require.Equal(t, int64(1), taskIDBlock.GetStartID())
-	require.Equal(t, tlm.config.RangeSize, taskIDBlock.GetEndID())
+	taskIDBlock := taskListStatus.GetTaskIdBlock()
+	require.Equal(t, int64(1), taskIDBlock.GetStartId())
+	require.Equal(t, tlm.config.RangeSize, taskIDBlock.GetEndId())
 
 	// Add a poller and complete all tasks
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), nil)

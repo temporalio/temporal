@@ -82,21 +82,21 @@ func (s *mutableStateSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          0,
-				RangeID:          1,
+				ShardId:          0,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
 	)
 	// set the checksum probabilities to 100% for exercising during test
-	s.mockShard.config.MutableStateChecksumGenProbability = func(domain string) int { return 100 }
-	s.mockShard.config.MutableStateChecksumVerifyProbability = func(domain string) int { return 100 }
+	s.mockShard.config.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
+	s.mockShard.config.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
 	s.mockShard.eventsCache = s.mockEventsCache
 
 	s.testScope = s.mockShard.resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
-	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger, testLocalDomainEntry)
+	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry)
 }
 
 func (s *mutableStateSuite) TearDownTest() {
@@ -256,7 +256,7 @@ OtherEventsLoop:
 }
 
 func (s *mutableStateSuite) TestReorderEvents() {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	we := commonproto.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
@@ -266,7 +266,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	activityResult := []byte("activity_result")
 
 	info := &persistence.WorkflowExecutionInfo{
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  we.GetWorkflowId(),
 		RunID:                       we.GetRunId(),
 		TaskList:                    tl,
@@ -402,7 +402,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.msBuilder.Load(dbState)
 			s.Equal(loadErrors, loadErrorsFunc()) // no errors expected
 			s.EqualValues(dbState.Checksum, s.msBuilder.checksum)
-			s.msBuilder.domainEntry = s.newDomainCacheEntry()
+			s.msBuilder.namespaceEntry = s.newNamespaceCacheEntry()
 			csum, err := tc.closeTxFunc(s.msBuilder)
 			s.Nil(err)
 			s.NotNil(csum.Value)
@@ -446,8 +446,8 @@ func (s *mutableStateSuite) TestChecksum() {
 
 func (s *mutableStateSuite) TestChecksumProbabilities() {
 	for _, prob := range []int{0, 100} {
-		s.mockShard.config.MutableStateChecksumGenProbability = func(domain string) int { return prob }
-		s.mockShard.config.MutableStateChecksumVerifyProbability = func(domain string) int { return prob }
+		s.mockShard.config.MutableStateChecksumGenProbability = func(namespace string) int { return prob }
+		s.mockShard.config.MutableStateChecksumVerifyProbability = func(namespace string) int { return prob }
 		for i := 0; i < 100; i++ {
 			shouldGenerate := s.msBuilder.shouldGenerateChecksum()
 			shouldVerify := s.msBuilder.shouldVerifyChecksum()
@@ -546,7 +546,7 @@ func (s *mutableStateSuite) TestEventReapplied() {
 }
 
 func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicated(version int64, runID string) (*commonproto.HistoryEvent, *commonproto.HistoryEvent) {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      runID,
@@ -613,7 +613,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	eventID++
 
 	s.mockEventsCache.EXPECT().putEvent(
-		domainID, execution.GetWorkflowId(), execution.GetRunId(),
+		namespaceID, execution.GetWorkflowId(), execution.GetRunId(),
 		workflowStartEvent.GetEventId(), workflowStartEvent,
 	).Times(1)
 	err := s.msBuilder.ReplicateWorkflowExecutionStartedEvent(
@@ -701,19 +701,19 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	return newDecisionScheduleEvent, newDecisionStartedEvent
 }
 
-func (s *mutableStateSuite) newDomainCacheEntry() *cache.DomainCacheEntry {
-	return cache.NewDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: "mutableStateTest"},
-		&persistence.DomainConfig{},
+func (s *mutableStateSuite) newNamespaceCacheEntry() *cache.NamespaceCacheEntry {
+	return cache.NewNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: "mutableStateTest"},
+		&persistence.NamespaceConfig{},
 		true,
-		&persistence.DomainReplicationConfig{},
+		&persistence.NamespaceReplicationConfig{},
 		1,
 		nil,
 	)
 }
 
 func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMutableState {
-	domainID := testDomainID
+	namespaceID := testNamespaceID
 	we := commonproto.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
@@ -722,7 +722,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	failoverVersion := int64(300)
 
 	info := &persistence.WorkflowExecutionInfo{
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  we.GetWorkflowId(),
 		RunID:                       we.GetRunId(),
 		TaskList:                    tl,
@@ -760,8 +760,8 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	timerInfos := map[string]*persistenceblobs.TimerInfo{
 		"25": {
 			Version:    failoverVersion,
-			TimerID:    "25",
-			StartedID:  85,
+			TimerId:    "25",
+			StartedId:  85,
 			ExpiryTime: expiryTime,
 		},
 	}
@@ -774,7 +774,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 			InitiatedEvent:        &commonproto.HistoryEvent{},
 			StartedID:             common.EmptyEventID,
 			CreateRequestID:       uuid.New(),
-			DomainName:            testDomainID,
+			Namespace:             testNamespaceID,
 			WorkflowTypeName:      "code.uber.internal/test/foobar",
 		},
 	}
@@ -782,9 +782,9 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	signalInfos := map[int64]*persistenceblobs.SignalInfo{
 		75: {
 			Version:               failoverVersion,
-			InitiatedID:           75,
-			InitiatedEventBatchID: 17,
-			RequestID:             uuid.New(),
+			InitiatedId:           75,
+			InitiatedEventBatchId: 17,
+			RequestId:             uuid.New(),
 			Name:                  "test-signal-75",
 			Input:                 []byte("signal-input-75"),
 		},

@@ -27,12 +27,12 @@ import (
 )
 
 // Validate validates the archival config
-func (a *Archival) Validate(domainDefaults *ArchivalDomainDefaults) error {
-	if !isArchivalConfigValid(a.History.Status, a.History.EnableRead, domainDefaults.History.Status, domainDefaults.History.URI, a.History.Provider != nil) {
+func (a *Archival) Validate(namespaceDefaults *ArchivalNamespaceDefaults) error {
+	if !isArchivalConfigValid(a.History.Status, a.History.EnableRead, namespaceDefaults.History.Status, namespaceDefaults.History.URI, a.History.Provider != nil) {
 		return errors.New("Invalid history archival config")
 	}
 
-	if !isArchivalConfigValid(a.Visibility.Status, a.Visibility.EnableRead, domainDefaults.Visibility.Status, domainDefaults.Visibility.URI, a.Visibility.Provider != nil) {
+	if !isArchivalConfigValid(a.Visibility.Status, a.Visibility.EnableRead, namespaceDefaults.Visibility.Status, namespaceDefaults.Visibility.URI, a.Visibility.Provider != nil) {
 		return errors.New("Invalid visibility archival config")
 	}
 
@@ -42,7 +42,7 @@ func (a *Archival) Validate(domainDefaults *ArchivalDomainDefaults) error {
 func isArchivalConfigValid(
 	clusterStatus string,
 	enableRead bool,
-	domainDefaultStatus string,
+	namespaceDefaultStatus string,
 	domianDefaultURI string,
 	specifiedProvider bool,
 ) bool {
@@ -50,6 +50,6 @@ func isArchivalConfigValid(
 	URISet := len(domianDefaultURI) != 0
 
 	validEnable := archivalEnabled && URISet && specifiedProvider
-	validDisabled := !archivalEnabled && !enableRead && domainDefaultStatus != common.ArchivalEnabled && !URISet && !specifiedProvider
+	validDisabled := !archivalEnabled && !enableRead && namespaceDefaultStatus != common.ArchivalEnabled && !URISet && !specifiedProvider
 	return validEnable || validDisabled
 }

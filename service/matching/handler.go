@@ -27,8 +27,8 @@ import (
 
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/serviceerror"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -75,7 +75,7 @@ func NewHandler(
 			config,
 			resource.GetLogger(),
 			resource.GetMetricsClient(),
-			resource.GetDomainCache(),
+			resource.GetNamespaceCache(),
 			resource.GetMatchingServiceResolver(),
 		),
 	}
@@ -104,12 +104,17 @@ func (h *Handler) startRequestProfile(_ string, scope int) tally.Stopwatch {
 	return sw
 }
 
-// Health is for health check
-func (h *Handler) Health(_ context.Context, _ *healthservice.HealthRequest) (_ *healthservice.HealthStatus, retError error) {
+// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+func (h *Handler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	h.startWG.Wait()
 	h.GetLogger().Debug("Matching service health check endpoint (gRPC) reached.")
-	hs := &healthservice.HealthStatus{Ok: true, Msg: "Matching service is healthy."}
+	hs := &healthpb.HealthCheckResponse{
+		Status: healthpb.HealthCheckResponse_SERVING,
+	}
 	return hs, nil
+}
+func (h *Handler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
+	return serviceerror.NewUnimplemented("Watch is not implemented.")
 }
 
 // AddActivityTask - adds an activity task.
@@ -313,8 +318,8 @@ func (h *Handler) handleErr(err error, scope int) error {
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		h.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
 		return err
-	case *serviceerror.DomainAlreadyExists:
-		h.metricsClient.IncCounter(scope, metrics.ServiceErrDomainAlreadyExistsCounter)
+	case *serviceerror.NamespaceAlreadyExists:
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrNamespaceAlreadyExistsCounter)
 		return err
 	case *serviceerror.QueryFailed:
 		h.metricsClient.IncCounter(scope, metrics.ServiceErrQueryFailedCounter)
@@ -322,8 +327,8 @@ func (h *Handler) handleErr(err error, scope int) error {
 	case *serviceerror.ResourceExhausted:
 		h.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
 		return err
-	case *serviceerror.DomainNotActive:
-		h.metricsClient.IncCounter(scope, metrics.ServiceErrDomainNotActiveCounter)
+	case *serviceerror.NamespaceNotActive:
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrNamespaceNotActiveCounter)
 		return err
 	default:
 		h.metricsClient.IncCounter(scope, metrics.ServiceFailures)

@@ -56,7 +56,7 @@ func NewVersionHistoryItemFromProto(
 		panic("version history item is null")
 	}
 
-	return NewVersionHistoryItem(input.GetEventID(), input.GetVersion())
+	return NewVersionHistoryItem(input.GetEventId(), input.GetVersion())
 }
 
 // Duplicate duplicate VersionHistoryItem
@@ -69,7 +69,7 @@ func (item *VersionHistoryItem) Duplicate() *VersionHistoryItem {
 func (item *VersionHistoryItem) ToProto() *commonproto.VersionHistoryItem {
 
 	return &commonproto.VersionHistoryItem{
-		EventID: item.EventID,
+		EventId: item.EventID,
 		Version: item.Version,
 	}
 }

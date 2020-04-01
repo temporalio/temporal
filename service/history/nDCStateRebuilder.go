@@ -57,7 +57,7 @@ type (
 
 	nDCStateRebuilderImpl struct {
 		shard           ShardContext
-		domainCache     cache.DomainCache
+		namespaceCache  cache.NamespaceCache
 		eventsCache     eventsCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryManager
@@ -77,13 +77,13 @@ func newNDCStateRebuilder(
 
 	return &nDCStateRebuilderImpl{
 		shard:           shard,
-		domainCache:     shard.GetDomainCache(),
+		namespaceCache:  shard.GetNamespaceCache(),
 		eventsCache:     shard.GetEventsCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryManager(),
 		taskRefresher: newMutableStateTaskRefresher(
 			shard.GetConfig(),
-			shard.GetDomainCache(),
+			shard.GetNamespaceCache(),
 			shard.GetEventsCache(),
 			logger,
 		),
@@ -111,7 +111,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		baseBranchToken,
 	))
 
-	domainEntry, err := r.domainCache.GetDomainByID(targetWorkflowIdentifier.DomainID)
+	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(targetWorkflowIdentifier.NamespaceID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -123,7 +123,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	}
 	firstEventBatch := batch.(*commonproto.History).Events
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
-		domainEntry,
+		namespaceEntry,
 	)
 	if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, firstEventBatch, requestID); err != nil {
 		return nil, 0, err
@@ -175,20 +175,20 @@ func (r *nDCStateRebuilderImpl) rebuild(
 }
 
 func (r *nDCStateRebuilderImpl) initializeBuilders(
-	domainEntry *cache.DomainCacheEntry,
+	namespaceEntry *cache.NamespaceCacheEntry,
 ) (mutableState, stateBuilder) {
 	resetMutableStateBuilder := newMutableStateBuilderWithVersionHistories(
 		r.shard,
 		r.shard.GetEventsCache(),
 		r.logger,
-		domainEntry,
+		namespaceEntry,
 	)
 	stateBuilder := newStateBuilder(
 		r.shard,
 		r.logger,
 		resetMutableStateBuilder,
 		func(mutableState mutableState) mutableStateTaskGenerator {
-			return newMutableStateTaskGenerator(r.shard.GetDomainCache(), r.logger, mutableState)
+			return newMutableStateTaskGenerator(r.shard.GetNamespaceCache(), r.logger, mutableState)
 		},
 	)
 	return resetMutableStateBuilder, stateBuilder
@@ -202,7 +202,7 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 ) error {
 
 	_, err := stateBuilder.applyEvents(
-		workflowIdentifier.DomainID,
+		workflowIdentifier.NamespaceID,
 		requestID,
 		commonproto.WorkflowExecution{
 			WorkflowId: workflowIdentifier.WorkflowID,

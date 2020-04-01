@@ -28,7 +28,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -97,8 +97,8 @@ func (s *queueAckMgrSuite) SetupTest() {
 		s.controller,
 		&p.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID: 0,
-				RangeID: 1,
+				ShardId: 0,
+				RangeId: 1,
 				ClusterTimerAckLevel: map[string]*types.Timestamp{
 					cluster.TestCurrentClusterName:     gogoProtoTimestampNowAddDuration(-8),
 					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
@@ -131,13 +131,13 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 	taskID1 := int64(59)
 	tasksInput := []queueTaskInfo{
 		&persistenceblobs.TransferTaskInfo{
-			DomainID:   TestDomainId,
-			WorkflowID: "some random workflow ID",
-			RunID:      uuid.NewRandom(),
-			TaskID:     taskID1,
-			TaskList:   "some random tasklist",
-			TaskType:   1,
-			ScheduleID: 28,
+			NamespaceId: TestNamespaceId,
+			WorkflowId:  "some random workflow ID",
+			RunId:       uuid.NewRandom(),
+			TaskId:      taskID1,
+			TaskList:    "some random tasklist",
+			TaskType:    1,
+			ScheduleId:  28,
 		},
 	}
 
@@ -153,13 +153,13 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 	taskID2 := int64(60)
 	tasksInput = []queueTaskInfo{
 		&persistenceblobs.TransferTaskInfo{
-			DomainID:   TestDomainId,
-			WorkflowID: "some random workflow ID",
-			RunID:      uuid.NewRandom(),
-			TaskID:     taskID2,
-			TaskList:   "some random tasklist",
-			TaskType:   1,
-			ScheduleID: 29,
+			NamespaceId: TestNamespaceId,
+			WorkflowId:  "some random workflow ID",
+			RunId:       uuid.NewRandom(),
+			TaskId:      taskID2,
+			TaskList:    "some random tasklist",
+			TaskType:    1,
+			ScheduleId:  29,
 		},
 	}
 
@@ -181,13 +181,13 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 	taskID := int64(59)
 	tasksInput := []queueTaskInfo{
 		&persistenceblobs.TransferTaskInfo{
-			DomainID:   TestDomainId,
-			WorkflowID: "some random workflow ID",
-			RunID:      uuid.NewRandom(),
-			TaskID:     taskID,
-			TaskList:   "some random tasklist",
-			TaskType:   1,
-			ScheduleID: 28,
+			NamespaceId: TestNamespaceId,
+			WorkflowId:  "some random workflow ID",
+			RunId:       uuid.NewRandom(),
+			TaskId:      taskID,
+			TaskList:    "some random tasklist",
+			TaskType:    1,
+			ScheduleId:  28,
 		},
 	}
 
@@ -214,31 +214,31 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	taskID3 := int64(61)
 	tasksInput := []queueTaskInfo{
 		&persistenceblobs.TransferTaskInfo{
-			DomainID:   TestDomainId,
-			WorkflowID: "some random workflow ID",
-			RunID:      uuid.NewRandom(),
-			TaskID:     taskID1,
-			TaskList:   "some random tasklist",
-			TaskType:   1,
-			ScheduleID: 28,
+			NamespaceId: TestNamespaceId,
+			WorkflowId:  "some random workflow ID",
+			RunId:       uuid.NewRandom(),
+			TaskId:      taskID1,
+			TaskList:    "some random tasklist",
+			TaskType:    1,
+			ScheduleId:  28,
 		},
 		&persistenceblobs.TransferTaskInfo{
-			DomainID:   TestDomainId,
-			WorkflowID: "some random workflow ID",
-			RunID:      uuid.NewRandom(),
-			TaskID:     taskID2,
-			TaskList:   "some random tasklist",
-			TaskType:   1,
-			ScheduleID: 28,
+			NamespaceId: TestNamespaceId,
+			WorkflowId:  "some random workflow ID",
+			RunId:       uuid.NewRandom(),
+			TaskId:      taskID2,
+			TaskList:    "some random tasklist",
+			TaskType:    1,
+			ScheduleId:  28,
 		},
 		&persistenceblobs.TransferTaskInfo{
-			DomainID:   TestDomainId,
-			WorkflowID: "some random workflow ID",
-			RunID:      uuid.NewRandom(),
-			TaskID:     taskID3,
-			TaskList:   "some random tasklist",
-			TaskType:   1,
-			ScheduleID: 28,
+			NamespaceId: TestNamespaceId,
+			WorkflowId:  "some random workflow ID",
+			RunId:       uuid.NewRandom(),
+			TaskId:      taskID3,
+			TaskList:    "some random tasklist",
+			TaskType:    1,
+			ScheduleId:  28,
 		},
 	}
 
@@ -286,8 +286,8 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 		s.controller,
 		&p.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID: 0,
-				RangeID: 1,
+				ShardId: 0,
+				RangeId: 1,
 				ClusterTimerAckLevel: map[string]*types.Timestamp{
 					cluster.TestCurrentClusterName:     types.TimestampNow(),
 					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
@@ -320,13 +320,13 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 	taskID1 := int64(59)
 	tasksInput := []queueTaskInfo{
 		&persistenceblobs.TransferTaskInfo{
-			DomainID:   TestDomainId,
-			WorkflowID: "some random workflow ID",
-			RunID:      uuid.NewRandom(),
-			TaskID:     taskID1,
-			TaskList:   "some random tasklist",
-			TaskType:   1,
-			ScheduleID: 28,
+			NamespaceId: TestNamespaceId,
+			WorkflowId:  "some random workflow ID",
+			RunId:       uuid.NewRandom(),
+			TaskId:      taskID1,
+			TaskList:    "some random tasklist",
+			TaskType:    1,
+			ScheduleId:  28,
 		},
 	}
 
@@ -343,13 +343,13 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 	taskID2 := int64(60)
 	tasksInput = []queueTaskInfo{
 		&persistenceblobs.TransferTaskInfo{
-			DomainID:   TestDomainId,
-			WorkflowID: "some random workflow ID",
-			RunID:      uuid.NewRandom(),
-			TaskID:     taskID2,
-			TaskList:   "some random tasklist",
-			TaskType:   1,
-			ScheduleID: 29,
+			NamespaceId: TestNamespaceId,
+			WorkflowId:  "some random workflow ID",
+			RunId:       uuid.NewRandom(),
+			TaskId:      taskID2,
+			TaskList:    "some random tasklist",
+			TaskType:    1,
+			ScheduleId:  29,
 		},
 	}
 
@@ -373,22 +373,22 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 	taskID2 := int64(60)
 	tasksInput := []queueTaskInfo{
 		&persistenceblobs.TransferTaskInfo{
-			DomainID:   TestDomainId,
-			WorkflowID: "some random workflow ID",
-			RunID:      uuid.NewRandom(),
-			TaskID:     taskID1,
-			TaskList:   "some random tasklist",
-			TaskType:   1,
-			ScheduleID: 28,
+			NamespaceId: TestNamespaceId,
+			WorkflowId:  "some random workflow ID",
+			RunId:       uuid.NewRandom(),
+			TaskId:      taskID1,
+			TaskList:    "some random tasklist",
+			TaskType:    1,
+			ScheduleId:  28,
 		},
 		&persistenceblobs.TransferTaskInfo{
-			DomainID:   TestDomainId,
-			WorkflowID: "some random workflow ID",
-			RunID:      uuid.NewRandom(),
-			TaskID:     taskID2,
-			TaskList:   "some random tasklist",
-			TaskType:   2,
-			ScheduleID: 29,
+			NamespaceId: TestNamespaceId,
+			WorkflowId:  "some random workflow ID",
+			RunId:       uuid.NewRandom(),
+			TaskId:      taskID2,
+			TaskList:    "some random tasklist",
+			TaskType:    2,
+			ScheduleId:  29,
 		},
 	}
 

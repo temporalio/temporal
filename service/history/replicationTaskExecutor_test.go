@@ -63,7 +63,7 @@ type (
 		mockEngine          *MockEngine
 		config              *Config
 		historyClient       *historyservicemock.MockHistoryServiceClient
-		mockDomainCache     *cache.MockDomainCache
+		mockNamespaceCache  *cache.MockNamespaceCache
 		mockClientBean      *client.MockBean
 		adminClient         *adminservicemock.MockAdminServiceClient
 		clusterMetadata     *cluster.MockMetadata
@@ -94,7 +94,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 	s.currentCluster = "test"
 
 	s.mockResource = resource.NewTest(s.controller, metrics.History)
-	s.mockDomainCache = s.mockResource.DomainCache
+	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockClientBean = s.mockResource.ClientBean
 	s.adminClient = s.mockResource.RemoteAdminClient
 	s.clusterMetadata = s.mockResource.ClusterMetadata
@@ -106,8 +106,8 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 		shardID:  0,
 		Resource: s.mockResource,
 		shardInfo: &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{
-			ShardID:                0,
-			RangeID:                1,
+			ShardId:                0,
+			RangeId:                1,
 			ReplicationAckLevel:    0,
 			ReplicationDLQAckLevel: map[string]int64{"test": -1},
 		}},
@@ -127,7 +127,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 
 	s.replicationTaskHandler = newReplicationTaskExecutor(
 		s.currentCluster,
-		s.mockDomainCache,
+		s.mockNamespaceCache,
 		s.nDCHistoryResender,
 		s.historyRereplicator,
 		s.mockEngine,
@@ -166,13 +166,13 @@ func (s *replicationTaskExecutorSuite) TestConvertRetryTaskV2Error_NotOK() {
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask() {
-	domainID := uuid.New()
-	s.mockDomainCache.EXPECT().
-		GetDomainByID(domainID).
-		Return(cache.NewGlobalDomainCacheEntryForTest(
+	namespaceID := uuid.New()
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByID(namespaceID).
+		Return(cache.NewGlobalNamespaceCacheEntryForTest(
 			nil,
 			nil,
-			&persistence.DomainReplicationConfig{
+			&persistence.NamespaceReplicationConfig{
 				Clusters: []*persistence.ClusterReplicationConfig{
 					{
 						ClusterName: "test",
@@ -181,44 +181,44 @@ func (s *replicationTaskExecutorSuite) TestFilterTask() {
 			0,
 			s.clusterMetadata,
 		), nil)
-	ok, err := s.replicationTaskHandler.filterTask(domainID, false)
+	ok, err := s.replicationTaskHandler.filterTask(namespaceID, false)
 	s.NoError(err)
 	s.True(ok)
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask_Error() {
-	domainID := uuid.New()
-	s.mockDomainCache.EXPECT().
-		GetDomainByID(domainID).
+	namespaceID := uuid.New()
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByID(namespaceID).
 		Return(nil, fmt.Errorf("test"))
-	ok, err := s.replicationTaskHandler.filterTask(domainID, false)
+	ok, err := s.replicationTaskHandler.filterTask(namespaceID, false)
 	s.Error(err)
 	s.False(ok)
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask_EnforceApply() {
-	domainID := uuid.New()
-	ok, err := s.replicationTaskHandler.filterTask(domainID, true)
+	namespaceID := uuid.New()
+	ok, err := s.replicationTaskHandler.filterTask(namespaceID, true)
 	s.NoError(err)
 	s.True(ok)
 }
 
 func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
-	domainID := uuid.New()
+	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
 	task := &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeSyncActivity,
 		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
-				DomainId:   domainID,
-				WorkflowId: workflowID,
-				RunId:      runID,
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowID,
+				RunId:       runID,
 			},
 		},
 	}
 	request := &historyservice.SyncActivityRequest{
-		DomainId:           domainID,
+		NamespaceId:        namespaceID,
 		WorkflowId:         workflowID,
 		RunId:              runID,
 		Version:            0,
@@ -238,14 +238,14 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 }
 
 func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTask() {
-	domainID := uuid.New()
+	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
 	task := &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeHistory,
 		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{
 			HistoryTaskAttributes: &replication.HistoryTaskAttributes{
-				DomainId:     domainID,
+				NamespaceId:  namespaceID,
 				WorkflowId:   workflowID,
 				RunId:        runID,
 				FirstEventId: 1,
@@ -255,7 +255,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 		},
 	}
 	request := &historyservice.ReplicateEventsRequest{
-		DomainUUID: domainID,
+		NamespaceId: namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -275,21 +275,21 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 }
 
 func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
-	domainID := uuid.New()
+	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
 	task := &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeHistoryV2,
 		Attributes: &replication.ReplicationTask_HistoryTaskV2Attributes{
 			HistoryTaskV2Attributes: &replication.HistoryTaskV2Attributes{
-				DomainId:   domainID,
-				WorkflowId: workflowID,
-				RunId:      runID,
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowID,
+				RunId:       runID,
 			},
 		},
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		DomainUUID: domainID,
+		NamespaceId: namespaceID,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

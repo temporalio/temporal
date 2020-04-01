@@ -86,7 +86,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	}
 
 	targetExecutionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
-	domainID := targetExecutionInfo.DomainID
+	namespaceID := targetExecutionInfo.NamespaceID
 	workflowID := targetExecutionInfo.WorkflowID
 	targetRunID := targetExecutionInfo.RunID
 
@@ -94,7 +94,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	// we need to check the current workflow execution
 	currentRunID, err := r.transactionMgr.getCurrentWorkflowRunID(
 		ctx,
-		domainID,
+		namespaceID,
 		workflowID,
 	)
 	if err != nil {
@@ -123,7 +123,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	// there exists a current workflow, need additional check
 	currentWorkflow, err := r.transactionMgr.loadNDCWorkflow(
 		ctx,
-		domainID,
+		namespaceID,
 		workflowID,
 		currentRunID,
 	)
@@ -274,7 +274,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		newExecutionInfo := newWorkflow.getMutableState().GetExecutionInfo()
 		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
 			ctx,
-			newExecutionInfo.DomainID,
+			newExecutionInfo.NamespaceID,
 			newExecutionInfo.WorkflowID,
 			newExecutionInfo.RunID,
 		)
@@ -418,7 +418,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		newExecutionInfo := newWorkflow.getMutableState().GetExecutionInfo()
 		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
 			ctx,
-			newExecutionInfo.DomainID,
+			newExecutionInfo.NamespaceID,
 			newExecutionInfo.WorkflowID,
 			newExecutionInfo.RunID,
 		)

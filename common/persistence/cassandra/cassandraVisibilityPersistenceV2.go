@@ -35,31 +35,31 @@ import (
 const (
 	templateGetClosedWorkflowExecutionsV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions_v2 ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition IN (?) ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition IN (?) ` +
 		`AND close_time >= ? ` +
 		`AND close_time <= ? `
 
 	templateGetClosedWorkflowExecutionsByTypeV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions_v2 ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
 		`AND close_time >= ? ` +
 		`AND close_time <= ? ` +
 		`AND workflow_type_name = ? `
 
 	templateGetClosedWorkflowExecutionsByIDV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions_v2 ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
 		`AND close_time >= ? ` +
 		`AND close_time <= ? ` +
 		`AND workflow_id = ? `
 
 	templateGetClosedWorkflowExecutionsByStatusV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions_v2 ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
 		`AND close_time >= ? ` +
 		`AND close_time <= ? ` +
 		`AND status = ? `
@@ -143,8 +143,8 @@ func (v *cassandraVisibilityPersistenceV2) GetClosedWorkflowExecution(
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsV2,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
@@ -177,8 +177,8 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutions(
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByType(
 	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByTypeV2,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.WorkflowTypeName).Consistency(v.lowConslevel)
@@ -212,8 +212,8 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByType(
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByWorkflowID(
 	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByIDV2,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.WorkflowID).Consistency(v.lowConslevel)
@@ -247,8 +247,8 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByWorkflo
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByStatus(
 	request *p.ListClosedWorkflowExecutionsByStatusRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByStatusV2,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.Status).Consistency(v.lowConslevel)

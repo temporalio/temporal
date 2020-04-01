@@ -37,8 +37,8 @@ import (
 )
 
 const (
-	testDomainID                     = "test-domain-id"
-	testDomainName                   = "test-domain-name"
+	testNamespaceID                  = "test-namespace-id"
+	testNamespace                    = "test-namespace"
 	testWorkflowID                   = "test-workflow-id"
 	testRunID                        = "test-run-id"
 	testShardID                      = 1
@@ -352,15 +352,15 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
 	expectedHeader := &archiver.HistoryBlobHeader{
-		DomainName:           testDomainName,
-		DomainID:             testDomainID,
-		WorkflowID:           testWorkflowID,
-		RunID:                testRunID,
+		Namespace:            testNamespace,
+		NamespaceId:          testNamespaceID,
+		WorkflowId:           testWorkflowID,
+		RunId:                testRunID,
 		IsLast:               true,
 		FirstFailoverVersion: 1,
 		LastFailoverVersion:  5,
-		FirstEventID:         common.FirstEventID,
-		LastEventID:          16,
+		FirstEventId:         common.FirstEventID,
+		LastEventId:          16,
 		EventCount:           16,
 	}
 	s.Equal(expectedHeader, blob.Header)
@@ -414,15 +414,15 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
 	expectedHeader := &archiver.HistoryBlobHeader{
-		DomainName:           testDomainName,
-		DomainID:             testDomainID,
-		WorkflowID:           testWorkflowID,
-		RunID:                testRunID,
+		Namespace:            testNamespace,
+		NamespaceId:          testNamespaceID,
+		WorkflowId:           testWorkflowID,
+		RunId:                testRunID,
 		IsLast:               false,
 		FirstFailoverVersion: 1,
 		LastFailoverVersion:  1,
-		FirstEventID:         common.FirstEventID,
-		LastEventID:          6,
+		FirstEventId:         common.FirstEventID,
+		LastEventId:          6,
 		EventCount:           6,
 	}
 	s.Equal(expectedHeader, blob.Header)
@@ -465,15 +465,15 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		s.NoError(err)
 		s.NotNil(blob)
 		expectedHeader := &archiver.HistoryBlobHeader{
-			DomainName:           testDomainName,
-			DomainID:             testDomainID,
-			WorkflowID:           testWorkflowID,
-			RunID:                testRunID,
+			Namespace:            testNamespace,
+			NamespaceId:          testNamespaceID,
+			WorkflowId:           testWorkflowID,
+			RunId:                testRunID,
 			IsLast:               false,
 			FirstFailoverVersion: 1,
 			LastFailoverVersion:  1,
-			FirstEventID:         common.FirstEventID + int64(i*200),
-			LastEventID:          int64(200 + (i * 200)),
+			FirstEventId:         common.FirstEventID + int64(i*200),
+			LastEventId:          int64(200 + (i * 200)),
 			EventCount:           200,
 		}
 		if i == 9 {
@@ -690,8 +690,8 @@ func (s *HistoryIteratorSuite) constructTestHistoryIterator(
 ) *historyIterator {
 	request := &ArchiveHistoryRequest{
 		ShardID:              testShardID,
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		BranchToken:          testBranchToken,

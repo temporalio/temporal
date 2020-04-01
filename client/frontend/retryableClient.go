@@ -46,30 +46,30 @@ func NewRetryableClient(client Client, policy backoff.RetryPolicy, isRetryable b
 	}
 }
 
-func (c *retryableClient) DeprecateDomain(
+func (c *retryableClient) DeprecateNamespace(
 	ctx context.Context,
-	request *workflowservice.DeprecateDomainRequest,
+	request *workflowservice.DeprecateNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DeprecateDomainResponse, error) {
-	var resp *workflowservice.DeprecateDomainResponse
+) (*workflowservice.DeprecateNamespaceResponse, error) {
+	var resp *workflowservice.DeprecateNamespaceResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.DeprecateDomain(ctx, request, opts...)
+		resp, err = c.client.DeprecateNamespace(ctx, request, opts...)
 		return err
 	}
 
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) DescribeDomain(
+func (c *retryableClient) DescribeNamespace(
 	ctx context.Context,
-	request *workflowservice.DescribeDomainRequest,
+	request *workflowservice.DescribeNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DescribeDomainResponse, error) {
-	var resp *workflowservice.DescribeDomainResponse
+) (*workflowservice.DescribeNamespaceResponse, error) {
+	var resp *workflowservice.DescribeNamespaceResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.DescribeDomain(ctx, request, opts...)
+		resp, err = c.client.DescribeNamespace(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -182,15 +182,15 @@ func (c *retryableClient) ListClosedWorkflowExecutions(
 	return resp, err
 }
 
-func (c *retryableClient) ListDomains(
+func (c *retryableClient) ListNamespaces(
 	ctx context.Context,
-	request *workflowservice.ListDomainsRequest,
+	request *workflowservice.ListNamespacesRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListDomainsResponse, error) {
-	var resp *workflowservice.ListDomainsResponse
+) (*workflowservice.ListNamespacesResponse, error) {
+	var resp *workflowservice.ListNamespacesResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ListDomains(ctx, request, opts...)
+		resp, err = c.client.ListNamespaces(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -332,30 +332,30 @@ func (c *retryableClient) RecordActivityTaskHeartbeat(
 	return resp, err
 }
 
-func (c *retryableClient) RecordActivityTaskHeartbeatByID(
+func (c *retryableClient) RecordActivityTaskHeartbeatById(
 	ctx context.Context,
-	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
+	request *workflowservice.RecordActivityTaskHeartbeatByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RecordActivityTaskHeartbeatByIDResponse, error) {
-	var resp *workflowservice.RecordActivityTaskHeartbeatByIDResponse
+) (*workflowservice.RecordActivityTaskHeartbeatByIdResponse, error) {
+	var resp *workflowservice.RecordActivityTaskHeartbeatByIdResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RecordActivityTaskHeartbeatByID(ctx, request, opts...)
+		resp, err = c.client.RecordActivityTaskHeartbeatById(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
 
-func (c *retryableClient) RegisterDomain(
+func (c *retryableClient) RegisterNamespace(
 	ctx context.Context,
-	request *workflowservice.RegisterDomainRequest,
+	request *workflowservice.RegisterNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RegisterDomainResponse, error) {
-	var resp *workflowservice.RegisterDomainResponse
+) (*workflowservice.RegisterNamespaceResponse, error) {
+	var resp *workflowservice.RegisterNamespaceResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RegisterDomain(ctx, request, opts...)
+		resp, err = c.client.RegisterNamespace(ctx, request, opts...)
 		return err
 	}
 
@@ -422,15 +422,15 @@ func (c *retryableClient) RespondActivityTaskCanceled(
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) RespondActivityTaskCanceledByID(
+func (c *retryableClient) RespondActivityTaskCanceledById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
+	request *workflowservice.RespondActivityTaskCanceledByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCanceledByIDResponse, error) {
-	var resp *workflowservice.RespondActivityTaskCanceledByIDResponse
+) (*workflowservice.RespondActivityTaskCanceledByIdResponse, error) {
+	var resp *workflowservice.RespondActivityTaskCanceledByIdResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RespondActivityTaskCanceledByID(ctx, request, opts...)
+		resp, err = c.client.RespondActivityTaskCanceledById(ctx, request, opts...)
 		return err
 	}
 
@@ -452,15 +452,15 @@ func (c *retryableClient) RespondActivityTaskCompleted(
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) RespondActivityTaskCompletedByID(
+func (c *retryableClient) RespondActivityTaskCompletedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
+	request *workflowservice.RespondActivityTaskCompletedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCompletedByIDResponse, error) {
-	var resp *workflowservice.RespondActivityTaskCompletedByIDResponse
+) (*workflowservice.RespondActivityTaskCompletedByIdResponse, error) {
+	var resp *workflowservice.RespondActivityTaskCompletedByIdResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RespondActivityTaskCompletedByID(ctx, request, opts...)
+		resp, err = c.client.RespondActivityTaskCompletedById(ctx, request, opts...)
 		return err
 	}
 
@@ -482,15 +482,15 @@ func (c *retryableClient) RespondActivityTaskFailed(
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) RespondActivityTaskFailedByID(
+func (c *retryableClient) RespondActivityTaskFailedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskFailedByIDRequest,
+	request *workflowservice.RespondActivityTaskFailedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskFailedByIDResponse, error) {
-	var resp *workflowservice.RespondActivityTaskFailedByIDResponse
+) (*workflowservice.RespondActivityTaskFailedByIdResponse, error) {
+	var resp *workflowservice.RespondActivityTaskFailedByIdResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.RespondActivityTaskFailedByID(ctx, request, opts...)
+		resp, err = c.client.RespondActivityTaskFailedById(ctx, request, opts...)
 		return err
 	}
 
@@ -602,15 +602,15 @@ func (c *retryableClient) TerminateWorkflowExecution(
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) UpdateDomain(
+func (c *retryableClient) UpdateNamespace(
 	ctx context.Context,
-	request *workflowservice.UpdateDomainRequest,
+	request *workflowservice.UpdateNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateDomainResponse, error) {
-	var resp *workflowservice.UpdateDomainResponse
+) (*workflowservice.UpdateNamespaceResponse, error) {
+	var resp *workflowservice.UpdateNamespaceResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.UpdateDomain(ctx, request, opts...)
+		resp, err = c.client.UpdateNamespace(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)

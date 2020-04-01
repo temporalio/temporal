@@ -35,9 +35,9 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 )
 
-// Fixed domain values for now
+// Fixed namespace values for now
 const (
-	domainPartition        = 0
+	namespacePartition     = 0
 	defaultCloseTTLSeconds = 86400
 	openExecutionTTLBuffer = int64(86400) // setting it to a day to account for shard going down
 
@@ -46,93 +46,93 @@ const (
 
 const (
 	templateCreateWorkflowExecutionStartedWithTTL = `INSERT INTO open_executions (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateCreateWorkflowExecutionStarted = `INSERT INTO open_executions (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateDeleteWorkflowExecutionStarted = `DELETE FROM open_executions ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
 		`AND start_time = ? ` +
 		`AND run_id = ?`
 
 	templateCreateWorkflowExecutionClosedWithTTL = `INSERT INTO closed_executions (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateCreateWorkflowExecutionClosed = `INSERT INTO closed_executions (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateWorkflowExecutionClosedWithTTLV2 = `INSERT INTO closed_executions_v2 (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateCreateWorkflowExecutionClosedV2 = `INSERT INTO closed_executions_v2 (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding) ` +
+		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding ` +
 		`FROM open_executions ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition IN (?) ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition IN (?) ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? `
 
 	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition IN (?) ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition IN (?) ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? `
 
 	templateGetOpenWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding ` +
 		`FROM open_executions ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? ` +
 		`AND workflow_type_name = ? `
 
 	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? ` +
 		`AND workflow_type_name = ? `
 
 	templateGetOpenWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding ` +
 		`FROM open_executions ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? ` +
 		`AND workflow_id = ? `
 
 	templateGetClosedWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? ` +
 		`AND workflow_id = ? `
 
 	templateGetClosedWorkflowExecutionsByStatus = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? ` +
 		`AND status = ? `
 
 	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
 		`FROM closed_executions ` +
-		`WHERE domain_id = ? ` +
-		`AND domain_partition = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
 		`AND workflow_id = ? ` +
 		`AND run_id = ? ALLOW FILTERING `
 )
@@ -177,8 +177,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 
 	if ttl > maxCassandraTTL {
 		query = v.session.Query(templateCreateWorkflowExecutionStarted,
-			request.DomainUUID,
-			domainPartition,
+			request.NamespaceID,
+			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
@@ -189,8 +189,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 		)
 	} else {
 		query = v.session.Query(templateCreateWorkflowExecutionStartedWithTTL,
-			request.DomainUUID,
-			domainPartition,
+			request.NamespaceID,
+			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
@@ -219,8 +219,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 
 	// First, remove execution from the open table
 	batch.Query(templateDeleteWorkflowExecutionStarted,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.StartTimestamp),
 		request.RunID,
 	)
@@ -235,8 +235,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 
 	if retention > maxCassandraTTL {
 		batch.Query(templateCreateWorkflowExecutionClosed,
-			request.DomainUUID,
-			domainPartition,
+			request.NamespaceID,
+			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
@@ -250,8 +250,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		)
 		// duplicate write to v2 to order by close time
 		batch.Query(templateCreateWorkflowExecutionClosedV2,
-			request.DomainUUID,
-			domainPartition,
+			request.NamespaceID,
+			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
@@ -265,8 +265,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		)
 	} else {
 		batch.Query(templateCreateWorkflowExecutionClosedWithTTL,
-			request.DomainUUID,
-			domainPartition,
+			request.NamespaceID,
+			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
@@ -281,8 +281,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		)
 		// duplicate write to v2 to order by close time
 		batch.Query(templateCreateWorkflowExecutionClosedWithTTLV2,
-			request.DomainUUID,
-			domainPartition,
+			request.NamespaceID,
+			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
 			p.UnixNanoToDBTimestamp(request.StartTimestamp),
@@ -329,8 +329,8 @@ func (v *cassandraVisibilityPersistence) UpsertWorkflowExecution(
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutions,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
@@ -363,8 +363,8 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutions,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
@@ -397,8 +397,8 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutionsByType,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.WorkflowTypeName).Consistency(v.lowConslevel)
@@ -432,8 +432,8 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByType,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.WorkflowTypeName).Consistency(v.lowConslevel)
@@ -467,8 +467,8 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutionsByID,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.WorkflowID).Consistency(v.lowConslevel)
@@ -502,8 +502,8 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowID(
 	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByID,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.WorkflowID).Consistency(v.lowConslevel)
@@ -537,8 +537,8 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 	request *p.ListClosedWorkflowExecutionsByStatusRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByStatus,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.Status).Consistency(v.lowConslevel)
@@ -573,8 +573,8 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 	request *p.GetClosedWorkflowExecutionRequest) (*p.InternalGetClosedWorkflowExecutionResponse, error) {
 	execution := request.Execution
 	query := v.session.Query(templateGetClosedWorkflowExecution,
-		request.DomainUUID,
-		domainPartition,
+		request.NamespaceID,
+		namespacePartition,
 		execution.GetWorkflowId(),
 		execution.GetRunId())
 

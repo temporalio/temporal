@@ -189,15 +189,15 @@ func (c *retryableClient) GetReplicationMessages(
 	return resp, err
 }
 
-func (c *retryableClient) GetDomainReplicationMessages(
+func (c *retryableClient) GetNamespaceReplicationMessages(
 	ctx context.Context,
-	request *adminservice.GetDomainReplicationMessagesRequest,
+	request *adminservice.GetNamespaceReplicationMessagesRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.GetDomainReplicationMessagesResponse, error) {
-	var resp *adminservice.GetDomainReplicationMessagesResponse
+) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
+	var resp *adminservice.GetNamespaceReplicationMessagesResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.GetDomainReplicationMessages(ctx, request, opts...)
+		resp, err = c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)

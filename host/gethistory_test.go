@@ -52,7 +52,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          workflowID,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -111,7 +111,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -121,9 +121,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	}
 
 	// this function poll events from history side
-	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*commonproto.HistoryEvent, []byte) {
+	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*commonproto.HistoryEvent, []byte) {
 		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain: domain,
+			Namespace: namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 			},
@@ -144,7 +144,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
 	start := time.Now()
-	events, token = getHistory(s.domainName, workflowID, token, true)
+	events, token = getHistory(s.namespace, workflowID, token, true)
 	allEvents = append(allEvents, events...)
 	s.True(time.Now().Before(start.Add(time.Second * 5)))
 	s.NotEmpty(events)
@@ -157,7 +157,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
 	})
 	start = time.Now()
-	events, token = getHistory(s.domainName, workflowID, token, true)
+	events, token = getHistory(s.namespace, workflowID, token, true)
 	allEvents = append(allEvents, events...)
 	s.True(time.Now().After(start.Add(time.Second * 5)))
 	s.NotEmpty(events)
@@ -173,7 +173,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
 	})
 	for token != nil {
-		events, token = getHistory(s.domainName, workflowID, token, true)
+		events, token = getHistory(s.namespace, workflowID, token, true)
 		allEvents = append(allEvents, events...)
 	}
 
@@ -195,7 +195,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	allEvents = nil
 	token = nil
 	for {
-		events, token = getHistory(s.domainName, workflowID, token, false)
+		events, token = getHistory(s.namespace, workflowID, token, false)
 		allEvents = append(allEvents, events...)
 		if token == nil {
 			break
@@ -218,7 +218,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          workflowID,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -277,7 +277,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -287,10 +287,10 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	}
 
 	// this function poll events from history side
-	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*commonproto.HistoryEvent, []byte) {
+	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*commonproto.HistoryEvent, []byte) {
 		closeEventOnly := enums.HistoryEventFilterTypeCloseEvent
 		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain: domain,
+			Namespace: namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 			},
@@ -311,7 +311,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
 	start := time.Now()
-	events, token = getHistory(s.domainName, workflowID, token, true)
+	events, token = getHistory(s.namespace, workflowID, token, true)
 	s.True(time.Now().After(start.Add(time.Second * 10)))
 	// since we are only interested in close event
 	s.Empty(events)
@@ -324,7 +324,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
 	})
 	start = time.Now()
-	events, token = getHistory(s.domainName, workflowID, token, true)
+	events, token = getHistory(s.namespace, workflowID, token, true)
 	s.True(time.Now().After(start.Add(time.Second * 10)))
 	// since we are only interested in close event
 	s.Empty(events)
@@ -340,7 +340,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
 	})
 	for token != nil {
-		events, token = getHistory(s.domainName, workflowID, token, true)
+		events, token = getHistory(s.namespace, workflowID, token, true)
 
 		// since we are only interested in close event
 		if token == nil {
@@ -354,7 +354,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// test non long poll for only closed events
 	token = nil
 	for {
-		events, token = getHistory(s.domainName, workflowID, token, false)
+		events, token = getHistory(s.namespace, workflowID, token, false)
 		if token == nil {
 			break
 		}
@@ -376,7 +376,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          workflowID,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -439,7 +439,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -450,11 +450,11 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 
 	// this function poll events from history side
 	pageSize := 1
-	getHistory := func(domain string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
+	getHistory := func(namespace string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
 		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 		return s.adminClient.GetWorkflowExecutionRawHistory(NewContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-			Domain:          domain,
+			Namespace:       namespace,
 			Execution:       execution,
 			FirstEventId:    firstEventID,
 			NextEventId:     nextEventID,
@@ -467,9 +467,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	convertBlob := func(blobs []*commonproto.DataBlob) []*commonproto.HistoryEvent {
 		var events []*commonproto.HistoryEvent
 		for _, blob := range blobs {
-			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
+			s.True(blob.GetEncodingType() == enums.EncodingTypeProto3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeThriftRW,
+				Encoding: common.EncodingTypeProto3,
 				Data:     blob.Data,
 			})
 			s.NoError(err)
@@ -481,13 +481,13 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	var blobs []*commonproto.DataBlob
 	var token []byte
 
-	resp, err := getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
+	resp, err := getHistory(s.namespace, execution, common.FirstEventID, common.EndEventID, token)
 	s.NoError(err)
 	s.True(len(resp.HistoryBatches) == pageSize)
 	blobs = append(blobs, resp.HistoryBatches...)
 	token = resp.NextPageToken
 	if token != nil {
-		resp, err := getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
+		resp, err := getHistory(s.namespace, execution, common.FirstEventID, common.EndEventID, token)
 		s.NoError(err)
 		s.Equal(0, len(resp.HistoryBatches))
 		s.Nil(resp.NextPageToken)
@@ -501,7 +501,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	blobs = nil
 	token = nil
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
-		resp, err = getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
+		resp, err = getHistory(s.namespace, execution, common.FirstEventID, common.EndEventID, token)
 		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
@@ -521,7 +521,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	token = nil
 	beginingEventID := events[len(events)-1].GetEventId() + 1
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
-		resp, err = getHistory(s.domainName, execution, beginingEventID, common.EndEventID, token)
+		resp, err = getHistory(s.namespace, execution, beginingEventID, common.EndEventID, token)
 		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
@@ -543,7 +543,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	token = nil
 	beginingEventID = events[len(events)-1].GetEventId() + 1
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
-		resp, err = getHistory(s.domainName, execution, beginingEventID, common.EndEventID, token)
+		resp, err = getHistory(s.namespace, execution, beginingEventID, common.EndEventID, token)
 		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
@@ -565,7 +565,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	blobs = nil // clear existing blobs
 	token = nil
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
-		resp, err = getHistory(s.domainName, execution, 4, 7, token)
+		resp, err = getHistory(s.namespace, execution, 4, 7, token)
 		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
@@ -593,7 +593,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          workflowID,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -656,7 +656,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -665,11 +665,11 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 		T:               s.T(),
 	}
 
-	getHistory := func(domain string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
+	getHistory := func(namespace string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
 		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 		return s.adminClient.GetWorkflowExecutionRawHistory(NewContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-			Domain:          domain,
+			Namespace:       namespace,
 			Execution:       execution,
 			FirstEventId:    firstEventID,
 			NextEventId:     nextEventID,
@@ -698,28 +698,28 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	firstEventID := int64(5)
 	var token []byte
 	// this should get the #4 batch, activity task started
-	resp, err := getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
+	resp, err := getHistory(s.namespace, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
 	// this should get the #5 batch, activity task completed and decision task scheduled
-	resp, err = getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
+	resp, err = getHistory(s.namespace, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
 	// this should get the #6 batch, decision task started
-	resp, err = getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
+	resp, err = getHistory(s.namespace, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
 	// this should get the #7 batch, decision task completed and workflow execution completed
-	resp, err = getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
+	resp, err = getHistory(s.namespace, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
 }
@@ -738,7 +738,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          workflowID,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -803,7 +803,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -814,11 +814,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 
 	// this function poll events from history side
 	pageSize := 1
-	getHistory := func(domain string, execution *commonproto.WorkflowExecution,
+	getHistory := func(namespace string, execution *commonproto.WorkflowExecution,
 		token []byte) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 		return s.engine.GetWorkflowExecutionRawHistory(NewContext(), &workflowservice.GetWorkflowExecutionRawHistoryRequest{
-			Domain:          domain,
+			Namespace:       namespace,
 			Execution:       execution,
 			MaximumPageSize: int32(pageSize),
 			NextPageToken:   token,
@@ -830,9 +830,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	convertBlob := func(blobs []*commonproto.DataBlob) []*commonproto.HistoryEvent {
 		var events []*commonproto.HistoryEvent
 		for _, blob := range blobs {
-			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
+			s.True(blob.GetEncodingType() == enums.EncodingTypeProto3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeThriftRW,
+				Encoding: common.EncodingTypeProto3,
 				Data:     blob.Data,
 			})
 			s.NoError(err)
@@ -844,13 +844,13 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	var blobs []*commonproto.DataBlob
 	var token []byte
 
-	resp, err := getHistory(s.domainName, execution, token)
+	resp, err := getHistory(s.namespace, execution, token)
 	s.NoError(err)
 	s.True(len(resp.RawHistory) == pageSize)
 	blobs = append(blobs, resp.RawHistory...)
 	token = resp.NextPageToken
 	if token != nil {
-		resp, err := getHistory(s.domainName, execution, token)
+		resp, err := getHistory(s.namespace, execution, token)
 		s.NoError(err)
 		s.Equal(0, len(resp.RawHistory))
 		s.Nil(resp.NextPageToken)
@@ -865,7 +865,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	token = nil
 
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
-		resp, err = getHistory(s.domainName, execution, token)
+		resp, err = getHistory(s.namespace, execution, token)
 		s.NoError(err)
 		s.True(len(resp.RawHistory) <= pageSize)
 		blobs = append(blobs, resp.RawHistory...)
@@ -884,7 +884,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	// continue the workflow by processing activity
 	poller.PollAndProcessActivityTask(false)
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
-		resp, err = getHistory(s.domainName, execution, token)
+		resp, err = getHistory(s.namespace, execution, token)
 		s.NoError(err)
 		s.True(len(resp.RawHistory) <= pageSize)
 		blobs = append(blobs, resp.RawHistory...)
@@ -907,7 +907,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	poller.PollAndProcessDecisionTask(false, false)
 
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
-		resp, err = getHistory(s.domainName, execution, token)
+		resp, err = getHistory(s.namespace, execution, token)
 		s.NoError(err)
 		s.True(len(resp.RawHistory) <= pageSize)
 		blobs = append(blobs, resp.RawHistory...)
@@ -942,7 +942,7 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          workflowID,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1004,7 +1004,7 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1014,9 +1014,9 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 	}
 
 	// this function poll events from history side
-	getHistoryWithLongPoll := func(domain string, workflowID string, token []byte) ([]*commonproto.DataBlob, []byte) {
+	getHistoryWithLongPoll := func(namespace string, workflowID string, token []byte) ([]*commonproto.DataBlob, []byte) {
 		responseInner, err := s.engine.PollForWorkflowExecutionRawHistory(NewContext(), &workflowservice.PollForWorkflowExecutionRawHistoryRequest{
-			Domain: domain,
+			Namespace: namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 			},
@@ -1030,9 +1030,9 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 		return responseInner.RawHistory, responseInner.NextPageToken
 	}
 
-	getHistory := func(domain string, workflowID string, token []byte) ([]*commonproto.DataBlob, []byte) {
+	getHistory := func(namespace string, workflowID string, token []byte) ([]*commonproto.DataBlob, []byte) {
 		responseInner, err := s.engine.GetWorkflowExecutionRawHistory(NewContext(), &workflowservice.GetWorkflowExecutionRawHistoryRequest{
-			Domain: domain,
+			Namespace: namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 			},
@@ -1048,9 +1048,9 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 	convertBlob := func(blobs []*commonproto.DataBlob) []*commonproto.HistoryEvent {
 		events := []*commonproto.HistoryEvent{}
 		for _, blob := range blobs {
-			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
+			s.True(blob.GetEncodingType() == enums.EncodingTypeProto3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
-				Encoding: common.EncodingTypeThriftRW,
+				Encoding: common.EncodingTypeProto3,
 				Data:     blob.Data,
 			})
 			s.Nil(err)
@@ -1067,7 +1067,7 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
 	start := time.Now()
-	blobs, token = getHistoryWithLongPoll(s.domainName, workflowID, token)
+	blobs, token = getHistoryWithLongPoll(s.namespace, workflowID, token)
 	events = convertBlob(blobs)
 	allEvents = append(allEvents, events...)
 	s.True(time.Now().Before(start.Add(time.Second * 5)))
@@ -1081,7 +1081,7 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
 	})
 	start = time.Now()
-	blobs, token = getHistoryWithLongPoll(s.domainName, workflowID, token)
+	blobs, token = getHistoryWithLongPoll(s.namespace, workflowID, token)
 	events = convertBlob(blobs)
 	allEvents = append(allEvents, events...)
 	s.True(time.Now().After(start.Add(time.Second * 5)))
@@ -1098,7 +1098,7 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
 	})
 	for token != nil {
-		blobs, token = getHistoryWithLongPoll(s.domainName, workflowID, token)
+		blobs, token = getHistoryWithLongPoll(s.namespace, workflowID, token)
 		events = convertBlob(blobs)
 		allEvents = append(allEvents, events...)
 	}
@@ -1121,7 +1121,7 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 	allEvents = nil
 	token = nil
 	for {
-		blobs, token = getHistory(s.domainName, workflowID, token)
+		blobs, token = getHistory(s.namespace, workflowID, token)
 		events = convertBlob(blobs)
 		allEvents = append(allEvents, events...)
 		if token == nil {

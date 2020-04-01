@@ -46,7 +46,7 @@ type (
 	// TaskPoller is used in integration tests to poll decision or activity tasks
 	TaskPoller struct {
 		Engine                              FrontendClient
-		Domain                              string
+		Namespace                           string
 		TaskList                            *commonproto.TaskList
 		StickyTaskList                      *commonproto.TaskList
 		StickyScheduleToStartTimeoutSeconds int32
@@ -133,9 +133,9 @@ Loop:
 			taskList = p.StickyTaskList
 		}
 		response, err1 := p.Engine.PollForDecisionTask(NewContext(), &workflowservice.PollForDecisionTaskRequest{
-			Domain:   p.Domain,
-			TaskList: taskList,
-			Identity: p.Identity,
+			Namespace: p.Namespace,
+			TaskList:  taskList,
+			Identity:  p.Identity,
 		})
 
 		if err1 == history.ErrDuplicate {
@@ -169,7 +169,7 @@ Loop:
 			nextPageToken := response.NextPageToken
 			for nextPageToken != nil {
 				resp, err2 := p.Engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-					Domain:        p.Domain,
+					Namespace:     p.Namespace,
 					Execution:     response.WorkflowExecution,
 					NextPageToken: nextPageToken,
 				})
@@ -340,9 +340,9 @@ func (p *TaskPoller) PollAndProcessActivityTask(dropTask bool) error {
 retry:
 	for attempt := 0; attempt < 5; attempt++ {
 		response, err := p.Engine.PollForActivityTask(NewContext(), &workflowservice.PollForActivityTaskRequest{
-			Domain:   p.Domain,
-			TaskList: p.TaskList,
-			Identity: p.Identity,
+			Namespace: p.Namespace,
+			TaskList:  p.TaskList,
+			Identity:  p.Identity,
 		})
 
 		if err == history.ErrDuplicate {
@@ -403,9 +403,9 @@ func (p *TaskPoller) PollAndProcessActivityTaskWithID(dropTask bool) error {
 retry:
 	for attempt := 0; attempt < 5; attempt++ {
 		response, err1 := p.Engine.PollForActivityTask(NewContext(), &workflowservice.PollForActivityTaskRequest{
-			Domain:   p.Domain,
-			TaskList: p.TaskList,
-			Identity: p.Identity,
+			Namespace: p.Namespace,
+			TaskList:  p.TaskList,
+			Identity:  p.Identity,
 		})
 
 		if err1 == history.ErrDuplicate {
@@ -437,11 +437,11 @@ retry:
 			response.Input, response.TaskToken)
 		if cancel {
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
-			_, err := p.Engine.RespondActivityTaskCanceledByID(NewContext(), &workflowservice.RespondActivityTaskCanceledByIDRequest{
-				Domain:     p.Domain,
-				WorkflowID: response.WorkflowExecution.GetWorkflowId(),
-				RunID:      response.WorkflowExecution.GetRunId(),
-				ActivityID: response.GetActivityId(),
+			_, err := p.Engine.RespondActivityTaskCanceledById(NewContext(), &workflowservice.RespondActivityTaskCanceledByIdRequest{
+				Namespace:  p.Namespace,
+				WorkflowId: response.WorkflowExecution.GetWorkflowId(),
+				RunId:      response.WorkflowExecution.GetRunId(),
+				ActivityId: response.GetActivityId(),
 				Details:    []byte("details"),
 				Identity:   p.Identity,
 			})
@@ -449,11 +449,11 @@ retry:
 		}
 
 		if err2 != nil {
-			_, err := p.Engine.RespondActivityTaskFailedByID(NewContext(), &workflowservice.RespondActivityTaskFailedByIDRequest{
-				Domain:     p.Domain,
-				WorkflowID: response.WorkflowExecution.GetWorkflowId(),
-				RunID:      response.WorkflowExecution.GetRunId(),
-				ActivityID: response.GetActivityId(),
+			_, err := p.Engine.RespondActivityTaskFailedById(NewContext(), &workflowservice.RespondActivityTaskFailedByIdRequest{
+				Namespace:  p.Namespace,
+				WorkflowId: response.WorkflowExecution.GetWorkflowId(),
+				RunId:      response.WorkflowExecution.GetRunId(),
+				ActivityId: response.GetActivityId(),
 				Reason:     err2.Error(),
 				Details:    []byte(err2.Error()),
 				Identity:   p.Identity,
@@ -461,11 +461,11 @@ retry:
 			return err
 		}
 
-		_, err := p.Engine.RespondActivityTaskCompletedByID(NewContext(), &workflowservice.RespondActivityTaskCompletedByIDRequest{
-			Domain:     p.Domain,
-			WorkflowID: response.WorkflowExecution.GetWorkflowId(),
-			RunID:      response.WorkflowExecution.GetRunId(),
-			ActivityID: response.GetActivityId(),
+		_, err := p.Engine.RespondActivityTaskCompletedById(NewContext(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
+			Namespace:  p.Namespace,
+			WorkflowId: response.WorkflowExecution.GetWorkflowId(),
+			RunId:      response.WorkflowExecution.GetRunId(),
+			ActivityId: response.GetActivityId(),
 			Identity:   p.Identity,
 			Result:     result,
 		})

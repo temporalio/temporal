@@ -190,7 +190,7 @@ func (p *indexProcessor) deserialize(payload []byte) (*indexer.Message, error) {
 }
 
 func (p *indexProcessor) addMessageToES(indexMsg *indexer.Message, kafkaMsg messaging.Message, logger log.Logger) error {
-	docID := indexMsg.GetWorkflowID() + esDocIDDelimiter + indexMsg.GetRunID()
+	docID := indexMsg.GetWorkflowId() + esDocIDDelimiter + indexMsg.GetRunId()
 
 	var keyToKafkaMsg string
 	var req elastic.BulkableRequest
@@ -282,8 +282,8 @@ func (p *indexProcessor) isValidFieldToES(field string) bool {
 }
 
 func fulfillDoc(doc map[string]interface{}, msg *indexer.Message, keyToKafkaMsg string) {
-	doc[definition.DomainID] = msg.GetDomainID()
-	doc[definition.WorkflowID] = msg.GetWorkflowID()
-	doc[definition.RunID] = msg.GetRunID()
+	doc[definition.NamespaceID] = msg.GetNamespaceId()
+	doc[definition.WorkflowID] = msg.GetWorkflowId()
+	doc[definition.RunID] = msg.GetRunId()
 	doc[definition.KafkaKey] = keyToKafkaMsg
 }

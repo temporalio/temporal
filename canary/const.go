@@ -38,8 +38,8 @@ const (
 	ctxKeyActivityRuntime         = "runtime"
 	ctxKeyActivityArchivalRuntime = "runtime-archival"
 	ctxKeyActivitySystemClient    = "system-client"
-	archivalDomain                = "canary-archival-domain"
-	systemDomain                  = "cadence-system"
+	archivalNamespace             = "canary-archival-namespace"
+	systemNamespace               = "temporal-system"
 	archivalTaskListName          = "canary-archival-task-queue"
 )
 

@@ -28,14 +28,14 @@ import (
 )
 
 const (
-	taskListCreatePart = `INTO task_lists(shard_id, domain_id, name, task_type, range_id, data, data_encoding) ` +
-		`VALUES (:shard_id, :domain_id, :name, :task_type, :range_id, :data, :data_encoding)`
+	taskListCreatePart = `INTO task_lists(shard_id, namespace_id, name, task_type, range_id, data, data_encoding) ` +
+		`VALUES (:shard_id, :namespace_id, :name, :task_type, :range_id, :data, :data_encoding)`
 
 	// (default range ID: initialRangeID == 1)
 	createTaskListQry = `INSERT ` + taskListCreatePart
 
 	replaceTaskListQry = `INSERT ` + taskListCreatePart +
-		`ON CONFLICT (shard_id, domain_id, name, task_type) DO UPDATE
+		`ON CONFLICT (shard_id, namespace_id, name, task_type) DO UPDATE
 SET range_id = excluded.range_id,
 data = excluded.data,
 data_encoding = excluded.data_encoding`
@@ -46,44 +46,44 @@ data = :data,
 data_encoding = :data_encoding
 WHERE
 shard_id = :shard_id AND
-domain_id = :domain_id AND
+namespace_id = :namespace_id AND
 name = :name AND
 task_type = :task_type
 `
 
-	listTaskListQry = `SELECT domain_id, range_id, name, task_type, data, data_encoding ` +
+	listTaskListQry = `SELECT namespace_id, range_id, name, task_type, data, data_encoding ` +
 		`FROM task_lists ` +
-		`WHERE shard_id = $1 AND domain_id > $2 AND name > $3 AND task_type > $4 ORDER BY domain_id,name,task_type LIMIT $5`
+		`WHERE shard_id = $1 AND namespace_id > $2 AND name > $3 AND task_type > $4 ORDER BY namespace_id,name,task_type LIMIT $5`
 
-	getTaskListQry = `SELECT domain_id, range_id, name, task_type, data, data_encoding ` +
+	getTaskListQry = `SELECT namespace_id, range_id, name, task_type, data, data_encoding ` +
 		`FROM task_lists ` +
-		`WHERE shard_id = $1 AND domain_id = $2 AND name = $3 AND task_type = $4`
+		`WHERE shard_id = $1 AND namespace_id = $2 AND name = $3 AND task_type = $4`
 
-	deleteTaskListQry = `DELETE FROM task_lists WHERE shard_id=$1 AND domain_id=$2 AND name=$3 AND task_type=$4 AND range_id=$5`
+	deleteTaskListQry = `DELETE FROM task_lists WHERE shard_id=$1 AND namespace_id=$2 AND name=$3 AND task_type=$4 AND range_id=$5`
 
 	lockTaskListQry = `SELECT range_id FROM task_lists ` +
-		`WHERE shard_id = $1 AND domain_id = $2 AND name = $3 AND task_type = $4 FOR UPDATE`
+		`WHERE shard_id = $1 AND namespace_id = $2 AND name = $3 AND task_type = $4 FOR UPDATE`
 
 	getTaskMinMaxQry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks ` +
-		`WHERE domain_id = $1 AND task_list_name = $2 AND task_type = $3 AND task_id > $4 AND task_id <= $5 ` +
+		`WHERE namespace_id = $1 AND task_list_name = $2 AND task_type = $3 AND task_id > $4 AND task_id <= $5 ` +
 		` ORDER BY task_id LIMIT $6`
 
 	getTaskMinQry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks ` +
-		`WHERE domain_id = $1 AND task_list_name = $2 AND task_type = $3 AND task_id > $4 ORDER BY task_id LIMIT $5`
+		`WHERE namespace_id = $1 AND task_list_name = $2 AND task_type = $3 AND task_id > $4 ORDER BY task_id LIMIT $5`
 
 	createTaskQry = `INSERT INTO ` +
-		`tasks(domain_id, task_list_name, task_type, task_id, data, data_encoding) ` +
-		`VALUES(:domain_id, :task_list_name, :task_type, :task_id, :data, :data_encoding)`
+		`tasks(namespace_id, task_list_name, task_type, task_id, data, data_encoding) ` +
+		`VALUES(:namespace_id, :task_list_name, :task_type, :task_id, :data, :data_encoding)`
 
 	deleteTaskQry = `DELETE FROM tasks ` +
-		`WHERE domain_id = $1 AND task_list_name = $2 AND task_type = $3 AND task_id = $4`
+		`WHERE namespace_id = $1 AND task_list_name = $2 AND task_type = $3 AND task_id = $4`
 
 	rangeDeleteTaskQry = `DELETE FROM tasks ` +
-		`WHERE domain_id = $1 AND task_list_name = $2 AND task_type = $3 AND task_id IN (SELECT task_id FROM
-		 tasks WHERE domain_id = $1 AND task_list_name = $2 AND task_type = $3 AND task_id <= $4 ` +
-		`ORDER BY domain_id,task_list_name,task_type,task_id LIMIT $5 )`
+		`WHERE namespace_id = $1 AND task_list_name = $2 AND task_type = $3 AND task_id IN (SELECT task_id FROM
+		 tasks WHERE namespace_id = $1 AND task_list_name = $2 AND task_type = $3 AND task_id <= $4 ` +
+		`ORDER BY namespace_id,task_list_name,task_type,task_id LIMIT $5 )`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -97,10 +97,10 @@ func (pdb *db) SelectFromTasks(filter *sqlplugin.TasksFilter) ([]sqlplugin.Tasks
 	var rows []sqlplugin.TasksRow
 	switch {
 	case filter.MaxTaskID != nil:
-		err = pdb.conn.Select(&rows, getTaskMinMaxQry, filter.DomainID,
+		err = pdb.conn.Select(&rows, getTaskMinMaxQry, filter.NamespaceID,
 			filter.TaskListName, filter.TaskType, *filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
 	default:
-		err = pdb.conn.Select(&rows, getTaskMinQry, filter.DomainID,
+		err = pdb.conn.Select(&rows, getTaskMinQry, filter.NamespaceID,
 			filter.TaskListName, filter.TaskType, *filter.MinTaskID, *filter.PageSize)
 	}
 	if err != nil {
@@ -116,9 +116,9 @@ func (pdb *db) DeleteFromTasks(filter *sqlplugin.TasksFilter) (sql.Result, error
 			return nil, fmt.Errorf("missing limit parameter")
 		}
 		return pdb.conn.Exec(rangeDeleteTaskQry,
-			filter.DomainID, filter.TaskListName, filter.TaskType, *filter.TaskIDLessThanEquals, *filter.Limit)
+			filter.NamespaceID, filter.TaskListName, filter.TaskType, *filter.TaskIDLessThanEquals, *filter.Limit)
 	}
-	return pdb.conn.Exec(deleteTaskQry, filter.DomainID, filter.TaskListName, filter.TaskType, *filter.TaskID)
+	return pdb.conn.Exec(deleteTaskQry, filter.NamespaceID, filter.TaskListName, filter.TaskType, *filter.TaskID)
 }
 
 // InsertIntoTaskLists inserts one or more rows into task_lists table
@@ -139,9 +139,9 @@ func (pdb *db) UpdateTaskLists(row *sqlplugin.TaskListsRow) (sql.Result, error) 
 // SelectFromTaskLists reads one or more rows from task_lists table
 func (pdb *db) SelectFromTaskLists(filter *sqlplugin.TaskListsFilter) ([]sqlplugin.TaskListsRow, error) {
 	switch {
-	case filter.DomainID != nil && filter.Name != nil && filter.TaskType != nil:
+	case filter.NamespaceID != nil && filter.Name != nil && filter.TaskType != nil:
 		return pdb.selectFromTaskLists(filter)
-	case filter.DomainIDGreaterThan != nil && filter.NameGreaterThan != nil && filter.TaskTypeGreaterThan != nil && filter.PageSize != nil:
+	case filter.NamespaceIDGreaterThan != nil && filter.NameGreaterThan != nil && filter.TaskTypeGreaterThan != nil && filter.PageSize != nil:
 		return pdb.rangeSelectFromTaskLists(filter)
 	default:
 		return nil, fmt.Errorf("invalid set of query filter params")
@@ -151,7 +151,7 @@ func (pdb *db) SelectFromTaskLists(filter *sqlplugin.TaskListsFilter) ([]sqlplug
 func (pdb *db) selectFromTaskLists(filter *sqlplugin.TaskListsFilter) ([]sqlplugin.TaskListsRow, error) {
 	var err error
 	var row sqlplugin.TaskListsRow
-	err = pdb.conn.Get(&row, getTaskListQry, filter.ShardID, *filter.DomainID, *filter.Name, *filter.TaskType)
+	err = pdb.conn.Get(&row, getTaskListQry, filter.ShardID, *filter.NamespaceID, *filter.Name, *filter.TaskType)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (pdb *db) rangeSelectFromTaskLists(filter *sqlplugin.TaskListsFilter) ([]sq
 	var err error
 	var rows []sqlplugin.TaskListsRow
 	err = pdb.conn.Select(&rows, listTaskListQry,
-		filter.ShardID, *filter.DomainIDGreaterThan, *filter.NameGreaterThan, *filter.TaskTypeGreaterThan, *filter.PageSize)
+		filter.ShardID, *filter.NamespaceIDGreaterThan, *filter.NameGreaterThan, *filter.TaskTypeGreaterThan, *filter.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -174,12 +174,12 @@ func (pdb *db) rangeSelectFromTaskLists(filter *sqlplugin.TaskListsFilter) ([]sq
 
 // DeleteFromTaskLists deletes a row from task_lists table
 func (pdb *db) DeleteFromTaskLists(filter *sqlplugin.TaskListsFilter) (sql.Result, error) {
-	return pdb.conn.Exec(deleteTaskListQry, filter.ShardID, *filter.DomainID, *filter.Name, *filter.TaskType, *filter.RangeID)
+	return pdb.conn.Exec(deleteTaskListQry, filter.ShardID, *filter.NamespaceID, *filter.Name, *filter.TaskType, *filter.RangeID)
 }
 
 // LockTaskLists locks a row in task_lists table
 func (pdb *db) LockTaskLists(filter *sqlplugin.TaskListsFilter) (int64, error) {
 	var rangeID int64
-	err := pdb.conn.Get(&rangeID, lockTaskListQry, filter.ShardID, *filter.DomainID, *filter.Name, *filter.TaskType)
+	err := pdb.conn.Get(&rangeID, lockTaskListQry, filter.ShardID, *filter.NamespaceID, *filter.Name, *filter.TaskType)
 	return rangeID, err
 }

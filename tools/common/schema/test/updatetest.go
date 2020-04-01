@@ -92,7 +92,7 @@ func (tb *UpdateSchemaTestBase) RunUpdateSchemaTest(app *cli.App, db DB, dbNameF
 	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "update-schema", "-d", tmpDir, "-v", "2.0"}))
 
 	expected := getExpectedTables(true, expectedTables)
-	expected["domains"] = struct{}{}
+	expected["namespaces"] = struct{}{}
 
 	ver, err := db.ReadSchemaVersion()
 	tb.Nil(err)
@@ -131,10 +131,10 @@ func (tb *UpdateSchemaTestBase) makeSchemaVersionDirs(rootDir string, sqlFileCon
 		"CurrVersion": "2.0",
 		"MinCompatibleVersion": "1.0",
 		"Description": "v2 of schema",
-		"SchemaUpdateCqlFiles": ["domain.cql"]
+		"SchemaUpdateCqlFiles": ["namespace.cql"]
 	}`
 
-	domain := `CREATE TABLE domains(
+	namespace := `CREATE TABLE namespaces(
 	  id     int,
 	  PRIMARY KEY (id)
 	);`
@@ -143,6 +143,6 @@ func (tb *UpdateSchemaTestBase) makeSchemaVersionDirs(rootDir string, sqlFileCon
 	tb.NoError(os.Mkdir(rootDir+"/v2.0", os.FileMode(0700)))
 	err = ioutil.WriteFile(dir+"/manifest.json", []byte(mData), os.FileMode(0600))
 	tb.Nil(err)
-	err = ioutil.WriteFile(dir+"/domain.cql", []byte(domain), os.FileMode(0600))
+	err = ioutil.WriteFile(dir+"/namespace.cql", []byte(namespace), os.FileMode(0600))
 	tb.Nil(err)
 }

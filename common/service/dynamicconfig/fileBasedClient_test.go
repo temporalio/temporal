@@ -75,21 +75,21 @@ func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
 
 func (s *fileBasedClientSuite) TestGetValueWithFilters() {
 	filters := map[Filter]interface{}{
-		DomainName: "global-samples-domain",
+		Namespace: "global-samples-namespace",
 	}
 	v, err := s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
 	s.NoError(err)
 	s.Equal(true, v)
 
 	filters = map[Filter]interface{}{
-		DomainName: "non-exist-domain",
+		Namespace: "non-exist-namespace",
 	}
 	v, err = s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, true)
 	s.NoError(err)
 	s.Equal(false, v)
 
 	filters = map[Filter]interface{}{
-		DomainName:   "samples-domain",
+		Namespace:    "samples-namespace",
 		TaskListName: "non-exist-tasklist",
 	}
 	v, err = s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
@@ -99,7 +99,7 @@ func (s *fileBasedClientSuite) TestGetValueWithFilters() {
 
 func (s *fileBasedClientSuite) TestGetValueWithFilters_UnknownFilter() {
 	filters := map[Filter]interface{}{
-		DomainName:    "global-samples-domain",
+		Namespace:     "global-samples-namespace",
 		unknownFilter: "unknown-filter",
 	}
 	v, err := s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
@@ -115,7 +115,7 @@ func (s *fileBasedClientSuite) TestGetIntValue() {
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterNotMatch() {
 	filters := map[Filter]interface{}{
-		DomainName: "samples-domain",
+		Namespace: "samples-namespace",
 	}
 	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 500)
 	s.NoError(err)
@@ -125,7 +125,7 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterNotMatch() {
 func (s *fileBasedClientSuite) TestGetIntValue_WrongType() {
 	defaultValue := 2000
 	filters := map[Filter]interface{}{
-		DomainName: "global-samples-domain",
+		Namespace: "global-samples-namespace",
 	}
 	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, defaultValue)
 	s.Error(err)
@@ -140,7 +140,7 @@ func (s *fileBasedClientSuite) TestGetFloatValue() {
 
 func (s *fileBasedClientSuite) TestGetFloatValue_WrongType() {
 	filters := map[Filter]interface{}{
-		DomainName: "samples-domain",
+		Namespace: "samples-namespace",
 	}
 	defaultValue := 1.0
 	v, err := s.client.GetFloatValue(testGetFloat64PropertyKey, filters, defaultValue)
@@ -199,7 +199,7 @@ func (s *fileBasedClientSuite) TestGetDurationValue() {
 
 func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
 	filters := map[Filter]interface{}{
-		DomainName: "samples-domain",
+		Namespace: "samples-namespace",
 	}
 	v, err := s.client.GetDurationValue(testGetDurationPropertyKey, filters, time.Second)
 	s.Error(err)
@@ -208,7 +208,7 @@ func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
 
 func (s *fileBasedClientSuite) TestGetDurationValue_ParseFailed() {
 	filters := map[Filter]interface{}{
-		DomainName:   "samples-domain",
+		Namespace:    "samples-namespace",
 		TaskListName: "longIdleTimeTasklist",
 	}
 	v, err := s.client.GetDurationValue(testGetDurationPropertyKey, filters, time.Second)
@@ -248,7 +248,7 @@ func (s *fileBasedClientSuite) TestMatch() {
 				Constraints: map[string]interface{}{},
 			},
 			filters: map[Filter]interface{}{
-				DomainName: "some random domain",
+				Namespace: "some random namespace",
 			},
 			matched: false,
 		},
@@ -261,22 +261,22 @@ func (s *fileBasedClientSuite) TestMatch() {
 		},
 		{
 			v: &constrainedValue{
-				Constraints: map[string]interface{}{"domainName": "samples-domain"},
+				Constraints: map[string]interface{}{"namespace": "samples-namespace"},
 			},
 			filters: map[Filter]interface{}{
-				DomainName: "some random domain",
+				Namespace: "some random namespace",
 			},
 			matched: false,
 		},
 		{
 			v: &constrainedValue{
 				Constraints: map[string]interface{}{
-					"domainName":   "samples-domain",
+					"namespace":    "samples-namespace",
 					"taskListName": "sample-task-list",
 				},
 			},
 			filters: map[Filter]interface{}{
-				DomainName:   "samples-domain",
+				Namespace:    "samples-namespace",
 				TaskListName: "sample-task-list",
 			},
 			matched: true,
@@ -284,12 +284,12 @@ func (s *fileBasedClientSuite) TestMatch() {
 		{
 			v: &constrainedValue{
 				Constraints: map[string]interface{}{
-					"domainName":        "samples-domain",
+					"namespace":         "samples-namespace",
 					"some-other-filter": "sample-task-list",
 				},
 			},
 			filters: map[Filter]interface{}{
-				DomainName:   "samples-domain",
+				Namespace:    "samples-namespace",
 				TaskListName: "sample-task-list",
 			},
 			matched: false,
@@ -297,7 +297,7 @@ func (s *fileBasedClientSuite) TestMatch() {
 		{
 			v: &constrainedValue{
 				Constraints: map[string]interface{}{
-					"domainName": "samples-domain",
+					"namespace": "samples-namespace",
 				},
 			},
 			filters: map[Filter]interface{}{
@@ -320,16 +320,16 @@ func (s *fileBasedClientSuite) TestUpdateConfig() {
 	// pre-check existing config
 	current, err := client.GetMapValue(key, nil, nil)
 	s.NoError(err)
-	currentDomainVal, ok := current["DomainID"]
+	currentNamespaceVal, ok := current["NamespaceID"]
 	s.True(ok)
-	s.Equal(1, currentDomainVal)
+	s.Equal(1, currentNamespaceVal)
 	_, ok = current["WorkflowID"]
 	s.False(ok)
 
 	// update config
 	v := map[string]interface{}{
-		"WorkflowID": 1,
-		"DomainID":   2,
+		"WorkflowID":  1,
+		"NamespaceID": 2,
 	}
 	err = client.UpdateValue(key, v)
 	s.NoError(err)
@@ -337,16 +337,16 @@ func (s *fileBasedClientSuite) TestUpdateConfig() {
 	// verify update result
 	current, err = client.GetMapValue(key, nil, nil)
 	s.NoError(err)
-	currentDomainVal, ok = current["DomainID"]
+	currentNamespaceVal, ok = current["NamespaceID"]
 	s.True(ok)
-	s.Equal(2, currentDomainVal)
+	s.Equal(2, currentNamespaceVal)
 	currentWorkflowIDVal, ok := current["WorkflowID"]
 	s.True(ok)
 	s.Equal(1, currentWorkflowIDVal)
 
 	// revert test file back
 	v = map[string]interface{}{
-		"DomainID": 1,
+		"NamespaceID": 1,
 	}
 	err = client.UpdateValue(key, v)
 	s.NoError(err)

@@ -77,13 +77,13 @@ func newTransferQueueTaskExecutorBase(
 	}
 }
 
-func (t *transferQueueTaskExecutorBase) getDomainIDAndWorkflowExecution(
+func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TransferTaskInfo,
 ) (string, commonproto.WorkflowExecution) {
 
-	return primitives.UUIDString(task.DomainID), commonproto.WorkflowExecution{
-		WorkflowId: task.WorkflowID,
-		RunId:      primitives.UUIDString(task.RunID),
+	return primitives.UUIDString(task.GetNamespaceId()), commonproto.WorkflowExecution{
+		WorkflowId: task.GetWorkflowId(),
+		RunId:      primitives.UUIDString(task.GetRunId()),
 	}
 }
 
@@ -100,14 +100,14 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	}
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
-		DomainUUID:       primitives.UUIDString(task.TargetDomainID),
-		SourceDomainUUID: primitives.UUIDString(task.DomainID),
+		NamespaceId:       primitives.UUIDString(task.GetTargetNamespaceId()),
+		SourceNamespaceId: primitives.UUIDString(task.GetNamespaceId()),
 		Execution: &commonproto.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      primitives.UUIDString(task.RunID),
+			WorkflowId: task.GetWorkflowId(),
+			RunId:      primitives.UUIDString(task.GetRunId()),
 		},
 		TaskList:                      &commonproto.TaskList{Name: task.TaskList},
-		ScheduleId:                    task.ScheduleID,
+		ScheduleId:                    task.GetScheduleId(),
 		ScheduleToStartTimeoutSeconds: activityScheduleToStartTimeout,
 	})
 
@@ -128,20 +128,20 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 	}
 
 	_, err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
-		DomainUUID: primitives.UUIDString(task.DomainID),
+		NamespaceId: primitives.UUIDString(task.GetNamespaceId()),
 		Execution: &commonproto.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      primitives.UUIDString(task.RunID),
+			WorkflowId: task.GetWorkflowId(),
+			RunId:      primitives.UUIDString(task.GetRunId()),
 		},
 		TaskList:                      tasklist,
-		ScheduleId:                    task.ScheduleID,
+		ScheduleId:                    task.GetScheduleId(),
 		ScheduleToStartTimeoutSeconds: decisionScheduleToStartTimeout,
 	})
 	return err
 }
 
 func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -153,24 +153,24 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	searchAttributes map[string][]byte,
 ) error {
 
-	domain := defaultDomainName
+	namespace := defaultNamespace
 
-	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID); err != nil {
+	if namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID); err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 	} else {
-		domain = domainEntry.GetInfo().Name
+		namespace = namespaceEntry.GetInfo().Name
 		// if sampled for longer retention is enabled, only record those sampled events
-		if domainEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
-			!domainEntry.IsSampledForLongerRetention(workflowID) {
+		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
+			!namespaceEntry.IsSampledForLongerRetention(workflowID) {
 			return nil
 		}
 	}
 
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
-		DomainUUID: domainID,
-		Domain:     domain,
+		NamespaceID: namespaceID,
+		Namespace:   namespace,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -188,7 +188,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 }
 
 func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -200,19 +200,19 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	searchAttributes map[string][]byte,
 ) error {
 
-	domain := defaultDomainName
-	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
+	namespace := defaultNamespace
+	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 	} else {
-		domain = domainEntry.GetInfo().Name
+		namespace = namespaceEntry.GetInfo().Name
 	}
 
 	request := &persistence.UpsertWorkflowExecutionRequest{
-		DomainUUID: domainID,
-		Domain:     domain,
+		NamespaceID: namespaceID,
+		Namespace:   namespace,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -230,7 +230,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 }
 
 func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -246,34 +246,34 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 	// Record closing in visibility store
 	retentionSeconds := int64(0)
-	domain := defaultDomainName
+	namespace := defaultNamespace
 	recordWorkflowClose := true
 	archiveVisibility := false
 
-	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
+	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil && !isWorkflowNotExistError(err) {
 		return err
 	}
 
 	if err == nil {
-		// retention in domain config is in days, convert to seconds
-		retentionSeconds = int64(domainEntry.GetRetentionDays(workflowID)) * int64(secondsInDay)
-		domain = domainEntry.GetInfo().Name
+		// retention in namespace config is in days, convert to seconds
+		retentionSeconds = int64(namespaceEntry.GetRetentionDays(workflowID)) * int64(secondsInDay)
+		namespace = namespaceEntry.GetInfo().Name
 		// if sampled for longer retention is enabled, only record those sampled events
-		if domainEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
-			!domainEntry.IsSampledForLongerRetention(workflowID) {
+		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
+			!namespaceEntry.IsSampledForLongerRetention(workflowID) {
 			recordWorkflowClose = false
 		}
 
 		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-		domainConfiguredForVisibilityArchival := domainEntry.GetConfig().VisibilityArchivalStatus == enums.ArchivalStatusEnabled
-		archiveVisibility = clusterConfiguredForVisibilityArchival && domainConfiguredForVisibilityArchival
+		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalStatus == enums.ArchivalStatusEnabled
+		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 	}
 
 	if recordWorkflowClose {
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
-			DomainUUID: domainID,
-			Domain:     domain,
+			NamespaceID: namespaceID,
+			Namespace:   namespace,
 			Execution: commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -298,8 +298,8 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		defer cancel()
 		_, err := t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 			ArchiveRequest: &archiver.ArchiveRequest{
-				DomainID:           domainID,
-				DomainName:         domain,
+				NamespaceID:        namespaceID,
+				Namespace:          namespace,
 				WorkflowID:         workflowID,
 				RunID:              runID,
 				WorkflowTypeName:   workflowTypeName,
@@ -310,8 +310,8 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 				HistoryLength:      historyLength,
 				Memo:               visibilityMemo,
 				SearchAttributes:   searchAttributes,
-				VisibilityURI:      domainEntry.GetConfig().VisibilityArchivalURI,
-				URI:                domainEntry.GetConfig().HistoryArchivalURI,
+				VisibilityURI:      namespaceEntry.GetConfig().VisibilityArchivalURI,
+				URI:                namespaceEntry.GetConfig().HistoryArchivalURI,
 				Targets:            []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
 			},
 			CallerService:        common.HistoryServiceName,

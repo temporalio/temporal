@@ -59,32 +59,32 @@ func NewClient(
 	}
 }
 
-func (c *clientImpl) DeprecateDomain(
+func (c *clientImpl) DeprecateNamespace(
 	ctx context.Context,
-	request *workflowservice.DeprecateDomainRequest,
+	request *workflowservice.DeprecateNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DeprecateDomainResponse, error) {
+) (*workflowservice.DeprecateNamespaceResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DeprecateDomain(ctx, request, opts...)
+	return client.DeprecateNamespace(ctx, request, opts...)
 }
 
-func (c *clientImpl) DescribeDomain(
+func (c *clientImpl) DescribeNamespace(
 	ctx context.Context,
-	request *workflowservice.DescribeDomainRequest,
+	request *workflowservice.DescribeNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DescribeDomainResponse, error) {
+) (*workflowservice.DescribeNamespaceResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DescribeDomain(ctx, request, opts...)
+	return client.DescribeNamespace(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeTaskList(
@@ -185,18 +185,18 @@ func (c *clientImpl) ListClosedWorkflowExecutions(
 	return client.ListClosedWorkflowExecutions(ctx, request, opts...)
 }
 
-func (c *clientImpl) ListDomains(
+func (c *clientImpl) ListNamespaces(
 	ctx context.Context,
-	request *workflowservice.ListDomainsRequest,
+	request *workflowservice.ListNamespacesRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListDomainsResponse, error) {
+) (*workflowservice.ListNamespacesResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ListDomains(ctx, request, opts...)
+	return client.ListNamespaces(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListOpenWorkflowExecutions(
@@ -325,25 +325,25 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(
 	return client.RecordActivityTaskHeartbeat(ctx, request, opts...)
 }
 
-func (c *clientImpl) RecordActivityTaskHeartbeatByID(
+func (c *clientImpl) RecordActivityTaskHeartbeatById(
 	ctx context.Context,
-	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
+	request *workflowservice.RecordActivityTaskHeartbeatByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RecordActivityTaskHeartbeatByIDResponse, error) {
+) (*workflowservice.RecordActivityTaskHeartbeatByIdResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RecordActivityTaskHeartbeatByID(ctx, request, opts...)
+	return client.RecordActivityTaskHeartbeatById(ctx, request, opts...)
 }
 
-func (c *clientImpl) RegisterDomain(
+func (c *clientImpl) RegisterNamespace(
 	ctx context.Context,
-	request *workflowservice.RegisterDomainRequest,
+	request *workflowservice.RegisterNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RegisterDomainResponse, error) {
+) (*workflowservice.RegisterNamespaceResponse, error) {
 
 	client, err := c.getRandomClient()
 	if err != nil {
@@ -351,7 +351,7 @@ func (c *clientImpl) RegisterDomain(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RegisterDomain(ctx, request, opts...)
+	return client.RegisterNamespace(ctx, request, opts...)
 }
 
 func (c *clientImpl) RequestCancelWorkflowExecution(
@@ -410,18 +410,18 @@ func (c *clientImpl) RespondActivityTaskCanceled(
 	return client.RespondActivityTaskCanceled(ctx, request, opts...)
 }
 
-func (c *clientImpl) RespondActivityTaskCanceledByID(
+func (c *clientImpl) RespondActivityTaskCanceledById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
+	request *workflowservice.RespondActivityTaskCanceledByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCanceledByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskCanceledByIdResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RespondActivityTaskCanceledByID(ctx, request, opts...)
+	return client.RespondActivityTaskCanceledById(ctx, request, opts...)
 }
 
 func (c *clientImpl) RespondActivityTaskCompleted(
@@ -438,18 +438,18 @@ func (c *clientImpl) RespondActivityTaskCompleted(
 	return client.RespondActivityTaskCompleted(ctx, request, opts...)
 }
 
-func (c *clientImpl) RespondActivityTaskCompletedByID(
+func (c *clientImpl) RespondActivityTaskCompletedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
+	request *workflowservice.RespondActivityTaskCompletedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCompletedByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskCompletedByIdResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RespondActivityTaskCompletedByID(ctx, request, opts...)
+	return client.RespondActivityTaskCompletedById(ctx, request, opts...)
 }
 
 func (c *clientImpl) RespondActivityTaskFailed(
@@ -466,18 +466,18 @@ func (c *clientImpl) RespondActivityTaskFailed(
 	return client.RespondActivityTaskFailed(ctx, request, opts...)
 }
 
-func (c *clientImpl) RespondActivityTaskFailedByID(
+func (c *clientImpl) RespondActivityTaskFailedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskFailedByIDRequest,
+	request *workflowservice.RespondActivityTaskFailedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskFailedByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskFailedByIdResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RespondActivityTaskFailedByID(ctx, request, opts...)
+	return client.RespondActivityTaskFailedById(ctx, request, opts...)
 }
 
 func (c *clientImpl) RespondDecisionTaskCompleted(
@@ -578,18 +578,18 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	return client.TerminateWorkflowExecution(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateDomain(
+func (c *clientImpl) UpdateNamespace(
 	ctx context.Context,
-	request *workflowservice.UpdateDomainRequest,
+	request *workflowservice.UpdateNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateDomainResponse, error) {
+) (*workflowservice.UpdateNamespaceResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.UpdateDomain(ctx, request, opts...)
+	return client.UpdateNamespace(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetClusterInfo(

@@ -200,7 +200,7 @@ func computeActivityInfoSize(ai *InternalActivityInfo) int {
 }
 
 func computeTimerInfoSize(ti *persistenceblobs.TimerInfo) int {
-	size := len(ti.TimerID)
+	size := len(ti.GetTimerId())
 
 	return size
 }

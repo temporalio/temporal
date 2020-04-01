@@ -1,6 +1,6 @@
 What
 ----
-This directory contains the cassandra schema for every keyspace that cadence owns. The directory structure is as follows
+This directory contains the cassandra schema for every keyspace that temporal owns. The directory structure is as follows
 
 ```
 ./schema

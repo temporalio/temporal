@@ -36,7 +36,7 @@ const (
 	DCRedirectionPolicyDefault = ""
 	// DCRedirectionPolicyNoop means no redirection
 	DCRedirectionPolicyNoop = "noop"
-	// DCRedirectionPolicySelectedAPIsForwarding means forwarding the following APIs based domain
+	// DCRedirectionPolicySelectedAPIsForwarding means forwarding the following APIs based namespace
 	// 1. StartWorkflowExecution
 	// 2. SignalWithStartWorkflowExecution
 	// 3. SignalWorkflowExecution
@@ -49,8 +49,8 @@ const (
 type (
 	// DCRedirectionPolicy is a DC redirection policy interface
 	DCRedirectionPolicy interface {
-		WithDomainIDRedirect(ctx context.Context, domainID string, apiName string, call func(string) error) error
-		WithDomainNameRedirect(ctx context.Context, domainName string, apiName string, call func(string) error) error
+		WithNamespaceIDRedirect(ctx context.Context, namespaceID string, apiName string, call func(string) error) error
+		WithNamespaceRedirect(ctx context.Context, namespace string, apiName string, call func(string) error) error
 	}
 
 	// NoopRedirectionPolicy is DC redirection policy which does nothing
@@ -59,11 +59,11 @@ type (
 	}
 
 	// SelectedAPIsForwardingRedirectionPolicy is a DC redirection policy
-	// which (based on domain) forwards selected APIs calls to active cluster
+	// which (based on namespace) forwards selected APIs calls to active cluster
 	SelectedAPIsForwardingRedirectionPolicy struct {
 		currentClusterName string
 		config             *Config
-		domainCache        cache.DomainCache
+		namespaceCache     cache.NamespaceCache
 	}
 )
 
@@ -78,7 +78,7 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 
 // RedirectionPolicyGenerator generate corresponding redirection policy
 func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, config *Config,
-	domainCache cache.DomainCache, policy config.DCRedirectionPolicy) DCRedirectionPolicy {
+	namespaceCache cache.NamespaceCache, policy config.DCRedirectionPolicy) DCRedirectionPolicy {
 	switch policy.Policy {
 	case DCRedirectionPolicyDefault:
 		// default policy, noop
@@ -87,7 +87,7 @@ func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, config *Config
 		return NewNoopRedirectionPolicy(clusterMetadata.GetCurrentClusterName())
 	case DCRedirectionPolicySelectedAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewSelectedAPIsForwardingPolicy(currentClusterName, config, domainCache)
+		return NewSelectedAPIsForwardingPolicy(currentClusterName, config, namespaceCache)
 	default:
 		panic(fmt.Sprintf("Unknown DC redirection policy %v", policy.Policy))
 	}
@@ -100,74 +100,74 @@ func NewNoopRedirectionPolicy(currentClusterName string) *NoopRedirectionPolicy 
 	}
 }
 
-// WithDomainIDRedirect redirect the API call based on domain ID
-func (policy *NoopRedirectionPolicy) WithDomainIDRedirect(ctx context.Context, domainID string, apiName string, call func(string) error) error {
+// WithNamespaceIDRedirect redirect the API call based on namespace ID
+func (policy *NoopRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID string, apiName string, call func(string) error) error {
 	return call(policy.currentClusterName)
 }
 
-// WithDomainNameRedirect redirect the API call based on domain name
-func (policy *NoopRedirectionPolicy) WithDomainNameRedirect(ctx context.Context, domainName string, apiName string, call func(string) error) error {
+// WithNamespaceRedirect redirect the API call based on namespace name
+func (policy *NoopRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespace string, apiName string, call func(string) error) error {
 	return call(policy.currentClusterName)
 }
 
-// NewSelectedAPIsForwardingPolicy creates a forwarding policy for selected APIs based on domain
-func NewSelectedAPIsForwardingPolicy(currentClusterName string, config *Config, domainCache cache.DomainCache) *SelectedAPIsForwardingRedirectionPolicy {
+// NewSelectedAPIsForwardingPolicy creates a forwarding policy for selected APIs based on namespace
+func NewSelectedAPIsForwardingPolicy(currentClusterName string, config *Config, namespaceCache cache.NamespaceCache) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
 		currentClusterName: currentClusterName,
 		config:             config,
-		domainCache:        domainCache,
+		namespaceCache:     namespaceCache,
 	}
 }
 
-// WithDomainIDRedirect redirect the API call based on domain ID
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithDomainIDRedirect(ctx context.Context, domainID string, apiName string, call func(string) error) error {
-	domainEntry, err := policy.domainCache.GetDomainByID(domainID)
+// WithNamespaceIDRedirect redirect the API call based on namespace ID
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID string, apiName string, call func(string) error) error {
+	namespaceEntry, err := policy.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
-	return policy.withRedirect(ctx, domainEntry, apiName, call)
+	return policy.withRedirect(ctx, namespaceEntry, apiName, call)
 }
 
-// WithDomainNameRedirect redirect the API call based on domain name
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithDomainNameRedirect(ctx context.Context, domainName string, apiName string, call func(string) error) error {
-	domainEntry, err := policy.domainCache.GetDomain(domainName)
+// WithNamespaceRedirect redirect the API call based on namespace name
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespace string, apiName string, call func(string) error) error {
+	namespaceEntry, err := policy.namespaceCache.GetNamespace(namespace)
 	if err != nil {
 		return err
 	}
-	return policy.withRedirect(ctx, domainEntry, apiName, call)
+	return policy.withRedirect(ctx, namespaceEntry, apiName, call)
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, domainEntry *cache.DomainCacheEntry, apiName string, call func(string) error) error {
-	targetDC, enableDomainNotActiveForwarding := policy.getTargetClusterAndIsDomainNotActiveAutoForwarding(ctx, domainEntry, apiName)
+func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *cache.NamespaceCacheEntry, apiName string, call func(string) error) error {
+	targetDC, enableNamespaceNotActiveForwarding := policy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx, namespaceEntry, apiName)
 
 	err := call(targetDC)
 
-	targetDC, ok := policy.isDomainNotActiveError(err)
-	if !ok || !enableDomainNotActiveForwarding {
+	targetDC, ok := policy.isNamespaceNotActiveError(err)
+	if !ok || !enableNamespaceNotActiveForwarding {
 		return err
 	}
 	return call(targetDC)
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) isDomainNotActiveError(err error) (string, bool) {
-	domainNotActiveErr, ok := err.(*serviceerror.DomainNotActive)
+func (policy *SelectedAPIsForwardingRedirectionPolicy) isNamespaceNotActiveError(err error) (string, bool) {
+	namespaceNotActiveErr, ok := err.(*serviceerror.NamespaceNotActive)
 	if !ok {
 		return "", false
 	}
-	return domainNotActiveErr.ActiveCluster, true
+	return namespaceNotActiveErr.ActiveCluster, true
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsDomainNotActiveAutoForwarding(ctx context.Context, domainEntry *cache.DomainCacheEntry, apiName string) (string, bool) {
-	if !domainEntry.IsGlobalDomain() {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx context.Context, namespaceEntry *cache.NamespaceCacheEntry, apiName string) (string, bool) {
+	if !namespaceEntry.IsGlobalNamespace() {
 		return policy.currentClusterName, false
 	}
 
-	if len(domainEntry.GetReplicationConfig().Clusters) == 1 {
-		// do not do dc redirection if domain is only targeting at 1 dc (effectively local domain)
+	if len(namespaceEntry.GetReplicationConfig().Clusters) == 1 {
+		// do not do dc redirection if namespace is only targeting at 1 dc (effectively local namespace)
 		return policy.currentClusterName, false
 	}
 
-	if !policy.config.EnableDomainNotActiveAutoForwarding(domainEntry.GetInfo().Name) {
+	if !policy.config.EnableNamespaceNotActiveAutoForwarding(namespaceEntry.GetInfo().Name) {
 		// do not do dc redirection if auto-forwarding dynamic config flag is not enabled
 		return policy.currentClusterName, false
 	}
@@ -178,5 +178,5 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsDoma
 		return policy.currentClusterName, false
 	}
 
-	return domainEntry.GetReplicationConfig().ActiveClusterName, true
+	return namespaceEntry.GetReplicationConfig().ActiveClusterName, true
 }

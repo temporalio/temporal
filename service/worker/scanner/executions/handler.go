@@ -32,7 +32,7 @@ const (
 	handlerStatusDefer = executor.TaskStatusDefer
 )
 
-const scannerTaskListPrefix = "cadence-sys-executions-scanner"
+const scannerTaskListPrefix = "temporal-sys-executions-scanner"
 
 // validateHandler validates a single execution.
 // It operates in two phases: collection step and validation step.

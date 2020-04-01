@@ -180,18 +180,18 @@ func (c *clientImpl) GetReplicationMessages(
 	return client.GetReplicationMessages(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetDomainReplicationMessages(
+func (c *clientImpl) GetNamespaceReplicationMessages(
 	ctx context.Context,
-	request *adminservice.GetDomainReplicationMessagesRequest,
+	request *adminservice.GetNamespaceReplicationMessagesRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.GetDomainReplicationMessagesResponse, error) {
+) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.GetDomainReplicationMessages(ctx, request, opts...)
+	return client.GetNamespaceReplicationMessages(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetDLQReplicationMessages(

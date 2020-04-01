@@ -44,7 +44,7 @@ type (
 	}
 
 	queryVisibilityRequest struct {
-		domainID      string
+		namespaceID   string
 		pageSize      int
 		nextPageToken []byte
 		parsedQuery   *parsedQuery
@@ -99,7 +99,7 @@ func (v *visibilityArchiver) Archive(
 	request *archiverproto.ArchiveVisibilityRequest,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
-	scope := v.container.MetricsClient.Scope(metrics.VisibilityArchiverScope, metrics.DomainTag(request.DomainName))
+	scope := v.container.MetricsClient.Scope(metrics.VisibilityArchiverScope, metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
@@ -138,7 +138,7 @@ func (v *visibilityArchiver) Archive(
 	indexes := createIndexesToArchive(request)
 	// Upload archive to all indexes
 	for _, element := range indexes {
-		key := constructTimestampIndex(URI.Path(), request.DomainID, element.primaryIndex, element.primaryIndexValue, element.secondaryIndex, element.secondaryIndexTimestamp, request.RunID)
+		key := constructTimestampIndex(URI.Path(), request.GetNamespaceId(), element.primaryIndex, element.primaryIndexValue, element.secondaryIndex, element.secondaryIndexTimestamp, request.GetRunId())
 		if err := upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord); err != nil {
 			archiveFailReason = errWriteKey
 			return err
@@ -151,8 +151,8 @@ func createIndexesToArchive(request *archiverproto.ArchiveVisibilityRequest) []i
 	return []indexToArchive{
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyCloseTimeout, request.CloseTimestamp},
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyStartTimeout, request.StartTimestamp},
-		{primaryIndexKeyWorkflowID, request.WorkflowID, secondaryIndexKeyCloseTimeout, request.CloseTimestamp},
-		{primaryIndexKeyWorkflowID, request.WorkflowID, secondaryIndexKeyStartTimeout, request.StartTimestamp},
+		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyCloseTimeout, request.CloseTimestamp},
+		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyStartTimeout, request.StartTimestamp},
 	}
 }
 
@@ -175,7 +175,7 @@ func (v *visibilityArchiver) Query(
 	}
 
 	return v.query(ctx, URI, &queryVisibilityRequest{
-		domainID:      request.DomainID,
+		namespaceID:   request.NamespaceID,
 		pageSize:      request.PageSize,
 		nextPageToken: request.NextPageToken,
 		parsedQuery:   parsedQuery,
@@ -199,12 +199,12 @@ func (v *visibilityArchiver) query(
 		primaryIndex = primaryIndexKeyWorkflowID
 		primaryIndexValue = request.parsedQuery.workflowID
 	}
-	var prefix = constructVisibilitySearchPrefix(URI.Path(), request.domainID, primaryIndex, *primaryIndexValue, secondaryIndexKeyCloseTimeout) + "/"
+	var prefix = constructVisibilitySearchPrefix(URI.Path(), request.namespaceID, primaryIndex, *primaryIndexValue, secondaryIndexKeyCloseTimeout) + "/"
 	if request.parsedQuery.closeTime != nil {
-		prefix = constructTimeBasedSearchKey(URI.Path(), request.domainID, primaryIndex, *primaryIndexValue, secondaryIndexKeyCloseTimeout, *request.parsedQuery.closeTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(URI.Path(), request.namespaceID, primaryIndex, *primaryIndexValue, secondaryIndexKeyCloseTimeout, *request.parsedQuery.closeTime, *request.parsedQuery.searchPrecision)
 	}
 	if request.parsedQuery.startTime != nil {
-		prefix = constructTimeBasedSearchKey(URI.Path(), request.domainID, primaryIndex, *primaryIndexValue, secondaryIndexKeyStartTimeout, *request.parsedQuery.startTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(URI.Path(), request.namespaceID, primaryIndex, *primaryIndexValue, secondaryIndexKeyStartTimeout, *request.parsedQuery.startTime, *request.parsedQuery.searchPrecision)
 	}
 
 	results, err := v.s3cli.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{

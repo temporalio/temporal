@@ -52,7 +52,7 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 		parsedQuery *parsedQuery
 	}{
 		{
-			query:     "WorkflowID = \"random workflowID\"",
+			query:     "WorkflowId = \"random workflowID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				workflowID: common.StringPtr("random workflowID"),
@@ -66,41 +66,41 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 			},
 		},
 		{
-			query:     "WorkflowID = \"random workflowID\" and WorkflowTypeName = \"random workflowTypeName\"",
+			query:     "WorkflowId = \"random workflowID\" and WorkflowTypeName = \"random workflowTypeName\"",
 			expectErr: true,
 		},
 		{
-			query:     "WorkflowID = \"random workflowID\" and WorkflowID = \"random workflowID\"",
+			query:     "WorkflowId = \"random workflowID\" and WorkflowId = \"random workflowID\"",
 			expectErr: true,
 		},
 		{
-			query:     "RunID = \"random runID\"",
+			query:     "RunId = \"random runID\"",
 			expectErr: true,
 		},
 		{
-			query:     "WorkflowID = 'random workflowID'",
+			query:     "WorkflowId = 'random workflowID'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				workflowID: common.StringPtr("random workflowID"),
 			},
 		},
 		{
-			query:     "(WorkflowID = \"random workflowID\")",
+			query:     "(WorkflowId = \"random workflowID\")",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				workflowID: common.StringPtr("random workflowID"),
 			},
 		},
 		{
-			query:     "runID = random workflowID",
+			query:     "runId = random workflowID",
 			expectErr: true,
 		},
 		{
-			query:     "WorkflowID = \"random workflowID\" or WorkflowID = \"another workflowID\"",
+			query:     "WorkflowId = \"random workflowID\" or WorkflowId = \"another workflowID\"",
 			expectErr: true,
 		},
 		{
-			query:     "WorkflowID = \"random workflowID\" or runID = \"random runID\"",
+			query:     "WorkflowId = \"random workflowID\" or runId = \"random runID\"",
 			expectErr: true,
 		},
 		{
@@ -108,7 +108,7 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 			expectErr: true,
 		},
 		{
-			query:     "runID > \"random workflowID\"",
+			query:     "runId > \"random workflowID\"",
 			expectErr: true,
 		},
 	}
@@ -127,7 +127,7 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 }
 
 func (s *queryParserSuite) TestParsePrecision() {
-	commonQueryPart := "WorkflowID = \"random workflowID\" AND "
+	commonQueryPart := "WorkflowId = \"random workflowID\" AND "
 	testCases := []struct {
 		query       string
 		expectErr   bool
@@ -183,7 +183,7 @@ func (s *queryParserSuite) TestParsePrecision() {
 }
 
 func (s *queryParserSuite) TestParseCloseTime() {
-	commonQueryPart := "WorkflowID = \"random workflowID\" AND SearchPrecision = 'Day' AND "
+	commonQueryPart := "WorkflowId = \"random workflowID\" AND SearchPrecision = 'Day' AND "
 
 	testCases := []struct {
 		query       string
@@ -227,7 +227,7 @@ func (s *queryParserSuite) TestParseCloseTime() {
 }
 
 func (s *queryParserSuite) TestParseStartTime() {
-	commonQueryPart := "WorkflowID = \"random workflowID\" AND SearchPrecision = 'Day' AND "
+	commonQueryPart := "WorkflowId = \"random workflowID\" AND SearchPrecision = 'Day' AND "
 
 	testCases := []struct {
 		query       string

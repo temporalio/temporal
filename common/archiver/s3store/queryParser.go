@@ -53,7 +53,7 @@ type (
 // All allowed fields for filtering
 const (
 	WorkflowTypeName = "WorkflowTypeName"
-	WorkflowID       = "WorkflowID"
+	WorkflowID       = "WorkflowId"
 	StartTime        = "StartTime"
 	CloseTime        = "CloseTime"
 	SearchPrecision  = "SearchPrecision"

@@ -29,14 +29,14 @@ func GetIntPropertyFn(value int) func(opts ...FilterOption) int {
 	return func(...FilterOption) int { return value }
 }
 
-// GetIntPropertyFilteredByDomain returns values as IntPropertyFnWithDomainFilters
-func GetIntPropertyFilteredByDomain(value int) func(domain string) int {
-	return func(domain string) int { return value }
+// GetIntPropertyFilteredByNamespace returns values as IntPropertyFnWithNamespaceFilters
+func GetIntPropertyFilteredByNamespace(value int) func(namespace string) int {
+	return func(namespace string) int { return value }
 }
 
 // GetIntPropertyFilteredByTaskListInfo returns value as IntPropertyFnWithTaskListInfoFilters
-func GetIntPropertyFilteredByTaskListInfo(value int) func(domain string, taskList string, taskType int32) int {
-	return func(domain string, taskList string, taskType int32) int { return value }
+func GetIntPropertyFilteredByTaskListInfo(value int) func(namespace string, taskList string, taskType int32) int {
+	return func(namespace string, taskList string, taskType int32) int { return value }
 }
 
 // GetFloatPropertyFn returns value as FloatPropertyFn
@@ -49,14 +49,14 @@ func GetBoolPropertyFn(value bool) func(opts ...FilterOption) bool {
 	return func(...FilterOption) bool { return value }
 }
 
-// GetBoolPropertyFnFilteredByDomain returns value as BoolPropertyFnWithDomainFilters
-func GetBoolPropertyFnFilteredByDomain(value bool) func(domain string) bool {
-	return func(domain string) bool { return value }
+// GetBoolPropertyFnFilteredByNamespace returns value as BoolPropertyFnWithNamespaceFilters
+func GetBoolPropertyFnFilteredByNamespace(value bool) func(namespace string) bool {
+	return func(namespace string) bool { return value }
 }
 
-// GetDurationPropertyFnFilteredByDomain returns value as DurationPropertyFnFilteredByDomain
-func GetDurationPropertyFnFilteredByDomain(value time.Duration) func(domain string) time.Duration {
-	return func(domain string) time.Duration { return value }
+// GetDurationPropertyFnFilteredByNamespace returns value as DurationPropertyFnFilteredByNamespace
+func GetDurationPropertyFnFilteredByNamespace(value time.Duration) func(namespace string) time.Duration {
+	return func(namespace string) time.Duration { return value }
 }
 
 // GetDurationPropertyFn returns value as DurationPropertyFn
@@ -65,8 +65,8 @@ func GetDurationPropertyFn(value time.Duration) func(opts ...FilterOption) time.
 }
 
 // GetDurationPropertyFnFilteredByTaskListInfo returns value as DurationPropertyFnWithTaskListInfoFilters
-func GetDurationPropertyFnFilteredByTaskListInfo(value time.Duration) func(domain string, taskList string, taskType int32) time.Duration {
-	return func(domain string, taskList string, taskType int32) time.Duration { return value }
+func GetDurationPropertyFnFilteredByTaskListInfo(value time.Duration) func(namespace string, taskList string, taskType int32) time.Duration {
+	return func(namespace string, taskList string, taskType int32) time.Duration { return value }
 }
 
 // GetStringPropertyFn returns value as StringPropertyFn

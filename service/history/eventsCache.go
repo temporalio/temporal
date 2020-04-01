@@ -39,7 +39,7 @@ import (
 type (
 	eventsCache interface {
 		getEvent(
-			domainID string,
+			namespaceID string,
 			workflowID string,
 			runID string,
 			firstEventID int64,
@@ -47,14 +47,14 @@ type (
 			branchToken []byte,
 		) (*commonproto.HistoryEvent, error)
 		putEvent(
-			domainID string,
+			namespaceID string,
 			workflowID string,
 			runID string,
 			eventID int64,
 			event *commonproto.HistoryEvent,
 		)
 		deleteEvent(
-			domainID string,
+			namespaceID string,
 			workflowID string,
 			runID string,
 			eventID int64,
@@ -71,10 +71,10 @@ type (
 	}
 
 	eventKey struct {
-		domainID   string
-		workflowID string
-		runID      string
-		eventID    int64
+		namespaceID string
+		workflowID  string
+		runID       string
+		eventID     int64
 	}
 )
 
@@ -107,22 +107,22 @@ func newEventsCacheWithOptions(initialSize, maxSize int, ttl time.Duration,
 	}
 }
 
-func newEventKey(domainID, workflowID, runID string, eventID int64) eventKey {
+func newEventKey(namespaceID, workflowID, runID string, eventID int64) eventKey {
 	return eventKey{
-		domainID:   domainID,
-		workflowID: workflowID,
-		runID:      runID,
-		eventID:    eventID,
+		namespaceID: namespaceID,
+		workflowID:  workflowID,
+		runID:       runID,
+		eventID:     eventID,
 	}
 }
 
-func (e *eventsCacheImpl) getEvent(domainID, workflowID, runID string, firstEventID, eventID int64,
+func (e *eventsCacheImpl) getEvent(namespaceID, workflowID, runID string, firstEventID, eventID int64,
 	branchToken []byte) (*commonproto.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	key := newEventKey(domainID, workflowID, runID, eventID)
+	key := newEventKey(namespaceID, workflowID, runID, eventID)
 	// Test hook for disabling cache
 	if !e.disabled {
 		event, cacheHit := e.Cache.Get(key).(*commonproto.HistoryEvent)
@@ -132,14 +132,14 @@ func (e *eventsCacheImpl) getEvent(domainID, workflowID, runID string, firstEven
 	}
 
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheMissCounter)
-	event, err := e.getHistoryEventFromStore(domainID, workflowID, runID, firstEventID, eventID, branchToken)
+	event, err := e.getHistoryEventFromStore(namespaceID, workflowID, runID, firstEventID, eventID, branchToken)
 	if err != nil {
 		e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheFailures)
 		e.logger.Error("EventsCache unable to retrieve event from store",
 			tag.Error(err),
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(runID),
-			tag.WorkflowDomainID(domainID),
+			tag.WorkflowNamespaceID(namespaceID),
 			tag.WorkflowEventID(eventID))
 		return nil, err
 	}
@@ -148,25 +148,25 @@ func (e *eventsCacheImpl) getEvent(domainID, workflowID, runID string, firstEven
 	return event, nil
 }
 
-func (e *eventsCacheImpl) putEvent(domainID, workflowID, runID string, eventID int64, event *commonproto.HistoryEvent) {
+func (e *eventsCacheImpl) putEvent(namespaceID, workflowID, runID string, eventID int64, event *commonproto.HistoryEvent) {
 	e.metricsClient.IncCounter(metrics.EventsCachePutEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCachePutEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	key := newEventKey(domainID, workflowID, runID, eventID)
+	key := newEventKey(namespaceID, workflowID, runID, eventID)
 	e.Put(key, event)
 }
 
-func (e *eventsCacheImpl) deleteEvent(domainID, workflowID, runID string, eventID int64) {
+func (e *eventsCacheImpl) deleteEvent(namespaceID, workflowID, runID string, eventID int64) {
 	e.metricsClient.IncCounter(metrics.EventsCacheDeleteEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheDeleteEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	key := newEventKey(domainID, workflowID, runID, eventID)
+	key := newEventKey(namespaceID, workflowID, runID, eventID)
 	e.Delete(key)
 }
 
-func (e *eventsCacheImpl) getHistoryEventFromStore(domainID, workflowID, runID string, firstEventID, eventID int64,
+func (e *eventsCacheImpl) getHistoryEventFromStore(namespaceID, workflowID, runID string, firstEventID, eventID int64,
 	branchToken []byte) (*commonproto.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetFromStoreScope, metrics.CacheLatency)

@@ -78,7 +78,7 @@ func newHistoryCache(shard ShardContext) *historyCache {
 
 func (c *historyCache) getOrCreateCurrentWorkflowExecution(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 
@@ -96,7 +96,7 @@ func (c *historyCache) getOrCreateCurrentWorkflowExecution(
 
 	return c.getOrCreateWorkflowExecutionInternal(
 		ctx,
-		domainID,
+		namespaceID,
 		execution,
 		scope,
 		true,
@@ -106,7 +106,7 @@ func (c *historyCache) getOrCreateCurrentWorkflowExecution(
 // For analyzing mutableState, we have to try get workflowExecutionContext from cache and also load from database
 func (c *historyCache) getAndCreateWorkflowExecution(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 ) (workflowExecutionContext, workflowExecutionContext, releaseWorkflowExecutionFunc, bool, error) {
 
@@ -115,12 +115,12 @@ func (c *historyCache) getAndCreateWorkflowExecution(
 	sw := c.metricsClient.StartTimer(scope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	if err := c.validateWorkflowExecutionInfo(domainID, &execution); err != nil {
+	if err := c.validateWorkflowExecutionInfo(namespaceID, &execution); err != nil {
 		c.metricsClient.IncCounter(scope, metrics.CacheFailures)
 		return nil, nil, nil, false, err
 	}
 
-	key := definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId())
+	key := definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId())
 	contextFromCache, cacheHit := c.Get(key).(workflowExecutionContext)
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
@@ -140,21 +140,21 @@ func (c *historyCache) getAndCreateWorkflowExecution(
 	}
 
 	// Note, the one loaded from DB is not put into cache and don't affect any behavior
-	contextFromDB := newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger)
+	contextFromDB := newWorkflowExecutionContext(namespaceID, execution, c.shard, c.executionManager, c.logger)
 	return contextFromCache, contextFromDB, releaseFunc, cacheHit, nil
 }
 
 func (c *historyCache) getOrCreateWorkflowExecutionForBackground(
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 
-	return c.getOrCreateWorkflowExecution(context.Background(), domainID, execution)
+	return c.getOrCreateWorkflowExecution(context.Background(), namespaceID, execution)
 }
 
 func (c *historyCache) getOrCreateWorkflowExecution(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 
@@ -163,14 +163,14 @@ func (c *historyCache) getOrCreateWorkflowExecution(
 	sw := c.metricsClient.StartTimer(scope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	if err := c.validateWorkflowExecutionInfo(domainID, &execution); err != nil {
+	if err := c.validateWorkflowExecutionInfo(namespaceID, &execution); err != nil {
 		c.metricsClient.IncCounter(scope, metrics.CacheFailures)
 		return nil, nil, err
 	}
 
 	return c.getOrCreateWorkflowExecutionInternal(
 		ctx,
-		domainID,
+		namespaceID,
 		execution,
 		scope,
 		false,
@@ -179,7 +179,7 @@ func (c *historyCache) getOrCreateWorkflowExecution(
 
 func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	execution commonproto.WorkflowExecution,
 	scope int,
 	forceClearContext bool,
@@ -187,15 +187,15 @@ func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 
 	// Test hook for disabling the cache
 	if c.disabled {
-		return newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger), noopReleaseFn, nil
+		return newWorkflowExecutionContext(namespaceID, execution, c.shard, c.executionManager, c.logger), noopReleaseFn, nil
 	}
 
-	key := definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId())
+	key := definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId())
 	workflowCtx, cacheHit := c.Get(key).(workflowExecutionContext)
 	if !cacheHit {
 		c.metricsClient.IncCounter(scope, metrics.CacheMissCounter)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger)
+		workflowCtx = newWorkflowExecutionContext(namespaceID, execution, c.shard, c.executionManager, c.logger)
 		elem, err := c.PutIfNotExist(key, workflowCtx)
 		if err != nil {
 			c.metricsClient.IncCounter(scope, metrics.CacheFailures)
@@ -219,7 +219,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 }
 
 func (c *historyCache) validateWorkflowExecutionInfo(
-	domainID string,
+	namespaceID string,
 	execution *commonproto.WorkflowExecution,
 ) error {
 
@@ -230,8 +230,8 @@ func (c *historyCache) validateWorkflowExecutionInfo(
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
 	if execution.GetRunId() == "" {
 		response, err := c.getCurrentExecutionWithRetry(&persistence.GetCurrentExecutionRequest{
-			DomainID:   domainID,
-			WorkflowID: execution.GetWorkflowId(),
+			NamespaceID: namespaceID,
+			WorkflowID:  execution.GetWorkflowId(),
 		})
 
 		if err != nil {

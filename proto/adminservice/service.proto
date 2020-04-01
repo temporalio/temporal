@@ -58,8 +58,8 @@ service AdminService {
     rpc GetReplicationMessages (GetReplicationMessagesRequest) returns (GetReplicationMessagesResponse) {
     }
 
-    // GetDomainReplicationMessages returns new domain replication tasks since last retrieved task ID.
-    rpc GetDomainReplicationMessages (GetDomainReplicationMessagesRequest) returns (GetDomainReplicationMessagesResponse) {
+    // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task Id.
+    rpc GetNamespaceReplicationMessages (GetNamespaceReplicationMessagesRequest) returns (GetNamespaceReplicationMessagesResponse) {
     }
 
     // GetDLQReplicationMessages return replication messages based on dlq info

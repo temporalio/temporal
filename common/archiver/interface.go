@@ -37,8 +37,8 @@ type (
 	// ArchiveHistoryRequest is request to Archive workflow history
 	ArchiveHistoryRequest struct {
 		ShardID              int
-		DomainID             string
-		DomainName           string
+		NamespaceID          string
+		Namespace            string
 		WorkflowID           string
 		RunID                string
 		BranchToken          []byte
@@ -48,7 +48,7 @@ type (
 
 	// GetHistoryRequest is the request to Get archived history
 	GetHistoryRequest struct {
-		DomainID             string
+		NamespaceID          string
 		WorkflowID           string
 		RunID                string
 		CloseFailoverVersion *int64
@@ -68,7 +68,7 @@ type (
 		Logger           log.Logger
 		MetricsClient    metrics.Client
 		ClusterMetadata  cluster.Metadata
-		DomainCache      cache.DomainCache
+		NamespaceCache   cache.NamespaceCache
 	}
 
 	// HistoryArchiver is used to archive history and read archived history
@@ -83,12 +83,12 @@ type (
 		Logger          log.Logger
 		MetricsClient   metrics.Client
 		ClusterMetadata cluster.Metadata
-		DomainCache     cache.DomainCache
+		NamespaceCache  cache.NamespaceCache
 	}
 
 	// QueryVisibilityRequest is the request to query archived visibility records
 	QueryVisibilityRequest struct {
-		DomainID      string
+		NamespaceID   string
 		PageSize      int
 		NextPageToken []byte
 		Query         string

@@ -52,7 +52,7 @@ var (
 
 func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
-	scope := container.MetricsClient.Scope(metrics.ArchiverUploadHistoryActivityScope, metrics.DomainTag(request.DomainName))
+	scope := container.MetricsClient.Scope(metrics.ArchiverUploadHistoryActivityScope, metrics.NamespaceTag(request.Namespace))
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
@@ -76,8 +76,8 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	}
 	err = historyArchiver.Archive(ctx, URI, &carchiver.ArchiveHistoryRequest{
 		ShardID:              request.ShardID,
-		DomainID:             request.DomainID,
-		DomainName:           request.DomainName,
+		NamespaceID:          request.NamespaceID,
+		Namespace:            request.Namespace,
 		WorkflowID:           request.WorkflowID,
 		RunID:                request.RunID,
 		BranchToken:          request.BranchToken,
@@ -97,7 +97,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 
 func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
-	scope := container.MetricsClient.Scope(metrics.ArchiverDeleteHistoryActivityScope, metrics.DomainTag(request.DomainName))
+	scope := container.MetricsClient.Scope(metrics.ArchiverDeleteHistoryActivityScope, metrics.NamespaceTag(request.Namespace))
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
@@ -125,7 +125,7 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 
 func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err error) {
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
-	scope := container.MetricsClient.Scope(metrics.ArchiverArchiveVisibilityActivityScope, metrics.DomainTag(request.DomainName))
+	scope := container.MetricsClient.Scope(metrics.ArchiverArchiveVisibilityActivityScope, metrics.NamespaceTag(request.Namespace))
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
@@ -148,10 +148,10 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		return errArchiveVisibilityNonRetriable
 	}
 	err = visibilityArchiver.Archive(ctx, URI, &archiverproto.ArchiveVisibilityRequest{
-		DomainID:           request.DomainID,
-		DomainName:         request.DomainName,
-		WorkflowID:         request.WorkflowID,
-		RunID:              request.RunID,
+		NamespaceId:        request.NamespaceID,
+		Namespace:          request.Namespace,
+		WorkflowId:         request.WorkflowID,
+		RunId:              request.RunID,
 		WorkflowTypeName:   request.WorkflowTypeName,
 		StartTimestamp:     request.StartTimestamp,
 		ExecutionTimestamp: request.ExecutionTimestamp,

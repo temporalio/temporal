@@ -127,10 +127,10 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 	newInfo := &WorkflowExecutionInfo{
 		CompletionEvent: completionEvent,
 
-		DomainID:                           info.DomainID,
+		NamespaceID:                        info.NamespaceID,
 		WorkflowID:                         info.WorkflowID,
 		RunID:                              info.RunID,
-		ParentDomainID:                     info.ParentDomainID,
+		ParentNamespaceID:                  info.ParentNamespaceID,
 		ParentWorkflowID:                   info.ParentWorkflowID,
 		ParentRunID:                        info.ParentRunID,
 		InitiatedID:                        info.InitiatedID,
@@ -227,7 +227,7 @@ func (m *executionManagerImpl) DeserializeChildExecutionInfos(
 			StartedWorkflowID:     v.StartedWorkflowID,
 			StartedRunID:          v.StartedRunID,
 			CreateRequestID:       v.CreateRequestID,
-			DomainName:            v.DomainName,
+			Namespace:             v.Namespace,
 			WorkflowTypeName:      v.WorkflowTypeName,
 			ParentClosePolicy:     v.ParentClosePolicy,
 		}
@@ -285,7 +285,7 @@ func (m *executionManagerImpl) DeserializeActivityInfos(
 			LastHeartBeatUpdatedTime:       v.LastHeartBeatUpdatedTime,
 			TimerTaskStatus:                v.TimerTaskStatus,
 			Attempt:                        v.Attempt,
-			DomainID:                       v.DomainID.String(),
+			NamespaceID:                    v.NamespaceID.String(),
 			StartedIdentity:                v.StartedIdentity,
 			TaskList:                       v.TaskList,
 			HasRetryPolicy:                 v.HasRetryPolicy,
@@ -361,7 +361,7 @@ func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(
 			StartedID:             v.StartedID,
 			StartedWorkflowID:     v.StartedWorkflowID,
 			StartedRunID:          v.StartedRunID,
-			DomainName:            v.DomainName,
+			Namespace:             v.Namespace,
 			WorkflowTypeName:      v.WorkflowTypeName,
 			ParentClosePolicy:     v.ParentClosePolicy,
 		}
@@ -406,7 +406,7 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(
 			LastHeartBeatUpdatedTime:       v.LastHeartBeatUpdatedTime,
 			TimerTaskStatus:                v.TimerTaskStatus,
 			Attempt:                        v.Attempt,
-			DomainID:                       primitives.MustParseUUID(v.DomainID),
+			NamespaceID:                    primitives.MustParseUUID(v.NamespaceID),
 			StartedIdentity:                v.StartedIdentity,
 			TaskList:                       v.TaskList,
 			HasRetryPolicy:                 v.HasRetryPolicy,
@@ -446,10 +446,10 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 	}
 
 	return &InternalWorkflowExecutionInfo{
-		DomainID:                           info.DomainID,
+		NamespaceID:                        info.NamespaceID,
 		WorkflowID:                         info.WorkflowID,
 		RunID:                              info.RunID,
-		ParentDomainID:                     info.ParentDomainID,
+		ParentNamespaceID:                  info.ParentNamespaceID,
 		ParentWorkflowID:                   info.ParentWorkflowID,
 		ParentRunID:                        info.ParentRunID,
 		InitiatedID:                        info.InitiatedID,
@@ -587,7 +587,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	request *CreateWorkflowExecutionRequest,
 ) (*CreateWorkflowExecutionResponse, error) {
 
-	encoding := common.EncodingTypeThriftRW
+	encoding := common.EncodingTypeProto3
 
 	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot, encoding)
 	if err != nil {

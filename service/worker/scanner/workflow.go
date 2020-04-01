@@ -46,20 +46,20 @@ const (
 	maxConcurrentDecisionTaskExecutionSize = 10
 	infiniteDuration                       = 20 * 365 * 24 * time.Hour
 
-	tlScannerWFID                 = "cadence-sys-tl-scanner"
-	tlScannerWFTypeName           = "cadence-sys-tl-scanner-workflow"
-	tlScannerTaskListName         = "cadence-sys-tl-scanner-tasklist-0"
-	taskListScavengerActivityName = "cadence-sys-tl-scanner-scvg-activity"
+	tlScannerWFID                 = "temporal-sys-tl-scanner"
+	tlScannerWFTypeName           = "temporal-sys-tl-scanner-workflow"
+	tlScannerTaskListName         = "temporal-sys-tl-scanner-tasklist-0"
+	taskListScavengerActivityName = "temporal-sys-tl-scanner-scvg-activity"
 
-	historyScannerWFID           = "cadence-sys-history-scanner"
-	historyScannerWFTypeName     = "cadence-sys-history-scanner-workflow"
-	historyScannerTaskListName   = "cadence-sys-history-scanner-tasklist-0"
-	historyScavengerActivityName = "cadence-sys-history-scanner-scvg-activity"
+	historyScannerWFID           = "temporal-sys-history-scanner"
+	historyScannerWFTypeName     = "temporal-sys-history-scanner-workflow"
+	historyScannerTaskListName   = "temporal-sys-history-scanner-tasklist-0"
+	historyScavengerActivityName = "temporal-sys-history-scanner-scvg-activity"
 
-	executionsScannerWFID           = "cadence-sys-executions-scanner"
-	executionsScannerWFTypeName     = "cadence-sys-executions-scanner-workflow"
-	executionsScannerTaskListName   = "cadence-sys-executions-scanner-tasklist-0"
-	executionsScavengerActivityName = "cadence-sys-executions-scanner-scvg-activity"
+	executionsScannerWFID           = "temporal-sys-executions-scanner"
+	executionsScannerWFTypeName     = "temporal-sys-executions-scanner-workflow"
+	executionsScannerTaskListName   = "temporal-sys-executions-scanner-tasklist-0"
+	executionsScavengerActivityName = "temporal-sys-executions-scanner-scvg-activity"
 )
 
 var (

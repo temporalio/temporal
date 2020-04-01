@@ -8,7 +8,7 @@ Current Temporal query request processing steps are listed below:
 - use elasticsql to translate SQL to DSL
 - ES V6.x does not support "missing" field, convert "missing" to "bool","must_not","exist" for ExecutionTime query if any
 - complete "range" field for ExecutionTime query by adding {"gt": 0}
-- add domain query
+- add namespace query
 - key whitelist filtering
 - delete some useless field like "from", "size"
 - modify sorting field (add workflow id as sorting tie breaker)
@@ -21,7 +21,7 @@ ESQL has convert functions specific for temporal usage. Please refer to `tempora
 Attention: to use temporal version api, `SetTemporal()` must be called at initialzation.
 ~~~~go
 sql := "SELECT colA FROM myTable WHERE colB < 10 AND dateTime = '2015-01-01T02:59:59Z'"
-domainID := "TemporalSampleDomain"
+namespaceID := "TemporalSampleNamespace"
 // custom policy that change colName like "col.." to "myCol.."
 func myKeyFilter(colName string) bool {
     return strings.HasPrefix(colName, "col")
@@ -45,7 +45,7 @@ e := NewESql()
 e.SetTemporal()
 e.ProcessQueryKey(myKeyFilter, myKeyProcess)         // set up filtering policy
 e.ProcessQueryValue(myValueFilter, myValueProcess)     // set up process policy
-dsl, _, err := e.ConvertPrettyTemporal(sql, domainID)             // convert sql to dsl
+dsl, _, err := e.ConvertPrettyTemporal(sql, namespaceID)             // convert sql to dsl
 if err == nil {
     fmt.Println(dsl)
 }

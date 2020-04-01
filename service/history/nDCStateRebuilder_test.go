@@ -52,15 +52,15 @@ type (
 		mockShard           *shardContextTest
 		mockEventsCache     *MockeventsCache
 		mockTaskRefresher   *MockmutableStateTaskRefresher
-		mockDomainCache     *cache.MockDomainCache
+		mockNamespaceCache  *cache.MockNamespaceCache
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
 		logger           log.Logger
 
-		domainID   string
-		workflowID string
-		runID      string
+		namespaceID string
+		workflowID  string
+		runID       string
 
 		nDCStateRebuilder *nDCStateRebuilderImpl
 	}
@@ -81,15 +81,15 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          10,
-				RangeID:          1,
+				ShardId:          10,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
 	)
 
 	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.mockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -111,7 +111,7 @@ func (s *nDCStateRebuilderSuite) TearDownTest() {
 }
 
 func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
-	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(testGlobalDomainEntry)
+	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(testGlobalNamespaceEntry)
 	s.NotNil(mutableState)
 	s.NotNil(stateBuilder)
 	s.NotNil(mutableState.GetVersionHistories())
@@ -133,11 +133,11 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 		},
 	}
 
-	workflowIdentifier := definition.NewWorkflowIdentifier(s.domainID, s.workflowID, s.runID)
+	workflowIdentifier := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, s.runID)
 
 	mockStateBuilder := NewMockstateBuilder(s.controller)
 	mockStateBuilder.EXPECT().applyEvents(
-		s.domainID,
+		s.namespaceID,
 		requestID,
 		commonproto.WorkflowExecution{
 			WorkflowId: s.workflowID,
@@ -156,7 +156,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	firstEventID := common.FirstEventID
 	nextEventID := int64(101)
 	branchToken := []byte("some random branch token")
-	workflowIdentifier := definition.NewWorkflowIdentifier(s.domainID, s.workflowID, s.runID)
+	workflowIdentifier := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, s.runID)
 
 	event1 := &commonproto.HistoryEvent{
 		EventId:    1,
@@ -235,8 +235,8 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	targetBranchToken := []byte("some other random branch token")
 	now := time.Now()
 
-	targetDomainID := uuid.New()
-	targetDomainName := "other random domain name"
+	targetNamespaceID := uuid.New()
+	targetNamespace := "other random namespace name"
 	targetWorkflowID := "other random workflow ID"
 	targetRunID := uuid.New()
 
@@ -297,10 +297,10 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Size:          historySize2,
 	}, nil).Once()
 
-	s.mockDomainCache.EXPECT().GetDomainByID(targetDomainID).Return(cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: targetDomainID, Name: targetDomainName},
-		&persistence.DomainConfig{},
-		&persistence.DomainReplicationConfig{
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: targetNamespaceID, Name: targetNamespace},
+		&persistence.NamespaceConfig{},
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -315,18 +315,18 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		context.Background(),
 		now,
-		definition.NewWorkflowIdentifier(s.domainID, s.workflowID, s.runID),
+		definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
 		version,
-		definition.NewWorkflowIdentifier(targetDomainID, targetWorkflowID, targetRunID),
+		definition.NewWorkflowIdentifier(targetNamespaceID, targetWorkflowID, targetRunID),
 		targetBranchToken,
 		requestID,
 	)
 	s.NoError(err)
 	s.NotNil(rebuildMutableState)
 	rebuildExecutionInfo := rebuildMutableState.GetExecutionInfo()
-	s.Equal(targetDomainID, rebuildExecutionInfo.DomainID)
+	s.Equal(targetNamespaceID, rebuildExecutionInfo.NamespaceID)
 	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowID)
 	s.Equal(targetRunID, rebuildExecutionInfo.RunID)
 	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)

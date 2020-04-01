@@ -62,7 +62,6 @@ const (
 const (
 	// todo: Deprecate and use protoEncodingEnum.ToString()
 	EncodingTypeJSON     EncodingType = "json"
-	EncodingTypeThriftRW EncodingType = "thriftrw"
 	EncodingTypeGob      EncodingType = "gob"
 	EncodingTypeUnknown  EncodingType = "unknow"
 	EncodingTypeEmpty    EncodingType = ""
@@ -97,16 +96,16 @@ const (
 // disregarded.
 // #nosec
 const (
-	// SystemGlobalDomainName is global domain name for cadence system workflows running globally
-	SystemGlobalDomainName = "cadence-system-global"
-	// SystemLocalDomainName is domain name for cadence system workflows running in local cluster
-	SystemLocalDomainName = "cadence-system"
-	// SystemDomainID is domain id for all cadence system workflows
-	SystemDomainID = "32049b68-7872-4094-8e63-d0dd59896a83"
-	// SystemDomainRetentionDays is retention config for all cadence system workflows
-	SystemDomainRetentionDays = 7
+	// SystemGlobalNamespace is global namespace name for temporal system workflows running globally
+	SystemGlobalNamespace = "temporal-system-global"
+	// SystemLocalNamespace is namespace name for temporal system workflows running in local cluster
+	SystemLocalNamespace = "temporal-system"
+	// SystemNamespaceID is namespace id for all temporal system workflows
+	SystemNamespaceID = "32049b68-7872-4094-8e63-d0dd59896a83"
+	// SystemNamespaceRetentionDays is retention config for all temporal system workflows
+	SystemNamespaceRetentionDays = 7
 	// DefaultAdminOperationToken is the default dynamic config value for AdminOperationToken
-	DefaultAdminOperationToken = "CadenceTeamONLY"
+	DefaultAdminOperationToken = "TemporalTeamONLY"
 )
 
 const (
@@ -116,7 +115,7 @@ const (
 	// CriticalLongPollTimeout is a threshold for the context timeout passed into long poll API,
 	// below which a warning will be logged
 	CriticalLongPollTimeout = time.Second * 20
-	// MaxWorkflowRetentionPeriodInDays is the maximum of workflow retention when registering domain
+	// MaxWorkflowRetentionPeriodInDays is the maximum of workflow retention when registering namespace
 	// !!! Do NOT simply decrease this number, because it is being used by history scavenger to avoid race condition against history archival.
 	// Check more details in history scanner(scavenger)
 	MaxWorkflowRetentionPeriodInDays = 30

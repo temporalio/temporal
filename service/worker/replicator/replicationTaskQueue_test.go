@@ -55,7 +55,7 @@ func (s *replicationSequentialTaskQueueSuite) TearDownSuite() {
 
 func (s *replicationSequentialTaskQueueSuite) SetupTest() {
 	s.queueID = definition.NewWorkflowIdentifier(
-		"some random domain ID",
+		"some random namespace ID",
 		"some random workflow ID",
 		"some random run ID",
 	)

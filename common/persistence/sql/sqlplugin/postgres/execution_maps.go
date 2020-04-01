@@ -32,7 +32,7 @@ const (
 	deleteMapQueryTemplate = `DELETE FROM %v
 WHERE
 shard_id = $1 AND
-domain_id = $2 AND
+namespace_id = $2 AND
 workflow_id = $3 AND
 run_id = $4`
 
@@ -43,12 +43,12 @@ run_id = $4`
 	// %[4]v should be the name of the key associated with the map
 	// e.g. for ActivityInfo it is "schedule_id"
 	setKeyInMapQueryTemplate = `INSERT INTO %[1]v
-(shard_id, domain_id, workflow_id, run_id, %[4]v, %[2]v)
+(shard_id, namespace_id, workflow_id, run_id, %[4]v, %[2]v)
 VALUES
-(:shard_id, :domain_id, :workflow_id, :run_id, :%[4]v, %[3]v)
-ON CONFLICT (shard_id, domain_id, workflow_id, run_id, %[4]v) DO UPDATE 
+(:shard_id, :namespace_id, :workflow_id, :run_id, :%[4]v, %[3]v)
+ON CONFLICT (shard_id, namespace_id, workflow_id, run_id, %[4]v) DO UPDATE 
   SET shard_id = excluded.shard_id,
-      domain_id = excluded.domain_id,
+      namespace_id = excluded.namespace_id,
       workflow_id = excluded.workflow_id,
 	  run_id = excluded.run_id,
       %[4]v = excluded.%[4]v `
@@ -57,7 +57,7 @@ ON CONFLICT (shard_id, domain_id, workflow_id, run_id, %[4]v) DO UPDATE
 	deleteKeyInMapQueryTemplate = `DELETE FROM %[1]v
 WHERE
 shard_id = $1 AND
-domain_id = $2 AND
+namespace_id = $2 AND
 workflow_id = $3 AND
 run_id = $4 AND
 %[2]v = $5`
@@ -68,7 +68,7 @@ run_id = $4 AND
 	getMapQueryTemplate = `SELECT %[2]v, %[3]v FROM %[1]v
 WHERE
 shard_id = $1 AND
-domain_id = $2 AND
+namespace_id = $2 AND
 workflow_id = $3 AND
 run_id = $4`
 )
@@ -77,27 +77,27 @@ const (
 	deleteAllSignalsRequestedSetQuery = `DELETE FROM signals_requested_sets
 WHERE
 shard_id = $1 AND
-domain_id = $2 AND
+namespace_id = $2 AND
 workflow_id = $3 AND
 run_id = $4
 `
 
 	createSignalsRequestedSetQuery = `INSERT INTO signals_requested_sets
-(shard_id, domain_id, workflow_id, run_id, signal_id) VALUES
-(:shard_id, :domain_id, :workflow_id, :run_id, :signal_id)
-ON CONFLICT (shard_id, domain_id, workflow_id, run_id, signal_id) DO NOTHING`
+(shard_id, namespace_id, workflow_id, run_id, signal_id) VALUES
+(:shard_id, :namespace_id, :workflow_id, :run_id, :signal_id)
+ON CONFLICT (shard_id, namespace_id, workflow_id, run_id, signal_id) DO NOTHING`
 
 	deleteSignalsRequestedSetQuery = `DELETE FROM signals_requested_sets
 WHERE
 shard_id = $1 AND
-domain_id = $2 AND
+namespace_id = $2 AND
 workflow_id = $3 AND
 run_id = $4 AND
 signal_id = $5`
 
 	getSignalsRequestedSetQuery = `SELECT signal_id FROM signals_requested_sets WHERE
 shard_id = $1 AND
-domain_id = $2 AND
+namespace_id = $2 AND
 workflow_id = $3 AND
 run_id = $4`
 )
@@ -138,7 +138,7 @@ func makeGetMapQryTemplate(tableName string, nonPrimaryKeyColumns []string, mapK
 }
 
 var (
-	// Omit shard_id, run_id, domain_id, workflow_id, schedule_id since they're in the primary key
+	// Omit shard_id, run_id, namespace_id, workflow_id, schedule_id since they're in the primary key
 	activityInfoColumns = []string{
 		"data",
 		"data_encoding",
@@ -165,10 +165,10 @@ func (pdb *db) ReplaceIntoActivityInfoMaps(rows []sqlplugin.ActivityInfoMapsRow)
 // SelectFromActivityInfoMaps reads one or more rows from activity_info_maps table
 func (pdb *db) SelectFromActivityInfoMaps(filter *sqlplugin.ActivityInfoMapsFilter) ([]sqlplugin.ActivityInfoMapsRow, error) {
 	var rows []sqlplugin.ActivityInfoMapsRow
-	err := pdb.conn.Select(&rows, getActivityInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	err := pdb.conn.Select(&rows, getActivityInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
 		rows[i].ShardID = int64(filter.ShardID)
-		rows[i].DomainID = filter.DomainID
+		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
 		rows[i].LastHeartbeatUpdatedTime = pdb.converter.FromPostgresDateTime(rows[i].LastHeartbeatUpdatedTime)
@@ -179,9 +179,9 @@ func (pdb *db) SelectFromActivityInfoMaps(filter *sqlplugin.ActivityInfoMapsFilt
 // DeleteFromActivityInfoMaps deletes one or more rows from activity_info_maps table
 func (pdb *db) DeleteFromActivityInfoMaps(filter *sqlplugin.ActivityInfoMapsFilter) (sql.Result, error) {
 	if filter.ScheduleID != nil {
-		return pdb.conn.Exec(deleteKeyInActivityInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID, *filter.ScheduleID)
+		return pdb.conn.Exec(deleteKeyInActivityInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID, *filter.ScheduleID)
 	}
-	return pdb.conn.Exec(deleteActivityInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	return pdb.conn.Exec(deleteActivityInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 
 var (
@@ -206,10 +206,10 @@ func (pdb *db) ReplaceIntoTimerInfoMaps(rows []sqlplugin.TimerInfoMapsRow) (sql.
 // SelectFromTimerInfoMaps reads one or more rows from timer_info_maps table
 func (pdb *db) SelectFromTimerInfoMaps(filter *sqlplugin.TimerInfoMapsFilter) ([]sqlplugin.TimerInfoMapsRow, error) {
 	var rows []sqlplugin.TimerInfoMapsRow
-	err := pdb.conn.Select(&rows, getTimerInfoMapSQLQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	err := pdb.conn.Select(&rows, getTimerInfoMapSQLQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
 		rows[i].ShardID = int64(filter.ShardID)
-		rows[i].DomainID = filter.DomainID
+		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
 	}
@@ -219,9 +219,9 @@ func (pdb *db) SelectFromTimerInfoMaps(filter *sqlplugin.TimerInfoMapsFilter) ([
 // DeleteFromTimerInfoMaps deletes one or more rows from timer_info_maps table
 func (pdb *db) DeleteFromTimerInfoMaps(filter *sqlplugin.TimerInfoMapsFilter) (sql.Result, error) {
 	if filter.TimerID != nil {
-		return pdb.conn.Exec(deleteKeyInTimerInfoMapSQLQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID, *filter.TimerID)
+		return pdb.conn.Exec(deleteKeyInTimerInfoMapSQLQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID, *filter.TimerID)
 	}
-	return pdb.conn.Exec(deleteTimerInfoMapSQLQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	return pdb.conn.Exec(deleteTimerInfoMapSQLQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 
 var (
@@ -246,10 +246,10 @@ func (pdb *db) ReplaceIntoChildExecutionInfoMaps(rows []sqlplugin.ChildExecution
 // SelectFromChildExecutionInfoMaps reads one or more rows from child_execution_info_maps table
 func (pdb *db) SelectFromChildExecutionInfoMaps(filter *sqlplugin.ChildExecutionInfoMapsFilter) ([]sqlplugin.ChildExecutionInfoMapsRow, error) {
 	var rows []sqlplugin.ChildExecutionInfoMapsRow
-	err := pdb.conn.Select(&rows, getChildExecutionInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	err := pdb.conn.Select(&rows, getChildExecutionInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
 		rows[i].ShardID = int64(filter.ShardID)
-		rows[i].DomainID = filter.DomainID
+		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
 	}
@@ -259,9 +259,9 @@ func (pdb *db) SelectFromChildExecutionInfoMaps(filter *sqlplugin.ChildExecution
 // DeleteFromChildExecutionInfoMaps deletes one or more rows from child_execution_info_maps table
 func (pdb *db) DeleteFromChildExecutionInfoMaps(filter *sqlplugin.ChildExecutionInfoMapsFilter) (sql.Result, error) {
 	if filter.InitiatedID != nil {
-		return pdb.conn.Exec(deleteKeyInChildExecutionInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID, *filter.InitiatedID)
+		return pdb.conn.Exec(deleteKeyInChildExecutionInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID, *filter.InitiatedID)
 	}
-	return pdb.conn.Exec(deleteChildExecutionInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	return pdb.conn.Exec(deleteChildExecutionInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 
 var (
@@ -286,10 +286,10 @@ func (pdb *db) ReplaceIntoRequestCancelInfoMaps(rows []sqlplugin.RequestCancelIn
 // SelectFromRequestCancelInfoMaps reads one or more rows from request_cancel_info_maps table
 func (pdb *db) SelectFromRequestCancelInfoMaps(filter *sqlplugin.RequestCancelInfoMapsFilter) ([]sqlplugin.RequestCancelInfoMapsRow, error) {
 	var rows []sqlplugin.RequestCancelInfoMapsRow
-	err := pdb.conn.Select(&rows, getRequestCancelInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	err := pdb.conn.Select(&rows, getRequestCancelInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
 		rows[i].ShardID = int64(filter.ShardID)
-		rows[i].DomainID = filter.DomainID
+		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
 	}
@@ -299,9 +299,9 @@ func (pdb *db) SelectFromRequestCancelInfoMaps(filter *sqlplugin.RequestCancelIn
 // DeleteFromRequestCancelInfoMaps deletes one or more rows from request_cancel_info_maps table
 func (pdb *db) DeleteFromRequestCancelInfoMaps(filter *sqlplugin.RequestCancelInfoMapsFilter) (sql.Result, error) {
 	if filter.InitiatedID != nil {
-		return pdb.conn.Exec(deleteKeyInRequestCancelInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID, *filter.InitiatedID)
+		return pdb.conn.Exec(deleteKeyInRequestCancelInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID, *filter.InitiatedID)
 	}
-	return pdb.conn.Exec(deleteRequestCancelInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	return pdb.conn.Exec(deleteRequestCancelInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 
 var (
@@ -326,10 +326,10 @@ func (pdb *db) ReplaceIntoSignalInfoMaps(rows []sqlplugin.SignalInfoMapsRow) (sq
 // SelectFromSignalInfoMaps reads one or more rows from signal_info_maps table
 func (pdb *db) SelectFromSignalInfoMaps(filter *sqlplugin.SignalInfoMapsFilter) ([]sqlplugin.SignalInfoMapsRow, error) {
 	var rows []sqlplugin.SignalInfoMapsRow
-	err := pdb.conn.Select(&rows, getSignalInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	err := pdb.conn.Select(&rows, getSignalInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
 		rows[i].ShardID = int64(filter.ShardID)
-		rows[i].DomainID = filter.DomainID
+		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
 	}
@@ -339,9 +339,9 @@ func (pdb *db) SelectFromSignalInfoMaps(filter *sqlplugin.SignalInfoMapsFilter) 
 // DeleteFromSignalInfoMaps deletes one or more rows from signal_info_maps table
 func (pdb *db) DeleteFromSignalInfoMaps(filter *sqlplugin.SignalInfoMapsFilter) (sql.Result, error) {
 	if filter.InitiatedID != nil {
-		return pdb.conn.Exec(deleteKeyInSignalInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID, *filter.InitiatedID)
+		return pdb.conn.Exec(deleteKeyInSignalInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID, *filter.InitiatedID)
 	}
-	return pdb.conn.Exec(deleteSignalInfoMapQry, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	return pdb.conn.Exec(deleteSignalInfoMapQry, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }
 
 // InsertIntoSignalsRequestedSets inserts one or more rows into signals_requested_sets table
@@ -352,10 +352,10 @@ func (pdb *db) InsertIntoSignalsRequestedSets(rows []sqlplugin.SignalsRequestedS
 // SelectFromSignalsRequestedSets reads one or more rows from signals_requested_sets table
 func (pdb *db) SelectFromSignalsRequestedSets(filter *sqlplugin.SignalsRequestedSetsFilter) ([]sqlplugin.SignalsRequestedSetsRow, error) {
 	var rows []sqlplugin.SignalsRequestedSetsRow
-	err := pdb.conn.Select(&rows, getSignalsRequestedSetQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	err := pdb.conn.Select(&rows, getSignalsRequestedSetQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 	for i := 0; i < len(rows); i++ {
 		rows[i].ShardID = int64(filter.ShardID)
-		rows[i].DomainID = filter.DomainID
+		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
 	}
@@ -365,7 +365,7 @@ func (pdb *db) SelectFromSignalsRequestedSets(filter *sqlplugin.SignalsRequested
 // DeleteFromSignalsRequestedSets deletes one or more rows from signals_requested_sets table
 func (pdb *db) DeleteFromSignalsRequestedSets(filter *sqlplugin.SignalsRequestedSetsFilter) (sql.Result, error) {
 	if filter.SignalID != nil {
-		return pdb.conn.Exec(deleteSignalsRequestedSetQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID, *filter.SignalID)
+		return pdb.conn.Exec(deleteSignalsRequestedSetQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID, *filter.SignalID)
 	}
-	return pdb.conn.Exec(deleteAllSignalsRequestedSetQuery, filter.ShardID, filter.DomainID, filter.WorkflowID, filter.RunID)
+	return pdb.conn.Exec(deleteAllSignalsRequestedSetQuery, filter.ShardID, filter.NamespaceID, filter.WorkflowID, filter.RunID)
 }

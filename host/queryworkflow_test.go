@@ -56,7 +56,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -124,7 +124,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 
 	poller := &TaskPoller{
 		Engine:                              s.engine,
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		TaskList:                            taskList,
 		Identity:                            identity,
 		DecisionHandler:                     dtHandler,
@@ -148,7 +148,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string) {
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -214,7 +214,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -282,7 +282,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 
 	poller := &TaskPoller{
 		Engine:                              s.engine,
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		TaskList:                            taskList,
 		Identity:                            identity,
 		DecisionHandler:                     dtHandler,
@@ -306,7 +306,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string) {
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -356,7 +356,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -423,7 +423,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -445,7 +445,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -560,7 +560,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -635,7 +635,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -660,7 +660,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		// to the worker yet
 		s.False(handledSignal.Load())
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -682,7 +682,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -743,7 +743,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -817,7 +817,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -840,7 +840,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
 		shortCtx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Second)
 		queryResp, err := s.engine.QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -858,7 +858,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -902,7 +902,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -979,7 +979,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1002,7 +1002,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
 		s.False(handledSignal.Load())
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -1022,7 +1022,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -1089,7 +1089,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1165,7 +1165,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 
 	poller := &TaskPoller{
 		Engine:                              s.engine,
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		TaskList:                            taskList,
 		Identity:                            identity,
 		DecisionHandler:                     dtHandler,
@@ -1190,7 +1190,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
 		s.False(handledSignal.Load())
 		queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -1210,7 +1210,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -1232,7 +1232,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		signalName := "my signal"
 		signalInput := []byte("my signal input")
 		_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -1300,7 +1300,7 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1320,7 +1320,7 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 
 	// query workflow without any decision task should produce an error
 	queryResp, err := s.engine.QueryWorkflow(NewContext(), &workflowservice.QueryWorkflowRequest{
-		Domain:    s.domainName,
+		Namespace: s.namespace,
 		Execution: workflowExecution,
 		Query: &commonproto.WorkflowQuery{
 			QueryType: queryType,

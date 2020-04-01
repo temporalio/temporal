@@ -35,9 +35,9 @@ message Field {
 
 message Message {
     enums.MessageType messageType = 1;
-    string domainID = 2;
-    string workflowID = 3;
-    string runID = 4;
+    string namespaceId = 2;
+    string workflowId = 3;
+    string runId = 4;
     int64 version = 5;
     map<string, Field> fields = 6;
 }

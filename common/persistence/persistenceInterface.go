@@ -57,12 +57,12 @@ type (
 	MetadataStore interface {
 		Closeable
 		GetName() string
-		CreateDomain(request *InternalCreateDomainRequest) (*CreateDomainResponse, error)
-		GetDomain(request *GetDomainRequest) (*InternalGetDomainResponse, error)
-		UpdateDomain(request *InternalUpdateDomainRequest) error
-		DeleteDomain(request *DeleteDomainRequest) error
-		DeleteDomainByName(request *DeleteDomainByNameRequest) error
-		ListDomains(request *ListDomainsRequest) (*InternalListDomainsResponse, error)
+		CreateNamespace(request *InternalCreateNamespaceRequest) (*CreateNamespaceResponse, error)
+		GetNamespace(request *GetNamespaceRequest) (*InternalGetNamespaceResponse, error)
+		UpdateNamespace(request *InternalUpdateNamespaceRequest) error
+		DeleteNamespace(request *DeleteNamespaceRequest) error
+		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
+		ListNamespaces(request *ListNamespacesRequest) (*InternalListNamespacesResponse, error)
 		GetMetadata() (*GetMetadataResponse, error)
 	}
 
@@ -204,10 +204,10 @@ type (
 
 	// InternalWorkflowExecutionInfo describes a workflow execution for Persistence Interface
 	InternalWorkflowExecutionInfo struct {
-		DomainID                           string
+		NamespaceID                        string
 		WorkflowID                         string
 		RunID                              string
-		ParentDomainID                     string
+		ParentNamespaceID                  string
 		ParentWorkflowID                   string
 		ParentRunID                        string
 		InitiatedID                        int64
@@ -304,7 +304,7 @@ type (
 		TimerTaskStatus          int32
 		// For retry
 		Attempt            int32
-		DomainID           primitives.UUID
+		NamespaceID        primitives.UUID
 		StartedIdentity    string
 		TaskList           string
 		HasRetryPolicy     bool
@@ -332,7 +332,7 @@ type (
 		StartedRunID          string
 		StartedEvent          *serialization.DataBlob
 		CreateRequestID       string
-		DomainName            string
+		Namespace             string
 		WorkflowTypeName      string
 		ParentClosePolicy     enums.ParentClosePolicy
 	}
@@ -445,7 +445,7 @@ type (
 
 	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface
 	InternalAppendHistoryEventsRequest struct {
-		DomainID          string
+		NamespaceID       string
 		Execution         commonproto.WorkflowExecution
 		FirstEventID      int64
 		EventBatchVersion int64
@@ -579,7 +579,7 @@ type (
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
 	InternalRecordWorkflowExecutionStartedRequest struct {
-		DomainUUID         string
+		NamespaceID        string
 		WorkflowID         string
 		RunID              string
 		WorkflowTypeName   string
@@ -593,7 +593,7 @@ type (
 
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
 	InternalRecordWorkflowExecutionClosedRequest struct {
-		DomainUUID         string
+		NamespaceID        string
 		WorkflowID         string
 		RunID              string
 		WorkflowTypeName   string
@@ -610,7 +610,7 @@ type (
 
 	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
 	InternalUpsertWorkflowExecutionRequest struct {
-		DomainUUID         string
+		NamespaceID        string
 		WorkflowID         string
 		RunID              string
 		WorkflowTypeName   string
@@ -622,8 +622,8 @@ type (
 		SearchAttributes   map[string][]byte
 	}
 
-	// InternalDomainConfig describes the domain configuration
-	InternalDomainConfig struct {
+	// InternalNamespaceConfig describes the namespace configuration
+	InternalNamespaceConfig struct {
 		// NOTE: this retention is in days, not in seconds
 		Retention                int32
 		EmitMetric               bool                 // deprecated
@@ -636,42 +636,42 @@ type (
 		BadBinaries              *serialization.DataBlob
 	}
 
-	// InternalCreateDomainRequest is used to create the domain
-	InternalCreateDomainRequest struct {
-		Info              *DomainInfo
-		Config            *InternalDomainConfig
-		ReplicationConfig *DomainReplicationConfig
-		IsGlobalDomain    bool
+	// InternalCreateNamespaceRequest is used to create the namespace
+	InternalCreateNamespaceRequest struct {
+		Info              *NamespaceInfo
+		Config            *InternalNamespaceConfig
+		ReplicationConfig *NamespaceReplicationConfig
+		IsGlobalNamespace bool
 		ConfigVersion     int64
 		FailoverVersion   int64
 	}
 
-	// InternalGetDomainResponse is the response for GetDomain
-	InternalGetDomainResponse struct {
-		Info                        *DomainInfo
-		Config                      *InternalDomainConfig
-		ReplicationConfig           *DomainReplicationConfig
-		IsGlobalDomain              bool
+	// InternalGetNamespaceResponse is the response for GetNamespace
+	InternalGetNamespaceResponse struct {
+		Info                        *NamespaceInfo
+		Config                      *InternalNamespaceConfig
+		ReplicationConfig           *NamespaceReplicationConfig
+		IsGlobalNamespace           bool
 		ConfigVersion               int64
 		FailoverVersion             int64
 		FailoverNotificationVersion int64
 		NotificationVersion         int64
 	}
 
-	// InternalUpdateDomainRequest is used to update domain
-	InternalUpdateDomainRequest struct {
-		Info                        *DomainInfo
-		Config                      *InternalDomainConfig
-		ReplicationConfig           *DomainReplicationConfig
+	// InternalUpdateNamespaceRequest is used to update namespace
+	InternalUpdateNamespaceRequest struct {
+		Info                        *NamespaceInfo
+		Config                      *InternalNamespaceConfig
+		ReplicationConfig           *NamespaceReplicationConfig
 		ConfigVersion               int64
 		FailoverVersion             int64
 		FailoverNotificationVersion int64
 		NotificationVersion         int64
 	}
 
-	// InternalListDomainsResponse is the response for GetDomain
-	InternalListDomainsResponse struct {
-		Domains       []*InternalGetDomainResponse
+	// InternalListNamespacesResponse is the response for GetNamespace
+	InternalListNamespacesResponse struct {
+		Namespaces    []*InternalGetNamespaceResponse
 		NextPageToken []byte
 	}
 
@@ -708,7 +708,7 @@ func NewDataBlob(data []byte, encodingType common.EncodingType) *serialization.D
 	if data == nil || len(data) == 0 {
 		return nil
 	}
-	if encodingType != common.EncodingTypeThriftRW && data[0] == 'Y' {
+	if encodingType != common.EncodingTypeProto3 && data[0] == 'Y' {
 		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingType))
 	}
 	return &serialization.DataBlob{
@@ -733,43 +733,41 @@ func NewDataBlobFromProto(blob *commonproto.DataBlob) *serialization.DataBlob {
 			Encoding: common.EncodingTypeJSON,
 			Data:     blob.Data,
 		}
-	case enums.EncodingTypeThriftRW:
+	case enums.EncodingTypeProto3:
 		return &serialization.DataBlob{
-			Encoding: common.EncodingTypeThriftRW,
+			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,
 		}
-	case enums.EncodingTypeProto3:
-		panic("EncodingTypeProto is not supported")
 	default:
-		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))
+		panic(fmt.Sprintf("NewDataBlobFromProto seeing unsupported enconding type: %v", blob.GetEncodingType()))
 	}
 }
 
 func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, currentVersion int64, replicationState *ReplicationState, versionHistories *serialization.DataBlob) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
 	state := &persistenceblobs.WorkflowExecutionState{
-		CreateRequestID: executionInfo.CreateRequestID,
+		CreateRequestId: executionInfo.CreateRequestID,
 		State:           int32(executionInfo.State),
 		CloseStatus:     int32(executionInfo.CloseStatus),
-		RunID:           primitives.MustParseUUID(executionInfo.RunID),
+		RunId:           primitives.MustParseUUID(executionInfo.RunID),
 	}
 
 	info := &persistenceblobs.WorkflowExecutionInfo{
-		DomainID:                                primitives.MustParseUUID(executionInfo.DomainID),
-		WorkflowID:                              executionInfo.WorkflowID,
+		NamespaceId:                             primitives.MustParseUUID(executionInfo.NamespaceID),
+		WorkflowId:                              executionInfo.WorkflowID,
 		TaskList:                                executionInfo.TaskList,
 		WorkflowTypeName:                        executionInfo.WorkflowTypeName,
 		WorkflowTimeoutSeconds:                  executionInfo.WorkflowTimeout,
 		DecisionTaskTimeoutSeconds:              executionInfo.DecisionStartToCloseTimeout,
 		ExecutionContext:                        executionInfo.ExecutionContext,
-		LastFirstEventID:                        executionInfo.LastFirstEventID,
-		LastEventTaskID:                         executionInfo.LastEventTaskID,
+		LastFirstEventId:                        executionInfo.LastFirstEventID,
+		LastEventTaskId:                         executionInfo.LastEventTaskID,
 		LastProcessedEvent:                      executionInfo.LastProcessedEvent,
 		StartTimeNanos:                          executionInfo.StartTimestamp.UnixNano(),
 		LastUpdatedTimeNanos:                    executionInfo.LastUpdatedTimestamp.UnixNano(),
 		DecisionVersion:                         executionInfo.DecisionVersion,
-		DecisionScheduleID:                      executionInfo.DecisionScheduleID,
-		DecisionStartedID:                       executionInfo.DecisionStartedID,
-		DecisionRequestID:                       executionInfo.DecisionRequestID,
+		DecisionScheduleId:                      executionInfo.DecisionScheduleID,
+		DecisionStartedId:                       executionInfo.DecisionStartedID,
+		DecisionRequestId:                       executionInfo.DecisionRequestID,
 		DecisionTimeout:                         executionInfo.DecisionTimeout,
 		DecisionAttempt:                         executionInfo.DecisionAttempt,
 		DecisionStartedTimestampNanos:           executionInfo.DecisionStartedTimestamp,
@@ -783,7 +781,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		SignalCount:                             int64(executionInfo.SignalCount),
 		HistorySize:                             executionInfo.HistorySize,
 		CronSchedule:                            executionInfo.CronSchedule,
-		CompletionEventBatchID:                  executionInfo.CompletionEventBatchID,
+		CompletionEventBatchId:                  executionInfo.CompletionEventBatchID,
 		HasRetryPolicy:                          executionInfo.HasRetryPolicy,
 		RetryAttempt:                            int64(executionInfo.Attempt),
 		RetryInitialIntervalSeconds:             executionInfo.InitialInterval,
@@ -814,39 +812,39 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 	info.CurrentVersion = currentVersion
 	if replicationState == nil && versionHistories == nil {
 		// this is allowed
-	} else if replicationState != nil {
-		info.LastWriteEventID = &types.Int64Value{Value: replicationState.LastWriteEventID}
+	} else if replicationState != nil && versionHistories == nil {
+		info.LastWriteEventId = &types.Int64Value{Value: replicationState.LastWriteEventID}
 		info.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(replicationState.LastReplicationInfo))
 		for k, v := range replicationState.LastReplicationInfo {
 			info.LastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
 		}
-	} else if versionHistories != nil {
+	} else if versionHistories != nil && replicationState == nil {
 		info.VersionHistories = versionHistories.Data
 		info.VersionHistoriesEncoding = string(versionHistories.GetEncoding())
 	} else {
 		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("build workflow execution with both version histories and replication state."))
 	}
 
-	if executionInfo.ParentDomainID != "" {
-		info.ParentDomainID = primitives.MustParseUUID(executionInfo.ParentDomainID)
-		info.ParentWorkflowID = executionInfo.ParentWorkflowID
-		info.ParentRunID = primitives.MustParseUUID(executionInfo.ParentRunID)
-		info.InitiatedID = executionInfo.InitiatedID
+	if executionInfo.ParentNamespaceID != "" {
+		info.ParentNamespaceId = primitives.MustParseUUID(executionInfo.ParentNamespaceID)
+		info.ParentWorkflowId = executionInfo.ParentWorkflowID
+		info.ParentRunId = primitives.MustParseUUID(executionInfo.ParentRunID)
+		info.InitiatedId = executionInfo.InitiatedID
 		info.CompletionEvent = nil
 	}
 
 	if executionInfo.CancelRequested {
 		info.CancelRequested = true
-		info.CancelRequestID = executionInfo.CancelRequestID
+		info.CancelRequestId = executionInfo.CancelRequestID
 	}
 	return info, state, nil
 }
 
 func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.WorkflowExecutionInfo, state *persistenceblobs.WorkflowExecutionState, nextEventID int64) *InternalWorkflowExecutionInfo {
 	executionInfo := &InternalWorkflowExecutionInfo{
-		DomainID:                           primitives.UUIDString(info.DomainID),
-		WorkflowID:                         info.WorkflowID,
-		RunID:                              primitives.UUIDString(state.RunID),
+		NamespaceID:                        primitives.UUIDString(info.NamespaceId),
+		WorkflowID:                         info.WorkflowId,
+		RunID:                              primitives.UUIDString(state.RunId),
 		NextEventID:                        nextEventID,
 		TaskList:                           info.GetTaskList(),
 		WorkflowTypeName:                   info.GetWorkflowTypeName(),
@@ -854,15 +852,15 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		DecisionStartToCloseTimeout:        info.GetDecisionTaskTimeoutSeconds(),
 		State:                              int(state.GetState()),
 		CloseStatus:                        enums.WorkflowExecutionCloseStatus(state.GetCloseStatus()),
-		LastFirstEventID:                   info.GetLastFirstEventID(),
+		LastFirstEventID:                   info.GetLastFirstEventId(),
 		LastProcessedEvent:                 info.GetLastProcessedEvent(),
 		StartTimestamp:                     time.Unix(0, info.GetStartTimeNanos()),
 		LastUpdatedTimestamp:               time.Unix(0, info.GetLastUpdatedTimeNanos()),
-		CreateRequestID:                    state.GetCreateRequestID(),
+		CreateRequestID:                    state.GetCreateRequestId(),
 		DecisionVersion:                    info.GetDecisionVersion(),
-		DecisionScheduleID:                 info.GetDecisionScheduleID(),
-		DecisionStartedID:                  info.GetDecisionStartedID(),
-		DecisionRequestID:                  info.GetDecisionRequestID(),
+		DecisionScheduleID:                 info.GetDecisionScheduleId(),
+		DecisionStartedID:                  info.GetDecisionStartedId(),
+		DecisionRequestID:                  info.GetDecisionRequestId(),
 		DecisionTimeout:                    info.GetDecisionTimeout(),
 		DecisionAttempt:                    info.GetDecisionAttempt(),
 		DecisionStartedTimestamp:           info.GetDecisionStartedTimestampNanos(),
@@ -895,11 +893,11 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		executionInfo.ExpirationTime = time.Unix(0, info.GetRetryExpirationTimeNanos())
 	}
 
-	if info.ParentDomainID != nil {
-		executionInfo.ParentDomainID = primitives.UUID(info.ParentDomainID).String()
-		executionInfo.ParentWorkflowID = info.GetParentWorkflowID()
-		executionInfo.ParentRunID = primitives.UUID(info.ParentRunID).String()
-		executionInfo.InitiatedID = info.GetInitiatedID()
+	if info.ParentNamespaceId != nil {
+		executionInfo.ParentNamespaceID = primitives.UUID(info.ParentNamespaceId).String()
+		executionInfo.ParentWorkflowID = info.GetParentWorkflowId()
+		executionInfo.ParentRunID = primitives.UUID(info.ParentRunId).String()
+		executionInfo.InitiatedID = info.GetInitiatedId()
 		if executionInfo.CompletionEvent != nil {
 			executionInfo.CompletionEvent = nil
 		}
@@ -907,10 +905,10 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 
 	if info.GetCancelRequested() {
 		executionInfo.CancelRequested = true
-		executionInfo.CancelRequestID = info.GetCancelRequestID()
+		executionInfo.CancelRequestID = info.GetCancelRequestId()
 	}
 
-	executionInfo.CompletionEventBatchID = info.CompletionEventBatchID
+	executionInfo.CompletionEventBatchID = info.CompletionEventBatchId
 
 	if info.CompletionEvent != nil {
 		executionInfo.CompletionEvent = NewDataBlob(info.CompletionEvent,
@@ -926,24 +924,24 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 
 func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityInfo) *InternalActivityInfo {
 	info := &InternalActivityInfo{
-		DomainID:                 decoded.DomainID,
-		ScheduleID:               decoded.ScheduleID,
+		NamespaceID:              decoded.GetNamespaceId(),
+		ScheduleID:               decoded.GetScheduleId(),
 		Details:                  decoded.LastHeartbeatDetails,
 		LastHeartBeatUpdatedTime: *timestamp.TimestampFromProto(decoded.LastHeartbeatUpdatedTime).ToTime(),
 		Version:                  decoded.GetVersion(),
-		ScheduledEventBatchID:    decoded.GetScheduledEventBatchID(),
+		ScheduledEventBatchID:    decoded.GetScheduledEventBatchId(),
 		ScheduledEvent:           NewDataBlob(decoded.ScheduledEvent, common.EncodingType(decoded.GetScheduledEventEncoding())),
 		ScheduledTime:            time.Unix(0, decoded.GetScheduledTimeNanos()),
-		StartedID:                decoded.GetStartedID(),
+		StartedID:                decoded.GetStartedId(),
 		StartedTime:              time.Unix(0, decoded.GetStartedTimeNanos()),
-		ActivityID:               decoded.GetActivityID(),
-		RequestID:                decoded.GetRequestID(),
+		ActivityID:               decoded.GetActivityId(),
+		RequestID:                decoded.GetRequestId(),
 		ScheduleToStartTimeout:   decoded.GetScheduleToStartTimeoutSeconds(),
 		ScheduleToCloseTimeout:   decoded.GetScheduleToCloseTimeoutSeconds(),
 		StartToCloseTimeout:      decoded.GetStartToCloseTimeoutSeconds(),
 		HeartbeatTimeout:         decoded.GetHeartbeatTimeoutSeconds(),
 		CancelRequested:          decoded.GetCancelRequested(),
-		CancelRequestID:          decoded.GetCancelRequestID(),
+		CancelRequestID:          decoded.GetCancelRequestId(),
 		TimerTaskStatus:          decoded.GetTimerTaskStatus(),
 		Attempt:                  decoded.GetAttempt(),
 		StartedIdentity:          decoded.GetStartedIdentity(),
@@ -972,27 +970,27 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 	startEvent, startEncoding := FromDataBlob(v.StartedEvent)
 
 	info := &persistenceblobs.ActivityInfo{
-		DomainID:                      v.DomainID,
-		ScheduleID:                    v.ScheduleID,
+		NamespaceId:                   v.NamespaceID,
+		ScheduleId:                    v.ScheduleID,
 		LastHeartbeatDetails:          v.Details,
 		LastHeartbeatUpdatedTime:      timestamp.TimestampFromTime(&v.LastHeartBeatUpdatedTime).ToProto(),
 		Version:                       v.Version,
-		ScheduledEventBatchID:         v.ScheduledEventBatchID,
+		ScheduledEventBatchId:         v.ScheduledEventBatchID,
 		ScheduledEvent:                scheduledEvent,
 		ScheduledEventEncoding:        scheduledEncoding,
 		ScheduledTimeNanos:            v.ScheduledTime.UnixNano(),
-		StartedID:                     v.StartedID,
+		StartedId:                     v.StartedID,
 		StartedEvent:                  startEvent,
 		StartedEventEncoding:          startEncoding,
 		StartedTimeNanos:              v.StartedTime.UnixNano(),
-		ActivityID:                    v.ActivityID,
-		RequestID:                     v.RequestID,
+		ActivityId:                    v.ActivityID,
+		RequestId:                     v.RequestID,
 		ScheduleToStartTimeoutSeconds: v.ScheduleToStartTimeout,
 		ScheduleToCloseTimeoutSeconds: v.ScheduleToCloseTimeout,
 		StartToCloseTimeoutSeconds:    v.StartToCloseTimeout,
 		HeartbeatTimeoutSeconds:       v.HeartbeatTimeout,
 		CancelRequested:               v.CancelRequested,
-		CancelRequestID:               v.CancelRequestID,
+		CancelRequestId:               v.CancelRequestID,
 		TimerTaskStatus:               v.TimerTaskStatus,
 		Attempt:                       v.Attempt,
 		TaskList:                      v.TaskList,
@@ -1019,17 +1017,17 @@ func (v *InternalChildExecutionInfo) ToProto() *persistenceblobs.ChildExecutionI
 
 	info := &persistenceblobs.ChildExecutionInfo{
 		Version:                v.Version,
-		InitiatedID:            v.InitiatedID,
-		InitiatedEventBatchID:  v.InitiatedEventBatchID,
+		InitiatedId:            v.InitiatedID,
+		InitiatedEventBatchId:  v.InitiatedEventBatchID,
 		InitiatedEvent:         initiateEvent,
 		InitiatedEventEncoding: initiateEncoding,
 		StartedEvent:           startEvent,
 		StartedEventEncoding:   startEncoding,
-		StartedID:              v.StartedID,
-		StartedWorkflowID:      v.StartedWorkflowID,
-		StartedRunID:           primitives.MustParseUUID(v.StartedRunID),
-		CreateRequestID:        v.CreateRequestID,
-		DomainName:             v.DomainName,
+		StartedId:              v.StartedID,
+		StartedWorkflowId:      v.StartedWorkflowID,
+		StartedRunId:           primitives.MustParseUUID(v.StartedRunID),
+		CreateRequestId:        v.CreateRequestID,
+		Namespace:              v.Namespace,
 		WorkflowTypeName:       v.WorkflowTypeName,
 		ParentClosePolicy:      int32(v.ParentClosePolicy),
 	}
@@ -1038,14 +1036,14 @@ func (v *InternalChildExecutionInfo) ToProto() *persistenceblobs.ChildExecutionI
 
 func ProtoChildExecutionInfoToInternal(rowInfo *persistenceblobs.ChildExecutionInfo) *InternalChildExecutionInfo {
 	return &InternalChildExecutionInfo{
-		InitiatedID:           rowInfo.InitiatedID,
-		InitiatedEventBatchID: rowInfo.GetInitiatedEventBatchID(),
+		InitiatedID:           rowInfo.GetInitiatedId(),
+		InitiatedEventBatchID: rowInfo.GetInitiatedEventBatchId(),
 		Version:               rowInfo.GetVersion(),
-		StartedID:             rowInfo.GetStartedID(),
-		StartedWorkflowID:     rowInfo.GetStartedWorkflowID(),
-		StartedRunID:          primitives.UUID(rowInfo.GetStartedRunID()).String(),
-		CreateRequestID:       rowInfo.GetCreateRequestID(),
-		DomainName:            rowInfo.GetDomainName(),
+		StartedID:             rowInfo.GetStartedId(),
+		StartedWorkflowID:     rowInfo.GetStartedWorkflowId(),
+		StartedRunID:          primitives.UUID(rowInfo.GetStartedRunId()).String(),
+		CreateRequestID:       rowInfo.GetCreateRequestId(),
+		Namespace:             rowInfo.GetNamespace(),
 		WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
 		ParentClosePolicy:     enums.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
 		InitiatedEvent:        NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.InitiatedEventEncoding)),

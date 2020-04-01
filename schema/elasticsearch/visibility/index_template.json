@@ -1,7 +1,7 @@
 {
   "order": 0,
   "index_patterns": [
-    "cadence-visibility-*"
+    "temporal-visibility-*"
   ],
   "settings": {
     "index": {
@@ -13,7 +13,7 @@
     "_doc": {
       "dynamic": "false",
       "properties": {
-        "DomainID": {
+        "NamespaceID": {
           "type": "keyword"
         },
         "WorkflowID": {
@@ -45,7 +45,7 @@
         },
         "Attr": {
           "properties": {
-            "CadenceChangeVersion":  { "type": "keyword" },
+            "TemporalChangeVersion":  { "type": "keyword" },
             "CustomStringField":  { "type": "text" },
             "CustomKeywordField": { "type": "keyword"},
             "CustomIntField": { "type": "long"},
@@ -58,7 +58,7 @@
             "addon": { "type": "keyword"},
             "addon-type": { "type": "keyword"},
             "user": { "type": "keyword"},
-            "CustomDomain": { "type": "keyword"},
+            "CustomNamespace": { "type": "keyword"},
             "Operator": { "type": "keyword"},
             "RolloutID": { "type": "keyword"},
             "BinaryChecksums": { "type": "keyword"}

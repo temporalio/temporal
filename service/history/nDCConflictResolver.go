@@ -130,7 +130,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 
 	executionInfo := r.mutableState.GetExecutionInfo()
 	workflowIdentifier := definition.NewWorkflowIdentifier(
-		executionInfo.DomainID,
+		executionInfo.NamespaceID,
 		executionInfo.WorkflowID,
 		executionInfo.RunID,
 	)

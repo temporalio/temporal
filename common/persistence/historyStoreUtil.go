@@ -79,7 +79,7 @@ func GetBeginNodeID(bi *persistenceblobs.HistoryBranch) int64 {
 		return 1
 	}
 	idx := len(bi.Ancestors) - 1
-	return bi.Ancestors[idx].EndNodeID
+	return bi.Ancestors[idx].GetEndNodeId()
 }
 
 func getShardID(shardID *int) (int, error) {

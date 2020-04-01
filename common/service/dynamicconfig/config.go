@@ -80,11 +80,11 @@ type PropertyFn func() interface{}
 // IntPropertyFn is a wrapper to get int property from dynamic config
 type IntPropertyFn func(opts ...FilterOption) int
 
-// IntPropertyFnWithDomainFilter is a wrapper to get int property from dynamic config with domain as filter
-type IntPropertyFnWithDomainFilter func(domain string) int
+// IntPropertyFnWithNamespaceFilter is a wrapper to get int property from dynamic config with namespace as filter
+type IntPropertyFnWithNamespaceFilter func(namespace string) int
 
-// IntPropertyFnWithTaskListInfoFilters is a wrapper to get int property from dynamic config with three filters: domain, taskList, taskType
-type IntPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int32) int
+// IntPropertyFnWithTaskListInfoFilters is a wrapper to get int property from dynamic config with three filters: namespace, taskList, taskType
+type IntPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType int32) int
 
 // FloatPropertyFn is a wrapper to get float property from dynamic config
 type FloatPropertyFn func(opts ...FilterOption) float64
@@ -92,11 +92,11 @@ type FloatPropertyFn func(opts ...FilterOption) float64
 // DurationPropertyFn is a wrapper to get duration property from dynamic config
 type DurationPropertyFn func(opts ...FilterOption) time.Duration
 
-// DurationPropertyFnWithDomainFilter is a wrapper to get duration property from dynamic config with domain as filter
-type DurationPropertyFnWithDomainFilter func(domain string) time.Duration
+// DurationPropertyFnWithNamespaceFilter is a wrapper to get duration property from dynamic config with namespace as filter
+type DurationPropertyFnWithNamespaceFilter func(namespace string) time.Duration
 
-// DurationPropertyFnWithTaskListInfoFilters is a wrapper to get duration property from dynamic config  with three filters: domain, taskList, taskType
-type DurationPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int32) time.Duration
+// DurationPropertyFnWithTaskListInfoFilters is a wrapper to get duration property from dynamic config  with three filters: namespace, taskList, taskType
+type DurationPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType int32) time.Duration
 
 // BoolPropertyFn is a wrapper to get bool property from dynamic config
 type BoolPropertyFn func(opts ...FilterOption) bool
@@ -107,14 +107,14 @@ type StringPropertyFn func(opts ...FilterOption) string
 // MapPropertyFn is a wrapper to get map property from dynamic config
 type MapPropertyFn func(opts ...FilterOption) map[string]interface{}
 
-// StringPropertyFnWithDomainFilter is a wrapper to get string property from dynamic config
-type StringPropertyFnWithDomainFilter func(domain string) string
+// StringPropertyFnWithNamespaceFilter is a wrapper to get string property from dynamic config
+type StringPropertyFnWithNamespaceFilter func(namespace string) string
 
-// BoolPropertyFnWithDomainFilter is a wrapper to get string property from dynamic config
-type BoolPropertyFnWithDomainFilter func(domain string) bool
+// BoolPropertyFnWithNamespaceFilter is a wrapper to get string property from dynamic config
+type BoolPropertyFnWithNamespaceFilter func(namespace string) bool
 
-// BoolPropertyFnWithTaskListInfoFilters is a wrapper to get bool property from dynamic config with three filters: domain, taskList, taskType
-type BoolPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int32) bool
+// BoolPropertyFnWithTaskListInfoFilters is a wrapper to get bool property from dynamic config with three filters: namespace, taskList, taskType
+type BoolPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType int32) bool
 
 // GetProperty gets a interface property and returns defaultValue if property is not found
 func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
@@ -149,10 +149,10 @@ func (c *Collection) GetIntProperty(key Key, defaultValue int) IntPropertyFn {
 	}
 }
 
-// GetIntPropertyFilteredByDomain gets property with domain filter and asserts that it's an integer
-func (c *Collection) GetIntPropertyFilteredByDomain(key Key, defaultValue int) IntPropertyFnWithDomainFilter {
-	return func(domain string) int {
-		val, err := c.client.GetIntValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
+// GetIntPropertyFilteredByNamespace gets property with namespace filter and asserts that it's an integer
+func (c *Collection) GetIntPropertyFilteredByNamespace(key Key, defaultValue int) IntPropertyFnWithNamespaceFilter {
+	return func(namespace string) int {
+		val, err := c.client.GetIntValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
@@ -163,10 +163,10 @@ func (c *Collection) GetIntPropertyFilteredByDomain(key Key, defaultValue int) I
 
 // GetIntPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's an integer
 func (c *Collection) GetIntPropertyFilteredByTaskListInfo(key Key, defaultValue int) IntPropertyFnWithTaskListInfoFilters {
-	return func(domain string, taskList string, taskType int32) int {
+	return func(namespace string, taskList string, taskType int32) int {
 		val, err := c.client.GetIntValue(
 			key,
-			getFilterMap(DomainFilter(domain), TaskListFilter(taskList), TaskTypeFilter(taskType)),
+			getFilterMap(NamespaceFilter(namespace), TaskListFilter(taskList), TaskTypeFilter(taskType)),
 			defaultValue,
 		)
 		if err != nil {
@@ -201,10 +201,10 @@ func (c *Collection) GetDurationProperty(key Key, defaultValue time.Duration) Du
 	}
 }
 
-// GetDurationPropertyFilteredByDomain gets property with domain filter and asserts that it's a duration
-func (c *Collection) GetDurationPropertyFilteredByDomain(key Key, defaultValue time.Duration) DurationPropertyFnWithDomainFilter {
-	return func(domain string) time.Duration {
-		val, err := c.client.GetDurationValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
+// GetDurationPropertyFilteredByNamespace gets property with namespace filter and asserts that it's a duration
+func (c *Collection) GetDurationPropertyFilteredByNamespace(key Key, defaultValue time.Duration) DurationPropertyFnWithNamespaceFilter {
+	return func(namespace string) time.Duration {
+		val, err := c.client.GetDurationValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
@@ -215,10 +215,10 @@ func (c *Collection) GetDurationPropertyFilteredByDomain(key Key, defaultValue t
 
 // GetDurationPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's a duration
 func (c *Collection) GetDurationPropertyFilteredByTaskListInfo(key Key, defaultValue time.Duration) DurationPropertyFnWithTaskListInfoFilters {
-	return func(domain string, taskList string, taskType int32) time.Duration {
+	return func(namespace string, taskList string, taskType int32) time.Duration {
 		val, err := c.client.GetDurationValue(
 			key,
-			getFilterMap(DomainFilter(domain), TaskListFilter(taskList), TaskTypeFilter(taskType)),
+			getFilterMap(NamespaceFilter(namespace), TaskListFilter(taskList), TaskTypeFilter(taskType)),
 			defaultValue,
 		)
 		if err != nil {
@@ -265,10 +265,10 @@ func (c *Collection) GetMapProperty(key Key, defaultValue map[string]interface{}
 	}
 }
 
-// GetStringPropertyFnWithDomainFilter gets property with domain filter and asserts that its domain
-func (c *Collection) GetStringPropertyFnWithDomainFilter(key Key, defaultValue string) StringPropertyFnWithDomainFilter {
-	return func(domain string) string {
-		val, err := c.client.GetStringValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
+// GetStringPropertyFnWithNamespaceFilter gets property with namespace filter and asserts that its namespace
+func (c *Collection) GetStringPropertyFnWithNamespaceFilter(key Key, defaultValue string) StringPropertyFnWithNamespaceFilter {
+	return func(namespace string) string {
+		val, err := c.client.GetStringValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
@@ -277,10 +277,10 @@ func (c *Collection) GetStringPropertyFnWithDomainFilter(key Key, defaultValue s
 	}
 }
 
-// GetBoolPropertyFnWithDomainFilter gets property with domain filter and asserts that its domain
-func (c *Collection) GetBoolPropertyFnWithDomainFilter(key Key, defaultValue bool) BoolPropertyFnWithDomainFilter {
-	return func(domain string) bool {
-		val, err := c.client.GetBoolValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
+// GetBoolPropertyFnWithNamespaceFilter gets property with namespace filter and asserts that its namespace
+func (c *Collection) GetBoolPropertyFnWithNamespaceFilter(key Key, defaultValue bool) BoolPropertyFnWithNamespaceFilter {
+	return func(namespace string) bool {
+		val, err := c.client.GetBoolValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
@@ -291,10 +291,10 @@ func (c *Collection) GetBoolPropertyFnWithDomainFilter(key Key, defaultValue boo
 
 // GetBoolPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's an bool
 func (c *Collection) GetBoolPropertyFilteredByTaskListInfo(key Key, defaultValue bool) BoolPropertyFnWithTaskListInfoFilters {
-	return func(domain string, taskList string, taskType int32) bool {
+	return func(namespace string, taskList string, taskType int32) bool {
 		val, err := c.client.GetBoolValue(
 			key,
-			getFilterMap(DomainFilter(domain), TaskListFilter(taskList), TaskTypeFilter(taskType)),
+			getFilterMap(NamespaceFilter(namespace), TaskListFilter(taskList), TaskTypeFilter(taskType)),
 			defaultValue,
 		)
 		if err != nil {

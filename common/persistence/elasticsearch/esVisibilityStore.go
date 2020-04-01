@@ -114,7 +114,7 @@ func (v *esVisibilityStore) GetName() string {
 func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
 	v.checkProducer()
 	msg := getVisibilityMessage(
-		request.DomainUUID,
+		request.NamespaceID,
 		request.WorkflowID,
 		request.RunID,
 		request.WorkflowTypeName,
@@ -131,7 +131,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRe
 func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
 	v.checkProducer()
 	msg := getVisibilityMessageForCloseExecution(
-		request.DomainUUID,
+		request.NamespaceID,
 		request.WorkflowID,
 		request.RunID,
 		request.WorkflowTypeName,
@@ -151,7 +151,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRec
 func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
 	v.checkProducer()
 	msg := getVisibilityMessage(
-		request.DomainUUID,
+		request.NamespaceID,
 		request.WorkflowID,
 		request.RunID,
 		request.WorkflowTypeName,
@@ -326,10 +326,10 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByStatus(
 func (v *esVisibilityStore) GetClosedWorkflowExecution(
 	request *p.GetClosedWorkflowExecutionRequest) (*p.InternalGetClosedWorkflowExecutionResponse, error) {
 
-	matchDomainQuery := elastic.NewMatchQuery(es.DomainID, request.DomainUUID)
+	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
 	existClosedStatusQuery := elastic.NewExistsQuery(es.CloseStatus)
 	matchWorkflowIDQuery := elastic.NewMatchQuery(es.WorkflowID, request.Execution.GetWorkflowId())
-	boolQuery := elastic.NewBoolQuery().Must(matchDomainQuery).Must(existClosedStatusQuery).Must(matchWorkflowIDQuery)
+	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).Must(existClosedStatusQuery).Must(matchWorkflowIDQuery)
 	rid := request.Execution.GetRunId()
 	if rid != "" {
 		matchRunIDQuery := elastic.NewMatchQuery(es.RunID, rid)
@@ -359,7 +359,7 @@ func (v *esVisibilityStore) GetClosedWorkflowExecution(
 func (v *esVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
 	v.checkProducer()
 	msg := getVisibilityMessageForDeletion(
-		request.DomainID,
+		request.NamespaceID,
 		request.WorkflowID,
 		request.RunID,
 		request.TaskID,
@@ -475,7 +475,7 @@ var (
 
 func getESQueryDSLForScan(request *p.ListWorkflowExecutionsRequestV2) (string, error) {
 	sql := getSQLFromListRequest(request)
-	dsl, err := getCustomizedDSLFromSQL(sql, request.DomainUUID)
+	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
 	if err != nil {
 		return "", err
 	}
@@ -487,7 +487,7 @@ func getESQueryDSLForScan(request *p.ListWorkflowExecutionsRequestV2) (string, e
 
 func getESQueryDSLForCount(request *p.CountWorkflowExecutionsRequest) (string, error) {
 	sql := getSQLFromCountRequest(request)
-	dsl, err := getCustomizedDSLFromSQL(sql, request.DomainUUID)
+	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
 	if err != nil {
 		return "", err
 	}
@@ -502,7 +502,7 @@ func getESQueryDSLForCount(request *p.CountWorkflowExecutionsRequest) (string, e
 
 func (v *esVisibilityStore) getESQueryDSL(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken) (string, error) {
 	sql := getSQLFromListRequest(request)
-	dsl, err := getCustomizedDSLFromSQL(sql, request.DomainUUID)
+	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
 	if err != nil {
 		return "", err
 	}
@@ -550,7 +550,7 @@ func getSQLFromCountRequest(request *p.CountWorkflowExecutionsRequest) string {
 	return sql
 }
 
-func getCustomizedDSLFromSQL(sql string, domainID string) (*fastjson.Value, error) {
+func getCustomizedDSLFromSQL(sql string, namespaceID string) (*fastjson.Value, error) {
 	dslStr, _, err := elasticsql.Convert(sql)
 	if err != nil {
 		return nil, err
@@ -566,7 +566,7 @@ func getCustomizedDSLFromSQL(sql string, domainID string) (*fastjson.Value, erro
 	if strings.Contains(dslStr, jsonRangeOnExecutionTime) {
 		addQueryForExecutionTime(dsl)
 	}
-	addDomainToQuery(dsl, domainID)
+	addNamespaceToQuery(dsl, namespaceID)
 	if err := processAllValuesForKey(dsl, timeKeyFilter, timeProcessFunc); err != nil {
 		return nil, err
 	}
@@ -588,13 +588,13 @@ func addQueryForExecutionTime(dsl *fastjson.Value) {
 	addMustQuery(dsl, executionTimeQueryString)
 }
 
-func addDomainToQuery(dsl *fastjson.Value, domainID string) {
-	if len(domainID) == 0 {
+func addNamespaceToQuery(dsl *fastjson.Value, namespaceID string) {
+	if len(namespaceID) == 0 {
 		return
 	}
 
-	domainQueryString := fmt.Sprintf(`{"match_phrase":{"DomainID":{"query":"%s"}}}`, domainID)
-	addMustQuery(dsl, domainQueryString)
+	namespaceQueryString := fmt.Sprintf(`{"match_phrase":{"NamespaceID":{"query":"%s"}}}`, namespaceID)
+	addMustQuery(dsl, namespaceQueryString)
 }
 
 // addMustQuery is wrapping bool query with new bool query with must,
@@ -713,7 +713,7 @@ func (v *esVisibilityStore) getNextPageToken(token []byte) (*esVisibilityPageTok
 func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsRequest, token *esVisibilityPageToken,
 	matchQuery *elastic.MatchQuery, isOpen bool) (*elastic.SearchResult, error) {
 
-	matchDomainQuery := elastic.NewMatchQuery(es.DomainID, request.DomainUUID)
+	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
 	existClosedStatusQuery := elastic.NewExistsQuery(es.CloseStatus)
 	var rangeQuery *elastic.RangeQuery
 	if isOpen {
@@ -736,7 +736,7 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 		Gte(earliestTimeStr).
 		Lte(latestTimeStr)
 
-	boolQuery := elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery)
+	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery)
 	if matchQuery != nil {
 		boolQuery = boolQuery.Must(matchQuery)
 	}
@@ -883,7 +883,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	return record
 }
 
-func getVisibilityMessage(domainID string, wid, rid string, workflowTypeName string,
+func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string,
 	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType,
 	searchAttributes map[string][]byte) *indexer.Message {
 
@@ -903,16 +903,16 @@ func getVisibilityMessage(domainID string, wid, rid string, workflowTypeName str
 
 	msg := &indexer.Message{
 		MessageType: msgType,
-		DomainID:    domainID,
-		WorkflowID:  wid,
-		RunID:       rid,
+		NamespaceId: namespaceID,
+		WorkflowId:  wid,
+		RunId:       rid,
 		Version:     taskID,
 		Fields:      fields,
 	}
 	return msg
 }
 
-func getVisibilityMessageForCloseExecution(domainID string, wid, rid string, workflowTypeName string,
+func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, workflowTypeName string,
 	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, closeStatus enums.WorkflowExecutionCloseStatus,
 	historyLength int64, taskID int64, memo []byte, encoding common.EncodingType,
 	searchAttributes map[string][]byte) *indexer.Message {
@@ -936,22 +936,22 @@ func getVisibilityMessageForCloseExecution(domainID string, wid, rid string, wor
 
 	msg := &indexer.Message{
 		MessageType: msgType,
-		DomainID:    domainID,
-		WorkflowID:  wid,
-		RunID:       rid,
+		NamespaceId: namespaceID,
+		WorkflowId:  wid,
+		RunId:       rid,
 		Version:     taskID,
 		Fields:      fields,
 	}
 	return msg
 }
 
-func getVisibilityMessageForDeletion(domainID, workflowID, runID string, docVersion int64) *indexer.Message {
+func getVisibilityMessageForDeletion(namespaceID, workflowID, runID string, docVersion int64) *indexer.Message {
 	msgType := enums.MessageTypeDelete
 	msg := &indexer.Message{
 		MessageType: msgType,
-		DomainID:    domainID,
-		WorkflowID:  workflowID,
-		RunID:       runID,
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       runID,
 		Version:     docVersion,
 	}
 	return msg

@@ -33,9 +33,9 @@ const (
 	FlagDBAddress                         = "db_address"
 	FlagDBPort                            = "db_port"
 	FlagHistoryAddressWithAlias           = FlagHistoryAddress + ", had"
-	FlagDomainID                          = "domain_id"
-	FlagDomain                            = "domain"
-	FlagDomainWithAlias                   = FlagDomain + ", do"
+	FlagNamespaceID                       = "namespace_id"
+	FlagNamespace                         = "namespace"
+	FlagNamespaceWithAlias                = FlagNamespace + ", ns"
 	FlagShardID                           = "shard_id"
 	FlagShardIDWithAlias                  = FlagShardID + ", sid"
 	FlagWorkflowID                        = "workflow_id"
@@ -148,10 +148,10 @@ const (
 	FlagActiveClusterNameWithAlias        = FlagActiveClusterName + ", ac"
 	FlagClusters                          = "clusters"
 	FlagClustersWithAlias                 = FlagClusters + ", cl"
-	FlagIsGlobalDomain                    = "global_domain"
-	FlagIsGlobalDomainWithAlias           = FlagIsGlobalDomain + ", gd"
-	FlagDomainData                        = "domain_data"
-	FlagDomainDataWithAlias               = FlagDomainData + ", dmd"
+	FlagIsGlobalNamespace                 = "global_namespace"
+	FlagIsGlobalNamespaceWithAlias        = FlagIsGlobalNamespace + ", gd"
+	FlagNamespaceData                     = "namespace_data"
+	FlagNamespaceDataWithAlias            = FlagNamespaceData + ", dmd"
 	FlagEventID                           = "event_id"
 	FlagEventIDWithAlias                  = FlagEventID + ", eid"
 	FlagActivityID                        = "activity_id"
@@ -215,11 +215,11 @@ const (
 var flagsForExecution = []cli.Flag{
 	cli.StringFlag{
 		Name:  FlagWorkflowIDWithAlias,
-		Usage: "WorkflowID",
+		Usage: "WorkflowId",
 	},
 	cli.StringFlag{
 		Name:  FlagRunIDWithAlias,
-		Usage: "RunID",
+		Usage: "RunId",
 	},
 }
 
@@ -273,7 +273,7 @@ func getFlagsForStart() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,
-			Usage: "WorkflowID",
+			Usage: "WorkflowId",
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowTypeWithAlias,
@@ -301,7 +301,7 @@ func getFlagsForStart() []cli.Flag {
 		},
 		cli.IntFlag{
 			Name: FlagWorkflowIDReusePolicyAlias,
-			Usage: "Optional input to configure if the same workflow ID is allow to use for new workflow execution. " +
+			Usage: "Optional input to configure if the same workflow Id is allow to use for new workflow execution. " +
 				"Available options: 0: AllowDuplicate, 1: AllowDuplicateFailedOnly, 2: RejectDuplicate",
 		},
 		cli.StringFlag{
@@ -421,7 +421,7 @@ func getFlagsForListAll() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,
-			Usage: "WorkflowID",
+			Usage: "WorkflowId",
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowTypeWithAlias,
@@ -461,7 +461,7 @@ func getFlagsForListArchived() []cli.Flag {
 	flagsForListArchived := []cli.Flag{
 		cli.StringFlag{
 			Name:  FlagListQueryWithAlias,
-			Usage: "SQL like query. Please check the documentation of the visibility archiver used by your domain for detailed instructions",
+			Usage: "SQL like query. Please check the documentation of the visibility archiver used by your namespace for detailed instructions",
 		},
 		cli.IntFlag{
 			Name:  FlagPageSizeWithAlias,
@@ -490,11 +490,11 @@ func getFlagsForQuery() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,
-			Usage: "WorkflowID",
+			Usage: "WorkflowId",
 		},
 		cli.StringFlag{
 			Name:  FlagRunIDWithAlias,
-			Usage: "RunID",
+			Usage: "RunId",
 		},
 		cli.StringFlag{
 			Name:  FlagQueryTypeWithAlias,

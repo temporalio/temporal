@@ -204,7 +204,7 @@ func IsServiceNonRetryableError(err error) bool {
 	switch err.(type) {
 	case *serviceerror.NotFound,
 		*serviceerror.InvalidArgument,
-		*serviceerror.DomainNotActive,
+		*serviceerror.NamespaceNotActive,
 		*serviceerror.WorkflowExecutionAlreadyStarted,
 		*serviceerror.CancellationAlreadyRequested:
 		return true
@@ -378,12 +378,12 @@ func ValidateRetryPolicy(policy *commonproto.RetryPolicy) error {
 
 // CreateHistoryStartWorkflowRequest create a start workflow request for history
 func CreateHistoryStartWorkflowRequest(
-	domainID string,
+	namespaceID string,
 	startRequest *workflowservice.StartWorkflowExecutionRequest,
 ) *historyservice.StartWorkflowExecutionRequest {
 	now := time.Now()
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
-		DomainUUID:   domainID,
+		NamespaceId:  namespaceID,
 		StartRequest: startRequest,
 	}
 	if startRequest.RetryPolicy != nil && startRequest.RetryPolicy.GetExpirationIntervalInSeconds() > 0 {
@@ -397,13 +397,13 @@ func CreateHistoryStartWorkflowRequest(
 
 // CheckEventBlobSizeLimit checks if a blob data exceeds limits. It logs a warning if it exceeds warnLimit,
 // and return ErrBlobSizeExceedsLimit if it exceeds errorLimit.
-func CheckEventBlobSizeLimit(actualSize, warnLimit, errorLimit int, domainID, workflowID, runID string, scope metrics.Scope, logger log.Logger) error {
+func CheckEventBlobSizeLimit(actualSize, warnLimit, errorLimit int, namespaceID, workflowID, runID string, scope metrics.Scope, logger log.Logger) error {
 	scope.RecordTimer(metrics.EventBlobSize, time.Duration(actualSize))
 
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob size exceeds limit.",
-				tag.WorkflowDomainID(domainID), tag.WorkflowID(workflowID), tag.WorkflowRunID(runID), tag.WorkflowSize(int64(actualSize)))
+				tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(workflowID), tag.WorkflowRunID(runID), tag.WorkflowSize(int64(actualSize)))
 		}
 
 		if actualSize > errorLimit {

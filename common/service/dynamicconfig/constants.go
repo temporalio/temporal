@@ -43,32 +43,32 @@ var keys = map[Key]string{
 	testGetBoolPropertyKey:                           "testGetBoolPropertyKey",
 	testGetStringPropertyKey:                         "testGetStringPropertyKey",
 	testGetMapPropertyKey:                            "testGetMapPropertyKey",
-	testGetIntPropertyFilteredByDomainKey:            "testGetIntPropertyFilteredByDomainKey",
-	testGetDurationPropertyFilteredByDomainKey:       "testGetDurationPropertyFilteredByDomainKey",
+	testGetIntPropertyFilteredByNamespaceKey:         "testGetIntPropertyFilteredByNamespaceKey",
+	testGetDurationPropertyFilteredByNamespaceKey:    "testGetDurationPropertyFilteredByNamespaceKey",
 	testGetIntPropertyFilteredByTaskListInfoKey:      "testGetIntPropertyFilteredByTaskListInfoKey",
 	testGetDurationPropertyFilteredByTaskListInfoKey: "testGetDurationPropertyFilteredByTaskListInfoKey",
 	testGetBoolPropertyFilteredByTaskListInfoKey:     "testGetBoolPropertyFilteredByTaskListInfoKey",
 
 	// system settings
-	EnableGlobalDomain:                  "system.enableGlobalDomain",
-	EnableNDC:                           "system.enableNDC",
-	EnableNewKafkaClient:                "system.enableNewKafkaClient",
-	EnableVisibilitySampling:            "system.enableVisibilitySampling",
-	EnableReadFromClosedExecutionV2:     "system.enableReadFromClosedExecutionV2",
-	AdvancedVisibilityWritingMode:       "system.advancedVisibilityWritingMode",
-	EnableReadVisibilityFromES:          "system.enableReadVisibilityFromES",
-	HistoryArchivalStatus:               "system.historyArchivalStatus",
-	EnableReadFromHistoryArchival:       "system.enableReadFromHistoryArchival",
-	VisibilityArchivalStatus:            "system.visibilityArchivalStatus",
-	EnableReadFromVisibilityArchival:    "system.enableReadFromVisibilityArchival",
-	EnableDomainNotActiveAutoForwarding: "system.enableDomainNotActiveAutoForwarding",
-	TransactionSizeLimit:                "system.transactionSizeLimit",
-	MinRetentionDays:                    "system.minRetentionDays",
-	MaxDecisionStartToCloseSeconds:      "system.maxDecisionStartToCloseSeconds",
-	DisallowQuery:                       "system.disallowQuery",
-	EnableBatcher:                       "worker.enableBatcher",
-	EnableParentClosePolicyWorker:       "system.enableParentClosePolicyWorker",
-	EnableStickyQuery:                   "system.enableStickyQuery",
+	EnableGlobalNamespace:                  "system.enableGlobalNamespace",
+	EnableNDC:                              "system.enableNDC",
+	EnableNewKafkaClient:                   "system.enableNewKafkaClient",
+	EnableVisibilitySampling:               "system.enableVisibilitySampling",
+	EnableReadFromClosedExecutionV2:        "system.enableReadFromClosedExecutionV2",
+	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
+	EnableReadVisibilityFromES:             "system.enableReadVisibilityFromES",
+	HistoryArchivalStatus:                  "system.historyArchivalStatus",
+	EnableReadFromHistoryArchival:          "system.enableReadFromHistoryArchival",
+	VisibilityArchivalStatus:               "system.visibilityArchivalStatus",
+	EnableReadFromVisibilityArchival:       "system.enableReadFromVisibilityArchival",
+	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
+	TransactionSizeLimit:                   "system.transactionSizeLimit",
+	MinRetentionDays:                       "system.minRetentionDays",
+	MaxDecisionStartToCloseSeconds:         "system.maxDecisionStartToCloseSeconds",
+	DisallowQuery:                          "system.disallowQuery",
+	EnableBatcher:                          "worker.enableBatcher",
+	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
+	EnableStickyQuery:                      "system.enableStickyQuery",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -88,7 +88,7 @@ var keys = map[Key]string{
 	FrontendESIndexMaxResultWindow:        "frontend.esIndexMaxResultWindow",
 	FrontendHistoryMaxPageSize:            "frontend.historyMaxPageSize",
 	FrontendRPS:                           "frontend.rps",
-	FrontendDomainRPS:                     "frontend.domainrps",
+	FrontendNamespaceRPS:                  "frontend.namespacerps",
 	FrontendHistoryMgrNumConns:            "frontend.historyMgrNumConns",
 	DisableListVisibilityByFilter:         "frontend.disableListVisibilityByFilter",
 	FrontendThrottledLogRPS:               "frontend.throttledLogRPS",
@@ -208,7 +208,7 @@ var keys = map[Key]string{
 	ReplicationTaskProcessorCleanupInterval:               "history.ReplicationTaskProcessorCleanupInterval",
 	ReplicationTaskProcessorCleanupJitterCoefficient:      "history.ReplicationTaskProcessorCleanupJitterCoefficient",
 	EnableConsistentQuery:                                 "history.EnableConsistentQuery",
-	EnableConsistentQueryByDomain:                         "history.EnableConsistentQueryByDomain",
+	EnableConsistentQueryByNamespace:                      "history.EnableConsistentQueryByNamespace",
 	MaxBufferedQueryCount:                                 "history.MaxBufferedQueryCount",
 	MutableStateChecksumGenProbability:                    "history.mutableStateChecksumGenProbability",
 	MutableStateChecksumVerifyProbability:                 "history.mutableStateChecksumVerifyProbability",
@@ -254,14 +254,14 @@ const (
 	testGetBoolPropertyKey
 	testGetStringPropertyKey
 	testGetMapPropertyKey
-	testGetIntPropertyFilteredByDomainKey
-	testGetDurationPropertyFilteredByDomainKey
+	testGetIntPropertyFilteredByNamespaceKey
+	testGetDurationPropertyFilteredByNamespaceKey
 	testGetIntPropertyFilteredByTaskListInfoKey
 	testGetDurationPropertyFilteredByTaskListInfoKey
 	testGetBoolPropertyFilteredByTaskListInfoKey
 
-	// EnableGlobalDomain is key for enable global domain
-	EnableGlobalDomain
+	// EnableGlobalNamespace is key for enable global namespace
+	EnableGlobalNamespace
 	// EnableNDC is key for enable N data center events replication
 	EnableNDC
 	// EnableNewKafkaClient is key for using New Kafka client
@@ -286,16 +286,16 @@ const (
 	VisibilityArchivalStatus
 	// EnableReadFromVisibilityArchival is key for enabling reading visibility from archival store
 	EnableReadFromVisibilityArchival
-	// EnableDomainNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
-	// for signal / start / signal with start API if domain is not active
-	EnableDomainNotActiveAutoForwarding
+	// EnableNamespaceNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
+	// for signal / start / signal with start API if namespace is not active
+	EnableNamespaceNotActiveAutoForwarding
 	// TransactionSizeLimit is the largest allowed transaction size to persistence
 	TransactionSizeLimit
-	// MinRetentionDays is the minimal allowed retention days for domain
+	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
 	// MaxDecisionStartToCloseSeconds is the minimal allowed decision start to close timeout in seconds
 	MaxDecisionStartToCloseSeconds
-	// DisallowQuery is the key to disallow query for a domain
+	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
 
 	// BlobSizeLimitError is the per event blob size limit
@@ -311,7 +311,7 @@ const (
 	// HistoryCountLimitWarn is the per workflow execution history event count limit for warning
 	HistoryCountLimitWarn
 
-	// MaxIDLengthLimit is the length limit for various IDs, including: Domain, TaskList, WorkflowID, ActivityID, TimerID,
+	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskList, WorkflowID, ActivityID, TimerID,
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit
 
@@ -331,15 +331,15 @@ const (
 	FrontendHistoryMaxPageSize
 	// FrontendRPS is workflow rate limit per second
 	FrontendRPS
-	// FrontendDomainRPS is workflow domain rate limit per second
-	FrontendDomainRPS
+	// FrontendNamespaceRPS is workflow namespace rate limit per second
+	FrontendNamespaceRPS
 	// FrontendHistoryMgrNumConns is for persistence cluster.NumConns
 	FrontendHistoryMgrNumConns
 	// FrontendThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	FrontendThrottledLogRPS
 	// EnableClientVersionCheck enables client version check for frontend
 	EnableClientVersionCheck
-	// FrontendMaxBadBinaries is the max number of bad binaries in domain config
+	// FrontendMaxBadBinaries is the max number of bad binaries in namespace config
 	FrontendMaxBadBinaries
 	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
 	ValidSearchAttributes
@@ -433,7 +433,7 @@ const (
 	// StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 	// before discarding the task
 	StandbyTaskMissingEventsDiscardDelay
-	// TaskProcessRPS is the task processing rate per second for each domain
+	// TaskProcessRPS is the task processing rate per second for each namespace
 	TaskProcessRPS
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize
@@ -614,7 +614,7 @@ const (
 	EnableBatcher
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker
-	// EnableStickyQuery indicates if sticky query should be enabled per domain
+	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery
 
 	//ReplicationTaskFetcherParallelism determines how many go routines we spin up for fetching tasks
@@ -637,8 +637,8 @@ const (
 	ReplicationTaskProcessorCleanupJitterCoefficient
 	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
 	EnableConsistentQuery
-	// EnableConsistentQueryByDomain indicates if consistent query is enabled for a domain
-	EnableConsistentQueryByDomain
+	// EnableConsistentQueryByNamespace indicates if consistent query is enabled for a namespace
+	EnableConsistentQueryByNamespace
 	// MaxBufferedQueryCount indicates the maximum number of queries which can be buffered at a given time for a single workflow
 	MaxBufferedQueryCount
 	// MutableStateChecksumGenProbability is the probability [0-100] that checksum will be generated for mutable state
@@ -664,15 +664,15 @@ func (f Filter) String() string {
 
 var filters = []string{
 	"unknownFilter",
-	"domainName",
+	"namespace",
 	"taskListName",
 	"taskType",
 }
 
 const (
 	unknownFilter Filter = iota
-	// DomainName is the domain name
-	DomainName
+	// Namespace is the namespace name
+	Namespace
 	// TaskListName is the tasklist name
 	TaskListName
 	// TaskType is the task type (0:Decision, 1:Activity)
@@ -692,10 +692,10 @@ func TaskListFilter(name string) FilterOption {
 	}
 }
 
-// DomainFilter filters by domain name
-func DomainFilter(name string) FilterOption {
+// NamespaceFilter filters by namespace name
+func NamespaceFilter(name string) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
-		filterMap[DomainName] = name
+		filterMap[Namespace] = name
 	}
 }
 

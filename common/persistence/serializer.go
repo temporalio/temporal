@@ -67,13 +67,13 @@ type (
 		DeserializeImmutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ImmutableClusterMetadata, error)
 	}
 
-	// CadenceSerializationError is an error type for cadence serialization
-	CadenceSerializationError struct {
+	// SerializationError is an error type for serialization
+	SerializationError struct {
 		msg string
 	}
 
-	// CadenceDeserializationError is an error type for cadence deserialization
-	CadenceDeserializationError struct {
+	// DeserializationError is an error type for deserialization
+	DeserializationError struct {
 		msg string
 	}
 
@@ -82,16 +82,12 @@ type (
 		encodingType common.EncodingType
 	}
 
-	serializerImpl struct {
-		thriftrwEncoder codec.BinaryEncoder
-	}
+	serializerImpl struct{}
 )
 
 // NewPayloadSerializer returns a PayloadSerializer
 func NewPayloadSerializer() PayloadSerializer {
-	return &serializerImpl{
-		thriftrwEncoder: codec.NewThriftRWEncoder(),
-	}
+	return &serializerImpl{}
 }
 
 func (t *serializerImpl) SerializeBatchEvents(events []*commonproto.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
@@ -111,12 +107,12 @@ func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, events)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, events)
 	default:
-		return nil, NewCadenceDeserializationError("DeserializeBatchEvents invalid encoding")
+		return nil, NewDeserializationError("DeserializeBatchEvents invalid encoding")
 	}
 	if err != nil {
 		return nil, err
@@ -144,12 +140,12 @@ func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*common
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, event)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, event)
 	default:
-		return nil, NewCadenceDeserializationError("DeserializeEvent invalid encoding")
+		return nil, NewDeserializationError("DeserializeEvent invalid encoding")
 	}
 
 	if err != nil {
@@ -179,12 +175,12 @@ func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
 	default:
-		return nil, NewCadenceDeserializationError("DeserializeResetPoints invalid encoding")
+		return nil, NewDeserializationError("DeserializeResetPoints invalid encoding")
 	}
 
 	if err != nil {
@@ -214,12 +210,12 @@ func (t *serializerImpl) DeserializeBadBinaries(data *serialization.DataBlob) (*
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
 	default:
-		return nil, NewCadenceDeserializationError("DeserializeBadBinaries invalid encoding")
+		return nil, NewDeserializationError("DeserializeBadBinaries invalid encoding")
 	}
 
 	if err != nil {
@@ -251,12 +247,12 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob)
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
 	default:
-		return nil, NewCadenceDeserializationError("DeserializeVisibilityMemo invalid encoding")
+		return nil, NewDeserializationError("DeserializeVisibilityMemo invalid encoding")
 	}
 
 	if err != nil {
@@ -286,12 +282,12 @@ func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlo
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
 	default:
-		return nil, NewCadenceDeserializationError("DeserializeVersionHistories invalid encoding")
+		return nil, NewDeserializationError("DeserializeVersionHistories invalid encoding")
 	}
 
 	if err != nil {
@@ -321,12 +317,12 @@ func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
 		err = codec.NewJSONPBEncoder().Decode(data.Data, event)
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, event)
 	default:
-		return nil, NewCadenceDeserializationError("DeserializeImmutableClusterMetadata invalid encoding")
+		return nil, NewDeserializationError("DeserializeImmutableClusterMetadata invalid encoding")
 	}
 
 	if err != nil {
@@ -336,7 +332,7 @@ func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization
 	return event, err
 }
 
-func (t *serializerImpl) serializeProto(p serialization.ProtoMarshal, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) serializeProto(p proto.Marshaler, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if p == nil {
 		return nil, nil
 	}
@@ -345,7 +341,7 @@ func (t *serializerImpl) serializeProto(p serialization.ProtoMarshal, encodingTy
 	var err error
 
 	switch encodingType {
-	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+	case common.EncodingTypeProto3:
 		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		data, err = p.Marshal()
@@ -353,7 +349,7 @@ func (t *serializerImpl) serializeProto(p serialization.ProtoMarshal, encodingTy
 		encodingType = common.EncodingTypeJSON
 		pb, ok := p.(proto.Message)
 		if !ok {
-			return nil, NewCadenceSerializationError("could not cast protomarshal interface to proto.message")
+			return nil, NewSerializationError("could not cast protomarshal interface to proto.message")
 		}
 		data, err = codec.NewJSONPBEncoder().Encode(pb)
 	default:
@@ -361,7 +357,7 @@ func (t *serializerImpl) serializeProto(p serialization.ProtoMarshal, encodingTy
 	}
 
 	if err != nil {
-		return nil, NewCadenceSerializationError(err.Error())
+		return nil, NewSerializationError(err.Error())
 	}
 
 	// Shouldn't happen, but keeping
@@ -380,7 +376,7 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 		return nil, nil
 	}
 
-	if p, ok := input.(serialization.ProtoMarshal); ok {
+	if p, ok := input.(proto.Marshaler); ok {
 		return t.serializeProto(p, encodingType)
 	}
 
@@ -396,7 +392,7 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 	}
 
 	if err != nil {
-		return nil, NewCadenceSerializationError(err.Error())
+		return nil, NewSerializationError(err.Error())
 	}
 
 	return NewDataBlob(data, encodingType), nil
@@ -407,13 +403,13 @@ func (t *serializerImpl) deserialize(data *serialization.DataBlob, target interf
 		return nil
 	}
 	if len(data.Data) == 0 {
-		return NewCadenceDeserializationError("DeserializeEvent empty data")
+		return NewDeserializationError("DeserializeEvent empty data")
 	}
 	var err error
 
 	switch data.GetEncoding() {
 	case common.EncodingTypeProto3:
-		return NewCadenceDeserializationError(fmt.Sprintf("proto requires proto specific deserialization"))
+		return NewDeserializationError(fmt.Sprintf("proto requires proto specific deserialization"))
 	case common.EncodingTypeJSON, common.EncodingTypeUnknown, common.EncodingTypeEmpty: // For backward-compatibility
 		err = json.Unmarshal(data.Data, target)
 	default:
@@ -421,7 +417,7 @@ func (t *serializerImpl) deserialize(data *serialization.DataBlob, target interf
 	}
 
 	if err != nil {
-		return NewCadenceDeserializationError(fmt.Sprintf("DeserializeBatchEvents encoding: \"%v\", error: %v", data.Encoding, err.Error()))
+		return NewDeserializationError(fmt.Sprintf("DeserializeBatchEvents encoding: \"%v\", error: %v", data.Encoding, err.Error()))
 	}
 	return nil
 }
@@ -435,20 +431,20 @@ func (e *UnknownEncodingTypeError) Error() string {
 	return fmt.Sprintf("unknown or unsupported encoding type %v", e.encodingType)
 }
 
-// NewCadenceSerializationError returns a CadenceSerializationError
-func NewCadenceSerializationError(msg string) *CadenceSerializationError {
-	return &CadenceSerializationError{msg: msg}
+// NewSerializationError returns a SerializationError
+func NewSerializationError(msg string) *SerializationError {
+	return &SerializationError{msg: msg}
 }
 
-func (e *CadenceSerializationError) Error() string {
+func (e *SerializationError) Error() string {
 	return fmt.Sprintf("cadence serialization error: %v", e.msg)
 }
 
-// NewCadenceDeserializationError returns a CadenceDeserializationError
-func NewCadenceDeserializationError(msg string) *CadenceDeserializationError {
-	return &CadenceDeserializationError{msg: msg}
+// NewDeserializationError returns a DeserializationError
+func NewDeserializationError(msg string) *DeserializationError {
+	return &DeserializationError{msg: msg}
 }
 
-func (e *CadenceDeserializationError) Error() string {
+func (e *DeserializationError) Error() string {
 	return fmt.Sprintf("cadence deserialization error: %v", e.msg)
 }

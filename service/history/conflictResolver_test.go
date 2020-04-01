@@ -56,7 +56,7 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockEventsCache          *MockeventsCache
-		mockDomainCache          *cache.MockDomainCache
+		mockNamespaceCache       *cache.MockNamespaceCache
 		mockClusterMetadata      *cluster.MockMetadata
 
 		logger           log.Logger
@@ -95,14 +95,14 @@ func (s *conflictResolverSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          10,
-				RangeID:          1,
+				ShardId:          10,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
 	)
 
-	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
 	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
 	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
@@ -122,7 +122,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	}
 	s.mockShard.SetEngine(h)
 
-	s.mockContext = newWorkflowExecutionContext(testDomainID, commonproto.WorkflowExecution{
+	s.mockContext = newWorkflowExecutionContext(testNamespaceID, commonproto.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      testRunID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -146,7 +146,7 @@ func (s *conflictResolverSuite) TestReset() {
 	startTime := time.Now()
 	version := int64(12)
 
-	domainID := s.mockContext.domainID
+	namespaceID := s.mockContext.namespaceID
 	execution := s.mockContext.workflowExecution
 	nextEventID := int64(2)
 	branchToken := []byte("some random branch token")
@@ -187,10 +187,10 @@ func (s *conflictResolverSuite) TestReset() {
 	createRequestID := uuid.New()
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		DomainID:                    domainID,
+		NamespaceID:                 namespaceID,
 		WorkflowID:                  execution.GetWorkflowId(),
 		RunID:                       execution.GetRunId(),
-		ParentDomainID:              "",
+		ParentNamespaceID:           "",
 		ParentWorkflowID:            "",
 		ParentRunID:                 "",
 		InitiatedID:                 common.EmptyEventID,
@@ -227,7 +227,7 @@ func (s *conflictResolverSuite) TestReset() {
 		input.ResetWorkflowSnapshot.TransferTasks = nil
 
 		s.Equal(&persistence.ConflictResolveWorkflowExecutionRequest{
-			RangeID: s.mockShard.shardInfo.RangeID,
+			RangeID: s.mockShard.shardInfo.GetRangeId(),
 			CurrentWorkflowCAS: &persistence.CurrentWorkflowCAS{
 				PrevRunID:            prevRunID,
 				PrevLastWriteVersion: prevLastWriteVersion,
@@ -261,23 +261,23 @@ func (s *conflictResolverSuite) TestReset() {
 				TimerTasks:          nil,
 				Condition:           s.mockContext.updateCondition,
 			},
-			Encoding: common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
+			Encoding: common.EncodingType(s.mockShard.GetConfig().EventEncodingType(namespaceID)),
 		}, input)
 		return true
 	})).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
-		DomainID:  domainID,
-		Execution: execution,
+		NamespaceID: namespaceID,
+		Execution:   execution,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo:  &persistence.WorkflowExecutionInfo{},
 			ExecutionStats: &persistence.ExecutionStats{},
 		},
 	}, nil).Once() // return empty resoonse since we are not testing the load
-	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(event1.GetVersion()).Return(sourceCluster).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil,
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{ID: namespaceID}, &persistence.NamespaceConfig{}, "", nil,
 	), nil).AnyTimes()
 
 	_, err := s.conflictResolver.reset(prevRunID, prevLastWriteVersion, prevState, createRequestID, nextEventID-1, executionInfo, s.mockContext.updateCondition)

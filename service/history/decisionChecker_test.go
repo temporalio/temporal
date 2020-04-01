@@ -43,13 +43,13 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller      *gomock.Controller
-		mockDomainCache *cache.MockDomainCache
+		controller         *gomock.Controller
+		mockNamespaceCache *cache.MockNamespaceCache
 
 		validator *decisionAttrValidator
 
-		testDomainID       string
-		testTargetDomainID string
+		testNamespaceID       string
+		testTargetNamespaceID string
 	}
 )
 
@@ -59,8 +59,8 @@ func TestDecisionAttrValidatorSuite(t *testing.T) {
 }
 
 func (s *decisionAttrValidatorSuite) SetupSuite() {
-	s.testDomainID = "test domain ID"
-	s.testTargetDomainID = "test target domain ID"
+	s.testNamespaceID = "test namespace ID"
+	s.testTargetNamespaceID = "test target namespace ID"
 }
 
 func (s *decisionAttrValidatorSuite) TearDownSuite() {
@@ -70,16 +70,16 @@ func (s *decisionAttrValidatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
 	config := &Config{
 		MaxIDLengthLimit:                  dynamicconfig.GetIntPropertyFn(1000),
 		ValidSearchAttributes:             dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
-		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByDomain(100),
-		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByDomain(2 * 1024),
-		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByDomain(40 * 1024),
+		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByNamespace(100),
+		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByNamespace(2 * 1024),
+		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByNamespace(40 * 1024),
 	}
 	s.validator = newDecisionAttrValidator(
-		s.mockDomainCache,
+		s.mockNamespaceCache,
 		config,
 		log.NewNoop(),
 	)
@@ -90,102 +90,102 @@ func (s *decisionAttrValidatorSuite) TearDownTest() {
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
-	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
-	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).AnyTimes()
 
 	var attributes *commonproto.SignalExternalWorkflowExecutionDecisionAttributes
 
-	err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
+	err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.")
 
 	attributes = &commonproto.SignalExternalWorkflowExecutionDecisionAttributes{}
-	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
+	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "Execution is nil on decision.")
 
 	attributes.Execution = &commonproto.WorkflowExecution{}
 	attributes.Execution.WorkflowId = "workflow-id"
-	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
+	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "SignalName is not set on decision.")
 
 	attributes.Execution.RunId = "run-id"
-	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
+	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "Invalid RunId set on decision.")
 	attributes.Execution.RunId = testRunID
 
 	attributes.SignalName = "my signal name"
-	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
+	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 
 	attributes.Input = []byte("test input")
-	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
+	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
-	domainName := "testDomain"
+	namespace := "testNamespace"
 	var attributes *commonproto.UpsertWorkflowSearchAttributesDecisionAttributes
 
-	err := s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
+	err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.")
 
 	attributes = &commonproto.UpsertWorkflowSearchAttributesDecisionAttributes{}
-	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
+	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "SearchAttributes is not set on decision.")
 
 	attributes.SearchAttributes = &commonproto.SearchAttributes{}
-	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
+	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "IndexedFields is empty on decision.")
 
 	attributes.SearchAttributes.IndexedFields = map[string][]byte{"CustomKeywordField": []byte(`bytes`)}
-	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
+	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToLocal() {
-	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal() {
+	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
-	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToEffectiveLocal_SameCluster() {
-	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_SameCluster() {
+	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
-	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestCurrentClusterName}},
 		},
@@ -193,24 +193,24 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToEffectiv
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToEffectiveLocal_DiffCluster() {
-	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_DiffCluster() {
+	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
-	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestAlternativeClusterName}},
 		},
@@ -218,24 +218,24 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToEffectiv
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToGlobal() {
-	domainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal() {
+	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
-	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -246,78 +246,78 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToGlobal()
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToLocal_SameCluster() {
-	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_SameCluster() {
+	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestCurrentClusterName}},
 		},
 		1234,
 		nil,
 	)
-	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToLocal_DiffCluster() {
-	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_DiffCluster() {
+	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestAlternativeClusterName}},
 		},
 		1234,
 		nil,
 	)
-	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToEffectiveLocal_SameCluster() {
-	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_SameCluster() {
+	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestCurrentClusterName}},
 		},
 		1234,
 		nil,
 	)
-	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestCurrentClusterName}},
 		},
@@ -325,28 +325,28 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.Nil(err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToEffectiveLocal_DiffCluster() {
-	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_DiffCluster() {
+	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestCurrentClusterName}},
 		},
 		1234,
 		nil,
 	)
-	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestAlternativeClusterName}},
 		},
@@ -354,18 +354,18 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToGlobal() {
-	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToGlobal() {
+	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -374,10 +374,10 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		5678,
 		nil,
 	)
-	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -388,18 +388,18 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToLocal() {
-	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal() {
+	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -409,25 +409,25 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToLocal()
 		1234,
 		nil,
 	)
-	targetDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToEffectiveLocal() {
-	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffectiveLocal() {
+	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -437,10 +437,10 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToEffecti
 		5678,
 		nil,
 	)
-	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -450,18 +450,18 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToEffecti
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_DiffDomain() {
-	domainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testDomainID},
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_DiffNamespace() {
+	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestAlternativeClusterName},
@@ -471,10 +471,10 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_
 		1234,
 		nil,
 	)
-	targetDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&persistence.DomainInfo{Name: s.testTargetDomainID},
+	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.DomainReplicationConfig{
+		&persistence.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
@@ -485,17 +485,17 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_
 		nil,
 	)
 
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).Times(1)
-	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).Times(1)
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
-func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_SameDomain() {
-	targetDomainID := s.testDomainID
+func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_SameNamespace() {
+	targetNamespaceID := s.testNamespaceID
 
-	err := s.validator.validateCrossDomainCall(s.testDomainID, targetDomainID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, targetNamespaceID)
 	s.Nil(err)
 }
 

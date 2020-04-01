@@ -15,6 +15,8 @@ clean: clean-bins clean-proto clean-test-results
 update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock gomodtidy
 ########################################################################
 
+.PHONY: proto
+
 ##### Variables ######
 ifndef GOOS
 GOOS := $(shell go env GOOS)
@@ -22,6 +24,10 @@ endif
 
 ifndef GOARCH
 GOARCH := $(shell go env GOARCH)
+endif
+
+ifndef GOPATH
+GOPATH := $(shell go env GOPATH)
 endif
 
 MODULE_ROOT := github.com/temporalio/temporal

@@ -47,14 +47,14 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 
 	validator := NewSearchAttributesValidator(log.NewNoop(),
 		dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
-		dynamicconfig.GetIntPropertyFilteredByDomain(numOfKeysLimit),
-		dynamicconfig.GetIntPropertyFilteredByDomain(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByDomain(sizeOfTotalLimit))
+		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
 
-	domain := "domain"
+	namespace := "namespace"
 	var attr *commonproto.SearchAttributes
 
-	err := validator.ValidateSearchAttributes(attr, domain)
+	err := validator.ValidateSearchAttributes(attr, namespace)
 	s.Nil(err)
 
 	fields := map[string][]byte{
@@ -63,7 +63,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	attr = &commonproto.SearchAttributes{
 		IndexedFields: fields,
 	}
-	err = validator.ValidateSearchAttributes(attr, domain)
+	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Nil(err)
 
 	fields = map[string][]byte{
@@ -72,28 +72,28 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 		"CustomBoolField":    []byte("true"),
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, domain)
+	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("number of keys 3 exceed limit", err.Error())
 
 	fields = map[string][]byte{
 		"InvalidKey": []byte("1"),
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, domain)
+	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("InvalidKey is not valid search attribute", err.Error())
 
 	fields = map[string][]byte{
 		"StartTime": []byte("1"),
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, domain)
+	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("StartTime is read-only Temporal reservered attribute", err.Error())
 
 	fields = map[string][]byte{
 		"CustomKeywordField": []byte("123456"),
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, domain)
+	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("size limit exceed for key CustomKeywordField", err.Error())
 
 	fields = map[string][]byte{
@@ -101,6 +101,6 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 		"CustomStringField":  []byte("12"),
 	}
 	attr.IndexedFields = fields
-	err = validator.ValidateSearchAttributes(attr, domain)
+	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("total size 40 exceed limit", err.Error())
 }

@@ -5,7 +5,7 @@ go 1.14
 require (
 	cloud.google.com/go v0.38.0
 	github.com/Shopify/sarama v1.23.0
-	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
+	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
 	github.com/aws/aws-sdk-go v1.29.4
 	github.com/benbjohnson/clock v1.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -50,7 +50,7 @@ require (
 	github.com/pborman/uuid v1.2.0
 	github.com/prashantv/protectmem v0.0.0-20171002184600-e20412882b3a // indirect
 	github.com/robfig/cron v1.2.0
-	github.com/sirupsen/logrus v1.4.2
+	github.com/sirupsen/logrus v1.5.0
 	github.com/streadway/quantile v0.0.0-20150917103942-b0c588724d25 // indirect
 	github.com/stretchr/testify v1.5.1
 	github.com/uber-common/bark v1.3.0 // indirect
@@ -61,15 +61,13 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/temporal v0.10.15
-	go.temporal.io/temporal-proto v0.20.1
+	go.temporal.io/temporal v0.20.3
+	go.temporal.io/temporal-proto v0.20.6
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
-	go.uber.org/thriftrw v1.20.2
 	go.uber.org/zap v1.14.1
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
-	golang.org/x/tools v0.0.0-20200325194147-644a21fb1449 // indirect
 	google.golang.org/api v0.4.0
 	google.golang.org/grpc v1.28.0
 	gopkg.in/inf.v0 v0.9.1 // indirect

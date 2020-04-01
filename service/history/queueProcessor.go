@@ -255,5 +255,5 @@ func (p *queueProcessorBase) retryTasks() {
 }
 
 func (p *queueProcessorBase) complete(task queueTaskInfo) {
-	p.ackMgr.completeQueueTask(task.GetTaskID())
+	p.ackMgr.completeQueueTask(task.GetTaskId())
 }

@@ -56,7 +56,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -128,7 +128,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -152,7 +152,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	s.Equal(1, activityExecutedCount)
 
 	// go over history and verify that the activity task scheduled event has header on it
-	events := s.getHistory(s.domainName, &commonproto.WorkflowExecution{
+	events := s.getHistory(s.namespace, &commonproto.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -176,7 +176,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -258,7 +258,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -269,7 +269,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -350,7 +350,7 @@ func (s *integrationSuite) TestActivityRetry() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -463,7 +463,7 @@ func (s *integrationSuite) TestActivityRetry() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -474,7 +474,7 @@ func (s *integrationSuite) TestActivityRetry() {
 
 	poller2 := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -485,7 +485,7 @@ func (s *integrationSuite) TestActivityRetry() {
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Domain: s.domainName,
+			Namespace: s.namespace,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -502,7 +502,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	descResp, err := describeWorkflowExecution()
 	s.NoError(err)
 	for _, pendingActivity := range descResp.GetPendingActivities() {
-		if pendingActivity.GetActivityID() == "A" {
+		if pendingActivity.GetActivityId() == "A" {
 			expectedErrString := "bad-luck-please-retry"
 			s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
 			s.Equal([]byte(expectedErrString), pendingActivity.GetLastFailureDetails())
@@ -516,7 +516,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	descResp, err = describeWorkflowExecution()
 	s.NoError(err)
 	for _, pendingActivity := range descResp.GetPendingActivities() {
-		if pendingActivity.GetActivityID() == "A" {
+		if pendingActivity.GetActivityId() == "A" {
 			expectedErrString := "bad-bug"
 			s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
 			s.Equal([]byte(expectedErrString), pendingActivity.GetLastFailureDetails())
@@ -531,7 +531,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		s.Logger.Info("Processing decision task:", tag.Counter(i))
 		_, err := poller.PollAndProcessDecisionTaskWithoutRetry(false, false)
 		if err != nil {
-			s.printWorkflowHistory(s.domainName, &commonproto.WorkflowExecution{
+			s.printWorkflowHistory(s.namespace, &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.GetRunId(),
 			})
@@ -560,7 +560,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -626,7 +626,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -661,7 +661,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -847,7 +847,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -893,7 +893,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1029,7 +1029,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1082,7 +1082,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1164,7 +1164,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1207,7 +1207,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              s.domainName,
+		Namespace:                           s.namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -1276,7 +1276,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          s.domainName,
+		Namespace:       s.namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,
@@ -1292,7 +1292,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Domain: s.domainName,
+		Namespace: s.namespace,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,

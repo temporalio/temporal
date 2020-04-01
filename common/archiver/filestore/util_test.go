@@ -261,23 +261,23 @@ func (s *UtilSuite) TestValidateDirPath() {
 
 func (s *UtilSuite) TestconstructHistoryFilename() {
 	testCases := []struct {
-		domainID             string
+		namespaceID          string
 		workflowID           string
 		runID                string
 		closeFailoverVersion int64
 		expectBuiltName      string
 	}{
 		{
-			domainID:             "testDomainID",
+			namespaceID:          "testNamespaceID",
 			workflowID:           "testWorkflowID",
 			runID:                "testRunID",
 			closeFailoverVersion: 5,
-			expectBuiltName:      "17971674567288329890367046253745284795510285995943906173973_5.history",
+			expectBuiltName:      "11936904199538907273367046253745284795510285995943906173973_5.history",
 		},
 	}
 
 	for _, tc := range testCases {
-		filename := constructHistoryFilename(tc.domainID, tc.workflowID, tc.runID, tc.closeFailoverVersion)
+		filename := constructHistoryFilename(tc.namespaceID, tc.workflowID, tc.runID, tc.closeFailoverVersion)
 		s.Equal(tc.expectBuiltName, filename)
 	}
 }
@@ -289,7 +289,7 @@ func (s *UtilSuite) TestExtractCloseFailoverVersion() {
 		expectedErr     bool
 	}{
 		{
-			filename:        "17971674567288329890367046253745284795510285995943906173973_5.history",
+			filename:        "11936904199538907273367046253745284795510285995943906173973_5.history",
 			expectedVersion: 5,
 			expectedErr:     false,
 		},

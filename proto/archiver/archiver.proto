@@ -30,15 +30,15 @@ import "common/history.proto";
 
 
 message HistoryBlobHeader {
-    string DomainName = 1;
-    string DomainID = 2;
-    string WorkflowID = 3;
-    string RunID = 4;
+    string Namespace = 1;
+    string NamespaceId = 2;
+    string WorkflowId = 3;
+    string RunId = 4;
     bool IsLast = 5;
     int64 FirstFailoverVersion = 6;
     int64 LastFailoverVersion = 7;
-    int64 FirstEventID = 8;
-    int64 LastEventID = 9;
+    int64 FirstEventId = 8;
+    int64 LastEventId = 9;
     int64 EventCount = 10;
 
 }
@@ -50,10 +50,10 @@ message HistoryBlob  {
 
 // ArchiveVisibilityRequest is request to Archive single workflow visibility record
 message ArchiveVisibilityRequest {
-    string DomainID = 1;
-    string DomainName = 2;
-    string WorkflowID = 3;
-    string RunID = 4;
+    string NamespaceId = 1;
+    string Namespace = 2;
+    string WorkflowId = 3;
+    string RunId = 4;
     string WorkflowTypeName = 5;
     int64 StartTimestamp = 6;
     int64 ExecutionTimestamp = 7;

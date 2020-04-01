@@ -25,12 +25,12 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/adminservice";
 
 import "enums/enums.proto";
 import "common/common.proto";
-import "common/domain.proto";
+import "common/namespace.proto";
 import "common/workflow_execution.proto";
 import "replication/replication.proto";
 
 message DescribeWorkflowExecutionRequest {
-    string domain = 1;
+    string namespace = 1;
     common.WorkflowExecution execution = 2;
 }
 
@@ -52,30 +52,30 @@ message DescribeHistoryHostRequest {
 message DescribeHistoryHostResponse {
     int32 numberOfShards = 1;
     repeated int32
-    shardIDs = 2;
-    common.DomainCacheInfo domainCache = 3;
+    shardIds = 2;
+    common.NamespaceCacheInfo namespaceCache = 3;
     string shardControllerStatus = 4;
     string address = 5;
 }
 
 message CloseShardRequest {
-    int32 shardID = 1;
+    int32 shardId = 1;
 }
 
 message CloseShardResponse {
 }
 
 message RemoveTaskRequest {
-    int32 shardID = 1;
+    int32 shardId = 1;
     int32 type = 2;
-    int64 taskID = 3;
+    int64 taskId = 3;
 }
 
 message RemoveTaskResponse {
 }
 
 message GetWorkflowExecutionRawHistoryRequest {
-    string domain = 1;
+    string namespace = 1;
     common.WorkflowExecution execution = 2;
     int64 firstEventId = 3;
     int64 nextEventId = 4;
@@ -95,7 +95,7 @@ message GetWorkflowExecutionRawHistoryResponse {
   * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
   **/
 message GetWorkflowExecutionRawHistoryV2Request {
-    string domain = 1;
+    string namespace = 1;
     common.WorkflowExecution execution = 2;
     int64 startEventId = 3;
     int64 startEventVersion = 4;
@@ -120,7 +120,7 @@ message GetReplicationMessagesResponse {
     map<int32, replication.ReplicationMessages> messagesByShard = 1;
 }
 
-message GetDomainReplicationMessagesRequest {
+message GetNamespaceReplicationMessagesRequest {
     // lastRetrievedMessageId is where the next fetch should begin with.
     int64 lastRetrievedMessageId = 1;
     // lastProcessedMessageId is the last messageId that is processed on the passive side.
@@ -130,7 +130,7 @@ message GetDomainReplicationMessagesRequest {
     string clusterName = 3;
 }
 
-message GetDomainReplicationMessagesResponse {
+message GetNamespaceReplicationMessagesResponse {
     replication.ReplicationMessages messages = 1;
 }
 
@@ -144,7 +144,7 @@ message GetDLQReplicationMessagesResponse {
 
 // ReapplyEventsRequest is the request for reapply events API.
 message ReapplyEventsRequest {
-    string domainName = 1;
+    string namespace = 1;
     common.WorkflowExecution workflowExecution = 2;
     common.DataBlob events = 3;
 }
@@ -170,9 +170,9 @@ message DescribeClusterResponse {
 
 message ReadDLQMessagesRequest {
     enums.DLQType type = 1;
-    int32 shardID = 2;
+    int32 shardId = 2;
     string sourceCluster = 3;
-    int64 inclusiveEndMessageID = 4;
+    int64 inclusiveEndMessageId = 4;
     int32 maximumPageSize = 5;
     bytes nextPageToken = 6;
 }
@@ -185,9 +185,9 @@ message ReadDLQMessagesResponse {
 
 message PurgeDLQMessagesRequest {
     enums.DLQType type = 1;
-    int32 shardID = 2;
+    int32 shardId = 2;
     string sourceCluster = 3;
-    int64 inclusiveEndMessageID = 4;
+    int64 inclusiveEndMessageId = 4;
 }
 
 message PurgeDLQMessagesResponse {
@@ -195,9 +195,9 @@ message PurgeDLQMessagesResponse {
 
 message MergeDLQMessagesRequest {
     enums.DLQType type = 1;
-    int32 shardID = 2;
+    int32 shardId = 2;
     string sourceCluster = 3;
-    int64 inclusiveEndMessageID = 4;
+    int64 inclusiveEndMessageId = 4;
     int32 maximumPageSize = 5;
     bytes nextPageToken = 6;
 }
@@ -207,7 +207,7 @@ message MergeDLQMessagesResponse {
 }
 
 message RefreshWorkflowTasksRequest {
-    string domain = 1;
+    string namespace = 1;
     common.WorkflowExecution execution = 2;
 }
 

@@ -116,21 +116,21 @@ func (a *queueAckMgrImpl) readQueueTasks() ([]queueTaskInfo, bool, error) {
 
 TaskFilterLoop:
 	for _, task := range tasks {
-		_, isLoaded := a.outstandingTasks[task.GetTaskID()]
+		_, isLoaded := a.outstandingTasks[task.GetTaskId()]
 		if isLoaded {
 			// task already loaded
 			a.logger.Debug("Skipping transfer task", tag.Task(task))
 			continue TaskFilterLoop
 		}
 
-		if a.readLevel >= task.GetTaskID() {
+		if a.readLevel >= task.GetTaskId() {
 			a.logger.Fatal("Next task ID is less than current read level.",
-				tag.TaskID(task.GetTaskID()),
+				tag.TaskID(task.GetTaskId()),
 				tag.ReadLevel(a.readLevel))
 		}
-		a.logger.Debug("Moving read level", tag.TaskID(task.GetTaskID()))
-		a.readLevel = task.GetTaskID()
-		a.outstandingTasks[task.GetTaskID()] = false
+		a.logger.Debug("Moving read level", tag.TaskID(task.GetTaskId()))
+		a.readLevel = task.GetTaskId()
+		a.outstandingTasks[task.GetTaskId()] = false
 	}
 
 	return tasks, morePage, nil

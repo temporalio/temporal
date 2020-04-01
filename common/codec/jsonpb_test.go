@@ -45,7 +45,7 @@ var (
 		Timestamp: 112345132134,
 		EventType: enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated,
 		Attributes: &commonproto.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &commonproto.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
-			Domain: "some random target domain",
+			Namespace: "some random target namespace",
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: "some random target workflow ID",
 				RunId:      "some random target run ID",
@@ -54,7 +54,7 @@ var (
 			Control:           []byte("some random control"),
 		}},
 	}
-	encodedHistoryEvent = `{"eventId":"130","timestamp":"112345132134","eventType":"EventTypeRequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"domain":"some random target domain","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"c29tZSByYW5kb20gY29udHJvbA==","childWorkflowOnly":true}}`
+	encodedHistoryEvent = `{"eventId":"130","timestamp":"112345132134","eventType":"EventTypeRequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"c29tZSByYW5kb20gY29udHJvbA==","childWorkflowOnly":true}}`
 )
 
 func TestJSONPBEncoderSuite(t *testing.T) {

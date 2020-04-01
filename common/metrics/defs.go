@@ -200,19 +200,19 @@ const (
 	PersistenceGetWorkflowExecutionHistoryScope
 	// PersistenceDeleteWorkflowExecutionHistoryScope tracks DeleteWorkflowExecutionHistory calls made by service to persistence layer
 	PersistenceDeleteWorkflowExecutionHistoryScope
-	// PersistenceCreateDomainScope tracks CreateDomain calls made by service to persistence layer
-	PersistenceCreateDomainScope
-	// PersistenceGetDomainScope tracks GetDomain calls made by service to persistence layer
-	PersistenceGetDomainScope
-	// PersistenceUpdateDomainScope tracks UpdateDomain calls made by service to persistence layer
-	PersistenceUpdateDomainScope
-	// PersistenceDeleteDomainScope tracks DeleteDomain calls made by service to persistence layer
-	PersistenceDeleteDomainScope
-	// PersistenceDeleteDomainByNameScope tracks DeleteDomainByName calls made by service to persistence layer
-	PersistenceDeleteDomainByNameScope
-	// PersistenceListDomainScope tracks DeleteDomainByName calls made by service to persistence layer
-	PersistenceListDomainScope
-	// PersistenceGetMetadataScope tracks DeleteDomainByName calls made by service to persistence layer
+	// PersistenceCreateNamespaceScope tracks CreateNamespace calls made by service to persistence layer
+	PersistenceCreateNamespaceScope
+	// PersistenceGetNamespaceScope tracks GetNamespace calls made by service to persistence layer
+	PersistenceGetNamespaceScope
+	// PersistenceUpdateNamespaceScope tracks UpdateNamespace calls made by service to persistence layer
+	PersistenceUpdateNamespaceScope
+	// PersistenceDeleteNamespaceScope tracks DeleteNamespace calls made by service to persistence layer
+	PersistenceDeleteNamespaceScope
+	// PersistenceDeleteNamespaceByNameScope tracks DeleteNamespaceByName calls made by service to persistence layer
+	PersistenceDeleteNamespaceByNameScope
+	// PersistenceListNamespaceScope tracks DeleteNamespaceByName calls made by service to persistence layer
+	PersistenceListNamespaceScope
+	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceGetMetadataScope
 	// PersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to persistence layer
 	PersistenceRecordWorkflowExecutionStartedScope
@@ -362,10 +362,10 @@ const (
 	MatchingClientDescribeTaskListScope
 	// MatchingClientListTaskListPartitionsScope tracks RPC calls to matching service
 	MatchingClientListTaskListPartitionsScope
-	// FrontendClientDeprecateDomainScope tracks RPC calls to frontend service
-	FrontendClientDeprecateDomainScope
-	// FrontendClientDescribeDomainScope tracks RPC calls to frontend service
-	FrontendClientDescribeDomainScope
+	// FrontendClientDeprecateNamespaceScope tracks RPC calls to frontend service
+	FrontendClientDeprecateNamespaceScope
+	// FrontendClientDescribeNamespaceScope tracks RPC calls to frontend service
+	FrontendClientDescribeNamespaceScope
 	// FrontendClientDescribeTaskListScope tracks RPC calls to frontend service
 	FrontendClientDescribeTaskListScope
 	// FrontendClientDescribeWorkflowExecutionScope tracks RPC calls to frontend service
@@ -380,8 +380,8 @@ const (
 	FrontendClientListArchivedWorkflowExecutionsScope
 	// FrontendClientListClosedWorkflowExecutionsScope tracks RPC calls to frontend service
 	FrontendClientListClosedWorkflowExecutionsScope
-	// FrontendClientListDomainsScope tracks RPC calls to frontend service
-	FrontendClientListDomainsScope
+	// FrontendClientListNamespacesScope tracks RPC calls to frontend service
+	FrontendClientListNamespacesScope
 	// FrontendClientListOpenWorkflowExecutionsScope tracks RPC calls to frontend service
 	FrontendClientListOpenWorkflowExecutionsScope
 	// FrontendClientPollForActivityTaskScope tracks RPC calls to frontend service
@@ -392,10 +392,10 @@ const (
 	FrontendClientQueryWorkflowScope
 	// FrontendClientRecordActivityTaskHeartbeatScope tracks RPC calls to frontend service
 	FrontendClientRecordActivityTaskHeartbeatScope
-	// FrontendClientRecordActivityTaskHeartbeatByIDScope tracks RPC calls to frontend service
-	FrontendClientRecordActivityTaskHeartbeatByIDScope
-	// FrontendClientRegisterDomainScope tracks RPC calls to frontend service
-	FrontendClientRegisterDomainScope
+	// FrontendClientRecordActivityTaskHeartbeatByIdScope tracks RPC calls to frontend service
+	FrontendClientRecordActivityTaskHeartbeatByIdScope
+	// FrontendClientRegisterNamespaceScope tracks RPC calls to frontend service
+	FrontendClientRegisterNamespaceScope
 	// FrontendClientRequestCancelWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientRequestCancelWorkflowExecutionScope
 	// FrontendClientResetStickyTaskListScope tracks RPC calls to frontend service
@@ -404,16 +404,16 @@ const (
 	FrontendClientResetWorkflowExecutionScope
 	// FrontendClientRespondActivityTaskCanceledScope tracks RPC calls to frontend service
 	FrontendClientRespondActivityTaskCanceledScope
-	// FrontendClientRespondActivityTaskCanceledByIDScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskCanceledByIDScope
+	// FrontendClientRespondActivityTaskCanceledByIdScope tracks RPC calls to frontend service
+	FrontendClientRespondActivityTaskCanceledByIdScope
 	// FrontendClientRespondActivityTaskCompletedScope tracks RPC calls to frontend service
 	FrontendClientRespondActivityTaskCompletedScope
-	// FrontendClientRespondActivityTaskCompletedByIDScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskCompletedByIDScope
+	// FrontendClientRespondActivityTaskCompletedByIdScope tracks RPC calls to frontend service
+	FrontendClientRespondActivityTaskCompletedByIdScope
 	// FrontendClientRespondActivityTaskFailedScope tracks RPC calls to frontend service
 	FrontendClientRespondActivityTaskFailedScope
-	// FrontendClientRespondActivityTaskFailedByIDScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskFailedByIDScope
+	// FrontendClientRespondActivityTaskFailedByIdScope tracks RPC calls to frontend service
+	FrontendClientRespondActivityTaskFailedByIdScope
 	// FrontendClientRespondDecisionTaskCompletedScope tracks RPC calls to frontend service
 	FrontendClientRespondDecisionTaskCompletedScope
 	// FrontendClientRespondDecisionTaskFailedScope tracks RPC calls to frontend service
@@ -428,8 +428,8 @@ const (
 	FrontendClientStartWorkflowExecutionScope
 	// FrontendClientTerminateWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientTerminateWorkflowExecutionScope
-	// FrontendClientUpdateDomainScope tracks RPC calls to frontend service
-	FrontendClientUpdateDomainScope
+	// FrontendClientUpdateNamespaceScope tracks RPC calls to frontend service
+	FrontendClientUpdateNamespaceScope
 	// FrontendClientListWorkflowExecutionsScope tracks RPC calls to frontend service
 	FrontendClientListWorkflowExecutionsScope
 	// FrontendClientScanWorkflowExecutionsScope tracks RPC calls to frontend service
@@ -440,8 +440,8 @@ const (
 	FrontendClientGetSearchAttributesScope
 	// FrontendClientGetReplicationTasksScope tracks RPC calls to frontend service
 	FrontendClientGetReplicationTasksScope
-	// FrontendClientGetDomainReplicationTasksScope tracks RPC calls to frontend service
-	FrontendClientGetDomainReplicationTasksScope
+	// FrontendClientGetNamespaceReplicationTasksScope tracks RPC calls to frontend service
+	FrontendClientGetNamespaceReplicationTasksScope
 	// FrontendClientGetDLQReplicationTasksScope tracks RPC calls to frontend service
 	FrontendClientGetDLQReplicationTasksScope
 	// FrontendClientReapplyEventsScope tracks RPC calls to frontend service
@@ -472,10 +472,10 @@ const (
 	AdminClientMergeDLQMessagesScope
 	// AdminClientRefreshWorkflowTasksScope tracks RPC calls to admin service
 	AdminClientRefreshWorkflowTasksScope
-	// DCRedirectionDeprecateDomainScope tracks RPC calls for dc redirection
-	DCRedirectionDeprecateDomainScope
-	// DCRedirectionDescribeDomainScope tracks RPC calls for dc redirection
-	DCRedirectionDescribeDomainScope
+	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
+	DCRedirectionDeprecateNamespaceScope
+	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
+	DCRedirectionDescribeNamespaceScope
 	// DCRedirectionDescribeTaskListScope tracks RPC calls for dc redirection
 	DCRedirectionDescribeTaskListScope
 	// DCRedirectionDescribeWorkflowExecutionScope tracks RPC calls for dc redirection
@@ -490,8 +490,8 @@ const (
 	DCRedirectionListArchivedWorkflowExecutionsScope
 	// DCRedirectionListClosedWorkflowExecutionsScope tracks RPC calls for dc redirection
 	DCRedirectionListClosedWorkflowExecutionsScope
-	// DCRedirectionListDomainsScope tracks RPC calls for dc redirection
-	DCRedirectionListDomainsScope
+	// DCRedirectionListNamespacesScope tracks RPC calls for dc redirection
+	DCRedirectionListNamespacesScope
 	// DCRedirectionListOpenWorkflowExecutionsScope tracks RPC calls for dc redirection
 	DCRedirectionListOpenWorkflowExecutionsScope
 	// DCRedirectionListWorkflowExecutionsScope tracks RPC calls for dc redirection
@@ -510,10 +510,10 @@ const (
 	DCRedirectionQueryWorkflowScope
 	// DCRedirectionRecordActivityTaskHeartbeatScope tracks RPC calls for dc redirection
 	DCRedirectionRecordActivityTaskHeartbeatScope
-	// DCRedirectionRecordActivityTaskHeartbeatByIDScope tracks RPC calls for dc redirection
-	DCRedirectionRecordActivityTaskHeartbeatByIDScope
-	// DCRedirectionRegisterDomainScope tracks RPC calls for dc redirection
-	DCRedirectionRegisterDomainScope
+	// DCRedirectionRecordActivityTaskHeartbeatByIdScope tracks RPC calls for dc redirection
+	DCRedirectionRecordActivityTaskHeartbeatByIdScope
+	// DCRedirectionRegisterNamespaceScope tracks RPC calls for dc redirection
+	DCRedirectionRegisterNamespaceScope
 	// DCRedirectionRequestCancelWorkflowExecutionScope tracks RPC calls for dc redirection
 	DCRedirectionRequestCancelWorkflowExecutionScope
 	// DCRedirectionResetStickyTaskListScope tracks RPC calls for dc redirection
@@ -522,16 +522,16 @@ const (
 	DCRedirectionResetWorkflowExecutionScope
 	// DCRedirectionRespondActivityTaskCanceledScope tracks RPC calls for dc redirection
 	DCRedirectionRespondActivityTaskCanceledScope
-	// DCRedirectionRespondActivityTaskCanceledByIDScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskCanceledByIDScope
+	// DCRedirectionRespondActivityTaskCanceledByIdScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskCanceledByIdScope
 	// DCRedirectionRespondActivityTaskCompletedScope tracks RPC calls for dc redirection
 	DCRedirectionRespondActivityTaskCompletedScope
-	// DCRedirectionRespondActivityTaskCompletedByIDScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskCompletedByIDScope
+	// DCRedirectionRespondActivityTaskCompletedByIdScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskCompletedByIdScope
 	// DCRedirectionRespondActivityTaskFailedScope tracks RPC calls for dc redirection
 	DCRedirectionRespondActivityTaskFailedScope
-	// DCRedirectionRespondActivityTaskFailedByIDScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskFailedByIDScope
+	// DCRedirectionRespondActivityTaskFailedByIdScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskFailedByIdScope
 	// DCRedirectionRespondDecisionTaskCompletedScope tracks RPC calls for dc redirection
 	DCRedirectionRespondDecisionTaskCompletedScope
 	// DCRedirectionRespondDecisionTaskFailedScope tracks RPC calls for dc redirection
@@ -546,8 +546,8 @@ const (
 	DCRedirectionStartWorkflowExecutionScope
 	// DCRedirectionTerminateWorkflowExecutionScope tracks RPC calls for dc redirection
 	DCRedirectionTerminateWorkflowExecutionScope
-	// DCRedirectionUpdateDomainScope tracks RPC calls for dc redirection
-	DCRedirectionUpdateDomainScope
+	// DCRedirectionUpdateNamespaceScope tracks RPC calls for dc redirection
+	DCRedirectionUpdateNamespaceScope
 	// DCRedirectionListTaskListPartitionsScope tracks RPC calls for dc redirection
 	DCRedirectionListTaskListPartitionsScope
 
@@ -556,8 +556,8 @@ const (
 	// MessagingPublishBatchScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishBatchScope
 
-	// DomainCacheScope tracks domain cache callbacks
-	DomainCacheScope
+	// NamespaceCacheScope tracks namespace cache callbacks
+	NamespaceCacheScope
 	// HistoryRereplicationByTransferTaskScope tracks history replication calls made by transfer task
 	HistoryRereplicationByTransferTaskScope
 	// HistoryRereplicationByTimerTaskScope tracks history replication calls made by timer task
@@ -583,8 +583,8 @@ const (
 	PersistenceGetHistoryTreeScope
 	// PersistenceGetAllHistoryTreeBranchesScope tracks GetHistoryTree calls made by service to persistence layer
 	PersistenceGetAllHistoryTreeBranchesScope
-	// PersistenceDomainReplicationQueueScope is the metrics scope for domain replication queue
-	PersistenceDomainReplicationQueueScope
+	// PersistenceNamespaceReplicationQueueScope is the metrics scope for namespace replication queue
+	PersistenceNamespaceReplicationQueueScope
 
 	// ClusterMetadataArchivalConfigScope tracks ArchivalConfig calls to ClusterMetadata
 	ClusterMetadataArchivalConfigScope
@@ -665,8 +665,8 @@ const (
 	AdminGetWorkflowExecutionRawHistoryV2Scope
 	// AdminGetReplicationMessagesScope is the metric scope for admin.GetReplicationMessages
 	AdminGetReplicationMessagesScope
-	// AdminGetDomainReplicationMessagesScope is the metric scope for admin.GetDomainReplicationMessages
-	AdminGetDomainReplicationMessagesScope
+	// AdminGetNamespaceReplicationMessagesScope is the metric scope for admin.GetNamespaceReplicationMessages
+	AdminGetNamespaceReplicationMessagesScope
 	// AdminGetDLQReplicationMessagesScope is the metric scope for admin.GetDLQReplicationMessages
 	AdminGetDLQReplicationMessagesScope
 	// AdminReapplyEventsScope is the metric scope for admin.ReapplyEvents
@@ -697,8 +697,8 @@ const (
 	FrontendPollForActivityTaskScope
 	// FrontendRecordActivityTaskHeartbeatScope is the metric scope for frontend.RecordActivityTaskHeartbeat
 	FrontendRecordActivityTaskHeartbeatScope
-	// FrontendRecordActivityTaskHeartbeatByIDScope is the metric scope for frontend.RespondDecisionTaskCompleted
-	FrontendRecordActivityTaskHeartbeatByIDScope
+	// FrontendRecordActivityTaskHeartbeatByIdScope is the metric scope for frontend.RespondDecisionTaskCompleted
+	FrontendRecordActivityTaskHeartbeatByIdScope
 	// FrontendRespondDecisionTaskCompletedScope is the metric scope for frontend.RespondDecisionTaskCompleted
 	FrontendRespondDecisionTaskCompletedScope
 	// FrontendRespondDecisionTaskFailedScope is the metric scope for frontend.RespondDecisionTaskFailed
@@ -711,12 +711,12 @@ const (
 	FrontendRespondActivityTaskFailedScope
 	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceled
 	FrontendRespondActivityTaskCanceledScope
-	// FrontendRespondActivityTaskCompletedScope is the metric scope for frontend.RespondActivityTaskCompletedByID
-	FrontendRespondActivityTaskCompletedByIDScope
-	// FrontendRespondActivityTaskFailedScope is the metric scope for frontend.RespondActivityTaskFailedByID
-	FrontendRespondActivityTaskFailedByIDScope
-	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceledByID
-	FrontendRespondActivityTaskCanceledByIDScope
+	// FrontendRespondActivityTaskCompletedScope is the metric scope for frontend.RespondActivityTaskCompletedById
+	FrontendRespondActivityTaskCompletedByIdScope
+	// FrontendRespondActivityTaskFailedScope is the metric scope for frontend.RespondActivityTaskFailedById
+	FrontendRespondActivityTaskFailedByIdScope
+	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceledById
+	FrontendRespondActivityTaskCanceledByIdScope
 	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for frontend.GetWorkflowExecutionHistory
 	FrontendGetWorkflowExecutionHistoryScope
 	// FrontendGetWorkflowExecutionRawHistoryScope is the metric scope for frontend.GetWorkflowExecutionRawHistory
@@ -743,14 +743,14 @@ const (
 	FrontendScanWorkflowExecutionsScope
 	// FrontendCountWorkflowExecutionsScope is the metric scope for frontend.CountWorkflowExecutions
 	FrontendCountWorkflowExecutionsScope
-	// FrontendRegisterDomainScope is the metric scope for frontend.RegisterDomain
-	FrontendRegisterDomainScope
-	// FrontendDescribeDomainScope is the metric scope for frontend.DescribeDomain
-	FrontendDescribeDomainScope
-	// FrontendUpdateDomainScope is the metric scope for frontend.DescribeDomain
-	FrontendUpdateDomainScope
-	// FrontendDeprecateDomainScope is the metric scope for frontend.DeprecateDomain
-	FrontendDeprecateDomainScope
+	// FrontendRegisterNamespaceScope is the metric scope for frontend.RegisterNamespace
+	FrontendRegisterNamespaceScope
+	// FrontendDescribeNamespaceScope is the metric scope for frontend.DescribeNamespace
+	FrontendDescribeNamespaceScope
+	// FrontendUpdateNamespaceScope is the metric scope for frontend.DescribeNamespace
+	FrontendUpdateNamespaceScope
+	// FrontendDeprecateNamespaceScope is the metric scope for frontend.DeprecateNamespace
+	FrontendDeprecateNamespaceScope
 	// FrontendQueryWorkflowScope is the metric scope for frontend.QueryWorkflow
 	FrontendQueryWorkflowScope
 	// FrontendDescribeWorkflowExecutionScope is the metric scope for frontend.DescribeWorkflowExecution
@@ -761,8 +761,8 @@ const (
 	FrontendListTaskListPartitionsScope
 	// FrontendResetStickyTaskListScope is the metric scope for frontend.ResetStickyTaskList
 	FrontendResetStickyTaskListScope
-	// FrontendListDomainsScope is the metric scope for frontend.ListDomain
-	FrontendListDomainsScope
+	// FrontendListNamespacesScope is the metric scope for frontend.ListNamespace
+	FrontendListNamespacesScope
 	// FrontendResetWorkflowExecutionScope is the metric scope for frontend.ResetWorkflowExecution
 	FrontendResetWorkflowExecutionScope
 	// FrontendGetSearchAttributesScope is the metric scope for frontend.GetSearchAttributes
@@ -1007,8 +1007,8 @@ const (
 const (
 	// ReplicationScope is the scope used by all metric emitted by replicator
 	ReplicatorScope = iota + NumCommonScopes
-	// DomainReplicationTaskScope is the scope used by domain task replication processing
-	DomainReplicationTaskScope
+	// NamespaceReplicationTaskScope is the scope used by namespace task replication processing
+	NamespaceReplicationTaskScope
 	// HistoryReplicationTaskScope is the scope used by history task replication processing
 	HistoryReplicationTaskScope
 	// HistoryMetadataReplicationTaskScope is the scope used by history metadata task replication processing
@@ -1089,12 +1089,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceAppendHistoryEventsScope:                      {operation: "AppendHistoryEvents"},
 		PersistenceGetWorkflowExecutionHistoryScope:              {operation: "GetWorkflowExecutionHistory"},
 		PersistenceDeleteWorkflowExecutionHistoryScope:           {operation: "DeleteWorkflowExecutionHistory"},
-		PersistenceCreateDomainScope:                             {operation: "CreateDomain"},
-		PersistenceGetDomainScope:                                {operation: "GetDomain"},
-		PersistenceUpdateDomainScope:                             {operation: "UpdateDomain"},
-		PersistenceDeleteDomainScope:                             {operation: "DeleteDomain"},
-		PersistenceDeleteDomainByNameScope:                       {operation: "DeleteDomainByName"},
-		PersistenceListDomainScope:                               {operation: "ListDomain"},
+		PersistenceCreateNamespaceScope:                          {operation: "CreateNamespace"},
+		PersistenceGetNamespaceScope:                             {operation: "GetNamespace"},
+		PersistenceUpdateNamespaceScope:                          {operation: "UpdateNamespace"},
+		PersistenceDeleteNamespaceScope:                          {operation: "DeleteNamespace"},
+		PersistenceDeleteNamespaceByNameScope:                    {operation: "DeleteNamespaceByName"},
+		PersistenceListNamespaceScope:                            {operation: "ListNamespace"},
 		PersistenceGetMetadataScope:                              {operation: "GetMetadata"},
 		PersistenceRecordWorkflowExecutionStartedScope:           {operation: "RecordWorkflowExecutionStarted"},
 		PersistenceRecordWorkflowExecutionClosedScope:            {operation: "RecordWorkflowExecutionClosed"},
@@ -1129,7 +1129,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetAckLevelScope:                              {operation: "GetAckLevel"},
 		PersistenceUpdateDLQAckLevelScope:                        {operation: "UpdateDLQAckLevel"},
 		PersistenceGetDLQAckLevelScope:                           {operation: "GetDLQAckLevel"},
-		PersistenceDomainReplicationQueueScope:                   {operation: "DomainReplicationQueue"},
+		PersistenceNamespaceReplicationQueueScope:                {operation: "NamespaceReplicationQueue"},
 		PersistenceInitImmutableClusterMetadataScope:             {operation: "InitializeImmutableClusterMetadata"},
 		PersistenceGetImmutableClusterMetadataScope:              {operation: "GetImmutableClusterMetadata"},
 		PersistencePruneClusterMembershipScope:                   {operation: "PruneClusterMembership"},
@@ -1181,8 +1181,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientCancelOutstandingPollScope:              {operation: "MatchingClientCancelOutstandingPoll", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientDescribeTaskListScope:                   {operation: "MatchingClientDescribeTaskList", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientListTaskListPartitionsScope:             {operation: "MatchingClientListTaskListPartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		FrontendClientDeprecateDomainScope:                    {operation: "FrontendClientDeprecateDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientDescribeDomainScope:                     {operation: "FrontendClientDescribeDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDeprecateNamespaceScope:                 {operation: "FrontendClientDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDescribeNamespaceScope:                  {operation: "FrontendClientDescribeNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeTaskListScope:                   {operation: "FrontendClientDescribeTaskList", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeWorkflowExecutionScope:          {operation: "FrontendClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetWorkflowExecutionHistoryScope:        {operation: "FrontendClientGetWorkflowExecutionHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1190,23 +1190,23 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientPollForWorkflowExecutionRawHistoryScope: {operation: "FrontendClientPollForWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListArchivedWorkflowExecutionsScope:     {operation: "FrontendClientListArchivedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListClosedWorkflowExecutionsScope:       {operation: "FrontendClientListClosedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientListDomainsScope:                        {operation: "FrontendClientListDomains", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListNamespacesScope:                     {operation: "FrontendClientListNamespaces", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListOpenWorkflowExecutionsScope:         {operation: "FrontendClientListOpenWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientPollForActivityTaskScope:                {operation: "FrontendClientPollForActivityTask", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientPollForDecisionTaskScope:                {operation: "FrontendClientPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientQueryWorkflowScope:                      {operation: "FrontendClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRecordActivityTaskHeartbeatScope:        {operation: "FrontendClientRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRecordActivityTaskHeartbeatByIDScope:    {operation: "FrontendClientRecordActivityTaskHeartbeatByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRegisterDomainScope:                     {operation: "FrontendClientRegisterDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRecordActivityTaskHeartbeatByIdScope:    {operation: "FrontendClientRecordActivityTaskHeartbeatById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRegisterNamespaceScope:                  {operation: "FrontendClientRegisterNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRequestCancelWorkflowExecutionScope:     {operation: "FrontendClientRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientResetStickyTaskListScope:                {operation: "FrontendClientResetStickyTaskList", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientResetWorkflowExecutionScope:             {operation: "FrontendClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskCanceledScope:        {operation: "FrontendClientRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskCanceledByIDScope:    {operation: "FrontendClientRespondActivityTaskCanceledByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskCanceledByIdScope:    {operation: "FrontendClientRespondActivityTaskCanceledById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskCompletedScope:       {operation: "FrontendClientRespondActivityTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskCompletedByIDScope:   {operation: "FrontendClientRespondActivityTaskCompletedByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskCompletedByIdScope:   {operation: "FrontendClientRespondActivityTaskCompletedById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskFailedScope:          {operation: "FrontendClientRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskFailedByIDScope:      {operation: "FrontendClientRespondActivityTaskFailedByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskFailedByIdScope:      {operation: "FrontendClientRespondActivityTaskFailedById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondDecisionTaskCompletedScope:       {operation: "FrontendClientRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondDecisionTaskFailedScope:          {operation: "FrontendClientRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondQueryTaskCompletedScope:          {operation: "FrontendClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1214,13 +1214,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientSignalWorkflowExecutionScope:            {operation: "FrontendClientSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientStartWorkflowExecutionScope:             {operation: "FrontendClientStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientTerminateWorkflowExecutionScope:         {operation: "FrontendClientTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientUpdateDomainScope:                       {operation: "FrontendClientUpdateDomain", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientUpdateNamespaceScope:                    {operation: "FrontendClientUpdateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListWorkflowExecutionsScope:             {operation: "FrontendClientListWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientScanWorkflowExecutionsScope:             {operation: "FrontendClientScanWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientCountWorkflowExecutionsScope:            {operation: "FrontendClientCountWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetSearchAttributesScope:                {operation: "FrontendClientGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetReplicationTasksScope:                {operation: "FrontendClientGetReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetDomainReplicationTasksScope:          {operation: "FrontendClientGetDomainReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetNamespaceReplicationTasksScope:       {operation: "FrontendClientGetNamespaceReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetDLQReplicationTasksScope:             {operation: "FrontendClientGetDLQReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientReapplyEventsScope:                      {operation: "FrontendClientReapplyEventsScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetClusterInfoScope:                     {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1236,8 +1236,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientReadDLQMessagesScope:                       {operation: "AdminClientReadDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                      {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                      {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		DCRedirectionDeprecateDomainScope:                     {operation: "DCRedirectionDeprecateDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionDescribeDomainScope:                      {operation: "DCRedirectionDescribeDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDeprecateNamespaceScope:                  {operation: "DCRedirectionDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeNamespaceScope:                   {operation: "DCRedirectionDescribeNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeTaskListScope:                    {operation: "DCRedirectionDescribeTaskList", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeWorkflowExecutionScope:           {operation: "DCRedirectionDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionGetWorkflowExecutionHistoryScope:         {operation: "DCRedirectionGetWorkflowExecutionHistory", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1245,7 +1245,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionPollForWorkflowExecutionRawHistoryScope:  {operation: "DCRedirectionPollForWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListArchivedWorkflowExecutionsScope:      {operation: "DCRedirectionListArchivedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListClosedWorkflowExecutionsScope:        {operation: "DCRedirectionListClosedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionListDomainsScope:                         {operation: "DCRedirectionListDomains", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListNamespacesScope:                      {operation: "DCRedirectionListNamespaces", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListOpenWorkflowExecutionsScope:          {operation: "DCRedirectionListOpenWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListWorkflowExecutionsScope:              {operation: "DCRedirectionListWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionScanWorkflowExecutionsScope:              {operation: "DCRedirectionScanWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1255,17 +1255,17 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionPollForDecisionTaskScope:                 {operation: "DCRedirectionPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionQueryWorkflowScope:                       {operation: "DCRedirectionQueryWorkflow", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRecordActivityTaskHeartbeatScope:         {operation: "DCRedirectionRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRecordActivityTaskHeartbeatByIDScope:     {operation: "DCRedirectionRecordActivityTaskHeartbeatByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRegisterDomainScope:                      {operation: "DCRedirectionRegisterDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRecordActivityTaskHeartbeatByIdScope:     {operation: "DCRedirectionRecordActivityTaskHeartbeatById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRegisterNamespaceScope:                   {operation: "DCRedirectionRegisterNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRequestCancelWorkflowExecutionScope:      {operation: "DCRedirectionRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionResetStickyTaskListScope:                 {operation: "DCRedirectionResetStickyTaskList", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionResetWorkflowExecutionScope:              {operation: "DCRedirectionResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondActivityTaskCanceledScope:         {operation: "DCRedirectionRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskCanceledByIDScope:     {operation: "DCRedirectionRespondActivityTaskCanceledByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCanceledByIdScope:     {operation: "DCRedirectionRespondActivityTaskCanceledById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondActivityTaskCompletedScope:        {operation: "DCRedirectionRespondActivityTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskCompletedByIDScope:    {operation: "DCRedirectionRespondActivityTaskCompletedByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCompletedByIdScope:    {operation: "DCRedirectionRespondActivityTaskCompletedById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondActivityTaskFailedScope:           {operation: "DCRedirectionRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskFailedByIDScope:       {operation: "DCRedirectionRespondActivityTaskFailedByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskFailedByIdScope:       {operation: "DCRedirectionRespondActivityTaskFailedById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondDecisionTaskCompletedScope:        {operation: "DCRedirectionRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondDecisionTaskFailedScope:           {operation: "DCRedirectionRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondQueryTaskCompletedScope:           {operation: "DCRedirectionRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1273,13 +1273,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionSignalWorkflowExecutionScope:             {operation: "DCRedirectionSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionStartWorkflowExecutionScope:              {operation: "DCRedirectionStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionTerminateWorkflowExecutionScope:          {operation: "DCRedirectionTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionUpdateDomainScope:                        {operation: "DCRedirectionUpdateDomain", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionUpdateNamespaceScope:                     {operation: "DCRedirectionUpdateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListTaskListPartitionsScope:              {operation: "DCRedirectionListTaskListPartitions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
 
-		DomainCacheScope:                                      {operation: "DomainCache"},
+		NamespaceCacheScope:                                   {operation: "NamespaceCache"},
 		HistoryRereplicationByTransferTaskScope:               {operation: "HistoryRereplicationByTransferTask"},
 		HistoryRereplicationByTimerTaskScope:                  {operation: "HistoryRereplicationByTimerTask"},
 		HistoryRereplicationByHistoryReplicationScope:         {operation: "HistoryRereplicationByHistoryReplication"},
@@ -1329,7 +1329,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminGetWorkflowExecutionRawHistoryScope:   {operation: "GetWorkflowExecutionRawHistory"},
 		AdminGetWorkflowExecutionRawHistoryV2Scope: {operation: "GetWorkflowExecutionRawHistoryV2"},
 		AdminGetReplicationMessagesScope:           {operation: "GetReplicationMessages"},
-		AdminGetDomainReplicationMessagesScope:     {operation: "GetDomainReplicationMessages"},
+		AdminGetNamespaceReplicationMessagesScope:  {operation: "GetNamespaceReplicationMessages"},
 		AdminGetDLQReplicationMessagesScope:        {operation: "AdminGetDLQReplicationMessages"},
 		AdminReapplyEventsScope:                    {operation: "ReapplyEvents"},
 		AdminRefreshWorkflowTasksScope:             {operation: "RefreshWorkflowTasks"},
@@ -1338,16 +1338,16 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendPollForDecisionTaskScope:                {operation: "PollForDecisionTask"},
 		FrontendPollForActivityTaskScope:                {operation: "PollForActivityTask"},
 		FrontendRecordActivityTaskHeartbeatScope:        {operation: "RecordActivityTaskHeartbeat"},
-		FrontendRecordActivityTaskHeartbeatByIDScope:    {operation: "RecordActivityTaskHeartbeatByID"},
+		FrontendRecordActivityTaskHeartbeatByIdScope:    {operation: "RecordActivityTaskHeartbeatById"},
 		FrontendRespondDecisionTaskCompletedScope:       {operation: "RespondDecisionTaskCompleted"},
 		FrontendRespondDecisionTaskFailedScope:          {operation: "RespondDecisionTaskFailed"},
 		FrontendRespondQueryTaskCompletedScope:          {operation: "RespondQueryTaskCompleted"},
 		FrontendRespondActivityTaskCompletedScope:       {operation: "RespondActivityTaskCompleted"},
 		FrontendRespondActivityTaskFailedScope:          {operation: "RespondActivityTaskFailed"},
 		FrontendRespondActivityTaskCanceledScope:        {operation: "RespondActivityTaskCanceled"},
-		FrontendRespondActivityTaskCompletedByIDScope:   {operation: "RespondActivityTaskCompletedByID"},
-		FrontendRespondActivityTaskFailedByIDScope:      {operation: "RespondActivityTaskFailedByID"},
-		FrontendRespondActivityTaskCanceledByIDScope:    {operation: "RespondActivityTaskCanceledByID"},
+		FrontendRespondActivityTaskCompletedByIdScope:   {operation: "RespondActivityTaskCompletedById"},
+		FrontendRespondActivityTaskFailedByIdScope:      {operation: "RespondActivityTaskFailedById"},
+		FrontendRespondActivityTaskCanceledByIdScope:    {operation: "RespondActivityTaskCanceledById"},
 		FrontendGetWorkflowExecutionHistoryScope:        {operation: "GetWorkflowExecutionHistory"},
 		FrontendGetWorkflowExecutionRawHistoryScope:     {operation: "GetWorkflowExecutionRawHistory"},
 		FrontendPollForWorkflowExecutionRawHistoryScope: {operation: "PollForWorkflowExecutionRawHistory"},
@@ -1362,11 +1362,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendListWorkflowExecutionsScope:             {operation: "ListWorkflowExecutions"},
 		FrontendScanWorkflowExecutionsScope:             {operation: "ScanWorkflowExecutions"},
 		FrontendCountWorkflowExecutionsScope:            {operation: "CountWorkflowExecutions"},
-		FrontendRegisterDomainScope:                     {operation: "RegisterDomain"},
-		FrontendDescribeDomainScope:                     {operation: "DescribeDomain"},
-		FrontendListDomainsScope:                        {operation: "ListDomain"},
-		FrontendUpdateDomainScope:                       {operation: "UpdateDomain"},
-		FrontendDeprecateDomainScope:                    {operation: "DeprecateDomain"},
+		FrontendRegisterNamespaceScope:                  {operation: "RegisterNamespace"},
+		FrontendDescribeNamespaceScope:                  {operation: "DescribeNamespace"},
+		FrontendListNamespacesScope:                     {operation: "ListNamespace"},
+		FrontendUpdateNamespaceScope:                    {operation: "UpdateNamespace"},
+		FrontendDeprecateNamespaceScope:                 {operation: "DeprecateNamespace"},
 		FrontendQueryWorkflowScope:                      {operation: "QueryWorkflow"},
 		FrontendDescribeWorkflowExecutionScope:          {operation: "DescribeWorkflowExecution"},
 		FrontendListTaskListPartitionsScope:             {operation: "FrontendListTaskListPartitions"},
@@ -1493,7 +1493,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// Worker Scope Names
 	Worker: {
 		ReplicatorScope:                        {operation: "Replicator"},
-		DomainReplicationTaskScope:             {operation: "DomainReplicationTask"},
+		NamespaceReplicationTaskScope:          {operation: "NamespaceReplicationTask"},
 		HistoryReplicationTaskScope:            {operation: "HistoryReplicationTask"},
 		HistoryMetadataReplicationTaskScope:    {operation: "HistoryMetadataReplicationTask"},
 		HistoryReplicationV2TaskScope:          {operation: "HistoryReplicationV2Task"},
@@ -1522,11 +1522,11 @@ const (
 	ServiceCriticalFailures
 	ServiceLatency
 	ServiceErrInvalidArgumentCounter
-	ServiceErrDomainNotActiveCounter
+	ServiceErrNamespaceNotActiveCounter
 	ServiceErrResourceExhaustedCounter
 	ServiceErrNotFoundCounter
 	ServiceErrExecutionAlreadyStartedCounter
-	ServiceErrDomainAlreadyExistsCounter
+	ServiceErrNamespaceAlreadyExistsCounter
 	ServiceErrCancellationAlreadyRequestedCounter
 	ServiceErrQueryFailedCounter
 	ServiceErrContextTimeoutCounter
@@ -1546,7 +1546,7 @@ const (
 	PersistenceErrBusyCounter
 	PersistenceErrEntityNotExistsCounter
 	PersistenceErrExecutionAlreadyStartedCounter
-	PersistenceErrDomainAlreadyExistsCounter
+	PersistenceErrNamespaceAlreadyExistsCounter
 	PersistenceErrBadRequestCounter
 	PersistenceSampledCounter
 
@@ -1558,8 +1558,8 @@ const (
 	ClientRedirectionFailures
 	ClientRedirectionLatency
 
-	DomainCachePrepareCallbacksLatency
-	DomainCacheCallbacksLatency
+	NamespaceCachePrepareCallbacksLatency
+	NamespaceCacheCallbacksLatency
 
 	HistorySize
 	HistoryCount
@@ -1612,9 +1612,9 @@ const (
 	MatchingClientForwardedCounter
 	MatchingClientInvalidTaskListName
 
-	DomainReplicationTaskAckLevelGauge
-	DomainReplicationDLQAckLevelGauge
-	DomainReplicationDLQMaxLevelGauge
+	NamespaceReplicationTaskAckLevelGauge
+	NamespaceReplicationDLQAckLevelGauge
+	NamespaceReplicationDLQMaxLevelGauge
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -1877,7 +1877,7 @@ const (
 	HistoryScavengerSkipCount
 	ParentClosePolicyProcessorSuccess
 	ParentClosePolicyProcessorFailures
-	DomainReplicationEnqueueDLQCount
+	NamespaceReplicationEnqueueDLQCount
 
 	NumWorkerMetrics
 )
@@ -1890,11 +1890,11 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceCriticalFailures:                             {metricName: "service_errors_critical", metricType: Counter},
 		ServiceLatency:                                      {metricName: "service_latency", metricType: Timer},
 		ServiceErrInvalidArgumentCounter:                    {metricName: "service_errors_invalid_argument", metricType: Counter},
-		ServiceErrDomainNotActiveCounter:                    {metricName: "service_errors_domain_not_active", metricType: Counter},
+		ServiceErrNamespaceNotActiveCounter:                 {metricName: "service_errors_namespace_not_active", metricType: Counter},
 		ServiceErrResourceExhaustedCounter:                  {metricName: "service_errors_resource_exhausted", metricType: Counter},
 		ServiceErrNotFoundCounter:                           {metricName: "service_errors_entity_not_found", metricType: Counter},
 		ServiceErrExecutionAlreadyStartedCounter:            {metricName: "service_errors_execution_already_started", metricType: Counter},
-		ServiceErrDomainAlreadyExistsCounter:                {metricName: "service_errors_domain_already_exists", metricType: Counter},
+		ServiceErrNamespaceAlreadyExistsCounter:             {metricName: "service_errors_namespace_already_exists", metricType: Counter},
 		ServiceErrCancellationAlreadyRequestedCounter:       {metricName: "service_errors_cancellation_already_requested", metricType: Counter},
 		ServiceErrQueryFailedCounter:                        {metricName: "service_errors_query_failed", metricType: Counter},
 		ServiceErrContextTimeoutCounter:                     {metricName: "service_errors_context_timeout", metricType: Counter},
@@ -1914,7 +1914,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		PersistenceErrBusyCounter:                           {metricName: "persistence_errors_busy", metricType: Counter},
 		PersistenceErrEntityNotExistsCounter:                {metricName: "persistence_errors_entity_not_exists", metricType: Counter},
 		PersistenceErrExecutionAlreadyStartedCounter:        {metricName: "persistence_errors_execution_already_started", metricType: Counter},
-		PersistenceErrDomainAlreadyExistsCounter:            {metricName: "persistence_errors_domain_already_exists", metricType: Counter},
+		PersistenceErrNamespaceAlreadyExistsCounter:         {metricName: "persistence_errors_namespace_already_exists", metricType: Counter},
 		PersistenceErrBadRequestCounter:                     {metricName: "persistence_errors_bad_request", metricType: Counter},
 		PersistenceSampledCounter:                           {metricName: "persistence_sampled", metricType: Counter},
 		ClientRequests:                                      {metricName: "client_requests", metricType: Counter},
@@ -1923,8 +1923,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ClientRedirectionRequests:                           {metricName: "client_redirection_requests", metricType: Counter},
 		ClientRedirectionFailures:                           {metricName: "client_redirection_errors", metricType: Counter},
 		ClientRedirectionLatency:                            {metricName: "client_redirection_latency", metricType: Timer},
-		DomainCachePrepareCallbacksLatency:                  {metricName: "domain_cache_prepare_callbacks_latency", metricType: Timer},
-		DomainCacheCallbacksLatency:                         {metricName: "domain_cache_callbacks_latency", metricType: Timer},
+		NamespaceCachePrepareCallbacksLatency:               {metricName: "namespace_cache_prepare_callbacks_latency", metricType: Timer},
+		NamespaceCacheCallbacksLatency:                      {metricName: "namespace_cache_callbacks_latency", metricType: Timer},
 		HistorySize:                                         {metricName: "history_size", metricType: Timer},
 		HistoryCount:                                        {metricName: "history_count", metricType: Timer},
 		EventBlobSize:                                       {metricName: "event_blob_size", metricType: Timer},
@@ -1966,9 +1966,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MatchingClientForwardedCounter:                            {metricName: "forwarded", metricType: Counter},
 		MatchingClientInvalidTaskListName:                         {metricName: "invalid_task_list_name", metricType: Counter},
 
-		DomainReplicationTaskAckLevelGauge: {metricName: "domain_replication_task_ack_level", metricType: Gauge},
-		DomainReplicationDLQAckLevelGauge:  {metricName: "domain_dlq_ack_level", metricType: Gauge},
-		DomainReplicationDLQMaxLevelGauge:  {metricName: "domain_dlq_max_level", metricType: Gauge},
+		NamespaceReplicationTaskAckLevelGauge: {metricName: "namespace_replication_task_ack_level", metricType: Gauge},
+		NamespaceReplicationDLQAckLevelGauge:  {metricName: "namespace_dlq_ack_level", metricType: Gauge},
+		NamespaceReplicationDLQMaxLevelGauge:  {metricName: "namespace_dlq_max_level", metricType: Gauge},
 	},
 	History: {
 		TaskRequests:                                      {metricName: "task_requests", metricType: Counter},
@@ -2217,7 +2217,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryScavengerSkipCount:                     {metricName: "scavenger_skips", metricType: Counter},
 		ParentClosePolicyProcessorSuccess:             {metricName: "parent_close_policy_processor_requests", metricType: Counter},
 		ParentClosePolicyProcessorFailures:            {metricName: "parent_close_policy_processor_errors", metricType: Counter},
-		DomainReplicationEnqueueDLQCount:              {metricName: "domain_replication_dlq_enqueue_requests", metricType: Counter},
+		NamespaceReplicationEnqueueDLQCount:           {metricName: "namespace_replication_dlq_enqueue_requests", metricType: Counter},
 	},
 }
 

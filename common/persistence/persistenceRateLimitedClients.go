@@ -492,57 +492,57 @@ func (p *metadataRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *metadataRateLimitedPersistenceClient) CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error) {
+func (p *metadataRateLimitedPersistenceClient) CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.CreateDomain(request)
+	response, err := p.persistence.CreateNamespace(request)
 	return response, err
 }
 
-func (p *metadataRateLimitedPersistenceClient) GetDomain(request *GetDomainRequest) (*GetDomainResponse, error) {
+func (p *metadataRateLimitedPersistenceClient) GetNamespace(request *GetNamespaceRequest) (*GetNamespaceResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.GetDomain(request)
+	response, err := p.persistence.GetNamespace(request)
 	return response, err
 }
 
-func (p *metadataRateLimitedPersistenceClient) UpdateDomain(request *UpdateDomainRequest) error {
+func (p *metadataRateLimitedPersistenceClient) UpdateNamespace(request *UpdateNamespaceRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.UpdateDomain(request)
+	err := p.persistence.UpdateNamespace(request)
 	return err
 }
 
-func (p *metadataRateLimitedPersistenceClient) DeleteDomain(request *DeleteDomainRequest) error {
+func (p *metadataRateLimitedPersistenceClient) DeleteNamespace(request *DeleteNamespaceRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteDomain(request)
+	err := p.persistence.DeleteNamespace(request)
 	return err
 }
 
-func (p *metadataRateLimitedPersistenceClient) DeleteDomainByName(request *DeleteDomainByNameRequest) error {
+func (p *metadataRateLimitedPersistenceClient) DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteDomainByName(request)
+	err := p.persistence.DeleteNamespaceByName(request)
 	return err
 }
 
-func (p *metadataRateLimitedPersistenceClient) ListDomains(request *ListDomainsRequest) (*ListDomainsResponse, error) {
+func (p *metadataRateLimitedPersistenceClient) ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.ListDomains(request)
+	response, err := p.persistence.ListNamespaces(request)
 	return response, err
 }
 

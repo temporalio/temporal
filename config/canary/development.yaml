@@ -1,5 +1,5 @@
 canary:
-  domains: ["canary"]
+  namespaces: ["canary"]
   excludes: ["workflow.searchAttributes", "workflow.batch"]
 
 cadence:

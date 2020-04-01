@@ -42,7 +42,7 @@ message WorkflowExecutionInfo {
     string closeTime = 4;
     enums.WorkflowExecutionCloseStatus closeStatus = 5;
     int64 historyLength = 6;
-    string parentDomainId = 7;
+    string parentNamespaceId = 7;
     common.WorkflowExecution parentExecution = 8;
     int64 executionTime = 9;
     common.Memo memo = 10;
@@ -51,7 +51,7 @@ message WorkflowExecutionInfo {
 }
 
 message PendingActivityInfo {
-    string activityID = 1;
+    string activityId = 1;
     common.ActivityType activityType = 2;
     enums.PendingActivityState state = 3;
     string heartbeatDetails = 4;

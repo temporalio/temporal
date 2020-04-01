@@ -37,7 +37,7 @@ import (
 )
 
 type (
-	cadenceSerializerSuite struct {
+	temporalSerializerSuite struct {
 		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
@@ -46,12 +46,12 @@ type (
 	}
 )
 
-func TestCadenceSerializerSuite(t *testing.T) {
-	s := new(cadenceSerializerSuite)
+func TestTemporalSerializerSuite(t *testing.T) {
+	s := new(temporalSerializerSuite)
 	suite.Run(t, s)
 }
 
-func (s *cadenceSerializerSuite) SetupTest() {
+func (s *temporalSerializerSuite) SetupTest() {
 	var err error
 	s.logger, err = loggerimpl.NewDevelopment()
 	s.Require().NoError(err)
@@ -59,7 +59,7 @@ func (s *cadenceSerializerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *cadenceSerializerSuite) TestSerializer() {
+func (s *temporalSerializerSuite) TestSerializer() {
 
 	concurrency := 1
 	startWG := sync.WaitGroup{}
@@ -121,11 +121,11 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 				BranchToken: []byte{1},
 				Items: []*commonproto.VersionHistoryItem{
 					{
-						EventID: 1,
+						EventId: 1,
 						Version: 0,
 					},
 					{
-						EventID: 2,
+						EventId: 2,
 						Version: 1,
 					},
 				},
@@ -134,11 +134,11 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 				BranchToken: []byte{2},
 				Items: []*commonproto.VersionHistoryItem{
 					{
-						EventID: 2,
+						EventId: 2,
 						Version: 0,
 					},
 					{
-						EventID: 3,
+						EventId: 3,
 						Version: 1,
 					},
 				},
@@ -224,7 +224,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 			// serialize version histories
 
-			nilHistories, err := serializer.SerializeVersionHistories(nil, common.EncodingTypeThriftRW)
+			nilHistories, err := serializer.SerializeVersionHistories(nil, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.Nil(nilHistories)
 
@@ -232,7 +232,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(historiesJSON)
 
-			historiesThrift, err := serializer.SerializeVersionHistories(histories, common.EncodingTypeThriftRW)
+			historiesThrift, err := serializer.SerializeVersionHistories(histories, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(historiesThrift)
 
@@ -298,7 +298,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 			// serialize reset points
 
-			nilResetPoints, err := serializer.SerializeResetPoints(nil, common.EncodingTypeThriftRW)
+			nilResetPoints, err := serializer.SerializeResetPoints(nil, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(nilResetPoints)
 
@@ -311,7 +311,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(resetPointsJSON)
 
-			resetPointsThrift, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeThriftRW)
+			resetPointsThrift, err := serializer.SerializeResetPoints(resetPoints0, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(resetPointsThrift)
 
@@ -343,7 +343,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 			// serialize bad binaries
 
-			nilBadBinaries, err := serializer.SerializeBadBinaries(nil, common.EncodingTypeThriftRW)
+			nilBadBinaries, err := serializer.SerializeBadBinaries(nil, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(nilBadBinaries)
 
@@ -356,7 +356,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(badBinariesJSON)
 
-			badBinariesThrift, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeThriftRW)
+			badBinariesThrift, err := serializer.SerializeBadBinaries(badBinaries0, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(badBinariesThrift)
 

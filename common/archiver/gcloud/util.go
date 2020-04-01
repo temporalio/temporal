@@ -43,25 +43,25 @@ func encode(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func constructHistoryFilename(domainID, workflowID, runID string, version int64) string {
-	combinedHash := constructHistoryFilenamePrefix(domainID, workflowID, runID)
+func constructHistoryFilename(namespaceID, workflowID, runID string, version int64) string {
+	combinedHash := constructHistoryFilenamePrefix(namespaceID, workflowID, runID)
 	return fmt.Sprintf("%s_%v.history", combinedHash, version)
 }
 
-func constructHistoryFilenameMultipart(domainID, workflowID, runID string, version int64, partNumber int) string {
-	combinedHash := constructHistoryFilenamePrefix(domainID, workflowID, runID)
+func constructHistoryFilenameMultipart(namespaceID, workflowID, runID string, version int64, partNumber int) string {
+	combinedHash := constructHistoryFilenamePrefix(namespaceID, workflowID, runID)
 	return fmt.Sprintf("%s_%v_%v.history", combinedHash, version, partNumber)
 }
 
-func constructHistoryFilenamePrefix(domainID, workflowID, runID string) string {
-	return strings.Join([]string{hash(domainID), hash(workflowID), hash(runID)}, "")
+func constructHistoryFilenamePrefix(namespaceID, workflowID, runID string) string {
+	return strings.Join([]string{hash(namespaceID), hash(workflowID), hash(runID)}, "")
 }
 
-func constructVisibilityFilenamePrefix(domainID, tag string) string {
-	return fmt.Sprintf("%s/%s", domainID, tag)
+func constructVisibilityFilenamePrefix(namespaceID, tag string) string {
+	return fmt.Sprintf("%s/%s", namespaceID, tag)
 }
 
-func constructTimeBasedSearchKey(domainID, tag string, timestamp int64, precision string) string {
+func constructTimeBasedSearchKey(namespaceID, tag string, timestamp int64, precision string) string {
 	t := time.Unix(0, timestamp).In(time.UTC)
 	var timeFormat = ""
 	switch precision {
@@ -78,7 +78,7 @@ func constructTimeBasedSearchKey(domainID, tag string, timestamp int64, precisio
 		timeFormat = "2006-01-02T" + timeFormat
 	}
 
-	return fmt.Sprintf("%s_%s", constructVisibilityFilenamePrefix(domainID, tag), t.Format(timeFormat))
+	return fmt.Sprintf("%s_%s", constructVisibilityFilenamePrefix(namespaceID, tag), t.Format(timeFormat))
 }
 
 func hash(s string) (result string) {
@@ -137,9 +137,9 @@ func decodeVisibilityRecord(data []byte) (*archiverproto.ArchiveVisibilityReques
 	return record, nil
 }
 
-func constructVisibilityFilename(domain, workflowTypeName, workflowID, runID, tag string, timestamp int64) string {
+func constructVisibilityFilename(namespace, workflowTypeName, workflowID, runID, tag string, timestamp int64) string {
 	t := time.Unix(0, timestamp).In(time.UTC)
-	prefix := constructVisibilityFilenamePrefix(domain, tag)
+	prefix := constructVisibilityFilenamePrefix(namespace, tag)
 	return fmt.Sprintf("%s_%s_%s_%s_%s.visibility", prefix, t.Format(time.RFC3339), hash(workflowTypeName), hash(workflowID), hash(runID))
 }
 
@@ -152,8 +152,8 @@ func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error
 func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *commonproto.WorkflowExecutionInfo {
 	return &commonproto.WorkflowExecutionInfo{
 		Execution: &commonproto.WorkflowExecution{
-			WorkflowId: record.WorkflowID,
-			RunId:      record.RunID,
+			WorkflowId: record.GetWorkflowId(),
+			RunId:      record.GetRunId(),
 		},
 		Type: &commonproto.WorkflowType{
 			Name: record.WorkflowTypeName,

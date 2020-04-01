@@ -249,10 +249,10 @@ func startAndFinishArchiverWorkflow(ctx workflow.Context, concurrency int, numRe
 
 func randomArchiveRequest() (ArchiveRequest, uint64) {
 	ar := ArchiveRequest{
-		DomainID:   fmt.Sprintf("%v", rand.Intn(1000)),
-		WorkflowID: fmt.Sprintf("%v", rand.Intn(1000)),
-		RunID:      fmt.Sprintf("%v", rand.Intn(1000)),
-		Targets:    []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
+		NamespaceID: fmt.Sprintf("%v", rand.Intn(1000)),
+		WorkflowID:  fmt.Sprintf("%v", rand.Intn(1000)),
+		RunID:       fmt.Sprintf("%v", rand.Intn(1000)),
+		Targets:     []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 	}
 	return ar, hash(ar)
 }

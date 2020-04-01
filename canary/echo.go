@@ -52,7 +52,7 @@ func registerEcho(r registrar) {
 
 // echoWorkflow is a workflow implementation which simply executes an
 // activity that echoes back the input as output
-func echoWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func echoWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	profile, err := beginWorkflow(ctx, wfTypeEcho, scheduledTimeNanos)
 	if err != nil {
 		return err

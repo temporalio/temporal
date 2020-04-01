@@ -113,65 +113,65 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
-func newTaskListConfig(id *taskListID, config *Config, domainCache cache.DomainCache) (*taskListConfig, error) {
-	domainEntry, err := domainCache.GetDomainByID(id.domainID)
+func newTaskListConfig(id *taskListID, config *Config, namespaceCache cache.NamespaceCache) (*taskListConfig, error) {
+	namespaceEntry, err := namespaceCache.GetNamespaceByID(id.namespaceID)
 	if err != nil {
 		return nil, err
 	}
 
-	domain := domainEntry.GetInfo().Name
+	namespace := namespaceEntry.GetInfo().Name
 	taskListName := id.name
 	taskType := id.taskType
 	return &taskListConfig{
 		RangeSize: config.RangeSize,
 		GetTasksBatchSize: func() int {
-			return config.GetTasksBatchSize(domain, taskListName, taskType)
+			return config.GetTasksBatchSize(namespace, taskListName, taskType)
 		},
 		UpdateAckInterval: func() time.Duration {
-			return config.UpdateAckInterval(domain, taskListName, taskType)
+			return config.UpdateAckInterval(namespace, taskListName, taskType)
 		},
 		IdleTasklistCheckInterval: func() time.Duration {
-			return config.IdleTasklistCheckInterval(domain, taskListName, taskType)
+			return config.IdleTasklistCheckInterval(namespace, taskListName, taskType)
 		},
 		MaxTasklistIdleTime: func() time.Duration {
-			return config.MaxTasklistIdleTime(domain, taskListName, taskType)
+			return config.MaxTasklistIdleTime(namespace, taskListName, taskType)
 		},
 		MinTaskThrottlingBurstSize: func() int {
-			return config.MinTaskThrottlingBurstSize(domain, taskListName, taskType)
+			return config.MinTaskThrottlingBurstSize(namespace, taskListName, taskType)
 		},
 		EnableSyncMatch: func() bool {
-			return config.EnableSyncMatch(domain, taskListName, taskType)
+			return config.EnableSyncMatch(namespace, taskListName, taskType)
 		},
 		LongPollExpirationInterval: func() time.Duration {
-			return config.LongPollExpirationInterval(domain, taskListName, taskType)
+			return config.LongPollExpirationInterval(namespace, taskListName, taskType)
 		},
 		MaxTaskDeleteBatchSize: func() int {
-			return config.MaxTaskDeleteBatchSize(domain, taskListName, taskType)
+			return config.MaxTaskDeleteBatchSize(namespace, taskListName, taskType)
 		},
 		OutstandingTaskAppendsThreshold: func() int {
-			return config.OutstandingTaskAppendsThreshold(domain, taskListName, taskType)
+			return config.OutstandingTaskAppendsThreshold(namespace, taskListName, taskType)
 		},
 		MaxTaskBatchSize: func() int {
-			return config.MaxTaskBatchSize(domain, taskListName, taskType)
+			return config.MaxTaskBatchSize(namespace, taskListName, taskType)
 		},
 		NumWritePartitions: func() int {
-			return common.MaxInt(1, config.NumTasklistWritePartitions(domain, taskListName, taskType))
+			return common.MaxInt(1, config.NumTasklistWritePartitions(namespace, taskListName, taskType))
 		},
 		NumReadPartitions: func() int {
-			return common.MaxInt(1, config.NumTasklistReadPartitions(domain, taskListName, taskType))
+			return common.MaxInt(1, config.NumTasklistReadPartitions(namespace, taskListName, taskType))
 		},
 		forwarderConfig: forwarderConfig{
 			ForwarderMaxOutstandingPolls: func() int {
-				return config.ForwarderMaxOutstandingPolls(domain, taskListName, taskType)
+				return config.ForwarderMaxOutstandingPolls(namespace, taskListName, taskType)
 			},
 			ForwarderMaxOutstandingTasks: func() int {
-				return config.ForwarderMaxOutstandingTasks(domain, taskListName, taskType)
+				return config.ForwarderMaxOutstandingTasks(namespace, taskListName, taskType)
 			},
 			ForwarderMaxRatePerSecond: func() int {
-				return config.ForwarderMaxRatePerSecond(domain, taskListName, taskType)
+				return config.ForwarderMaxRatePerSecond(namespace, taskListName, taskType)
 			},
 			ForwarderMaxChildrenPerNode: func() int {
-				return common.MaxInt(1, config.ForwarderMaxChildrenPerNode(domain, taskListName, taskType))
+				return common.MaxInt(1, config.ForwarderMaxChildrenPerNode(namespace, taskListName, taskType))
 			},
 		},
 	}, nil

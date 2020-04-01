@@ -85,11 +85,11 @@ func newWorkflowCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
+					Usage: "WorkflowId",
 				},
 				cli.StringFlag{
 					Name:  FlagRunIDWithAlias,
-					Usage: "RunID",
+					Usage: "RunId",
 				},
 				cli.StringFlag{
 					Name:  FlagNameWithAlias,
@@ -115,11 +115,11 @@ func newWorkflowCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
+					Usage: "WorkflowId",
 				},
 				cli.StringFlag{
 					Name:  FlagRunIDWithAlias,
-					Usage: "RunID",
+					Usage: "RunId",
 				},
 				cli.StringFlag{
 					Name:  FlagReasonWithAlias,
@@ -232,19 +232,19 @@ func newWorkflowCommands() []cli.Command {
 		{
 			Name:    "reset",
 			Aliases: []string{"rs"},
-			Usage:   "reset the workflow, by either eventID or resetType.",
+			Usage:   "reset the workflow, by either eventId or resetType.",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
+					Usage: "WorkflowId",
 				},
 				cli.StringFlag{
 					Name:  FlagRunIDWithAlias,
-					Usage: "RunID",
+					Usage: "RunId",
 				},
 				cli.StringFlag{
 					Name:  FlagEventID,
-					Usage: "The eventID of any event after DecisionTaskStarted you want to reset to (exclusive). It can be DecisionTaskCompleted, DecisionTaskFailed or others",
+					Usage: "The eventId of any event after DecisionTaskStarted you want to reset to (exclusive). It can be DecisionTaskCompleted, DecisionTaskFailed or others",
 				},
 				cli.StringFlag{
 					Name:  FlagReason,
@@ -266,11 +266,11 @@ func newWorkflowCommands() []cli.Command {
 		{
 			Name: "reset-batch",
 			Usage: "reset workflow in batch by resetType: " + strings.Join(mapKeysToArray(resetTypesMap), ",") +
-				"To get base workflowIDs/runIDs to reset, source is from input file or visibility query.",
+				"To get base workflowIds/runIds to reset, source is from input file or visibility query.",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagInputFileWithAlias,
-					Usage: "Input file to use for resetting, one workflow per line of WorkflowID and RunID. RunID is optional, default to current runID if not specified. ",
+					Usage: "Input file to use for resetting, one workflow per line of WorkflowId and RunId. RunId is optional, default to current runId if not specified. ",
 				},
 				cli.StringFlag{
 					Name:  FlagListQueryWithAlias,
@@ -279,7 +279,7 @@ func newWorkflowCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagExcludeFile,
 					Value: "",
-					Usage: "Another input file to use for excluding from resetting, only workflowID is needed.",
+					Usage: "Another input file to use for excluding from resetting, only workflowId is needed.",
 				},
 				cli.StringFlag{
 					Name:  FlagInputSeparator,
@@ -297,7 +297,7 @@ func newWorkflowCommands() []cli.Command {
 				},
 				cli.BoolFlag{
 					Name:  FlagSkipCurrentOpen,
-					Usage: "Skip the workflow if the current run is open for the same workflowID as base.",
+					Usage: "Skip the workflow if the current run is open for the same workflowId as base.",
 				},
 				cli.BoolFlag{
 					Name: FlagSkipBaseIsNotCurrent,
@@ -344,15 +344,15 @@ func newActivityCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
+					Usage: "WorkflowId",
 				},
 				cli.StringFlag{
 					Name:  FlagRunIDWithAlias,
-					Usage: "RunID",
+					Usage: "RunId",
 				},
 				cli.StringFlag{
 					Name:  FlagActivityIDWithAlias,
-					Usage: "The activityID to operate on",
+					Usage: "The activityId to operate on",
 				},
 				cli.StringFlag{
 					Name:  FlagResult,
@@ -373,15 +373,15 @@ func newActivityCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowID",
+					Usage: "WorkflowId",
 				},
 				cli.StringFlag{
 					Name:  FlagRunIDWithAlias,
-					Usage: "RunID",
+					Usage: "RunId",
 				},
 				cli.StringFlag{
 					Name:  FlagActivityIDWithAlias,
-					Usage: "The activityID to operate on",
+					Usage: "The activityId to operate on",
 				},
 				cli.StringFlag{
 					Name:  FlagReason,
@@ -412,7 +412,7 @@ func newBatchCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagJobIDWithAlias,
-					Usage: "Batch Job ID",
+					Usage: "Batch Job Id",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -425,7 +425,7 @@ func newBatchCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagJobIDWithAlias,
-					Usage: "Batch Job ID",
+					Usage: "Batch Job Id",
 				},
 				cli.StringFlag{
 					Name:  FlagReasonWithAlias,

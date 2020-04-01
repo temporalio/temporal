@@ -63,16 +63,16 @@ func (m *MetadataPersistenceSuiteV2) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	m.Assertions = require.New(m.T())
 
-	// cleanup the domain created
+	// cleanup the namespace created
 	var token []byte
 	pageSize := 10
 ListLoop:
 	for {
-		resp, err := m.ListDomains(pageSize, token)
+		resp, err := m.ListNamespaces(pageSize, token)
 		m.NoError(err)
 		token = resp.NextPageToken
-		for _, domain := range resp.Domains {
-			m.NoError(m.DeleteDomain(domain.Info.ID, ""))
+		for _, namespace := range resp.Namespaces {
+			m.NoError(m.DeleteNamespace(namespace.Info.ID, ""))
 		}
 		if len(token) == 0 {
 			break ListLoop
@@ -89,13 +89,13 @@ func (m *MetadataPersistenceSuiteV2) TearDownSuite() {
 	m.TearDownWorkflowStore()
 }
 
-// TestCreateDomain test
-func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
+// TestCreateNamespace test
+func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	id := uuid.New()
-	name := "create-domain-test-name"
-	status := p.DomainStatusRegistered
-	description := "create-domain-test-description"
-	owner := "create-domain-test-owner"
+	name := "create-namespace-test-name"
+	status := p.NamespaceStatusRegistered
+	description := "create-namespace-test-description"
+	owner := "create-namespace-test-owner"
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
@@ -104,12 +104,12 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 	visibilityArchivalStatus := enums.ArchivalStatusEnabled
 	visibilityArchivalURI := "test://visibility/uri"
 	badBinaries := commonproto.BadBinaries{map[string]*commonproto.BadBinaryInfo{}}
-	isGlobalDomain := false
+	isGlobalNamespace := false
 	configVersion := int64(0)
 	failoverVersion := int64(0)
 
-	resp0, err0 := m.CreateDomain(
-		&p.DomainInfo{
+	resp0, err0 := m.CreateNamespace(
+		&p.NamespaceInfo{
 			ID:          id,
 			Name:        name,
 			Status:      status,
@@ -117,7 +117,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 			OwnerEmail:  owner,
 			Data:        data,
 		},
-		&p.DomainConfig{
+		&p.NamespaceConfig{
 			Retention:                retention,
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
@@ -126,8 +126,8 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 			VisibilityArchivalURI:    visibilityArchivalURI,
 			BadBinaries:              badBinaries,
 		},
-		&p.DomainReplicationConfig{},
-		isGlobalDomain,
+		&p.NamespaceReplicationConfig{},
+		isGlobalNamespace,
 		configVersion,
 		failoverVersion,
 	)
@@ -135,9 +135,9 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 	m.NotNil(resp0)
 	m.Equal(id, resp0.ID)
 
-	// for domain which do not have replication config set, will default to
+	// for namespace which do not have replication config set, will default to
 	// use current cluster as active, with current cluster as all clusters
-	resp1, err1 := m.GetDomain(id, "")
+	resp1, err1 := m.GetNamespace(id, "")
 	m.NoError(err1)
 	m.NotNil(resp1)
 	m.Equal(id, resp1.Info.ID)
@@ -155,14 +155,14 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 	m.Equal(badBinaries, resp1.Config.BadBinaries)
 	m.Equal(cluster.TestCurrentClusterName, resp1.ReplicationConfig.ActiveClusterName)
 	m.Equal(1, len(resp1.ReplicationConfig.Clusters))
-	m.Equal(isGlobalDomain, resp1.IsGlobalDomain)
+	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
 	m.Equal(configVersion, resp1.ConfigVersion)
 	m.Equal(failoverVersion, resp1.FailoverVersion)
 	m.True(resp1.ReplicationConfig.Clusters[0].ClusterName == cluster.TestCurrentClusterName)
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.FailoverNotificationVersion)
 
-	resp2, err2 := m.CreateDomain(
-		&p.DomainInfo{
+	resp2, err2 := m.CreateNamespace(
+		&p.NamespaceInfo{
 			ID:          uuid.New(),
 			Name:        name,
 			Status:      status,
@@ -170,7 +170,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 			OwnerEmail:  "fail",
 			Data:        map[string]string{},
 		},
-		&p.DomainConfig{
+		&p.NamespaceConfig{
 			Retention:                100,
 			EmitMetric:               false,
 			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
@@ -178,23 +178,23 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 			VisibilityArchivalURI:    "",
 		},
-		&p.DomainReplicationConfig{},
-		isGlobalDomain,
+		&p.NamespaceReplicationConfig{},
+		isGlobalNamespace,
 		configVersion,
 		failoverVersion,
 	)
 	m.Error(err2)
-	m.IsType(&serviceerror.DomainAlreadyExists{}, err2)
+	m.IsType(&serviceerror.NamespaceAlreadyExists{}, err2)
 	m.Nil(resp2)
 }
 
-// TestGetDomain test
-func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
+// TestGetNamespace test
+func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	id := uuid.New()
-	name := "get-domain-test-name"
-	status := p.DomainStatusRegistered
-	description := "get-domain-test-description"
-	owner := "get-domain-test-owner"
+	name := "get-namespace-test-name"
+	status := p.NamespaceStatusRegistered
+	description := "get-namespace-test-description"
+	owner := "get-namespace-test-owner"
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
@@ -207,7 +207,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(11)
 	failoverVersion := int64(59)
-	isGlobalDomain := true
+	isGlobalNamespace := true
 	clusters := []*p.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
@@ -217,7 +217,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 		},
 	}
 
-	resp0, err0 := m.GetDomain("", "does-not-exist")
+	resp0, err0 := m.GetNamespace("", "does-not-exist")
 	m.Nil(resp0)
 	m.Error(err0)
 	m.IsType(&serviceerror.NotFound{}, err0)
@@ -231,8 +231,8 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 		},
 	}
 
-	resp1, err1 := m.CreateDomain(
-		&p.DomainInfo{
+	resp1, err1 := m.CreateNamespace(
+		&p.NamespaceInfo{
 			ID:          id,
 			Name:        name,
 			Status:      status,
@@ -240,7 +240,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 			OwnerEmail:  owner,
 			Data:        data,
 		},
-		&p.DomainConfig{
+		&p.NamespaceConfig{
 			Retention:                retention,
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
@@ -249,11 +249,11 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 			VisibilityArchivalURI:    visibilityArchivalURI,
 			BadBinaries:              testBinaries,
 		},
-		&p.DomainReplicationConfig{
+		&p.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
-		isGlobalDomain,
+		isGlobalNamespace,
 		configVersion,
 		failoverVersion,
 	)
@@ -261,7 +261,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	m.NotNil(resp1)
 	m.Equal(id, resp1.ID)
 
-	resp2, err2 := m.GetDomain(id, "")
+	resp2, err2 := m.GetNamespace(id, "")
 	m.NoError(err2)
 	m.NotNil(resp2)
 	m.Equal(id, resp2.Info.ID)
@@ -282,12 +282,12 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	for index := range clusters {
 		m.Equal(clusters[index], resp2.ReplicationConfig.Clusters[index])
 	}
-	m.Equal(isGlobalDomain, resp2.IsGlobalDomain)
+	m.Equal(isGlobalNamespace, resp2.IsGlobalNamespace)
 	m.Equal(configVersion, resp2.ConfigVersion)
 	m.Equal(failoverVersion, resp2.FailoverVersion)
 	m.Equal(p.InitialFailoverNotificationVersion, resp2.FailoverNotificationVersion)
 
-	resp3, err3 := m.GetDomain("", name)
+	resp3, err3 := m.GetNamespace("", name)
 	m.NoError(err3)
 	m.NotNil(resp3)
 	m.Equal(id, resp3.Info.ID)
@@ -307,29 +307,29 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	for index := range clusters {
 		m.Equal(clusters[index], resp3.ReplicationConfig.Clusters[index])
 	}
-	m.Equal(isGlobalDomain, resp3.IsGlobalDomain)
+	m.Equal(isGlobalNamespace, resp3.IsGlobalNamespace)
 	m.Equal(configVersion, resp3.ConfigVersion)
 	m.Equal(failoverVersion, resp3.FailoverVersion)
 	m.Equal(p.InitialFailoverNotificationVersion, resp3.FailoverNotificationVersion)
 
-	resp4, err4 := m.GetDomain(id, name)
+	resp4, err4 := m.GetNamespace(id, name)
 	m.Error(err4)
 	m.IsType(&serviceerror.InvalidArgument{}, err4)
 	m.Nil(resp4)
 
-	resp5, err5 := m.GetDomain("", "")
+	resp5, err5 := m.GetNamespace("", "")
 	m.Nil(resp5)
 	m.IsType(&serviceerror.InvalidArgument{}, err5)
 }
 
-// TestConcurrentCreateDomain test
-func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
+// TestConcurrentCreateNamespace test
+func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	id := uuid.New()
 
-	name := "concurrent-create-domain-test-name"
-	status := p.DomainStatusRegistered
-	description := "concurrent-create-domain-test-description"
-	owner := "create-domain-test-owner"
+	name := "concurrent-create-namespace-test-name"
+	status := p.NamespaceStatusRegistered
+	description := "concurrent-create-namespace-test-description"
+	owner := "create-namespace-test-owner"
 	retention := int32(10)
 	emitMetric := true
 	historyArchivalStatus := enums.ArchivalStatusEnabled
@@ -341,7 +341,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(10)
 	failoverVersion := int64(59)
-	isGlobalDomain := true
+	isGlobalNamespace := true
 	clusters := []*p.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
@@ -367,8 +367,8 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 		newValue := fmt.Sprintf("v-%v", i)
 		wg.Add(1)
 		go func(data map[string]string) {
-			_, err1 := m.CreateDomain(
-				&p.DomainInfo{
+			_, err1 := m.CreateNamespace(
+				&p.NamespaceInfo{
 					ID:          id,
 					Name:        name,
 					Status:      status,
@@ -376,7 +376,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 					OwnerEmail:  owner,
 					Data:        data,
 				},
-				&p.DomainConfig{
+				&p.NamespaceConfig{
 					Retention:                retention,
 					EmitMetric:               emitMetric,
 					HistoryArchivalStatus:    historyArchivalStatus,
@@ -385,11 +385,11 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 					VisibilityArchivalURI:    visibilityArchivalURI,
 					BadBinaries:              testBinaries,
 				},
-				&p.DomainReplicationConfig{
+				&p.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
 					Clusters:          clusters,
 				},
-				isGlobalDomain,
+				isGlobalNamespace,
 				configVersion,
 				failoverVersion,
 			)
@@ -402,7 +402,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 	wg.Wait()
 	m.Equal(int32(1), successCount)
 
-	resp, err3 := m.GetDomain("", name)
+	resp, err3 := m.GetNamespace("", name)
 	m.NoError(err3)
 	m.NotNil(resp)
 	m.Equal(name, resp.Info.Name)
@@ -421,11 +421,11 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 	for index := range clusters {
 		m.Equal(clusters[index], resp.ReplicationConfig.Clusters[index])
 	}
-	m.Equal(isGlobalDomain, resp.IsGlobalDomain)
+	m.Equal(isGlobalNamespace, resp.IsGlobalNamespace)
 	m.Equal(configVersion, resp.ConfigVersion)
 	m.Equal(failoverVersion, resp.FailoverVersion)
 
-	//check domain data
+	//check namespace data
 	ss := strings.Split(resp.Info.Data["k0"], "-")
 	m.Equal(2, len(ss))
 	vi, err := strconv.Atoi(ss[1])
@@ -433,13 +433,13 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 	m.Equal(true, vi > 0 && vi <= concurrency)
 }
 
-// TestConcurrentUpdateDomain test
-func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
+// TestConcurrentUpdateNamespace test
+func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	id := uuid.New()
-	name := "concurrent-update-domain-test-name"
-	status := p.DomainStatusRegistered
-	description := "update-domain-test-description"
-	owner := "update-domain-test-owner"
+	name := "concurrent-update-namespace-test-name"
+	status := p.NamespaceStatusRegistered
+	description := "update-namespace-test-description"
+	owner := "update-namespace-test-owner"
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
@@ -453,7 +453,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(10)
 	failoverVersion := int64(59)
-	isGlobalDomain := true
+	isGlobalNamespace := true
 	clusters := []*p.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
@@ -463,8 +463,8 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 		},
 	}
 
-	resp1, err1 := m.CreateDomain(
-		&p.DomainInfo{
+	resp1, err1 := m.CreateNamespace(
+		&p.NamespaceInfo{
 			ID:          id,
 			Name:        name,
 			Status:      status,
@@ -472,7 +472,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 			OwnerEmail:  owner,
 			Data:        data,
 		},
-		&p.DomainConfig{
+		&p.NamespaceConfig{
 			Retention:                retention,
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
@@ -481,18 +481,18 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 			VisibilityArchivalURI:    visibilityArchivalURI,
 			BadBinaries:              badBinaries,
 		},
-		&p.DomainReplicationConfig{
+		&p.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
-		isGlobalDomain,
+		isGlobalNamespace,
 		configVersion,
 		failoverVersion,
 	)
 	m.NoError(err1)
 	m.Equal(id, resp1.ID)
 
-	resp2, err2 := m.GetDomain(id, "")
+	resp2, err2 := m.GetNamespace(id, "")
 	m.NoError(err2)
 	m.Equal(badBinaries, resp2.Config.BadBinaries)
 	metadata, err := m.MetadataManager.GetMetadata()
@@ -515,8 +515,8 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 		newValue := fmt.Sprintf("v-%v", i)
 		wg.Add(1)
 		go func(updatedData map[string]string) {
-			err3 := m.UpdateDomain(
-				&p.DomainInfo{
+			err3 := m.UpdateNamespace(
+				&p.NamespaceInfo{
 					ID:          resp2.Info.ID,
 					Name:        resp2.Info.Name,
 					Status:      resp2.Info.Status,
@@ -524,7 +524,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 					OwnerEmail:  resp2.Info.OwnerEmail,
 					Data:        updatedData,
 				},
-				&p.DomainConfig{
+				&p.NamespaceConfig{
 					Retention:                resp2.Config.Retention,
 					EmitMetric:               resp2.Config.EmitMetric,
 					HistoryArchivalStatus:    resp2.Config.HistoryArchivalStatus,
@@ -533,7 +533,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 					VisibilityArchivalURI:    resp2.Config.VisibilityArchivalURI,
 					BadBinaries:              testBinaries,
 				},
-				&p.DomainReplicationConfig{
+				&p.NamespaceReplicationConfig{
 					ActiveClusterName: resp2.ReplicationConfig.ActiveClusterName,
 					Clusters:          resp2.ReplicationConfig.Clusters,
 				},
@@ -551,13 +551,13 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	wg.Wait()
 	m.Equal(int32(1), successCount)
 
-	resp3, err3 := m.GetDomain("", name)
+	resp3, err3 := m.GetNamespace("", name)
 	m.NoError(err3)
 	m.NotNil(resp3)
 	m.Equal(id, resp3.Info.ID)
 	m.Equal(name, resp3.Info.Name)
 	m.Equal(status, resp3.Info.Status)
-	m.Equal(isGlobalDomain, resp3.IsGlobalDomain)
+	m.Equal(isGlobalNamespace, resp3.IsGlobalNamespace)
 	m.Equal(description, resp3.Info.Description)
 	m.Equal(owner, resp3.Info.OwnerEmail)
 
@@ -573,11 +573,11 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	for index := range clusters {
 		m.Equal(clusters[index], resp3.ReplicationConfig.Clusters[index])
 	}
-	m.Equal(isGlobalDomain, resp3.IsGlobalDomain)
+	m.Equal(isGlobalNamespace, resp3.IsGlobalNamespace)
 	m.Equal(configVersion, resp3.ConfigVersion)
 	m.Equal(failoverVersion, resp3.FailoverVersion)
 
-	//check domain data
+	//check namespace data
 	ss := strings.Split(resp3.Info.Data["k0"], "-")
 	m.Equal(2, len(ss))
 	vi, err := strconv.Atoi(ss[1])
@@ -585,13 +585,13 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	m.Equal(true, vi > 0 && vi <= concurrency)
 }
 
-// TestUpdateDomain test
-func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
+// TestUpdateNamespace test
+func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	id := uuid.New()
-	name := "update-domain-test-name"
-	status := p.DomainStatusRegistered
-	description := "update-domain-test-description"
-	owner := "update-domain-test-owner"
+	name := "update-namespace-test-name"
+	status := p.NamespaceStatusRegistered
+	description := "update-namespace-test-description"
+	owner := "update-namespace-test-owner"
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
@@ -604,7 +604,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(10)
 	failoverVersion := int64(59)
-	isGlobalDomain := true
+	isGlobalNamespace := true
 	clusters := []*p.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
@@ -614,8 +614,8 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 		},
 	}
 
-	resp1, err1 := m.CreateDomain(
-		&p.DomainInfo{
+	resp1, err1 := m.CreateNamespace(
+		&p.NamespaceInfo{
 			ID:          id,
 			Name:        name,
 			Status:      status,
@@ -623,7 +623,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 			OwnerEmail:  owner,
 			Data:        data,
 		},
-		&p.DomainConfig{
+		&p.NamespaceConfig{
 			Retention:                retention,
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
@@ -631,24 +631,24 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 			VisibilityArchivalStatus: visibilityArchivalStatus,
 			VisibilityArchivalURI:    visibilityArchivalURI,
 		},
-		&p.DomainReplicationConfig{
+		&p.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
-		isGlobalDomain,
+		isGlobalNamespace,
 		configVersion,
 		failoverVersion,
 	)
 	m.NoError(err1)
 	m.Equal(id, resp1.ID)
 
-	resp2, err2 := m.GetDomain(id, "")
+	resp2, err2 := m.GetNamespace(id, "")
 	m.NoError(err2)
 	metadata, err := m.MetadataManager.GetMetadata()
 	m.NoError(err)
 	notificationVersion := metadata.NotificationVersion
 
-	updatedStatus := p.DomainStatusDeprecated
+	updatedStatus := p.NamespaceStatusDeprecated
 	updatedDescription := "description-updated"
 	updatedOwner := "owner-updated"
 	//This will overriding the previous key-value pair
@@ -683,8 +683,8 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 		},
 	}
 
-	err3 := m.UpdateDomain(
-		&p.DomainInfo{
+	err3 := m.UpdateNamespace(
+		&p.NamespaceInfo{
 			ID:          resp2.Info.ID,
 			Name:        resp2.Info.Name,
 			Status:      updatedStatus,
@@ -692,7 +692,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 			OwnerEmail:  updatedOwner,
 			Data:        updatedData,
 		},
-		&p.DomainConfig{
+		&p.NamespaceConfig{
 			Retention:                updatedRetention,
 			EmitMetric:               updatedEmitMetric,
 			HistoryArchivalStatus:    updatedHistoryArchivalStatus,
@@ -701,7 +701,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 			VisibilityArchivalURI:    updatedVisibilityArchivalURI,
 			BadBinaries:              testBinaries,
 		},
-		&p.DomainReplicationConfig{
+		&p.NamespaceReplicationConfig{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
 		},
@@ -712,12 +712,12 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	)
 	m.NoError(err3)
 
-	resp4, err4 := m.GetDomain("", name)
+	resp4, err4 := m.GetNamespace("", name)
 	m.NoError(err4)
 	m.NotNil(resp4)
 	m.Equal(id, resp4.Info.ID)
 	m.Equal(name, resp4.Info.Name)
-	m.Equal(isGlobalDomain, resp4.IsGlobalDomain)
+	m.Equal(isGlobalNamespace, resp4.IsGlobalNamespace)
 	m.Equal(updatedStatus, resp4.Info.Status)
 	m.Equal(updatedDescription, resp4.Info.Description)
 	m.Equal(updatedOwner, resp4.Info.OwnerEmail)
@@ -739,12 +739,12 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	m.Equal(updateFailoverNotificationVersion, resp4.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp4.NotificationVersion)
 
-	resp5, err5 := m.GetDomain(id, "")
+	resp5, err5 := m.GetNamespace(id, "")
 	m.NoError(err5)
 	m.NotNil(resp5)
 	m.Equal(id, resp5.Info.ID)
 	m.Equal(name, resp5.Info.Name)
-	m.Equal(isGlobalDomain, resp5.IsGlobalDomain)
+	m.Equal(isGlobalNamespace, resp5.IsGlobalNamespace)
 	m.Equal(updatedStatus, resp5.Info.Status)
 	m.Equal(updatedDescription, resp5.Info.Description)
 	m.Equal(updatedOwner, resp5.Info.OwnerEmail)
@@ -766,13 +766,13 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	m.Equal(notificationVersion, resp5.NotificationVersion)
 }
 
-// TestDeleteDomain test
-func (m *MetadataPersistenceSuiteV2) TestDeleteDomain() {
+// TestDeleteNamespace test
+func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	id := uuid.New()
-	name := "delete-domain-test-name"
-	status := p.DomainStatusRegistered
-	description := "delete-domain-test-description"
-	owner := "delete-domain-test-owner"
+	name := "delete-namespace-test-name"
+	status := p.NamespaceStatusRegistered
+	description := "delete-namespace-test-description"
+	owner := "delete-namespace-test-owner"
 	data := map[string]string{"k1": "v1"}
 	retention := 10
 	emitMetric := true
@@ -785,7 +785,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteDomain() {
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(10)
 	failoverVersion := int64(59)
-	isGlobalDomain := true
+	isGlobalNamespace := true
 	clusters := []*p.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
@@ -795,8 +795,8 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteDomain() {
 		},
 	}
 
-	resp1, err1 := m.CreateDomain(
-		&p.DomainInfo{
+	resp1, err1 := m.CreateNamespace(
+		&p.NamespaceInfo{
 			ID:          id,
 			Name:        name,
 			Status:      status,
@@ -804,7 +804,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteDomain() {
 			OwnerEmail:  owner,
 			Data:        data,
 		},
-		&p.DomainConfig{
+		&p.NamespaceConfig{
 			Retention:                int32(retention),
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
@@ -812,37 +812,37 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteDomain() {
 			VisibilityArchivalStatus: visibilityArchivalStatus,
 			VisibilityArchivalURI:    visibilityArchivalURI,
 		},
-		&p.DomainReplicationConfig{
+		&p.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
-		isGlobalDomain,
+		isGlobalNamespace,
 		configVersion,
 		failoverVersion,
 	)
 	m.NoError(err1)
 	m.Equal(id, resp1.ID)
 
-	resp2, err2 := m.GetDomain("", name)
+	resp2, err2 := m.GetNamespace("", name)
 	m.NoError(err2)
 	m.NotNil(resp2)
 
-	err3 := m.DeleteDomain("", name)
+	err3 := m.DeleteNamespace("", name)
 	m.NoError(err3)
 
-	resp4, err4 := m.GetDomain("", name)
+	resp4, err4 := m.GetNamespace("", name)
 	m.Error(err4)
 	m.IsType(&serviceerror.NotFound{}, err4)
 	m.Nil(resp4)
 
-	resp5, err5 := m.GetDomain(id, "")
+	resp5, err5 := m.GetNamespace(id, "")
 	m.Error(err5)
 	m.IsType(&serviceerror.NotFound{}, err5)
 	m.Nil(resp5)
 
 	id = uuid.New()
-	resp6, err6 := m.CreateDomain(
-		&p.DomainInfo{
+	resp6, err6 := m.CreateNamespace(
+		&p.NamespaceInfo{
 			ID:          id,
 			Name:        name,
 			Status:      status,
@@ -850,7 +850,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteDomain() {
 			OwnerEmail:  owner,
 			Data:        data,
 		},
-		&p.DomainConfig{
+		&p.NamespaceConfig{
 			Retention:                int32(retention),
 			EmitMetric:               emitMetric,
 			HistoryArchivalStatus:    historyArchivalStatus,
@@ -858,33 +858,33 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteDomain() {
 			VisibilityArchivalStatus: visibilityArchivalStatus,
 			VisibilityArchivalURI:    visibilityArchivalURI,
 		},
-		&p.DomainReplicationConfig{
+		&p.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
 		},
-		isGlobalDomain,
+		isGlobalNamespace,
 		configVersion,
 		failoverVersion,
 	)
 	m.NoError(err6)
 	m.Equal(id, resp6.ID)
 
-	err7 := m.DeleteDomain(id, "")
+	err7 := m.DeleteNamespace(id, "")
 	m.NoError(err7)
 
-	resp8, err8 := m.GetDomain("", name)
+	resp8, err8 := m.GetNamespace("", name)
 	m.Error(err8)
 	m.IsType(&serviceerror.NotFound{}, err8)
 	m.Nil(resp8)
 
-	resp9, err9 := m.GetDomain(id, "")
+	resp9, err9 := m.GetNamespace(id, "")
 	m.Error(err9)
 	m.IsType(&serviceerror.NotFound{}, err9)
 	m.Nil(resp9)
 }
 
-// TestListDomains test
-func (m *MetadataPersistenceSuiteV2) TestListDomains() {
+// TestListNamespaces test
+func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 	clusterActive1 := "some random active cluster name"
 	clusterStandby1 := "some random standby cluster name"
 	clusters1 := []*p.ClusterReplicationConfig{
@@ -926,17 +926,17 @@ func (m *MetadataPersistenceSuiteV2) TestListDomains() {
 		},
 	}
 
-	inputDomains := []*p.GetDomainResponse{
+	inputNamespaces := []*p.GetNamespaceResponse{
 		{
-			Info: &p.DomainInfo{
+			Info: &p.NamespaceInfo{
 				ID:          uuid.New(),
-				Name:        "list-domain-test-name-1",
-				Status:      p.DomainStatusRegistered,
-				Description: "list-domain-test-description-1",
-				OwnerEmail:  "list-domain-test-owner-1",
+				Name:        "list-namespace-test-name-1",
+				Status:      p.NamespaceStatusRegistered,
+				Description: "list-namespace-test-description-1",
+				OwnerEmail:  "list-namespace-test-owner-1",
 				Data:        map[string]string{"k1": "v1"},
 			},
-			Config: &p.DomainConfig{
+			Config: &p.NamespaceConfig{
 				Retention:                109,
 				EmitMetric:               true,
 				HistoryArchivalStatus:    enums.ArchivalStatusEnabled,
@@ -945,24 +945,24 @@ func (m *MetadataPersistenceSuiteV2) TestListDomains() {
 				VisibilityArchivalURI:    "test://visibility/uri",
 				BadBinaries:              testBinaries1,
 			},
-			ReplicationConfig: &p.DomainReplicationConfig{
+			ReplicationConfig: &p.NamespaceReplicationConfig{
 				ActiveClusterName: clusterActive1,
 				Clusters:          clusters1,
 			},
-			IsGlobalDomain:  true,
-			ConfigVersion:   133,
-			FailoverVersion: 266,
+			IsGlobalNamespace: true,
+			ConfigVersion:     133,
+			FailoverVersion:   266,
 		},
 		{
-			Info: &p.DomainInfo{
+			Info: &p.NamespaceInfo{
 				ID:          uuid.New(),
-				Name:        "list-domain-test-name-2",
-				Status:      p.DomainStatusRegistered,
-				Description: "list-domain-test-description-2",
-				OwnerEmail:  "list-domain-test-owner-2",
+				Name:        "list-namespace-test-name-2",
+				Status:      p.NamespaceStatusRegistered,
+				Description: "list-namespace-test-description-2",
+				OwnerEmail:  "list-namespace-test-owner-2",
 				Data:        map[string]string{"k1": "v2"},
 			},
-			Config: &p.DomainConfig{
+			Config: &p.NamespaceConfig{
 				Retention:                326,
 				EmitMetric:               false,
 				HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
@@ -971,77 +971,77 @@ func (m *MetadataPersistenceSuiteV2) TestListDomains() {
 				VisibilityArchivalURI:    "",
 				BadBinaries:              testBinaries2,
 			},
-			ReplicationConfig: &p.DomainReplicationConfig{
+			ReplicationConfig: &p.NamespaceReplicationConfig{
 				ActiveClusterName: clusterActive2,
 				Clusters:          clusters2,
 			},
-			IsGlobalDomain:  false,
-			ConfigVersion:   400,
-			FailoverVersion: 667,
+			IsGlobalNamespace: false,
+			ConfigVersion:     400,
+			FailoverVersion:   667,
 		},
 	}
-	for _, domain := range inputDomains {
-		_, err := m.CreateDomain(
-			domain.Info,
-			domain.Config,
-			domain.ReplicationConfig,
-			domain.IsGlobalDomain,
-			domain.ConfigVersion,
-			domain.FailoverVersion,
+	for _, namespace := range inputNamespaces {
+		_, err := m.CreateNamespace(
+			namespace.Info,
+			namespace.Config,
+			namespace.ReplicationConfig,
+			namespace.IsGlobalNamespace,
+			namespace.ConfigVersion,
+			namespace.FailoverVersion,
 		)
 		m.NoError(err)
 	}
 
 	var token []byte
 	pageSize := 1
-	outputDomains := make(map[string]*p.GetDomainResponse)
+	outputNamespaces := make(map[string]*p.GetNamespaceResponse)
 ListLoop:
 	for {
-		resp, err := m.ListDomains(pageSize, token)
+		resp, err := m.ListNamespaces(pageSize, token)
 		m.NoError(err)
 		token = resp.NextPageToken
-		for _, domain := range resp.Domains {
-			outputDomains[domain.Info.ID] = domain
+		for _, namespace := range resp.Namespaces {
+			outputNamespaces[namespace.Info.ID] = namespace
 			// global notification version is already tested, so here we make it 0
 			// so we can test == easily
-			domain.NotificationVersion = 0
+			namespace.NotificationVersion = 0
 		}
 		if len(token) == 0 {
 			break ListLoop
 		}
 	}
 
-	m.Equal(len(inputDomains), len(outputDomains))
-	for _, domain := range inputDomains {
-		m.Equal(domain, outputDomains[domain.Info.ID])
+	m.Equal(len(inputNamespaces), len(outputNamespaces))
+	for _, namespace := range inputNamespaces {
+		m.Equal(namespace, outputNamespaces[namespace.Info.ID])
 	}
 }
 
-// CreateDomain helper method
-func (m *MetadataPersistenceSuiteV2) CreateDomain(info *p.DomainInfo, config *p.DomainConfig,
-	replicationConfig *p.DomainReplicationConfig, isGlobaldomain bool, configVersion int64, failoverVersion int64) (*p.CreateDomainResponse, error) {
-	return m.MetadataManager.CreateDomain(&p.CreateDomainRequest{
+// CreateNamespace helper method
+func (m *MetadataPersistenceSuiteV2) CreateNamespace(info *p.NamespaceInfo, config *p.NamespaceConfig,
+	replicationConfig *p.NamespaceReplicationConfig, isGlobalnamespace bool, configVersion int64, failoverVersion int64) (*p.CreateNamespaceResponse, error) {
+	return m.MetadataManager.CreateNamespace(&p.CreateNamespaceRequest{
 		Info:              info,
 		Config:            config,
 		ReplicationConfig: replicationConfig,
-		IsGlobalDomain:    isGlobaldomain,
+		IsGlobalNamespace: isGlobalnamespace,
 		ConfigVersion:     configVersion,
 		FailoverVersion:   failoverVersion,
 	})
 }
 
-// GetDomain helper method
-func (m *MetadataPersistenceSuiteV2) GetDomain(id, name string) (*p.GetDomainResponse, error) {
-	return m.MetadataManager.GetDomain(&p.GetDomainRequest{
+// GetNamespace helper method
+func (m *MetadataPersistenceSuiteV2) GetNamespace(id, name string) (*p.GetNamespaceResponse, error) {
+	return m.MetadataManager.GetNamespace(&p.GetNamespaceRequest{
 		ID:   id,
 		Name: name,
 	})
 }
 
-// UpdateDomain helper method
-func (m *MetadataPersistenceSuiteV2) UpdateDomain(info *p.DomainInfo, config *p.DomainConfig, replicationConfig *p.DomainReplicationConfig,
+// UpdateNamespace helper method
+func (m *MetadataPersistenceSuiteV2) UpdateNamespace(info *p.NamespaceInfo, config *p.NamespaceConfig, replicationConfig *p.NamespaceReplicationConfig,
 	configVersion int64, failoverVersion int64, failoverNotificationVersion int64, notificationVersion int64) error {
-	return m.MetadataManager.UpdateDomain(&p.UpdateDomainRequest{
+	return m.MetadataManager.UpdateNamespace(&p.UpdateNamespaceRequest{
 		Info:                        info,
 		Config:                      config,
 		ReplicationConfig:           replicationConfig,
@@ -1052,17 +1052,17 @@ func (m *MetadataPersistenceSuiteV2) UpdateDomain(info *p.DomainInfo, config *p.
 	})
 }
 
-// DeleteDomain helper method
-func (m *MetadataPersistenceSuiteV2) DeleteDomain(id, name string) error {
+// DeleteNamespace helper method
+func (m *MetadataPersistenceSuiteV2) DeleteNamespace(id, name string) error {
 	if len(id) > 0 {
-		return m.MetadataManager.DeleteDomain(&p.DeleteDomainRequest{ID: id})
+		return m.MetadataManager.DeleteNamespace(&p.DeleteNamespaceRequest{ID: id})
 	}
-	return m.MetadataManager.DeleteDomainByName(&p.DeleteDomainByNameRequest{Name: name})
+	return m.MetadataManager.DeleteNamespaceByName(&p.DeleteNamespaceByNameRequest{Name: name})
 }
 
-// ListDomains helper method
-func (m *MetadataPersistenceSuiteV2) ListDomains(pageSize int, pageToken []byte) (*p.ListDomainsResponse, error) {
-	return m.MetadataManager.ListDomains(&p.ListDomainsRequest{
+// ListNamespaces helper method
+func (m *MetadataPersistenceSuiteV2) ListNamespaces(pageSize int, pageToken []byte) (*p.ListNamespacesResponse, error) {
+	return m.MetadataManager.ListNamespaces(&p.ListNamespacesRequest{
 		PageSize:      pageSize,
 		NextPageToken: pageToken,
 	})

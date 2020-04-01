@@ -3,7 +3,7 @@ when creating the service config).
 
 Each key can have zero or more values and each value can have zero or more
 constraints. There are only three types of constraint:
-    1. domainName: string
+    1. namespace: string
     2. taskListName: string
     3. taskType: int (0:Decision, 1:Activity)
 A value will be selected and returned if all its has exactly the same constraints
@@ -15,19 +15,19 @@ testGetBoolPropertyKey:
   - value: false
   - value: true
     constraints:
-      domainName: "global-samples-domain"
+      namespace: "global-samples-namespace"
   - value: false
     constraints:
-      domainName: "samples-domain"
+      namespace: "samples-namespace"
 testGetDurationPropertyKey:
   - value: "1m"
     constraints:
-      domainName: "samples-domain"
+      namespace: "samples-namespace"
       taskListName: "longIdleTimeTasklist"
 testGetFloat64PropertyKey:
   - value: 12.0
     constraints:
-      domainName: "samples-domain"
+      namespace: "samples-namespace"
 testGetMapPropertyKey:
   - value:
       key1: 1

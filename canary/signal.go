@@ -43,7 +43,7 @@ func registerSignal(r registrar) {
 
 // signalWorkflow is the workflow implementation to test SignalWorkflowExecution API
 // it simply spins up an activity which sends a signal to the parent
-func signalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func signalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	var err error
 	profile, err := beginWorkflow(ctx, wfTypeSignal, scheduledTimeNanos)
 	if err != nil {
@@ -73,7 +73,7 @@ func signalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain strin
 		return profile.end(errors.New("invalid signal value"))
 	}
 
-	cwo := newChildWorkflowOptions(domain, wfTypeSignalExternal+"-child")
+	cwo := newChildWorkflowOptions(namespace, wfTypeSignalExternal+"-child")
 	childCtx := workflow.WithChildOptions(ctx, cwo)
 	childFuture := workflow.ExecuteChildWorkflow(childCtx, wfTypeSignalExternal, workflow.Now(ctx).UnixNano(), sleepDuration)
 	signalFuture := childFuture.SignalChildWorkflow(childCtx, signalName, signalValue)
@@ -87,7 +87,7 @@ func signalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain strin
 		if !useRunID {
 			workflowIDSuffix = "-without-run-ID"
 		}
-		cwo = newChildWorkflowOptions(domain, wfTypeSignalExternal+workflowIDSuffix)
+		cwo = newChildWorkflowOptions(namespace, wfTypeSignalExternal+workflowIDSuffix)
 		childCtx = workflow.WithChildOptions(ctx, cwo)
 		childFuture = workflow.ExecuteChildWorkflow(childCtx, wfTypeSignalExternal, workflow.Now(ctx).UnixNano(), sleepDuration)
 		childExecution := &workflow.Execution{}

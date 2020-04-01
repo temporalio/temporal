@@ -48,10 +48,10 @@ type (
 
 		logger log.Logger
 
-		domainID   string
-		domainName string
-		workflowID string
-		runID      string
+		namespaceID string
+		namespace   string
+		workflowID  string
+		runID       string
 
 		nDCConflictResolver *nDCConflictResolverImpl
 	}
@@ -74,8 +74,8 @@ func (s *nDCConflictResolverSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          10,
-				RangeID:          1,
+				ShardId:          10,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
@@ -83,8 +83,8 @@ func (s *nDCConflictResolverSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.domainID = uuid.New()
-	s.domainName = "some random domain name"
+	s.namespaceID = uuid.New()
+	s.namespace = "some random namespace name"
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
 
@@ -125,13 +125,13 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   s.domainID,
-		WorkflowID: s.workflowID,
-		RunID:      s.runID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
 	}).AnyTimes()
 
 	workflowIdentifier := definition.NewWorkflowIdentifier(
-		s.domainID,
+		s.namespaceID,
 		s.workflowID,
 		s.runID,
 	)
@@ -218,13 +218,13 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   s.domainID,
-		WorkflowID: s.workflowID,
-		RunID:      s.runID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
 	}).AnyTimes()
 
 	workflowIdentifier := definition.NewWorkflowIdentifier(
-		s.domainID,
+		s.namespaceID,
 		s.workflowID,
 		s.runID,
 	)

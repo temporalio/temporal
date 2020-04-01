@@ -53,7 +53,7 @@ type (
 		event            *genericTaskInfo // non-nil for activity or decision task that's locally generated
 		query            *queryTaskInfo   // non-nil for a query task that's locally sync matched
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
-		domainName       string
+		namespace        string
 		source           enums.TaskSource
 		forwardedFrom    string     // name of the child partition this task is forwarded from (empty if not forwarded)
 		responseC        chan error // non-nil only where there is a caller waiting for response (sync-match)
@@ -119,7 +119,7 @@ func (task *internalTask) isForwarded() bool {
 func (task *internalTask) workflowExecution() *commonproto.WorkflowExecution {
 	switch {
 	case task.event != nil:
-		return &commonproto.WorkflowExecution{WorkflowId: task.event.Data.WorkflowID, RunId: primitives.UUIDString(task.event.Data.RunID)}
+		return &commonproto.WorkflowExecution{WorkflowId: task.event.Data.GetWorkflowId(), RunId: primitives.UUIDString(task.event.Data.GetRunId())}
 	case task.query != nil:
 		return task.query.request.GetQueryRequest().GetExecution()
 	case task.started != nil && task.started.decisionTaskInfo != nil:

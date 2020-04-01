@@ -52,7 +52,7 @@ type (
 		timeSource        clock.TimeSource
 		historyEngine     *historyEngineImpl
 		historyCache      *historyCache
-		domainCache       cache.DomainCache
+		namespaceCache    cache.NamespaceCache
 		historySerializer persistence.PayloadSerializer
 		clusterMetadata   cluster.Metadata
 		metricsClient     metrics.Client
@@ -114,7 +114,7 @@ func newHistoryReplicator(
 	timeSource clock.TimeSource,
 	historyEngine *historyEngineImpl,
 	historyCache *historyCache,
-	domainCache cache.DomainCache,
+	namespaceCache cache.NamespaceCache,
 	historyV2Mgr persistence.HistoryManager,
 	logger log.Logger,
 ) *historyReplicator {
@@ -124,7 +124,7 @@ func newHistoryReplicator(
 		timeSource:        timeSource,
 		historyEngine:     historyEngine,
 		historyCache:      historyCache,
-		domainCache:       domainCache,
+		namespaceCache:    namespaceCache,
 		historySerializer: persistence.NewPayloadSerializer(),
 		clusterMetadata:   shard.GetService().GetClusterMetadata(),
 		metricsClient:     shard.GetMetricsClient(),
@@ -139,16 +139,16 @@ func newHistoryReplicator(
 				logger,
 				msBuilder,
 				func(mutableState mutableState) mutableStateTaskGenerator {
-					return newMutableStateTaskGenerator(shard.GetDomainCache(), logger, mutableState)
+					return newMutableStateTaskGenerator(shard.GetNamespaceCache(), logger, mutableState)
 				},
 			)
 		},
-		getNewMutableState: func(domainEntry *cache.DomainCacheEntry, logger log.Logger) mutableState {
+		getNewMutableState: func(namespaceEntry *cache.NamespaceCacheEntry, logger log.Logger) mutableState {
 			return newMutableStateBuilderWithReplicationState(
 				shard,
 				shard.GetEventsCache(),
 				logger,
-				domainEntry,
+				namespaceEntry,
 			)
 		},
 	}
@@ -178,7 +178,7 @@ func (r *historyReplicator) ApplyRawEvents(
 
 	requestOut := &historyservice.ReplicateEventsRequest{
 		SourceCluster:     sourceCluster,
-		DomainUUID:        requestIn.DomainUUID,
+		NamespaceId:       requestIn.GetNamespaceId(),
 		WorkflowExecution: requestIn.WorkflowExecution,
 		FirstEventId:      firstEventID,
 		NextEventId:       nextEventID,
@@ -242,13 +242,13 @@ func (r *historyReplicator) ApplyEvents(
 		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.EmptyReplicationEventsCounter)
 		return nil
 	}
-	domainID, err := validateDomainUUID(request.DomainUUID)
+	namespaceID, err := validateNamespaceUUID(request.GetNamespaceId())
 	if err != nil {
 		return err
 	}
 
 	execution := *request.WorkflowExecution
-	weContext, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
+	weContext, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
 	if err != nil {
 		// for get workflow execution context, with valid run id
 		// err will not be of type EntityNotExistsError
@@ -283,7 +283,7 @@ func (r *historyReplicator) ApplyEvents(
 			// mutable state for the target workflow ID & run ID combination does not exist
 			// we need to check the existing workflow ID
 			release(err)
-			return r.ApplyOtherEventsMissingMutableState(ctx, domainID, request.WorkflowExecution.GetWorkflowId(),
+			return r.ApplyOtherEventsMissingMutableState(ctx, namespaceID, request.WorkflowExecution.GetWorkflowId(),
 				request.WorkflowExecution.GetRunId(), request, logger)
 		}
 
@@ -308,17 +308,17 @@ func (r *historyReplicator) ApplyStartEvent(
 	logger log.Logger,
 ) error {
 
-	domainEntry, err := r.domainCache.GetDomainByID(context.getDomainID())
+	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(context.getNamespaceID())
 	if err != nil {
 		return err
 	}
-	msBuilder := r.getNewMutableState(domainEntry, logger)
+	msBuilder := r.getNewMutableState(namespaceEntry, logger)
 	return r.ApplyReplicationTask(ctx, context, msBuilder, request, logger)
 }
 
 func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	request *historyservice.ReplicateEventsRequest,
@@ -329,12 +329,12 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 	lastEvent := request.History.Events[len(request.History.Events)-1]
 
 	// we need to check the current workflow execution
-	currentContext, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, domainID, workflowID)
+	currentContext, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, namespaceID, workflowID)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
+		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
 	}
 	defer func() { currentRelease(retError) }()
 
@@ -358,16 +358,16 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 
 	if currentLastWriteVersion < lastEvent.GetVersion() {
 		if currentStillRunning {
-			_, err = r.terminateWorkflow(ctx, domainID, workflowID, currentRunID, lastEvent.GetVersion(), logger)
+			_, err = r.terminateWorkflow(ctx, namespaceID, workflowID, currentRunID, lastEvent.GetVersion(), logger)
 			if err != nil {
 				return err
 			}
 
 		}
 		if request.GetResetWorkflow() {
-			return r.resetor.ApplyResetEvent(ctx, request, domainID, workflowID, currentRunID)
+			return r.resetor.ApplyResetEvent(ctx, request, namespaceID, workflowID, currentRunID)
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
+		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
 	}
 
 	// currentLastWriteVersion == incomingVersion
@@ -376,14 +376,14 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 			// versions are the same, so not necessary to re-apply signals
 			return nil
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, currentRunID, currentNextEventID)
+		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, currentRunID, currentNextEventID)
 	}
 
 	if request.GetResetWorkflow() {
 		//Note that at this point, current run is already closed and currentLastWriteVersion <= incomingVersion
-		return r.resetor.ApplyResetEvent(ctx, request, domainID, workflowID, currentRunID)
+		return r.resetor.ApplyResetEvent(ctx, request, namespaceID, workflowID, currentRunID)
 	}
-	return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
+	return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, namespaceID, workflowID, runID, common.FirstEventID)
 }
 
 func (r *historyReplicator) ApplyOtherEventsVersionChecking(
@@ -414,13 +414,13 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 		// must get the current run ID first
 		// if trying to getCurrentWorkflowRunID function (which use mutable state cache)
 		// there can be deadlock if current workflow is this workflow
-		currentRunID, err := r.getCurrentWorkflowRunID(context.getDomainID(), context.getExecution().GetWorkflowId())
+		currentRunID, err := r.getCurrentWorkflowRunID(context.getNamespaceID(), context.getExecution().GetWorkflowId())
 		if currentRunID == context.getExecution().GetRunId() {
 			err = r.reapplyEvents(ctx, context, msBuilder, events, logger)
 			return nil, err
 		}
 		currentContext, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(
-			ctx, context.getDomainID(), context.getExecution().GetWorkflowId(),
+			ctx, context.getNamespaceID(), context.getExecution().GetWorkflowId(),
 		)
 		if err != nil {
 			return nil, err
@@ -545,7 +545,7 @@ func (r *historyReplicator) ApplyOtherEvents(
 
 		return newRetryTaskErrorWithHint(
 			ErrRetryBufferEventsMsg,
-			context.getDomainID(),
+			context.getNamespaceID(),
 			context.getExecution().GetWorkflowId(),
 			context.getExecution().GetRunId(),
 			msBuilder.GetNextEventID(),
@@ -573,7 +573,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 		return nil
 	}
 
-	domainID, err := validateDomainUUID(request.DomainUUID)
+	namespaceID, err := validateNamespaceUUID(request.GetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -593,7 +593,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 
 	// directly use stateBuilder to apply events for other events(including continueAsNew)
 	newMutableState, err := sBuilder.applyEvents(
-		domainID, requestID, execution, request.History.Events, newRunHistory, request.GetNewRunNDC(),
+		namespaceID, requestID, execution, request.History.Events, newRunHistory, request.GetNewRunNDC(),
 	)
 	if err != nil {
 		return err
@@ -609,7 +609,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 		if newMutableState != nil {
 			newExecutionInfo := newMutableState.GetExecutionInfo()
 			newContext = newWorkflowExecutionContext(
-				newExecutionInfo.DomainID,
+				newExecutionInfo.NamespaceID,
 				commonproto.WorkflowExecution{
 					WorkflowId: newExecutionInfo.WorkflowID,
 					RunId:      newExecutionInfo.RunID,
@@ -640,7 +640,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 ) (retError error) {
 
 	executionInfo := msBuilder.GetExecutionInfo()
-	domainID := executionInfo.DomainID
+	namespaceID := executionInfo.NamespaceID
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: executionInfo.WorkflowID,
 		RunId:      executionInfo.RunID,
@@ -725,7 +725,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.StaleReplicationEventsCounter)
 		deleteHistory()
 
-		currentContext, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, domainID, execution.GetWorkflowId())
+		currentContext, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, namespaceID, execution.GetWorkflowId())
 		if err != nil {
 			return err
 		}
@@ -736,7 +736,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	if currentLastWriteVersion == incomingVersion {
 		_, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(
 			ctx,
-			domainID,
+			namespaceID,
 			execution.GetWorkflowId(),
 		)
 		if err != nil {
@@ -753,7 +753,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 		}
 		return newRetryTaskErrorWithHint(
 			ErrRetryExistingWorkflowMsg,
-			domainID,
+			namespaceID,
 			execution.GetWorkflowId(),
 			currentRunID,
 			currentNextEventID,
@@ -769,7 +769,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	// same workflow ID, same shard
 	currentLastWriteVersion, err = r.terminateWorkflow(
 		ctx,
-		domainID,
+		namespaceID,
 		executionInfo.WorkflowID,
 		currentRunID,
 		incomingVersion,
@@ -817,11 +817,11 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 
 	// terminate the current running workflow
 	// cannot use history cache to get current workflow since there can be deadlock
-	domainID := msBuilder.GetExecutionInfo().DomainID
+	namespaceID := msBuilder.GetExecutionInfo().NamespaceID
 	workflowID := msBuilder.GetExecutionInfo().WorkflowID
 	resp, err := r.shard.GetExecutionManager().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	})
 	if err != nil {
 		logError(logger, "Conflict resolution error getting current workflow.", err)
@@ -854,7 +854,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 	// same workflow ID, same shard
 	currentLastWriteVetsion, err = r.terminateWorkflow(
 		ctx,
-		domainID,
+		namespaceID,
 		workflowID,
 		currentRunID,
 		incomingVersion,
@@ -867,15 +867,15 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 	return currentRunID, currentLastWriteVetsion, persistence.WorkflowStateCompleted, nil
 }
 
-// func (r *historyReplicator) getCurrentWorkflowInfo(domainID string, workflowID string) (runID string, lastWriteVersion int64, closeStatus int, retError error) {
+// func (r *historyReplicator) getCurrentWorkflowInfo(namespaceID string, workflowID string) (runID string, lastWriteVersion int64, closeStatus int, retError error) {
 func (r *historyReplicator) getCurrentWorkflowMutableState(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 ) (workflowExecutionContext, mutableState, releaseWorkflowExecutionFunc, error) {
 	// we need to check the current workflow execution
 	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx,
-		domainID,
+		namespaceID,
 		// only use the workflow ID, to get the current running one
 		commonproto.WorkflowExecution{WorkflowId: workflowID},
 	)
@@ -892,10 +892,10 @@ func (r *historyReplicator) getCurrentWorkflowMutableState(
 	return context, msBuilder, release, nil
 }
 
-func (r *historyReplicator) getCurrentWorkflowRunID(domainID string, workflowID string) (string, error) {
+func (r *historyReplicator) getCurrentWorkflowRunID(namespaceID string, workflowID string) (string, error) {
 	resp, err := r.historyEngine.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	})
 	if err != nil {
 		return "", err
@@ -905,7 +905,7 @@ func (r *historyReplicator) getCurrentWorkflowRunID(domainID string, workflowID 
 
 func (r *historyReplicator) terminateWorkflow(
 	ctx context.Context,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	incomingVersion int64,
@@ -919,7 +919,7 @@ func (r *historyReplicator) terminateWorkflow(
 	}
 	var currentLastWriteVersion int64
 	var err error
-	err = r.historyEngine.updateWorkflowExecution(ctx, domainID, execution, false,
+	err = r.historyEngine.updateWorkflowExecution(ctx, namespaceID, execution, false,
 		func(context workflowExecutionContext, msBuilder mutableState) error {
 
 			// compare the current last write version first
@@ -933,7 +933,7 @@ func (r *historyReplicator) terminateWorkflow(
 			if incomingVersion <= currentLastWriteVersion {
 				return newRetryTaskErrorWithHint(
 					ErrRetryExistingWorkflowMsg,
-					domainID,
+					namespaceID,
 					workflowID,
 					runID,
 					msBuilder.GetNextEventID(),
@@ -952,7 +952,7 @@ func (r *historyReplicator) terminateWorkflow(
 			if sourceCluster != r.clusterMetadata.GetCurrentClusterName() {
 				return newRetryTaskErrorWithHint(
 					ErrRetryExistingWorkflowMsg,
-					domainID,
+					namespaceID,
 					workflowID,
 					runID,
 					msBuilder.GetNextEventID(),
@@ -1066,11 +1066,11 @@ func (r *historyReplicator) deserializeBlob(
 	blob *commonproto.DataBlob,
 ) ([]*commonproto.HistoryEvent, error) {
 
-	if blob.GetEncodingType() != enums.EncodingTypeThriftRW {
+	if blob.GetEncodingType() != enums.EncodingTypeProto3 {
 		return nil, ErrUnknownEncodingType
 	}
 	historyEvents, err := r.historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
-		Encoding: common.EncodingTypeThriftRW,
+		Encoding: common.EncodingTypeProto3,
 		Data:     blob.Data,
 	})
 	if err != nil {
@@ -1186,10 +1186,10 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	logger log.Logger,
 ) (retError error) {
 
-	domainID := msBuilder.GetExecutionInfo().DomainID
+	namespaceID := msBuilder.GetExecutionInfo().NamespaceID
 	workflowID := msBuilder.GetExecutionInfo().WorkflowID
 
-	domainEntry, err := r.domainCache.GetDomainByID(domainID)
+	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
@@ -1216,7 +1216,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	resp, err := r.resetor.ResetWorkflowExecution(
 		ctx,
 		&workflowservice.ResetWorkflowExecutionRequest{
-			Domain:                domainEntry.GetInfo().Name,
+			Namespace:             namespaceEntry.GetInfo().Name,
 			WorkflowExecution:     context.getExecution(),
 			Reason:                workflowResetReason,
 			DecisionFinishEventId: resetDecisionFinishID,
@@ -1228,7 +1228,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 		currMutableState,
 	)
 	if err != nil {
-		if _, ok := err.(*serviceerror.DomainNotActive); ok {
+		if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 			return nil
 		}
 		return err
@@ -1239,7 +1239,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 		RunId:      resp.GetRunId(),
 	}
 	resetNewContext, resetNewRelease, err := r.historyCache.getOrCreateWorkflowExecution(
-		ctx, domainID, resetNewExecution,
+		ctx, namespaceID, resetNewExecution,
 	)
 	if err != nil {
 		return err
@@ -1263,7 +1263,7 @@ func (r *historyReplicator) prepareWorkflowMutation(
 	// for replication stack to modify workflow re-applying events
 	// we need to check 2 things
 	// 1. if the workflow's last write version indicates that workflow is active here
-	// 2. if the domain entry says this domain is active and failover version in the domain entry >= workflow's last write version
+	// 2. if the namespace entry says this namespace is active and failover version in the namespace entry >= workflow's last write version
 	// if either of the above is true, then the workflow can be mutated
 
 	lastWriteVersion, err := msBuilder.GetLastWriteVersion()
@@ -1281,16 +1281,16 @@ func (r *historyReplicator) prepareWorkflowMutation(
 		return true, nil
 	}
 
-	domainEntry, err := r.domainCache.GetDomainByID(msBuilder.GetExecutionInfo().DomainID)
+	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(msBuilder.GetExecutionInfo().NamespaceID)
 	if err != nil {
 		return false, err
 	}
 
-	domainFailoverVersion := domainEntry.GetFailoverVersion()
-	domainActive := domainEntry.GetReplicationConfig().ActiveClusterName == r.clusterMetadata.GetCurrentClusterName() &&
-		domainFailoverVersion >= lastWriteVersion
+	namespaceFailoverVersion := namespaceEntry.GetFailoverVersion()
+	namespaceActive := namespaceEntry.GetReplicationConfig().ActiveClusterName == r.clusterMetadata.GetCurrentClusterName() &&
+		namespaceFailoverVersion >= lastWriteVersion
 
-	if domainActive {
+	if namespaceActive {
 		if err := msBuilder.UpdateCurrentVersion(
 			lastWriteVersion,
 			true,
@@ -1330,7 +1330,7 @@ func logError(
 
 func newRetryTaskErrorWithHint(
 	msg string,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	runID string,
 	nextEventID int64,
@@ -1338,7 +1338,7 @@ func newRetryTaskErrorWithHint(
 
 	return serviceerror.NewRetryTask(
 		msg,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		nextEventID,

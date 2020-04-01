@@ -30,12 +30,12 @@ import (
 	tallystatsdreporter "github.com/uber-go/tally/statsd"
 )
 
-type cadenceTallyStatsdReporter struct {
+type temporalTallyStatsdReporter struct {
 	//Wrapper on top of "github.com/uber-go/tally/statsd"
 	tallystatsd tally.StatsReporter
 }
 
-func (r *cadenceTallyStatsdReporter) metricNameWithTags(originalName string, tags map[string]string) string {
+func (r *temporalTallyStatsdReporter) metricNameWithTags(originalName string, tags map[string]string) string {
 	var keys []string
 	for k := range tags {
 		keys = append(keys, k)
@@ -57,27 +57,27 @@ func (r *cadenceTallyStatsdReporter) metricNameWithTags(originalName string, tag
 // The purpose is to support tagging
 // The implementation is to append tags as metric name suffixes
 func NewReporter(statsd statsd.Statter, opts tallystatsdreporter.Options) tally.StatsReporter {
-	return &cadenceTallyStatsdReporter{
+	return &temporalTallyStatsdReporter{
 		tallystatsd: tallystatsdreporter.NewReporter(statsd, opts),
 	}
 }
 
-func (r *cadenceTallyStatsdReporter) ReportCounter(name string, tags map[string]string, value int64) {
+func (r *temporalTallyStatsdReporter) ReportCounter(name string, tags map[string]string, value int64) {
 	newName := r.metricNameWithTags(name, tags)
 	r.tallystatsd.ReportCounter(newName, map[string]string{}, value)
 }
 
-func (r *cadenceTallyStatsdReporter) ReportGauge(name string, tags map[string]string, value float64) {
+func (r *temporalTallyStatsdReporter) ReportGauge(name string, tags map[string]string, value float64) {
 	newName := r.metricNameWithTags(name, tags)
 	r.tallystatsd.ReportGauge(newName, map[string]string{}, value)
 }
 
-func (r *cadenceTallyStatsdReporter) ReportTimer(name string, tags map[string]string, interval time.Duration) {
+func (r *temporalTallyStatsdReporter) ReportTimer(name string, tags map[string]string, interval time.Duration) {
 	newName := r.metricNameWithTags(name, tags)
 	r.tallystatsd.ReportTimer(newName, map[string]string{}, interval)
 }
 
-func (r *cadenceTallyStatsdReporter) ReportHistogramValueSamples(
+func (r *temporalTallyStatsdReporter) ReportHistogramValueSamples(
 	name string,
 	tags map[string]string,
 	buckets tally.Buckets,
@@ -89,7 +89,7 @@ func (r *cadenceTallyStatsdReporter) ReportHistogramValueSamples(
 	r.tallystatsd.ReportHistogramValueSamples(newName, map[string]string{}, buckets, bucketLowerBound, bucketUpperBound, samples)
 }
 
-func (r *cadenceTallyStatsdReporter) ReportHistogramDurationSamples(
+func (r *temporalTallyStatsdReporter) ReportHistogramDurationSamples(
 	name string,
 	tags map[string]string,
 	buckets tally.Buckets,
@@ -101,10 +101,10 @@ func (r *cadenceTallyStatsdReporter) ReportHistogramDurationSamples(
 	r.tallystatsd.ReportHistogramDurationSamples(newName, map[string]string{}, buckets, bucketLowerBound, bucketUpperBound, samples)
 }
 
-func (r *cadenceTallyStatsdReporter) Capabilities() tally.Capabilities {
+func (r *temporalTallyStatsdReporter) Capabilities() tally.Capabilities {
 	return r.tallystatsd.Capabilities()
 }
 
-func (r *cadenceTallyStatsdReporter) Flush() {
+func (r *temporalTallyStatsdReporter) Flush() {
 	r.tallystatsd.Flush()
 }

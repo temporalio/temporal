@@ -36,7 +36,7 @@ import (
 // AdminDescribeTaskList displays poller and status information of task list.
 func AdminDescribeTaskList(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
-	domain := getRequiredGlobalOption(c, FlagDomain)
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	taskList := getRequiredOption(c, FlagTaskList)
 	taskListType := enums.TaskListTypeDecision
 	if strings.ToLower(c.String(FlagTaskListType)) == "activity" {
@@ -46,7 +46,7 @@ func AdminDescribeTaskList(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &workflowservice.DescribeTaskListRequest{
-		Domain:                domain,
+		Namespace:             namespace,
 		TaskList:              &commonproto.TaskList{Name: taskList},
 		TaskListType:          taskListType,
 		IncludeTaskListStatus: true,
@@ -72,19 +72,19 @@ func AdminDescribeTaskList(c *cli.Context) {
 }
 
 func printTaskListStatus(taskListStatus *commonproto.TaskListStatus) {
-	taskIDBlock := taskListStatus.GetTaskIDBlock()
+	taskIDBlock := taskListStatus.GetTaskIdBlock()
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	table.SetHeader([]string{"Read Level", "Ack Level", "Backlog", "Lease Start TaskID", "Lease End TaskID"})
+	table.SetHeader([]string{"Read Level", "Ack Level", "Backlog", "Lease Start TaskId", "Lease End TaskId"})
 	table.SetHeaderLine(false)
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue)
 	table.Append([]string{strconv.FormatInt(taskListStatus.GetReadLevel(), 10),
 		strconv.FormatInt(taskListStatus.GetAckLevel(), 10),
 		strconv.FormatInt(taskListStatus.GetBacklogCountHint(), 10),
-		strconv.FormatInt(taskIDBlock.GetStartID(), 10),
-		strconv.FormatInt(taskIDBlock.GetEndID(), 10)})
+		strconv.FormatInt(taskIDBlock.GetStartId(), 10),
+		strconv.FormatInt(taskIDBlock.GetEndId(), 10)})
 	table.Render()
 }
 

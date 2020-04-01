@@ -154,10 +154,10 @@ func buildFilterFn(workflowID, runID string) filterFn {
 
 func buildFilterFnForVisibility(workflowID, runID string) filterFnForVisibility {
 	return func(msg *indexer.Message) bool {
-		if len(workflowID) != 0 && msg.GetWorkflowID() != workflowID {
+		if len(workflowID) != 0 && msg.GetWorkflowId() != workflowID {
 			return false
 		}
-		if len(runID) != 0 && msg.GetRunID() != runID {
+		if len(runID) != 0 && msg.GetRunId() != runID {
 			return false
 		}
 		return true
@@ -291,7 +291,7 @@ Loop:
 				} else {
 					outStr = fmt.Sprintf(
 						"%v, %v, %v, %v, %v",
-						task.GetHistoryTaskAttributes().GetDomainId(),
+						task.GetHistoryTaskAttributes().GetNamespaceId(),
 						task.GetHistoryTaskAttributes().GetWorkflowId(),
 						task.GetHistoryTaskAttributes().GetRunId(),
 						task.GetHistoryTaskAttributes().GetFirstEventId(),
@@ -341,9 +341,9 @@ Loop:
 				} else {
 					outStr = fmt.Sprintf(
 						"%v, %v, %v, %v, %v",
-						msg.GetDomainID(),
-						msg.GetWorkflowID(),
-						msg.GetRunID(),
+						msg.GetNamespaceId(),
+						msg.GetWorkflowId(),
+						msg.GetRunId(),
 						msg.GetMessageType().String(),
 						msg.GetVersion(),
 					)
@@ -479,7 +479,7 @@ type ClustersConfig struct {
 	TLS      auth.TLS
 }
 
-func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, targets []string, producer messaging.Producer, session *gocql.Session) {
+func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64, targets []string, producer messaging.Producer, session *gocql.Session) {
 	if minID <= 0 {
 		minID = 1
 	}
@@ -496,7 +496,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 	for {
 		fmt.Printf("Start rereplicate for wid: %v, rid:%v \n", wid, rid)
 		resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
-			DomainID: domainID,
+			NamespaceID: namespaceID,
 			Execution: commonproto.WorkflowExecution{
 				WorkflowId: wid,
 				RunId:      rid,
@@ -516,9 +516,9 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 
 		exeInfo := resp.State.ExecutionInfo
 		taskTemplate := &persistenceblobs.ReplicationTaskInfo{
-			DomainID:            primitives.MustParseUUID(domainID),
-			WorkflowID:          wid,
-			RunID:               primitives.MustParseUUID(rid),
+			NamespaceId:         primitives.MustParseUUID(namespaceID),
+			WorkflowId:          wid,
+			RunId:               primitives.MustParseUUID(rid),
 			Version:             currVersion,
 			LastReplicationInfo: repInfo,
 			BranchToken:         exeInfo.BranchToken,
@@ -542,7 +542,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 				continueAsNew = true
 				newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
-					DomainID: domainID,
+					NamespaceID: namespaceID,
 					Execution: commonproto.WorkflowExecution{
 						WorkflowId: wid,
 						RunId:      newRunID,
@@ -554,8 +554,8 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 				taskTemplate.NewRunBranchToken = resp.State.ExecutionInfo.BranchToken
 			}
 			taskTemplate.Version = firstEvent.GetVersion()
-			taskTemplate.FirstEventID = firstEvent.GetEventId()
-			taskTemplate.NextEventID = lastEvent.GetEventId() + 1
+			taskTemplate.FirstEventId = firstEvent.GetEventId()
+			taskTemplate.NextEventId = lastEvent.GetEventId() + 1
 			task, _, err := history.GenerateReplicationTask(targets, taskTemplate, historyV2Mgr, nil, batch, common.IntPtr(shardID))
 			if err != nil {
 				ErrorAndExit("GenerateReplicationTask error", err)
@@ -564,7 +564,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 			if err != nil {
 				ErrorAndExit("Publish task error", err)
 			}
-			fmt.Printf("publish task successfully firstEventID %v, lastEventID %v \n", firstEvent.GetEventId(), lastEvent.GetEventId())
+			fmt.Printf("publish task successfully firstEventId %v, lastEventId %v \n", firstEvent.GetEventId(), lastEvent.GetEventId())
 		}
 
 		fmt.Printf("Done rereplicate for wid: %v, rid:%v \n", wid, rid)
@@ -595,7 +595,7 @@ func AdminRereplicate(c *cli.Context) {
 	if c.IsSet(FlagInputFile) {
 		inFile := c.String(FlagInputFile)
 		// This code is executed from the CLI. All user input is from a CLI user.
-		// parse domainID,workflowID,runID,minEventID,maxEventID
+		// parse namespaceID,workflowID,runID,minEventID,maxEventID
 		// #nosec
 		file, err := os.Open(inFile)
 		if err != nil {
@@ -617,7 +617,7 @@ func AdminRereplicate(c *cli.Context) {
 				ErrorAndExit("Split failed", fmt.Errorf("line %v has less than 3 cols separated by comma, only %v ", idx, len(cols)))
 			}
 			fmt.Printf("Start processing line %v ...\n", idx)
-			domainID := strings.TrimSpace(cols[0])
+			namespaceID := strings.TrimSpace(cols[0])
 			wid := strings.TrimSpace(cols[1])
 			rid := strings.TrimSpace(cols[2])
 			var minID, maxID int64
@@ -637,21 +637,21 @@ func AdminRereplicate(c *cli.Context) {
 			}
 
 			shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-			doRereplicate(shardID, domainID, wid, rid, minID, maxID, targets, producer, session)
+			doRereplicate(shardID, namespaceID, wid, rid, minID, maxID, targets, producer, session)
 			fmt.Printf("Done processing line %v ...\n", idx)
 		}
 		if err := scanner.Err(); err != nil {
 			ErrorAndExit("scanner failed", err)
 		}
 	} else {
-		domainID := getRequiredOption(c, FlagDomainID)
+		namespaceID := getRequiredOption(c, FlagNamespaceID)
 		wid := getRequiredOption(c, FlagWorkflowID)
 		rid := getRequiredOption(c, FlagRunID)
 		minID := c.Int64(FlagMinEventID)
 		maxID := c.Int64(FlagMaxEventID)
 
 		shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-		doRereplicate(shardID, domainID, wid, rid, minID, maxID, targets, producer, session)
+		doRereplicate(shardID, namespaceID, wid, rid, minID, maxID, targets, producer, session)
 	}
 }
 
@@ -741,7 +741,7 @@ func AdminMergeDLQ(c *cli.Context) {
 				fmt.Printf("cannot publish task %v to topic \n", idx)
 				ErrorAndExit("", err)
 			} else {
-				fmt.Printf("replication task sent: %v firstID %v, nextID %v \n", idx, t.GetHistoryTaskAttributes().GetFirstEventId(), t.GetHistoryTaskAttributes().GetNextEventId())
+				fmt.Printf("replication task sent: %v firstId %v, nextId %v \n", idx, t.GetHistoryTaskAttributes().GetFirstEventId(), t.GetHistoryTaskAttributes().GetNextEventId())
 			}
 		}
 	} else {

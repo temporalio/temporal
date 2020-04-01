@@ -42,7 +42,7 @@ type (
 )
 
 // VisibilityEncoding is default encoding for visibility data
-const VisibilityEncoding = common.EncodingTypeThriftRW
+const VisibilityEncoding = common.EncodingTypeProto3
 
 var _ VisibilityManager = (*visibilityManagerImpl)(nil)
 
@@ -65,7 +65,7 @@ func (v *visibilityManagerImpl) GetName() string {
 
 func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
 	req := &InternalRecordWorkflowExecutionStartedRequest{
-		DomainUUID:         request.DomainUUID,
+		NamespaceID:        request.NamespaceID,
 		WorkflowID:         request.Execution.GetWorkflowId(),
 		RunID:              request.Execution.GetRunId(),
 		WorkflowTypeName:   request.WorkflowTypeName,
@@ -73,7 +73,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWo
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		WorkflowTimeout:    request.WorkflowTimeout,
 		TaskID:             request.TaskID,
-		Memo:               v.serializeMemo(request.Memo, request.DomainUUID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
 		SearchAttributes:   request.SearchAttributes,
 	}
 	return v.persistence.RecordWorkflowExecutionStarted(req)
@@ -81,14 +81,14 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWo
 
 func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	req := &InternalRecordWorkflowExecutionClosedRequest{
-		DomainUUID:         request.DomainUUID,
+		NamespaceID:        request.NamespaceID,
 		WorkflowID:         request.Execution.GetWorkflowId(),
 		RunID:              request.Execution.GetRunId(),
 		WorkflowTypeName:   request.WorkflowTypeName,
 		StartTimestamp:     request.StartTimestamp,
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		TaskID:             request.TaskID,
-		Memo:               v.serializeMemo(request.Memo, request.DomainUUID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
 		SearchAttributes:   request.SearchAttributes,
 		CloseTimestamp:     request.CloseTimestamp,
 		Status:             request.Status,
@@ -100,14 +100,14 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWor
 
 func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
 	req := &InternalUpsertWorkflowExecutionRequest{
-		DomainUUID:         request.DomainUUID,
+		NamespaceID:        request.NamespaceID,
 		WorkflowID:         request.Execution.GetWorkflowId(),
 		RunID:              request.Execution.GetRunId(),
 		WorkflowTypeName:   request.WorkflowTypeName,
 		StartTimestamp:     request.StartTimestamp,
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		TaskID:             request.TaskID,
-		Memo:               v.serializeMemo(request.Memo, request.DomainUUID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
 		SearchAttributes:   request.SearchAttributes,
 	}
 	return v.persistence.UpsertWorkflowExecution(req)
@@ -295,11 +295,11 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 	return convertedExecution
 }
 
-func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *commonproto.Memo, domainID, wID, rID string) *serialization.DataBlob {
+func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *commonproto.Memo, namespaceID, wID, rID string) *serialization.DataBlob {
 	memo, err := v.serializer.SerializeVisibilityMemo(visibilityMemo, VisibilityEncoding)
 	if err != nil {
 		v.logger.WithTags(
-			tag.WorkflowDomainID(domainID),
+			tag.WorkflowNamespaceID(namespaceID),
 			tag.WorkflowID(wID),
 			tag.WorkflowRunID(rID),
 			tag.Error(err)).

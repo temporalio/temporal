@@ -50,21 +50,21 @@ func (_m *MetadataManager) Close() {
 	_m.Called()
 }
 
-// CreateDomain provides a mock function with given fields: request
-func (_m *MetadataManager) CreateDomain(request *persistence.CreateDomainRequest) (*persistence.CreateDomainResponse, error) {
+// CreateNamespace provides a mock function with given fields: request
+func (_m *MetadataManager) CreateNamespace(request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
 	ret := _m.Called(request)
 
-	var r0 *persistence.CreateDomainResponse
-	if rf, ok := ret.Get(0).(func(*persistence.CreateDomainRequest) *persistence.CreateDomainResponse); ok {
+	var r0 *persistence.CreateNamespaceResponse
+	if rf, ok := ret.Get(0).(func(*persistence.CreateNamespaceRequest) *persistence.CreateNamespaceResponse); ok {
 		r0 = rf(request)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.CreateDomainResponse)
+			r0 = ret.Get(0).(*persistence.CreateNamespaceResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*persistence.CreateDomainRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*persistence.CreateNamespaceRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)
@@ -73,12 +73,12 @@ func (_m *MetadataManager) CreateDomain(request *persistence.CreateDomainRequest
 	return r0, r1
 }
 
-// DeleteDomain provides a mock function with given fields: request
-func (_m *MetadataManager) DeleteDomain(request *persistence.DeleteDomainRequest) error {
+// DeleteNamespace provides a mock function with given fields: request
+func (_m *MetadataManager) DeleteNamespace(request *persistence.DeleteNamespaceRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*persistence.DeleteDomainRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*persistence.DeleteNamespaceRequest) error); ok {
 		r0 = rf(request)
 	} else {
 		r0 = ret.Error(0)
@@ -87,12 +87,12 @@ func (_m *MetadataManager) DeleteDomain(request *persistence.DeleteDomainRequest
 	return r0
 }
 
-// DeleteDomainByName provides a mock function with given fields: request
-func (_m *MetadataManager) DeleteDomainByName(request *persistence.DeleteDomainByNameRequest) error {
+// DeleteNamespaceByName provides a mock function with given fields: request
+func (_m *MetadataManager) DeleteNamespaceByName(request *persistence.DeleteNamespaceByNameRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*persistence.DeleteDomainByNameRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*persistence.DeleteNamespaceByNameRequest) error); ok {
 		r0 = rf(request)
 	} else {
 		r0 = ret.Error(0)
@@ -101,21 +101,21 @@ func (_m *MetadataManager) DeleteDomainByName(request *persistence.DeleteDomainB
 	return r0
 }
 
-// GetDomain provides a mock function with given fields: request
-func (_m *MetadataManager) GetDomain(request *persistence.GetDomainRequest) (*persistence.GetDomainResponse, error) {
+// GetNamespace provides a mock function with given fields: request
+func (_m *MetadataManager) GetNamespace(request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 	ret := _m.Called(request)
 
-	var r0 *persistence.GetDomainResponse
-	if rf, ok := ret.Get(0).(func(*persistence.GetDomainRequest) *persistence.GetDomainResponse); ok {
+	var r0 *persistence.GetNamespaceResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetNamespaceRequest) *persistence.GetNamespaceResponse); ok {
 		r0 = rf(request)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.GetDomainResponse)
+			r0 = ret.Get(0).(*persistence.GetNamespaceResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*persistence.GetDomainRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*persistence.GetNamespaceRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)
@@ -124,12 +124,12 @@ func (_m *MetadataManager) GetDomain(request *persistence.GetDomainRequest) (*pe
 	return r0, r1
 }
 
-// UpdateDomain provides a mock function with given fields: request
-func (_m *MetadataManager) UpdateDomain(request *persistence.UpdateDomainRequest) error {
+// UpdateNamespace provides a mock function with given fields: request
+func (_m *MetadataManager) UpdateNamespace(request *persistence.UpdateNamespaceRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*persistence.UpdateDomainRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*persistence.UpdateNamespaceRequest) error); ok {
 		r0 = rf(request)
 	} else {
 		r0 = ret.Error(0)
@@ -138,21 +138,21 @@ func (_m *MetadataManager) UpdateDomain(request *persistence.UpdateDomainRequest
 	return r0
 }
 
-// ListDomains provides a mock function with given fields: request
-func (_m *MetadataManager) ListDomains(request *persistence.ListDomainsRequest) (*persistence.ListDomainsResponse, error) {
+// ListNamespaces provides a mock function with given fields: request
+func (_m *MetadataManager) ListNamespaces(request *persistence.ListNamespacesRequest) (*persistence.ListNamespacesResponse, error) {
 	ret := _m.Called(request)
 
-	var r0 *persistence.ListDomainsResponse
-	if rf, ok := ret.Get(0).(func(*persistence.ListDomainsRequest) *persistence.ListDomainsResponse); ok {
+	var r0 *persistence.ListNamespacesResponse
+	if rf, ok := ret.Get(0).(func(*persistence.ListNamespacesRequest) *persistence.ListNamespacesResponse); ok {
 		r0 = rf(request)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.ListDomainsResponse)
+			r0 = ret.Get(0).(*persistence.ListNamespacesResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*persistence.ListDomainsRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*persistence.ListNamespacesRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)

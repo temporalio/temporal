@@ -128,21 +128,21 @@ func isNotFoundError(err error) bool {
 }
 
 // Key construction
-func constructHistoryKey(path, domainID, workflowID, runID string, version int64, batchIdx int) string {
-	prefix := constructHistoryKeyPrefixWithVersion(path, domainID, workflowID, runID, version)
+func constructHistoryKey(path, namespaceID, workflowID, runID string, version int64, batchIdx int) string {
+	prefix := constructHistoryKeyPrefixWithVersion(path, namespaceID, workflowID, runID, version)
 	return fmt.Sprintf("%s%d", prefix, batchIdx)
 }
 
-func constructHistoryKeyPrefixWithVersion(path, domainID, workflowID, runID string, version int64) string {
-	prefix := constructHistoryKeyPrefix(path, domainID, workflowID, runID)
+func constructHistoryKeyPrefixWithVersion(path, namespaceID, workflowID, runID string, version int64) string {
+	prefix := constructHistoryKeyPrefix(path, namespaceID, workflowID, runID)
 	return fmt.Sprintf("%s/%v/", prefix, version)
 }
 
-func constructHistoryKeyPrefix(path, domainID, workflowID, runID string) string {
-	return strings.TrimLeft(strings.Join([]string{path, domainID, "history", workflowID, runID}, "/"), "/")
+func constructHistoryKeyPrefix(path, namespaceID, workflowID, runID string) string {
+	return strings.TrimLeft(strings.Join([]string{path, namespaceID, "history", workflowID, runID}, "/"), "/")
 }
 
-func constructTimeBasedSearchKey(path, domainID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, precision string) string {
+func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, precision string) string {
 	t := time.Unix(0, timestamp).In(time.UTC)
 	var timeFormat = ""
 	switch precision {
@@ -159,16 +159,16 @@ func constructTimeBasedSearchKey(path, domainID, primaryIndexKey, primaryIndexVa
 		timeFormat = "2006-01-02T" + timeFormat
 	}
 
-	return fmt.Sprintf("%s/%s", constructVisibilitySearchPrefix(path, domainID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(timeFormat))
+	return fmt.Sprintf("%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(timeFormat))
 }
 
-func constructTimestampIndex(path, domainID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, runID string) string {
+func constructTimestampIndex(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, runID string) string {
 	t := time.Unix(0, timestamp).In(time.UTC)
-	return fmt.Sprintf("%s/%s/%s", constructVisibilitySearchPrefix(path, domainID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(time.RFC3339), runID)
+	return fmt.Sprintf("%s/%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(time.RFC3339), runID)
 }
 
-func constructVisibilitySearchPrefix(path, domainID, primaryIndexKey, primaryIndexValue, secondaryIndexType string) string {
-	return strings.TrimLeft(strings.Join([]string{path, domainID, "visibility", primaryIndexKey, primaryIndexValue, secondaryIndexType}, "/"), "/")
+func constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexType string) string {
+	return strings.TrimLeft(strings.Join([]string{path, namespaceID, "visibility", primaryIndexKey, primaryIndexValue, secondaryIndexType}, "/"), "/")
 }
 
 func ensureContextTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -258,8 +258,8 @@ func contextExpired(ctx context.Context) bool {
 func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *commonproto.WorkflowExecutionInfo {
 	return &commonproto.WorkflowExecutionInfo{
 		Execution: &commonproto.WorkflowExecution{
-			WorkflowId: record.WorkflowID,
-			RunId:      record.RunID,
+			WorkflowId: record.GetWorkflowId(),
+			RunId:      record.GetRunId(),
 		},
 		Type: &commonproto.WorkflowType{
 			Name: record.WorkflowTypeName,

@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
-	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -74,24 +74,24 @@ type (
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		suite.Suite
-		ShardMgr                 p.ShardManager
-		AbstractDataStoreFactory client.AbstractDataStoreFactory
-		ExecutionMgrFactory      client.Factory
-		ExecutionManager         p.ExecutionManager
-		TaskMgr                  p.TaskManager
-		HistoryV2Mgr             p.HistoryManager
-		ClusterMetadataManager   p.ClusterMetadataManager
-		MetadataManager          p.MetadataManager
-		VisibilityMgr            p.VisibilityManager
-		DomainReplicationQueue   p.DomainReplicationQueue
-		ShardInfo                *pblobs.ShardInfo
-		TaskIDGenerator          TransferTaskIDGenerator
-		ClusterMetadata          cluster.Metadata
-		ReadLevel                int64
-		ReplicationReadLevel     int64
-		DefaultTestCluster       PersistenceTestCluster
-		VisibilityTestCluster    PersistenceTestCluster
-		logger                   log.Logger
+		ShardMgr                  p.ShardManager
+		AbstractDataStoreFactory  client.AbstractDataStoreFactory
+		ExecutionMgrFactory       client.Factory
+		ExecutionManager          p.ExecutionManager
+		TaskMgr                   p.TaskManager
+		HistoryV2Mgr              p.HistoryManager
+		ClusterMetadataManager    p.ClusterMetadataManager
+		MetadataManager           p.MetadataManager
+		VisibilityMgr             p.VisibilityManager
+		NamespaceReplicationQueue p.NamespaceReplicationQueue
+		ShardInfo                 *persistenceblobs.ShardInfo
+		TaskIDGenerator           TransferTaskIDGenerator
+		ClusterMetadata           cluster.Metadata
+		ReadLevel                 int64
+		ReplicationReadLevel      int64
+		DefaultTestCluster        PersistenceTestCluster
+		VisibilityTestCluster     PersistenceTestCluster
+		logger                    log.Logger
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -220,9 +220,9 @@ func (s *TestBase) Setup() {
 
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0
-	s.ShardInfo = &pblobs.ShardInfo{
-		ShardID:                 shardID,
-		RangeID:                 0,
+	s.ShardInfo = &persistenceblobs.ShardInfo{
+		ShardId:                 shardID,
+		RangeId:                 0,
 		TransferAckLevel:        0,
 		ReplicationAckLevel:     0,
 		TimerAckLevel:           &types.Timestamp{},
@@ -234,9 +234,9 @@ func (s *TestBase) Setup() {
 	err = s.ShardMgr.CreateShard(&p.CreateShardRequest{ShardInfo: s.ShardInfo})
 	s.fatalOnError("CreateShard", err)
 
-	queue, err := factory.NewDomainReplicationQueue()
-	s.fatalOnError("Create DomainReplicationQueue", err)
-	s.DomainReplicationQueue = queue
+	queue, err := factory.NewNamespaceReplicationQueue()
+	s.fatalOnError("Create NamespaceReplicationQueue", err)
+	s.NamespaceReplicationQueue = queue
 }
 
 func (s *TestBase) fatalOnError(msg string, err error) {
@@ -247,10 +247,10 @@ func (s *TestBase) fatalOnError(msg string, err error) {
 
 // CreateShard is a utility method to create the shard using persistence layer
 func (s *TestBase) CreateShard(shardID int32, owner string, rangeID int64) error {
-	info := &pblobs.ShardInfo{
-		ShardID: shardID,
+	info := &persistenceblobs.ShardInfo{
+		ShardId: shardID,
 		Owner:   owner,
-		RangeID: rangeID,
+		RangeId: rangeID,
 	}
 
 	return s.ShardMgr.CreateShard(&p.CreateShardRequest{
@@ -259,7 +259,7 @@ func (s *TestBase) CreateShard(shardID int32, owner string, rangeID int64) error
 }
 
 // GetShard is a utility method to get the shard using persistence layer
-func (s *TestBase) GetShard(shardID int32) (*pblobs.ShardInfo, error) {
+func (s *TestBase) GetShard(shardID int32) (*persistenceblobs.ShardInfo, error) {
 	response, err := s.ShardMgr.GetShard(&p.GetShardRequest{
 		ShardID: shardID,
 	})
@@ -272,7 +272,7 @@ func (s *TestBase) GetShard(shardID int32) (*pblobs.ShardInfo, error) {
 }
 
 // UpdateShard is a utility method to update the shard using persistence layer
-func (s *TestBase) UpdateShard(updatedInfo *pblobs.ShardInfo, previousRangeID int64) error {
+func (s *TestBase) UpdateShard(updatedInfo *persistenceblobs.ShardInfo, previousRangeID int64) error {
 	return s.ShardMgr.UpdateShard(&p.UpdateShardRequest{
 		ShardInfo:       updatedInfo,
 		PreviousRangeID: previousRangeID,
@@ -280,14 +280,14 @@ func (s *TestBase) UpdateShard(updatedInfo *pblobs.ShardInfo, previousRangeID in
 }
 
 // CreateWorkflowExecutionWithBranchToken test util function
-func (s *TestBase) CreateWorkflowExecutionWithBranchToken(domainID string, workflowExecution commonproto.WorkflowExecution, taskList,
+func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, workflowExecution commonproto.WorkflowExecution, taskList,
 	wType string, wTimeout int32, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleID int64, branchToken []byte, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
 				CreateRequestID:             uuid.New(),
-				DomainID:                    domainID,
+				NamespaceID:                 namespaceID,
 				WorkflowID:                  workflowExecution.GetWorkflowId(),
 				RunID:                       workflowExecution.GetRunId(),
 				TaskList:                    taskList,
@@ -309,7 +309,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(domainID string, workf
 			TransferTasks: []p.Task{
 				&p.DecisionTask{
 					TaskID:              s.GetNextSequenceNumber(),
-					DomainID:            domainID,
+					NamespaceID:         namespaceID,
 					TaskList:            taskList,
 					ScheduleID:          decisionScheduleID,
 					VisibilityTimestamp: time.Now(),
@@ -318,22 +318,22 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(domainID string, workf
 			TimerTasks: timerTasks,
 			Checksum:   testWorkflowChecksum,
 		},
-		RangeID: s.ShardInfo.RangeID,
+		RangeID: s.ShardInfo.GetRangeId(),
 	})
 
 	return response, err
 }
 
 // CreateWorkflowExecution is a utility method to create workflow executions
-func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution commonproto.WorkflowExecution, taskList,
+func (s *TestBase) CreateWorkflowExecution(namespaceID string, workflowExecution commonproto.WorkflowExecution, taskList,
 	wType string, wTimeout int32, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
-	return s.CreateWorkflowExecutionWithBranchToken(domainID, workflowExecution, taskList, wType, wTimeout, decisionTimeout,
+	return s.CreateWorkflowExecutionWithBranchToken(namespaceID, workflowExecution, taskList, wType, wTimeout, decisionTimeout,
 		executionContext, nextEventID, lastProcessedEventID, decisionScheduleID, nil, timerTasks)
 }
 
 // CreateWorkflowExecutionWithReplication is a utility method to create workflow executions
-func (s *TestBase) CreateWorkflowExecutionWithReplication(domainID string, workflowExecution commonproto.WorkflowExecution,
+func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, workflowExecution commonproto.WorkflowExecution,
 	taskList, wType string, wTimeout int32, decisionTimeout int32, nextEventID int64,
 	lastProcessedEventID int64, decisionScheduleID int64, state *p.ReplicationState, txTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	var transferTasks []p.Task
@@ -350,16 +350,16 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(domainID string, workf
 	}
 
 	transferTasks = append(transferTasks, &p.DecisionTask{
-		TaskID:     s.GetNextSequenceNumber(),
-		DomainID:   domainID,
-		TaskList:   taskList,
-		ScheduleID: decisionScheduleID,
+		TaskID:      s.GetNextSequenceNumber(),
+		NamespaceID: namespaceID,
+		TaskList:    taskList,
+		ScheduleID:  decisionScheduleID,
 	})
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
 				CreateRequestID:             uuid.New(),
-				DomainID:                    domainID,
+				NamespaceID:                 namespaceID,
 				WorkflowID:                  workflowExecution.GetWorkflowId(),
 				RunID:                       workflowExecution.GetRunId(),
 				TaskList:                    taskList,
@@ -381,14 +381,14 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(domainID string, workf
 			ReplicationTasks: replicationTasks,
 			Checksum:         testWorkflowChecksum,
 		},
-		RangeID: s.ShardInfo.RangeID,
+		RangeID: s.ShardInfo.GetRangeId(),
 	})
 
 	return response, err
 }
 
 // CreateWorkflowExecutionManyTasks is a utility method to create workflow executions
-func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExecution commonproto.WorkflowExecution,
+func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflowExecution commonproto.WorkflowExecution,
 	taskList string, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleIDs []int64, activityScheduleIDs []int64) (*p.CreateWorkflowExecutionResponse, error) {
 
@@ -396,20 +396,20 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExe
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks,
 			&p.DecisionTask{
-				TaskID:     s.GetNextSequenceNumber(),
-				DomainID:   domainID,
-				TaskList:   taskList,
-				ScheduleID: int64(decisionScheduleID),
+				TaskID:      s.GetNextSequenceNumber(),
+				NamespaceID: namespaceID,
+				TaskList:    taskList,
+				ScheduleID:  int64(decisionScheduleID),
 			})
 	}
 
 	for _, activityScheduleID := range activityScheduleIDs {
 		transferTasks = append(transferTasks,
 			&p.ActivityTask{
-				TaskID:     s.GetNextSequenceNumber(),
-				DomainID:   domainID,
-				TaskList:   taskList,
-				ScheduleID: int64(activityScheduleID),
+				TaskID:      s.GetNextSequenceNumber(),
+				NamespaceID: namespaceID,
+				TaskList:    taskList,
+				ScheduleID:  int64(activityScheduleID),
 			})
 	}
 
@@ -417,7 +417,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExe
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
 				CreateRequestID:    uuid.New(),
-				DomainID:           domainID,
+				NamespaceID:        namespaceID,
 				WorkflowID:         workflowExecution.GetWorkflowId(),
 				RunID:              workflowExecution.GetRunId(),
 				TaskList:           taskList,
@@ -435,25 +435,25 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExe
 			TransferTasks:  transferTasks,
 			Checksum:       testWorkflowChecksum,
 		},
-		RangeID: s.ShardInfo.RangeID,
+		RangeID: s.ShardInfo.GetRangeId(),
 	})
 
 	return response, err
 }
 
 // CreateChildWorkflowExecution is a utility method to create child workflow executions
-func (s *TestBase) CreateChildWorkflowExecution(domainID string, workflowExecution commonproto.WorkflowExecution,
-	parentDomainID string, parentExecution commonproto.WorkflowExecution, initiatedID int64, taskList, wType string,
+func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExecution commonproto.WorkflowExecution,
+	parentNamespaceID string, parentExecution commonproto.WorkflowExecution, initiatedID int64, taskList, wType string,
 	wTimeout int32, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleID int64, timerTasks []p.Task) (*p.CreateWorkflowExecutionResponse, error) {
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
 				CreateRequestID:             uuid.New(),
-				DomainID:                    domainID,
+				NamespaceID:                 namespaceID,
 				WorkflowID:                  workflowExecution.GetWorkflowId(),
 				RunID:                       workflowExecution.GetRunId(),
-				ParentDomainID:              parentDomainID,
+				ParentNamespaceID:           parentNamespaceID,
 				ParentWorkflowID:            parentExecution.GetWorkflowId(),
 				ParentRunID:                 parentExecution.GetRunId(),
 				InitiatedID:                 initiatedID,
@@ -474,26 +474,26 @@ func (s *TestBase) CreateChildWorkflowExecution(domainID string, workflowExecuti
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks: []p.Task{
 				&p.DecisionTask{
-					TaskID:     s.GetNextSequenceNumber(),
-					DomainID:   domainID,
-					TaskList:   taskList,
-					ScheduleID: decisionScheduleID,
+					TaskID:      s.GetNextSequenceNumber(),
+					NamespaceID: namespaceID,
+					TaskList:    taskList,
+					ScheduleID:  decisionScheduleID,
 				},
 			},
 			TimerTasks: timerTasks,
 		},
-		RangeID: s.ShardInfo.RangeID,
+		RangeID: s.ShardInfo.GetRangeId(),
 	})
 
 	return response, err
 }
 
 // GetWorkflowExecutionInfoWithStats is a utility method to retrieve execution info with size stats
-func (s *TestBase) GetWorkflowExecutionInfoWithStats(domainID string, workflowExecution commonproto.WorkflowExecution) (
+func (s *TestBase) GetWorkflowExecutionInfoWithStats(namespaceID string, workflowExecution commonproto.WorkflowExecution) (
 	*p.MutableStateStats, *p.WorkflowMutableState, error) {
 	response, err := s.ExecutionManager.GetWorkflowExecution(&p.GetWorkflowExecutionRequest{
-		DomainID:  domainID,
-		Execution: workflowExecution,
+		NamespaceID: namespaceID,
+		Execution:   workflowExecution,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -503,11 +503,11 @@ func (s *TestBase) GetWorkflowExecutionInfoWithStats(domainID string, workflowEx
 }
 
 // GetWorkflowExecutionInfo is a utility method to retrieve execution info
-func (s *TestBase) GetWorkflowExecutionInfo(domainID string, workflowExecution commonproto.WorkflowExecution) (
+func (s *TestBase) GetWorkflowExecutionInfo(namespaceID string, workflowExecution commonproto.WorkflowExecution) (
 	*p.WorkflowMutableState, error) {
 	response, err := s.ExecutionManager.GetWorkflowExecution(&p.GetWorkflowExecutionRequest{
-		DomainID:  domainID,
-		Execution: workflowExecution,
+		NamespaceID: namespaceID,
+		Execution:   workflowExecution,
 	})
 	if err != nil {
 		return nil, err
@@ -516,10 +516,10 @@ func (s *TestBase) GetWorkflowExecutionInfo(domainID string, workflowExecution c
 }
 
 // GetCurrentWorkflowRunID returns the workflow run ID for the given params
-func (s *TestBase) GetCurrentWorkflowRunID(domainID, workflowID string) (string, error) {
+func (s *TestBase) GetCurrentWorkflowRunID(namespaceID, workflowID string) (string, error) {
 	response, err := s.ExecutionManager.GetCurrentExecution(&p.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
 	})
 
 	if err != nil {
@@ -543,10 +543,10 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 	newExecution commonproto.WorkflowExecution, nextEventID, decisionScheduleID int64,
 	prevResetPoints *commonproto.ResetPoints, beforeState *p.ReplicationState, afterState *p.ReplicationState) error {
 	newdecisionTask := &p.DecisionTask{
-		TaskID:     s.GetNextSequenceNumber(),
-		DomainID:   updatedInfo.DomainID,
-		TaskList:   updatedInfo.TaskList,
-		ScheduleID: int64(decisionScheduleID),
+		TaskID:      s.GetNextSequenceNumber(),
+		NamespaceID: updatedInfo.NamespaceID,
+		TaskList:    updatedInfo.TaskList,
+		ScheduleID:  int64(decisionScheduleID),
 	}
 
 	req := &p.UpdateWorkflowExecutionRequest{
@@ -565,7 +565,7 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 		NewWorkflowSnapshot: &p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
 				CreateRequestID:             uuid.New(),
-				DomainID:                    updatedInfo.DomainID,
+				NamespaceID:                 updatedInfo.NamespaceID,
 				WorkflowID:                  newExecution.GetWorkflowId(),
 				RunID:                       newExecution.GetRunId(),
 				TaskList:                    updatedInfo.TaskList,
@@ -588,7 +588,7 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 			TransferTasks:    nil,
 			TimerTasks:       nil,
 		},
-		RangeID:  s.ShardInfo.RangeID,
+		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
 	}
 	req.UpdateWorkflowMutation.ExecutionInfo.State = p.WorkflowStateCompleted
@@ -601,9 +601,9 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 func (s *TestBase) UpdateWorkflowExecution(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, updatedVersionHistories *p.VersionHistories,
 	decisionScheduleIDs []int64, activityScheduleIDs []int64, condition int64, timerTasks []p.Task,
 	upsertActivityInfos []*p.ActivityInfo, deleteActivityInfos []int64,
-	upsertTimerInfos []*pblobs.TimerInfo, deleteTimerInfos []string) error {
+	upsertTimerInfos []*persistenceblobs.TimerInfo, deleteTimerInfos []string) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedStats, updatedVersionHistories, decisionScheduleIDs, activityScheduleIDs,
-		s.ShardInfo.RangeID, condition, timerTasks, upsertActivityInfos, deleteActivityInfos,
+		s.ShardInfo.GetRangeId(), condition, timerTasks, upsertActivityInfos, deleteActivityInfos,
 		upsertTimerInfos, deleteTimerInfos, nil, nil, nil, nil,
 		nil, nil, nil, "")
 }
@@ -613,7 +613,7 @@ func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *p.WorkflowExecu
 	transferTasks := []p.Task{}
 	transferTasks = append(transferTasks, &p.CloseExecutionTask{TaskID: s.GetNextSequenceNumber()})
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		RangeID: s.ShardInfo.RangeID,
+		RangeID: s.ShardInfo.GetRangeId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:       updatedInfo,
 			ExecutionStats:      updatedStats,
@@ -634,25 +634,25 @@ func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *p.WorkflowExecu
 func (s *TestBase) UpsertChildExecutionsState(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, updatedVersionHistories *p.VersionHistories,
 	condition int64, upsertChildInfos []*p.ChildExecutionInfo) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedStats, updatedVersionHistories, nil, nil,
-		s.ShardInfo.RangeID, condition, nil, nil, nil,
+		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, upsertChildInfos, nil, nil, nil,
 		nil, nil, nil, "")
 }
 
 // UpsertRequestCancelState is a utility method to update mutable state of workflow execution
 func (s *TestBase) UpsertRequestCancelState(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, updatedVersionHistories *p.VersionHistories,
-	condition int64, upsertCancelInfos []*pblobs.RequestCancelInfo) error {
+	condition int64, upsertCancelInfos []*persistenceblobs.RequestCancelInfo) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedStats, updatedVersionHistories, nil, nil,
-		s.ShardInfo.RangeID, condition, nil, nil, nil,
+		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, nil, upsertCancelInfos, nil,
 		nil, nil, nil, "")
 }
 
 // UpsertSignalInfoState is a utility method to update mutable state of workflow execution
 func (s *TestBase) UpsertSignalInfoState(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, updatedVersionHistories *p.VersionHistories,
-	condition int64, upsertSignalInfos []*pblobs.SignalInfo) error {
+	condition int64, upsertSignalInfos []*persistenceblobs.SignalInfo) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedStats, updatedVersionHistories, nil, nil,
-		s.ShardInfo.RangeID, condition, nil, nil, nil,
+		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		upsertSignalInfos, nil, nil, "")
 }
@@ -661,7 +661,7 @@ func (s *TestBase) UpsertSignalInfoState(updatedInfo *p.WorkflowExecutionInfo, u
 func (s *TestBase) UpsertSignalsRequestedState(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, updatedVersionHistories *p.VersionHistories,
 	condition int64, upsertSignalsRequested []string) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedStats, updatedVersionHistories, nil, nil,
-		s.ShardInfo.RangeID, condition, nil, nil, nil,
+		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, upsertSignalsRequested, "")
 }
@@ -670,7 +670,7 @@ func (s *TestBase) UpsertSignalsRequestedState(updatedInfo *p.WorkflowExecutionI
 func (s *TestBase) DeleteChildExecutionsState(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, updatedVersionHistories *p.VersionHistories,
 	condition int64, deleteChildInfo int64) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedStats, updatedVersionHistories, nil, nil,
-		s.ShardInfo.RangeID, condition, nil, nil, nil,
+		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, &deleteChildInfo, nil, nil,
 		nil, nil, nil, "")
 }
@@ -679,7 +679,7 @@ func (s *TestBase) DeleteChildExecutionsState(updatedInfo *p.WorkflowExecutionIn
 func (s *TestBase) DeleteCancelState(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, updatedVersionHistories *p.VersionHistories,
 	condition int64, deleteCancelInfo int64) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedStats, updatedVersionHistories, nil, nil,
-		s.ShardInfo.RangeID, condition, nil, nil, nil,
+		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, &deleteCancelInfo,
 		nil, nil, nil, "")
 }
@@ -688,7 +688,7 @@ func (s *TestBase) DeleteCancelState(updatedInfo *p.WorkflowExecutionInfo, updat
 func (s *TestBase) DeleteSignalState(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, updatedVersionHistories *p.VersionHistories,
 	condition int64, deleteSignalInfo int64) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedStats, updatedVersionHistories, nil, nil,
-		s.ShardInfo.RangeID, condition, nil, nil, nil,
+		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, &deleteSignalInfo, nil, "")
 }
@@ -697,7 +697,7 @@ func (s *TestBase) DeleteSignalState(updatedInfo *p.WorkflowExecutionInfo, updat
 func (s *TestBase) DeleteSignalsRequestedState(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, updatedVersionHistories *p.VersionHistories,
 	condition int64, deleteSignalsRequestedID string) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedStats, updatedVersionHistories, nil, nil,
-		s.ShardInfo.RangeID, condition, nil, nil, nil,
+		s.ShardInfo.GetRangeId(), condition, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, deleteSignalsRequestedID)
 }
@@ -707,17 +707,17 @@ func (s *TestBase) UpdateWorklowStateAndReplication(updatedInfo *p.WorkflowExecu
 	updatedReplicationState *p.ReplicationState, updatedVersionHistories *p.VersionHistories,
 	condition int64, txTasks []p.Task) error {
 	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedStats, updatedReplicationState, updatedVersionHistories, nil, nil,
-		s.ShardInfo.RangeID, condition, nil, txTasks, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "",
+		s.ShardInfo.GetRangeId(), condition, nil, txTasks, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "",
 	)
 }
 
 // UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, updatedVersionHistories *p.VersionHistories,
 	decisionScheduleIDs []int64, activityScheduleIDs []int64, rangeID, condition int64, timerTasks []p.Task,
-	upsertActivityInfos []*p.ActivityInfo, deleteActivityInfos []int64, upsertTimerInfos []*pblobs.TimerInfo,
+	upsertActivityInfos []*p.ActivityInfo, deleteActivityInfos []int64, upsertTimerInfos []*persistenceblobs.TimerInfo,
 	deleteTimerInfos []string, upsertChildInfos []*p.ChildExecutionInfo, deleteChildInfo *int64,
-	upsertCancelInfos []*pblobs.RequestCancelInfo, deleteCancelInfo *int64,
-	upsertSignalInfos []*pblobs.SignalInfo, deleteSignalInfo *int64,
+	upsertCancelInfos []*persistenceblobs.RequestCancelInfo, deleteCancelInfo *int64,
+	upsertSignalInfos []*persistenceblobs.SignalInfo, deleteSignalInfo *int64,
 	upsertSignalRequestedIDs []string, deleteSignalRequestedID string) error {
 	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedStats, nil, updatedVersionHistories, decisionScheduleIDs, activityScheduleIDs, rangeID,
 		condition, timerTasks, []p.Task{}, upsertActivityInfos, deleteActivityInfos, upsertTimerInfos, deleteTimerInfos,
@@ -729,9 +729,9 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *p.WorkflowExe
 func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats,
 	updatedReplicationState *p.ReplicationState, updatedVersionHistories *p.VersionHistories, decisionScheduleIDs []int64, activityScheduleIDs []int64, rangeID,
 	condition int64, timerTasks []p.Task, txTasks []p.Task, upsertActivityInfos []*p.ActivityInfo,
-	deleteActivityInfos []int64, upsertTimerInfos []*pblobs.TimerInfo, deleteTimerInfos []string,
-	upsertChildInfos []*p.ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*pblobs.RequestCancelInfo,
-	deleteCancelInfo *int64, upsertSignalInfos []*pblobs.SignalInfo, deleteSignalInfo *int64, upsertSignalRequestedIDs []string,
+	deleteActivityInfos []int64, upsertTimerInfos []*persistenceblobs.TimerInfo, deleteTimerInfos []string,
+	upsertChildInfos []*p.ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*persistenceblobs.RequestCancelInfo,
+	deleteCancelInfo *int64, upsertSignalInfos []*persistenceblobs.SignalInfo, deleteSignalInfo *int64, upsertSignalRequestedIDs []string,
 	deleteSignalRequestedID string) error {
 	var transferTasks []p.Task
 	var replicationTasks []p.Task
@@ -747,18 +747,18 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 	}
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks, &p.DecisionTask{
-			TaskID:     s.GetNextSequenceNumber(),
-			DomainID:   updatedInfo.DomainID,
-			TaskList:   updatedInfo.TaskList,
-			ScheduleID: int64(decisionScheduleID)})
+			TaskID:      s.GetNextSequenceNumber(),
+			NamespaceID: updatedInfo.NamespaceID,
+			TaskList:    updatedInfo.TaskList,
+			ScheduleID:  int64(decisionScheduleID)})
 	}
 
 	for _, activityScheduleID := range activityScheduleIDs {
 		transferTasks = append(transferTasks, &p.ActivityTask{
-			TaskID:     s.GetNextSequenceNumber(),
-			DomainID:   updatedInfo.DomainID,
-			TaskList:   updatedInfo.TaskList,
-			ScheduleID: int64(activityScheduleID)})
+			TaskID:      s.GetNextSequenceNumber(),
+			NamespaceID: updatedInfo.NamespaceID,
+			TaskList:    updatedInfo.TaskList,
+			ScheduleID:  int64(activityScheduleID)})
 	}
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		RangeID: rangeID,
@@ -804,7 +804,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithTransferTasks(
 			Condition:           condition,
 			UpsertActivityInfos: upsertActivityInfo,
 		},
-		RangeID:  s.ShardInfo.RangeID,
+		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
 	})
 	return err
@@ -821,7 +821,7 @@ func (s *TestBase) UpdateWorkflowExecutionForChildExecutionsInitiated(
 			Condition:                 condition,
 			UpsertChildExecutionInfos: childInfos,
 		},
-		RangeID:  s.ShardInfo.RangeID,
+		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
 	})
 	return err
@@ -830,7 +830,7 @@ func (s *TestBase) UpdateWorkflowExecutionForChildExecutionsInitiated(
 // UpdateWorkflowExecutionForRequestCancel is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
 	updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, condition int64, transferTasks []p.Task,
-	upsertRequestCancelInfo []*pblobs.RequestCancelInfo) error {
+	upsertRequestCancelInfo []*persistenceblobs.RequestCancelInfo) error {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:            updatedInfo,
@@ -839,7 +839,7 @@ func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
 			Condition:                condition,
 			UpsertRequestCancelInfos: upsertRequestCancelInfo,
 		},
-		RangeID:  s.ShardInfo.RangeID,
+		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
 	})
 	return err
@@ -848,7 +848,7 @@ func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
 // UpdateWorkflowExecutionForSignal is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionForSignal(
 	updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, condition int64, transferTasks []p.Task,
-	upsertSignalInfos []*pblobs.SignalInfo) error {
+	upsertSignalInfos []*persistenceblobs.SignalInfo) error {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:     updatedInfo,
@@ -857,7 +857,7 @@ func (s *TestBase) UpdateWorkflowExecutionForSignal(
 			Condition:         condition,
 			UpsertSignalInfos: upsertSignalInfos,
 		},
-		RangeID:  s.ShardInfo.RangeID,
+		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
 	})
 	return err
@@ -876,7 +876,7 @@ func (s *TestBase) UpdateWorkflowExecutionForBufferEvents(
 			Condition:           condition,
 			ClearBufferedEvents: clearBufferedEvents,
 		},
-		RangeID:  s.ShardInfo.RangeID,
+		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
 	})
 	return err
@@ -889,7 +889,7 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 		aInfos = append(aInfos, ai)
 	}
 
-	var tInfos []*pblobs.TimerInfo
+	var tInfos []*persistenceblobs.TimerInfo
 	for _, ti := range updatedMutableState.TimerInfos {
 		tInfos = append(tInfos, ti)
 	}
@@ -899,12 +899,12 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 		cInfos = append(cInfos, ci)
 	}
 
-	var rcInfos []*pblobs.RequestCancelInfo
+	var rcInfos []*persistenceblobs.RequestCancelInfo
 	for _, rci := range updatedMutableState.RequestCancelInfos {
 		rcInfos = append(rcInfos, rci)
 	}
 
-	var sInfos []*pblobs.SignalInfo
+	var sInfos []*persistenceblobs.SignalInfo
 	for _, si := range updatedMutableState.SignalInfos {
 		sInfos = append(sInfos, si)
 	}
@@ -914,7 +914,7 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 		srIDs = append(srIDs, id)
 	}
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		RangeID: s.ShardInfo.RangeID,
+		RangeID: s.ShardInfo.GetRangeId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:             updatedMutableState.ExecutionInfo,
 			ExecutionStats:            updatedMutableState.ExecutionStats,
@@ -935,10 +935,10 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 // ConflictResolveWorkflowExecution is  utility method to reset mutable state
 func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWriteVersion int64, prevState int,
 	info *p.WorkflowExecutionInfo, stats *p.ExecutionStats, replicationState *p.ReplicationState, nextEventID int64,
-	activityInfos []*p.ActivityInfo, timerInfos []*pblobs.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
-	requestCancelInfos []*pblobs.RequestCancelInfo, signalInfos []*pblobs.SignalInfo, ids []string) error {
+	activityInfos []*p.ActivityInfo, timerInfos []*persistenceblobs.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
+	requestCancelInfos []*persistenceblobs.RequestCancelInfo, signalInfos []*persistenceblobs.SignalInfo, ids []string) error {
 	return s.ExecutionManager.ConflictResolveWorkflowExecution(&p.ConflictResolveWorkflowExecutionRequest{
-		RangeID: s.ShardInfo.RangeID,
+		RangeID: s.ShardInfo.GetRangeId(),
 		CurrentWorkflowCAS: &p.CurrentWorkflowCAS{
 			PrevRunID:            prevRunID,
 			PrevLastWriteVersion: prevLastWriteVersion,
@@ -964,13 +964,13 @@ func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWr
 // ResetWorkflowExecution is  utility method to reset WF
 func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecutionInfo,
 	executionStats *p.ExecutionStats, replicationState *p.ReplicationState,
-	activityInfos []*p.ActivityInfo, timerInfos []*pblobs.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
-	requestCancelInfos []*pblobs.RequestCancelInfo, signalInfos []*pblobs.SignalInfo, ids []string, trasTasks, timerTasks, replTasks []p.Task,
+	activityInfos []*p.ActivityInfo, timerInfos []*persistenceblobs.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
+	requestCancelInfos []*persistenceblobs.RequestCancelInfo, signalInfos []*persistenceblobs.SignalInfo, ids []string, trasTasks, timerTasks, replTasks []p.Task,
 	updateCurr bool, currInfo *p.WorkflowExecutionInfo, currExecutionStats *p.ExecutionStats, currReplicationState *p.ReplicationState,
 	currTrasTasks, currTimerTasks []p.Task, forkRunID string, forkRunNextEventID int64) error {
 
 	req := &p.ResetWorkflowExecutionRequest{
-		RangeID: s.ShardInfo.RangeID,
+		RangeID: s.ShardInfo.GetRangeId(),
 
 		BaseRunID:          forkRunID,
 		BaseRunNextEventID: forkRunNextEventID,
@@ -1018,24 +1018,24 @@ func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecu
 // DeleteWorkflowExecution is a utility method to delete a workflow execution
 func (s *TestBase) DeleteWorkflowExecution(info *p.WorkflowExecutionInfo) error {
 	return s.ExecutionManager.DeleteWorkflowExecution(&p.DeleteWorkflowExecutionRequest{
-		DomainID:   info.DomainID,
-		WorkflowID: info.WorkflowID,
-		RunID:      info.RunID,
+		NamespaceID: info.NamespaceID,
+		WorkflowID:  info.WorkflowID,
+		RunID:       info.RunID,
 	})
 }
 
 // DeleteCurrentWorkflowExecution is a utility method to delete the workflow current execution
 func (s *TestBase) DeleteCurrentWorkflowExecution(info *p.WorkflowExecutionInfo) error {
 	return s.ExecutionManager.DeleteCurrentWorkflowExecution(&p.DeleteCurrentWorkflowExecutionRequest{
-		DomainID:   info.DomainID,
-		WorkflowID: info.WorkflowID,
-		RunID:      info.RunID,
+		NamespaceID: info.NamespaceID,
+		WorkflowID:  info.WorkflowID,
+		RunID:       info.RunID,
 	})
 }
 
 // GetTransferTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTransferTasks(batchSize int, getAll bool) ([]*pblobs.TransferTaskInfo, error) {
-	result := []*pblobs.TransferTaskInfo{}
+func (s *TestBase) GetTransferTasks(batchSize int, getAll bool) ([]*persistenceblobs.TransferTaskInfo, error) {
+	result := []*persistenceblobs.TransferTaskInfo{}
 	var token []byte
 
 Loop:
@@ -1058,15 +1058,15 @@ Loop:
 	}
 
 	for _, task := range result {
-		atomic.StoreInt64(&s.ReadLevel, task.TaskID)
+		atomic.StoreInt64(&s.ReadLevel, task.GetTaskId())
 	}
 
 	return result, nil
 }
 
 // GetReplicationTasks is a utility method to get tasks from replication task queue
-func (s *TestBase) GetReplicationTasks(batchSize int, getAll bool) ([]*pblobs.ReplicationTaskInfo, error) {
-	result := []*pblobs.ReplicationTaskInfo{}
+func (s *TestBase) GetReplicationTasks(batchSize int, getAll bool) ([]*persistenceblobs.ReplicationTaskInfo, error) {
+	result := []*persistenceblobs.ReplicationTaskInfo{}
 	var token []byte
 
 Loop:
@@ -1089,7 +1089,7 @@ Loop:
 	}
 
 	for _, task := range result {
-		atomic.StoreInt64(&s.ReplicationReadLevel, task.TaskID)
+		atomic.StoreInt64(&s.ReplicationReadLevel, task.GetTaskId())
 	}
 
 	return result, nil
@@ -1105,7 +1105,7 @@ func (s *TestBase) RangeCompleteReplicationTask(inclusiveEndTaskID int64) error 
 // PutReplicationTaskToDLQ is a utility method to insert a replication task info
 func (s *TestBase) PutReplicationTaskToDLQ(
 	sourceCluster string,
-	taskInfo *pblobs.ReplicationTaskInfo,
+	taskInfo *persistenceblobs.ReplicationTaskInfo,
 ) error {
 
 	return s.ExecutionManager.PutReplicationTaskToDLQ(&p.PutReplicationTaskToDLQRequest{
@@ -1185,8 +1185,8 @@ func (s *TestBase) CompleteReplicationTask(taskID int64) error {
 }
 
 // GetTimerIndexTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTimerIndexTasks(batchSize int, getAll bool) ([]*pblobs.TimerTaskInfo, error) {
-	result := []*pblobs.TimerTaskInfo{}
+func (s *TestBase) GetTimerIndexTasks(batchSize int, getAll bool) ([]*persistenceblobs.TimerTaskInfo, error) {
+	result := []*persistenceblobs.TimerTaskInfo{}
 	var token []byte
 
 Loop:
@@ -1236,26 +1236,26 @@ func (s *TestBase) RangeCompleteTimerTask(inclusiveBeginTimestamp time.Time, exc
 }
 
 // CreateDecisionTask is a utility method to create a task
-func (s *TestBase) CreateDecisionTask(domainID primitives.UUID, workflowExecution commonproto.WorkflowExecution, taskList string,
+func (s *TestBase) CreateDecisionTask(namespaceID primitives.UUID, workflowExecution commonproto.WorkflowExecution, taskList string,
 	decisionScheduleID int64) (int64, error) {
 	leaseResponse, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
-		DomainID: domainID,
-		TaskList: taskList,
-		TaskType: p.TaskListTypeDecision,
+		NamespaceID: namespaceID,
+		TaskList:    taskList,
+		TaskType:    p.TaskListTypeDecision,
 	})
 	if err != nil {
 		return 0, err
 	}
 
 	taskID := s.GetNextSequenceNumber()
-	tasks := []*pblobs.AllocatedTaskInfo{
+	tasks := []*persistenceblobs.AllocatedTaskInfo{
 		{
-			TaskID: taskID,
-			Data: &pblobs.TaskInfo{
-				DomainID:    domainID,
-				WorkflowID:  workflowExecution.WorkflowId,
-				RunID:       primitives.MustParseUUID(workflowExecution.RunId),
-				ScheduleID:  decisionScheduleID,
+			TaskId: taskID,
+			Data: &persistenceblobs.TaskInfo{
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowExecution.WorkflowId,
+				RunId:       primitives.MustParseUUID(workflowExecution.RunId),
+				ScheduleId:  decisionScheduleID,
 				CreatedTime: types.TimestampNow(),
 			},
 		},
@@ -1274,7 +1274,7 @@ func (s *TestBase) CreateDecisionTask(domainID primitives.UUID, workflowExecutio
 }
 
 // CreateActivityTasks is a utility method to create tasks
-func (s *TestBase) CreateActivityTasks(domainID primitives.UUID, workflowExecution commonproto.WorkflowExecution,
+func (s *TestBase) CreateActivityTasks(namespaceID primitives.UUID, workflowExecution commonproto.WorkflowExecution,
 	activities map[int64]string) ([]int64, error) {
 
 	taskLists := make(map[string]*p.PersistedTaskListInfo)
@@ -1282,7 +1282,7 @@ func (s *TestBase) CreateActivityTasks(domainID primitives.UUID, workflowExecuti
 		_, ok := taskLists[tl]
 		if !ok {
 			resp, err := s.TaskMgr.LeaseTaskList(
-				&p.LeaseTaskListRequest{DomainID: domainID, TaskList: tl, TaskType: p.TaskListTypeActivity})
+				&p.LeaseTaskListRequest{NamespaceID: namespaceID, TaskList: tl, TaskType: p.TaskListTypeActivity})
 			if err != nil {
 				return []int64{}, err
 			}
@@ -1293,17 +1293,17 @@ func (s *TestBase) CreateActivityTasks(domainID primitives.UUID, workflowExecuti
 	var taskIDs []int64
 	for activityScheduleID, taskList := range activities {
 		taskID := s.GetNextSequenceNumber()
-		tasks := []*pblobs.AllocatedTaskInfo{
+		tasks := []*persistenceblobs.AllocatedTaskInfo{
 			{
-				Data: &pblobs.TaskInfo{
-					DomainID:    domainID,
-					WorkflowID:  workflowExecution.WorkflowId,
-					RunID:       primitives.MustParseUUID(workflowExecution.RunId),
-					ScheduleID:  activityScheduleID,
+				Data: &persistenceblobs.TaskInfo{
+					NamespaceId: namespaceID,
+					WorkflowId:  workflowExecution.WorkflowId,
+					RunId:       primitives.MustParseUUID(workflowExecution.RunId),
+					ScheduleId:  activityScheduleID,
 					Expiry:      timestamp.TimestampNowAddSeconds(defaultScheduleToStartTimeout).ToProto(),
 					CreatedTime: types.TimestampNow(),
 				},
-				TaskID: taskID,
+				TaskId: taskID,
 			},
 		}
 		_, err := s.TaskMgr.CreateTasks(&p.CreateTasksRequest{
@@ -1320,9 +1320,9 @@ func (s *TestBase) CreateActivityTasks(domainID primitives.UUID, workflowExecuti
 }
 
 // GetTasks is a utility method to get tasks from persistence
-func (s *TestBase) GetTasks(domainID primitives.UUID, taskList string, taskType int32, batchSize int) (*p.GetTasksResponse, error) {
+func (s *TestBase) GetTasks(namespaceID primitives.UUID, taskList string, taskType int32, batchSize int) (*p.GetTasksResponse, error) {
 	response, err := s.TaskMgr.GetTasks(&p.GetTasksRequest{
-		DomainID:     domainID,
+		NamespaceID:  namespaceID,
 		TaskList:     taskList,
 		TaskType:     taskType,
 		BatchSize:    batchSize,
@@ -1337,12 +1337,12 @@ func (s *TestBase) GetTasks(domainID primitives.UUID, taskList string, taskType 
 }
 
 // CompleteTask is a utility method to complete a task
-func (s *TestBase) CompleteTask(domainID primitives.UUID, taskList string, taskType int32, taskID int64) error {
+func (s *TestBase) CompleteTask(namespaceID primitives.UUID, taskList string, taskType int32, taskID int64) error {
 	return s.TaskMgr.CompleteTask(&p.CompleteTaskRequest{
 		TaskList: &p.TaskListKey{
-			DomainID: domainID,
-			TaskType: taskType,
-			Name:     taskList,
+			NamespaceID: namespaceID,
+			TaskType:    taskType,
+			Name:        taskList,
 		},
 		TaskID: taskID,
 	})
@@ -1384,7 +1384,7 @@ func (s *TestBase) ClearTasks() {
 
 // ClearTransferQueue completes all tasks in transfer queue
 func (s *TestBase) ClearTransferQueue() {
-	s.logger.Info("Clearing transfer tasks", tag.ShardRangeID(s.ShardInfo.RangeID), tag.ReadLevel(s.GetTransferReadLevel()))
+	s.logger.Info("Clearing transfer tasks", tag.ShardRangeID(s.ShardInfo.GetRangeId()), tag.ReadLevel(s.GetTransferReadLevel()))
 	tasks, err := s.GetTransferTasks(100, true)
 	if err != nil {
 		s.logger.Fatal("Error during cleanup", tag.Error(err))
@@ -1392,8 +1392,8 @@ func (s *TestBase) ClearTransferQueue() {
 
 	counter := 0
 	for _, t := range tasks {
-		s.logger.Info("Deleting transfer task with ID", tag.TaskID(t.TaskID))
-		s.NoError(s.CompleteTransferTask(t.TaskID))
+		s.logger.Info("Deleting transfer task with ID", tag.TaskID(t.GetTaskId()))
+		s.NoError(s.CompleteTransferTask(t.GetTaskId()))
 		counter++
 	}
 
@@ -1403,7 +1403,7 @@ func (s *TestBase) ClearTransferQueue() {
 
 // ClearReplicationQueue completes all tasks in replication queue
 func (s *TestBase) ClearReplicationQueue() {
-	s.logger.Info("Clearing replication tasks", tag.ShardRangeID(s.ShardInfo.RangeID), tag.ReadLevel(s.GetReplicationReadLevel()))
+	s.logger.Info("Clearing replication tasks", tag.ShardRangeID(s.ShardInfo.GetRangeId()), tag.ReadLevel(s.GetReplicationReadLevel()))
 	tasks, err := s.GetReplicationTasks(100, true)
 	if err != nil {
 		s.logger.Fatal("Error during cleanup", tag.Error(err))
@@ -1411,8 +1411,8 @@ func (s *TestBase) ClearReplicationQueue() {
 
 	counter := 0
 	for _, t := range tasks {
-		s.logger.Info("Deleting replication task with ID", tag.TaskID(t.TaskID))
-		s.NoError(s.CompleteReplicationTask(t.TaskID))
+		s.logger.Info("Deleting replication task with ID", tag.TaskID(t.GetTaskId()))
+		s.NoError(s.CompleteReplicationTask(t.GetTaskId()))
 		counter++
 	}
 
@@ -1460,7 +1460,7 @@ func (s *TestBase) Publish(
 
 	return backoff.Retry(
 		func() error {
-			return s.DomainReplicationQueue.Publish(message)
+			return s.NamespaceReplicationQueue.Publish(message)
 		},
 		retryPolicy,
 		func(e error) bool {
@@ -1479,7 +1479,7 @@ func (s *TestBase) GetReplicationMessages(
 	maxCount int,
 ) ([]*replication.ReplicationTask, int, error) {
 
-	return s.DomainReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
+	return s.NamespaceReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
 }
 
 // UpdateAckLevel updates replication queue ack level
@@ -1488,16 +1488,16 @@ func (s *TestBase) UpdateAckLevel(
 	clusterName string,
 ) error {
 
-	return s.DomainReplicationQueue.UpdateAckLevel(lastProcessedMessageID, clusterName)
+	return s.NamespaceReplicationQueue.UpdateAckLevel(lastProcessedMessageID, clusterName)
 }
 
 // GetAckLevels returns replication queue ack levels
 func (s *TestBase) GetAckLevels() (map[string]int, error) {
-	return s.DomainReplicationQueue.GetAckLevels()
+	return s.NamespaceReplicationQueue.GetAckLevels()
 }
 
-// PublishToDomainDLQ is a utility method to add messages to the domain DLQ
-func (s *TestBase) PublishToDomainDLQ(
+// PublishToNamespaceDLQ is a utility method to add messages to the namespace DLQ
+func (s *TestBase) PublishToNamespaceDLQ(
 	message interface{},
 ) error {
 
@@ -1507,7 +1507,7 @@ func (s *TestBase) PublishToDomainDLQ(
 
 	return backoff.Retry(
 		func() error {
-			return s.DomainReplicationQueue.PublishToDLQ(message)
+			return s.NamespaceReplicationQueue.PublishToDLQ(message)
 		},
 		retryPolicy,
 		func(e error) bool {
@@ -1515,15 +1515,15 @@ func (s *TestBase) PublishToDomainDLQ(
 		})
 }
 
-// GetMessagesFromDomainDLQ is a utility method to get messages from the domain DLQ
-func (s *TestBase) GetMessagesFromDomainDLQ(
+// GetMessagesFromNamespaceDLQ is a utility method to get messages from the namespace DLQ
+func (s *TestBase) GetMessagesFromNamespaceDLQ(
 	firstMessageID int,
 	lastMessageID int,
 	pageSize int,
 	pageToken []byte,
 ) ([]*replication.ReplicationTask, []byte, error) {
 
-	return s.DomainReplicationQueue.GetMessagesFromDLQ(
+	return s.NamespaceReplicationQueue.GetMessagesFromDLQ(
 		firstMessageID,
 		lastMessageID,
 		pageSize,
@@ -1531,34 +1531,34 @@ func (s *TestBase) GetMessagesFromDomainDLQ(
 	)
 }
 
-// UpdateDomainDLQAckLevel updates domain dlq ack level
-func (s *TestBase) UpdateDomainDLQAckLevel(
+// UpdateNamespaceDLQAckLevel updates namespace dlq ack level
+func (s *TestBase) UpdateNamespaceDLQAckLevel(
 	lastProcessedMessageID int,
 ) error {
 
-	return s.DomainReplicationQueue.UpdateDLQAckLevel(lastProcessedMessageID)
+	return s.NamespaceReplicationQueue.UpdateDLQAckLevel(lastProcessedMessageID)
 }
 
-// GetDomainDLQAckLevel returns domain dlq ack level
-func (s *TestBase) GetDomainDLQAckLevel() (int, error) {
-	return s.DomainReplicationQueue.GetDLQAckLevel()
+// GetNamespaceDLQAckLevel returns namespace dlq ack level
+func (s *TestBase) GetNamespaceDLQAckLevel() (int, error) {
+	return s.NamespaceReplicationQueue.GetDLQAckLevel()
 }
 
-// DeleteMessageFromDomainDLQ deletes one message from domain DLQ
-func (s *TestBase) DeleteMessageFromDomainDLQ(
+// DeleteMessageFromNamespaceDLQ deletes one message from namespace DLQ
+func (s *TestBase) DeleteMessageFromNamespaceDLQ(
 	messageID int,
 ) error {
 
-	return s.DomainReplicationQueue.DeleteMessageFromDLQ(messageID)
+	return s.NamespaceReplicationQueue.DeleteMessageFromDLQ(messageID)
 }
 
-// RangeDeleteMessagesFromDomainDLQ deletes messages from domain DLQ
-func (s *TestBase) RangeDeleteMessagesFromDomainDLQ(
+// RangeDeleteMessagesFromNamespaceDLQ deletes messages from namespace DLQ
+func (s *TestBase) RangeDeleteMessagesFromNamespaceDLQ(
 	firstMessageID int,
 	lastMessageID int,
 ) error {
 
-	return s.DomainReplicationQueue.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)
+	return s.NamespaceReplicationQueue.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)
 }
 
 // GenerateTransferTaskIDs helper
@@ -1603,7 +1603,7 @@ func pickRandomEncoding() common.EncodingType {
 	case 0:
 		encoding = common.EncodingTypeJSON
 	case 1:
-		encoding = common.EncodingTypeThriftRW
+		encoding = common.EncodingTypeProto3
 	case 2:
 		encoding = common.EncodingType("")
 	}

@@ -57,7 +57,7 @@ type (
 	}
 
 	queryVisibilityRequest struct {
-		domainID      string
+		namespaceID   string
 		pageSize      int
 		nextPageToken []byte
 		parsedQuery   *parsedQuery
@@ -110,7 +110,7 @@ func (v *visibilityArchiver) Archive(
 		return err
 	}
 
-	dirPath := path.Join(URI.Path(), request.DomainID)
+	dirPath := path.Join(URI.Path(), request.GetNamespaceId())
 	if err = mkdirAll(dirPath, v.dirMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errMakeDirectory), tag.Error(err))
 		return err
@@ -124,7 +124,7 @@ func (v *visibilityArchiver) Archive(
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
-	filename := constructVisibilityFilename(request.CloseTimestamp, request.RunID)
+	filename := constructVisibilityFilename(request.CloseTimestamp, request.GetRunId())
 	if err := writeFile(path.Join(dirPath, filename), encodedVisibilityRecord, v.fileMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return err
@@ -156,7 +156,7 @@ func (v *visibilityArchiver) Query(
 	}
 
 	return v.query(ctx, URI, &queryVisibilityRequest{
-		domainID:      request.DomainID,
+		namespaceID:   request.NamespaceID,
 		pageSize:      request.PageSize,
 		nextPageToken: request.NextPageToken,
 		parsedQuery:   parsedQuery,
@@ -177,7 +177,7 @@ func (v *visibilityArchiver) query(
 		}
 	}
 
-	dirPath := path.Join(URI.Path(), request.domainID)
+	dirPath := path.Join(URI.Path(), request.namespaceID)
 	exists, err := directoryExists(dirPath)
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
@@ -221,7 +221,7 @@ func (v *visibilityArchiver) query(
 				if idx != len(files) {
 					newToken := &queryVisibilityToken{
 						LastCloseTime: record.CloseTimestamp,
-						LastRunID:     record.RunID,
+						LastRunID:     record.GetRunId(),
 					}
 					encodedToken, err := serializeToken(newToken)
 					if err != nil {
@@ -307,10 +307,10 @@ func matchQuery(record *archiverproto.ArchiveVisibilityRequest, query *parsedQue
 	if record.CloseTimestamp < query.earliestCloseTime || record.CloseTimestamp > query.latestCloseTime {
 		return false
 	}
-	if query.workflowID != nil && record.WorkflowID != *query.workflowID {
+	if query.workflowID != nil && record.GetWorkflowId() != *query.workflowID {
 		return false
 	}
-	if query.runID != nil && record.RunID != *query.runID {
+	if query.runID != nil && record.GetRunId() != *query.runID {
 		return false
 	}
 	if query.workflowTypeName != nil && record.WorkflowTypeName != *query.workflowTypeName {
@@ -325,8 +325,8 @@ func matchQuery(record *archiverproto.ArchiveVisibilityRequest, query *parsedQue
 func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *commonproto.WorkflowExecutionInfo {
 	return &commonproto.WorkflowExecutionInfo{
 		Execution: &commonproto.WorkflowExecution{
-			WorkflowId: record.WorkflowID,
-			RunId:      record.RunID,
+			WorkflowId: record.GetWorkflowId(),
+			RunId:      record.GetRunId(),
 		},
 		Type: &commonproto.WorkflowType{
 			Name: record.WorkflowTypeName,

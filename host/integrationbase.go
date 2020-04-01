@@ -49,14 +49,14 @@ type (
 	IntegrationBase struct {
 		suite.Suite
 
-		testCluster        *TestCluster
-		testClusterConfig  *TestClusterConfig
-		engine             FrontendClient
-		adminClient        AdminClient
-		Logger             log.Logger
-		domainName         string
-		foreignDomainName  string
-		archivalDomainName string
+		testCluster       *TestCluster
+		testClusterConfig *TestClusterConfig
+		engine            FrontendClient
+		adminClient       AdminClient
+		Logger            log.Logger
+		namespace         string
+		foreignNamespace  string
+		archivalNamespace string
 	}
 )
 
@@ -86,19 +86,19 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.adminClient = s.testCluster.GetAdminClient()
 	}
 
-	s.domainName = s.randomizeStr("integration-test-domain")
+	s.namespace = s.randomizeStr("integration-test-namespace")
 	s.Require().NoError(
-		s.registerDomain(s.domainName, 1, enums.ArchivalStatusDisabled, "", enums.ArchivalStatusDisabled, ""))
+		s.registerNamespace(s.namespace, 1, enums.ArchivalStatusDisabled, "", enums.ArchivalStatusDisabled, ""))
 
-	s.foreignDomainName = s.randomizeStr("integration-foreign-test-domain")
+	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
 	s.Require().NoError(
-		s.registerDomain(s.foreignDomainName, 1, enums.ArchivalStatusDisabled, "", enums.ArchivalStatusDisabled, ""))
+		s.registerNamespace(s.foreignNamespace, 1, enums.ArchivalStatusDisabled, "", enums.ArchivalStatusDisabled, ""))
 
-	s.Require().NoError(s.registerArchivalDomain())
+	s.Require().NoError(s.registerArchivalNamespace())
 
-	// this sleep is necessary because domainv2 cache gets refreshed in the
-	// background only every domainCacheRefreshInterval period
-	time.Sleep(cache.DomainCacheRefreshInterval + time.Second)
+	// this sleep is necessary because namespacev2 cache gets refreshed in the
+	// background only every namespaceCacheRefreshInterval period
+	time.Sleep(cache.NamespaceCacheRefreshInterval + time.Second)
 }
 
 func (s *IntegrationBase) setupLogger() {
@@ -143,8 +143,8 @@ func (s *IntegrationBase) tearDownSuite() {
 	}
 }
 
-func (s *IntegrationBase) registerDomain(
-	domain string,
+func (s *IntegrationBase) registerNamespace(
+	namespace string,
 	retentionDays int,
 	historyArchivalStatus enums.ArchivalStatus,
 	historyArchivalURI string,
@@ -153,9 +153,9 @@ func (s *IntegrationBase) registerDomain(
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(10000 * time.Second)
 	defer cancel()
-	_, err := s.engine.RegisterDomain(ctx, &workflowservice.RegisterDomainRequest{
-		Name:                                   domain,
-		Description:                            domain,
+	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Name:                                   namespace,
+		Description:                            namespace,
 		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
 		HistoryArchivalStatus:                  historyArchivalStatus,
 		HistoryArchivalURI:                     historyArchivalURI,
@@ -170,17 +170,17 @@ func (s *IntegrationBase) randomizeStr(id string) string {
 	return fmt.Sprintf("%v-%v", id, uuid.New())
 }
 
-func (s *IntegrationBase) printWorkflowHistory(domain string, execution *commonproto.WorkflowExecution) {
-	events := s.getHistory(domain, execution)
+func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *commonproto.WorkflowExecution) {
+	events := s.getHistory(namespace, execution)
 	history := &commonproto.History{
 		Events: events,
 	}
 	common.PrettyPrintHistory(history, s.Logger)
 }
 
-func (s *IntegrationBase) getHistory(domain string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
+func (s *IntegrationBase) getHistory(namespace string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain:          domain,
+		Namespace:       namespace,
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
 	})
@@ -189,7 +189,7 @@ func (s *IntegrationBase) getHistory(domain string, execution *commonproto.Workf
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
 		historyResponse, err = s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain:        domain,
+			Namespace:     namespace,
 			Execution:     execution,
 			NextPageToken: historyResponse.NextPageToken,
 		})
@@ -200,19 +200,19 @@ func (s *IntegrationBase) getHistory(domain string, execution *commonproto.Workf
 	return events
 }
 
-// To register archival domain we can't use frontend API as the retention period is set to 0 for testing,
+// To register archival namespace we can't use frontend API as the retention period is set to 0 for testing,
 // and request will be rejected by frontend. Here we make a call directly to persistence to register
-// the domain.
-func (s *IntegrationBase) registerArchivalDomain() error {
-	s.archivalDomainName = s.randomizeStr("integration-archival-enabled-domain")
+// the namespace.
+func (s *IntegrationBase) registerArchivalNamespace() error {
+	s.archivalNamespace = s.randomizeStr("integration-archival-enabled-namespace")
 	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
-	domainRequest := &persistence.CreateDomainRequest{
-		Info: &persistence.DomainInfo{
+	namespaceRequest := &persistence.CreateNamespaceRequest{
+		Info: &persistence.NamespaceInfo{
 			ID:     uuid.New(),
-			Name:   s.archivalDomainName,
-			Status: persistence.DomainStatusRegistered,
+			Name:   s.archivalNamespace,
+			Status: persistence.NamespaceStatusRegistered,
 		},
-		Config: &persistence.DomainConfig{
+		Config: &persistence.NamespaceConfig{
 			Retention:                0,
 			HistoryArchivalStatus:    enums.ArchivalStatusEnabled,
 			HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
@@ -220,20 +220,20 @@ func (s *IntegrationBase) registerArchivalDomain() error {
 			VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
 			BadBinaries:              commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 		},
-		ReplicationConfig: &persistence.DomainReplicationConfig{
+		ReplicationConfig: &persistence.NamespaceReplicationConfig{
 			ActiveClusterName: currentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: currentClusterName},
 			},
 		},
-		IsGlobalDomain:  false,
-		FailoverVersion: common.EmptyVersion,
+		IsGlobalNamespace: false,
+		FailoverVersion:   common.EmptyVersion,
 	}
-	response, err := s.testCluster.testBase.MetadataManager.CreateDomain(domainRequest)
+	response, err := s.testCluster.testBase.MetadataManager.CreateNamespace(namespaceRequest)
 
-	s.Logger.Info("Register domain succeeded",
-		tag.WorkflowDomainName(s.archivalDomainName),
-		tag.WorkflowDomainID(response.ID),
+	s.Logger.Info("Register namespace succeeded",
+		tag.WorkflowNamespace(s.archivalNamespace),
+		tag.WorkflowNamespaceID(response.ID),
 	)
 	return err
 }

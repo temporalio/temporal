@@ -52,7 +52,7 @@ func registerSanity(r registrar) {
 // exercises the frontend APIs and the basic functionality of the
 // client library - each probe / test MUST be implemented as a
 // child workflow of this workflow
-func sanityWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func sanityWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	var err error
 	profile, err := beginWorkflow(ctx, wfTypeSanity, scheduledTimeNanos)
 	if err != nil {
@@ -64,7 +64,7 @@ func sanityWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain strin
 		return profile.end(err)
 	}
 
-	selector, resultC := forkChildWorkflows(ctx, domain, childNames)
+	selector, resultC := forkChildWorkflows(ctx, namespace, childNames)
 	err = joinChildWorkflows(ctx, childNames, selector, resultC)
 	if err != nil {
 		workflow.GetLogger(ctx).Error("sanity workflow failed", zap.Error(err))
@@ -77,16 +77,16 @@ func sanityWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain strin
 
 // forkChildWorkflows spawns child workflows with the given names
 // this method assumes that all child workflows have the same method signature
-func forkChildWorkflows(ctx workflow.Context, domain string, names []string) (workflow.Selector, workflow.Channel) {
+func forkChildWorkflows(ctx workflow.Context, namespace string, names []string) (workflow.Selector, workflow.Channel) {
 	now := workflow.Now(ctx).UnixNano()
 	selector := workflow.NewSelector(ctx)
 	resultC := workflow.NewBufferedChannel(ctx, len(names))
 
 	myID := workflow.GetInfo(ctx).WorkflowExecution.ID
 	for _, childName := range names {
-		cwo := newChildWorkflowOptions(domain, concat(myID, childName))
+		cwo := newChildWorkflowOptions(namespace, concat(myID, childName))
 		childCtx := workflow.WithChildOptions(ctx, cwo)
-		future := workflow.ExecuteChildWorkflow(childCtx, childName, now, domain)
+		future := workflow.ExecuteChildWorkflow(childCtx, childName, now, namespace)
 		selector.AddFuture(future, func(f workflow.Future) {
 			if err := f.Get(ctx, nil); err != nil {
 				workflow.GetLogger(ctx).Error("child workflow failed", zap.Error(err))

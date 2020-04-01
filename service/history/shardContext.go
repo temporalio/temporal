@@ -50,7 +50,7 @@ type (
 		GetService() resource.Resource
 		GetExecutionManager() persistence.ExecutionManager
 		GetHistoryManager() persistence.HistoryManager
-		GetDomainCache() cache.DomainCache
+		GetNamespaceCache() cache.NamespaceCache
 		GetClusterMetadata() cluster.Metadata
 		GetConfig() *Config
 		GetEventsCache() eventsCache
@@ -100,14 +100,14 @@ type (
 		DeleteTimerFailoverLevel(failoverID string) error
 		GetAllTimerFailoverLevels() map[string]persistence.TimerFailoverLevel
 
-		GetDomainNotificationVersion() int64
-		UpdateDomainNotificationVersion(domainNotificationVersion int64) error
+		GetNamespaceNotificationVersion() int64
+		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error
 
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error
-		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string, execution commonproto.WorkflowExecution) (int, error)
+		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonproto.WorkflowExecution) (int, error)
 	}
 
 	shardContextImpl struct {
@@ -420,18 +420,18 @@ func (s *shardContextImpl) GetAllTimerFailoverLevels() map[string]persistence.Ti
 	return ret
 }
 
-func (s *shardContextImpl) GetDomainNotificationVersion() int64 {
+func (s *shardContextImpl) GetNamespaceNotificationVersion() int64 {
 	s.RLock()
 	defer s.RUnlock()
 
-	return s.shardInfo.DomainNotificationVersion
+	return s.shardInfo.NamespaceNotificationVersion
 }
 
-func (s *shardContextImpl) UpdateDomainNotificationVersion(domainNotificationVersion int64) error {
+func (s *shardContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error {
 	s.Lock()
 	defer s.Unlock()
 
-	s.shardInfo.DomainNotificationVersion = domainNotificationVersion
+	s.shardInfo.NamespaceNotificationVersion = namespaceNotificationVersion
 	return s.updateShardInfoLocked()
 }
 
@@ -459,11 +459,11 @@ func (s *shardContextImpl) CreateWorkflowExecution(
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
 
-	domainID := request.NewWorkflowSnapshot.ExecutionInfo.DomainID
+	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceID
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowID
 
-	// do not try to get domain cache within shard lock
-	domainEntry, err := s.GetDomainCache().GetDomainByID(domainID)
+	// do not try to get namespace cache within shard lock
+	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -473,7 +473,7 @@ func (s *shardContextImpl) CreateWorkflowExecution(
 
 	transferMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDsLocked(
-		domainEntry,
+		namespaceEntry,
 		workflowID,
 		request.NewWorkflowSnapshot.TransferTasks,
 		request.NewWorkflowSnapshot.ReplicationTasks,
@@ -531,30 +531,30 @@ Create_Loop:
 	return nil, ErrMaxAttemptsExceeded
 }
 
-func (s *shardContextImpl) getDefaultEncoding(domainEntry *cache.DomainCacheEntry) common.EncodingType {
-	return common.EncodingType(s.config.EventEncodingType(domainEntry.GetInfo().Name))
+func (s *shardContextImpl) getDefaultEncoding(namespaceEntry *cache.NamespaceCacheEntry) common.EncodingType {
+	return common.EncodingType(s.config.EventEncodingType(namespaceEntry.GetInfo().Name))
 }
 
 func (s *shardContextImpl) UpdateWorkflowExecution(
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
 
-	domainID := request.UpdateWorkflowMutation.ExecutionInfo.DomainID
+	namespaceID := request.UpdateWorkflowMutation.ExecutionInfo.NamespaceID
 	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowID
 
-	// do not try to get domain cache within shard lock
-	domainEntry, err := s.GetDomainCache().GetDomainByID(domainID)
+	// do not try to get namespace cache within shard lock
+	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
-	request.Encoding = s.getDefaultEncoding(domainEntry)
+	request.Encoding = s.getDefaultEncoding(namespaceEntry)
 
 	s.Lock()
 	defer s.Unlock()
 
 	transferMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDsLocked(
-		domainEntry,
+		namespaceEntry,
 		workflowID,
 		request.UpdateWorkflowMutation.TransferTasks,
 		request.UpdateWorkflowMutation.ReplicationTasks,
@@ -565,7 +565,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(
 	}
 	if request.NewWorkflowSnapshot != nil {
 		if err := s.allocateTaskIDsLocked(
-			domainEntry,
+			namespaceEntry,
 			workflowID,
 			request.NewWorkflowSnapshot.TransferTasks,
 			request.NewWorkflowSnapshot.ReplicationTasks,
@@ -623,15 +623,15 @@ Update_Loop:
 
 func (s *shardContextImpl) ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error {
 
-	domainID := request.NewWorkflowSnapshot.ExecutionInfo.DomainID
+	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceID
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowID
 
-	// do not try to get domain cache within shard lock
-	domainEntry, err := s.GetDomainCache().GetDomainByID(domainID)
+	// do not try to get namespace cache within shard lock
+	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
-	request.Encoding = s.getDefaultEncoding(domainEntry)
+	request.Encoding = s.getDefaultEncoding(namespaceEntry)
 
 	s.Lock()
 	defer s.Unlock()
@@ -639,7 +639,7 @@ func (s *shardContextImpl) ResetWorkflowExecution(request *persistence.ResetWork
 	transferMaxReadLevel := int64(0)
 	if request.CurrentWorkflowMutation != nil {
 		if err := s.allocateTaskIDsLocked(
-			domainEntry,
+			namespaceEntry,
 			workflowID,
 			request.CurrentWorkflowMutation.TransferTasks,
 			request.CurrentWorkflowMutation.ReplicationTasks,
@@ -650,7 +650,7 @@ func (s *shardContextImpl) ResetWorkflowExecution(request *persistence.ResetWork
 		}
 	}
 	if err := s.allocateTaskIDsLocked(
-		domainEntry,
+		namespaceEntry,
 		workflowID,
 		request.NewWorkflowSnapshot.TransferTasks,
 		request.NewWorkflowSnapshot.ReplicationTasks,
@@ -710,15 +710,15 @@ func (s *shardContextImpl) ConflictResolveWorkflowExecution(
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) error {
 
-	domainID := request.ResetWorkflowSnapshot.ExecutionInfo.DomainID
+	namespaceID := request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceID
 	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowID
 
-	// do not try to get domain cache within shard lock
-	domainEntry, err := s.GetDomainCache().GetDomainByID(domainID)
+	// do not try to get namespace cache within shard lock
+	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
-	request.Encoding = s.getDefaultEncoding(domainEntry)
+	request.Encoding = s.getDefaultEncoding(namespaceEntry)
 
 	s.Lock()
 	defer s.Unlock()
@@ -726,7 +726,7 @@ func (s *shardContextImpl) ConflictResolveWorkflowExecution(
 	transferMaxReadLevel := int64(0)
 	if request.CurrentWorkflowMutation != nil {
 		if err := s.allocateTaskIDsLocked(
-			domainEntry,
+			namespaceEntry,
 			workflowID,
 			request.CurrentWorkflowMutation.TransferTasks,
 			request.CurrentWorkflowMutation.ReplicationTasks,
@@ -737,7 +737,7 @@ func (s *shardContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}
 	if err := s.allocateTaskIDsLocked(
-		domainEntry,
+		namespaceEntry,
 		workflowID,
 		request.ResetWorkflowSnapshot.TransferTasks,
 		request.ResetWorkflowSnapshot.ReplicationTasks,
@@ -748,7 +748,7 @@ func (s *shardContextImpl) ConflictResolveWorkflowExecution(
 	}
 	if request.NewWorkflowSnapshot != nil {
 		if err := s.allocateTaskIDsLocked(
-			domainEntry,
+			namespaceEntry,
 			workflowID,
 			request.NewWorkflowSnapshot.TransferTasks,
 			request.NewWorkflowSnapshot.ReplicationTasks,
@@ -805,9 +805,9 @@ Reset_Loop:
 }
 
 func (s *shardContextImpl) AppendHistoryV2Events(
-	request *persistence.AppendHistoryNodesRequest, domainID string, execution commonproto.WorkflowExecution) (int, error) {
+	request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonproto.WorkflowExecution) (int, error) {
 
-	domainEntry, err := s.GetDomainCache().GetDomainByID(domainID)
+	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return 0, err
 	}
@@ -819,23 +819,23 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 		return 0, err
 	}
 
-	request.Encoding = s.getDefaultEncoding(domainEntry)
+	request.Encoding = s.getDefaultEncoding(namespaceEntry)
 	request.ShardID = common.IntPtr(s.shardID)
 	request.TransactionID = transactionID
 
 	size := 0
 	defer func() {
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
-		// domains along with the individual domains stats
+		// namespaces along with the individual namespaces stats
 		s.GetMetricsClient().RecordTimer(metrics.SessionSizeStatsScope, metrics.HistorySize, time.Duration(size))
-		if entry, err := s.GetDomainCache().GetDomainByID(domainID); err == nil && entry != nil && entry.GetInfo() != nil {
-			s.GetMetricsClient().Scope(metrics.SessionSizeStatsScope, metrics.DomainTag(entry.GetInfo().Name)).RecordTimer(metrics.HistorySize, time.Duration(size))
+		if entry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID); err == nil && entry != nil && entry.GetInfo() != nil {
+			s.GetMetricsClient().Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(entry.GetInfo().Name)).RecordTimer(metrics.HistorySize, time.Duration(size))
 		}
 		if size >= historySizeLogThreshold {
 			s.throttledLogger.Warn("history size threshold breached",
 				tag.WorkflowID(execution.GetWorkflowId()),
 				tag.WorkflowRunID(execution.GetRunId()),
-				tag.WorkflowDomainID(domainID),
+				tag.WorkflowNamespaceID(namespaceID),
 				tag.WorkflowHistorySizeBytes(size))
 		}
 	}()
@@ -867,7 +867,7 @@ func (s *shardContextImpl) GetThrottledLogger() log.Logger {
 }
 
 func (s *shardContextImpl) getRangeID() int64 {
-	return s.shardInfo.RangeID
+	return s.shardInfo.GetRangeId()
 }
 
 func (s *shardContextImpl) closeShard() {
@@ -880,8 +880,8 @@ func (s *shardContextImpl) closeShard() {
 	go s.shardItem.stopEngine()
 
 	// fails any writes that may start after this point.
-	s.shardInfo.RangeID = -1
-	atomic.StoreInt64(&s.rangeID, s.shardInfo.RangeID)
+	s.shardInfo.RangeId = -1
+	atomic.StoreInt64(&s.rangeID, s.shardInfo.GetRangeId())
 
 	if s.closeCh != nil {
 		// This is the channel passed in by shard controller to monitor if a shard needs to be unloaded
@@ -911,14 +911,14 @@ func (s *shardContextImpl) updateRangeIfNeededLocked() error {
 
 func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	updatedShardInfo := copyShardInfo(s.shardInfo)
-	updatedShardInfo.RangeID++
+	updatedShardInfo.RangeId++
 	if isStealing {
 		updatedShardInfo.StolenSinceRenew++
 	}
 
 	err := s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
-		PreviousRangeID: s.shardInfo.RangeID})
+		PreviousRangeID: s.shardInfo.GetRangeId()})
 	if err != nil {
 		// Shard is stolen, trigger history engine shutdown
 		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
@@ -928,22 +928,22 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 			s.logger.Error("Persistent store operation failure",
 				tag.StoreOperationUpdateShard,
 				tag.Error(err),
-				tag.ShardRangeID(updatedShardInfo.RangeID),
-				tag.PreviousShardRangeID(s.shardInfo.RangeID))
+				tag.ShardRangeID(updatedShardInfo.GetRangeId()),
+				tag.PreviousShardRangeID(s.shardInfo.GetRangeId()))
 		}
 		return err
 	}
 
 	// Range is successfully updated in cassandra now update shard context to reflect new range
-	s.transferSequenceNumber = updatedShardInfo.RangeID << s.config.RangeSizeBits
-	s.maxTransferSequenceNumber = (updatedShardInfo.RangeID + 1) << s.config.RangeSizeBits
+	s.transferSequenceNumber = updatedShardInfo.GetRangeId() << s.config.RangeSizeBits
+	s.maxTransferSequenceNumber = (updatedShardInfo.GetRangeId() + 1) << s.config.RangeSizeBits
 	s.transferMaxReadLevel = s.transferSequenceNumber - 1
-	atomic.StoreInt64(&s.rangeID, updatedShardInfo.RangeID)
+	atomic.StoreInt64(&s.rangeID, updatedShardInfo.GetRangeId())
 	s.shardInfo = updatedShardInfo
 
 	s.logger.Info("Range updated for shardID",
-		tag.ShardID(int(s.shardInfo.ShardID)),
-		tag.ShardRangeID(s.shardInfo.RangeID),
+		tag.ShardID(int(s.shardInfo.GetShardId())),
+		tag.ShardRangeID(s.shardInfo.GetRangeId()),
 		tag.Number(s.transferSequenceNumber),
 		tag.NextNumber(s.maxTransferSequenceNumber))
 	return nil
@@ -967,7 +967,7 @@ func (s *shardContextImpl) updateShardInfoLocked() error {
 
 	err = s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
-		PreviousRangeID: s.shardInfo.RangeID,
+		PreviousRangeID: s.shardInfo.GetRangeId(),
 	})
 
 	if err != nil {
@@ -1045,7 +1045,7 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 }
 
 func (s *shardContextImpl) allocateTaskIDsLocked(
-	domainEntry *cache.DomainCacheEntry,
+	namespaceEntry *cache.NamespaceCacheEntry,
 	workflowID string,
 	transferTasks []persistence.Task,
 	replicationTasks []persistence.Task,
@@ -1064,7 +1064,7 @@ func (s *shardContextImpl) allocateTaskIDsLocked(
 		return err
 	}
 	return s.allocateTimerIDsLocked(
-		domainEntry,
+		namespaceEntry,
 		workflowID,
 		timerTasks)
 }
@@ -1087,10 +1087,10 @@ func (s *shardContextImpl) allocateTransferIDsLocked(
 }
 
 // NOTE: allocateTimerIDsLocked should always been called after assigning taskID for transferTasks when assigning taskID together,
-// because Cadence Indexer assume timer taskID of deleteWorkflowExecution is larger than transfer taskID of closeWorkflowExecution
+// because Temporal Indexer assume timer taskID of deleteWorkflowExecution is larger than transfer taskID of closeWorkflowExecution
 // for a given workflow.
 func (s *shardContextImpl) allocateTimerIDsLocked(
-	domainEntry *cache.DomainCacheEntry,
+	namespaceEntry *cache.NamespaceCacheEntry,
 	workflowID string,
 	timerTasks []persistence.Task,
 ) error {
@@ -1103,14 +1103,14 @@ func (s *shardContextImpl) allocateTimerIDsLocked(
 			// cannot use version to determine the corresponding cluster for timer task
 			// this is because during failover, timer task should be created as active
 			// or otherwise, failover + active processing logic may not pick up the task.
-			currentCluster = domainEntry.GetReplicationConfig().ActiveClusterName
+			currentCluster = namespaceEntry.GetReplicationConfig().ActiveClusterName
 		}
 		readCursorTS := s.timerMaxReadLevelMap[currentCluster]
 		if ts.Before(readCursorTS) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
 			s.logger.Warn("New timer generated is less than read level",
-				tag.WorkflowDomainID(domainEntry.GetInfo().ID),
+				tag.WorkflowNamespaceID(namespaceEntry.GetInfo().ID),
 				tag.WorkflowID(workflowID),
 				tag.Timestamp(ts),
 				tag.CursorTimestamp(readCursorTS),
@@ -1191,8 +1191,8 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		// EntityNotExistsError error
 		shardInfo = &persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          int32(shardItem.shardID),
-				RangeID:          0,
+				ShardId:          int32(shardItem.shardID),
+				RangeId:          0,
 				TransferAckLevel: 0,
 			},
 		}
@@ -1282,18 +1282,18 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 	}
 	shardInfoCopy := &persistence.ShardInfoWithFailover{
 		ShardInfo: &persistenceblobs.ShardInfo{
-			ShardID:                   shardInfo.ShardID,
-			Owner:                     shardInfo.Owner,
-			RangeID:                   shardInfo.RangeID,
-			StolenSinceRenew:          shardInfo.StolenSinceRenew,
-			ReplicationAckLevel:       shardInfo.ReplicationAckLevel,
-			TransferAckLevel:          shardInfo.TransferAckLevel,
-			TimerAckLevel:             shardInfo.TimerAckLevel,
-			ClusterTransferAckLevel:   clusterTransferAckLevel,
-			ClusterTimerAckLevel:      clusterTimerAckLevel,
-			DomainNotificationVersion: shardInfo.DomainNotificationVersion,
-			ClusterReplicationLevel:   clusterReplicationLevel,
-			UpdatedAt:                 shardInfo.UpdatedAt,
+			ShardId:                      shardInfo.GetShardId(),
+			Owner:                        shardInfo.Owner,
+			RangeId:                      shardInfo.GetRangeId(),
+			StolenSinceRenew:             shardInfo.StolenSinceRenew,
+			ReplicationAckLevel:          shardInfo.ReplicationAckLevel,
+			TransferAckLevel:             shardInfo.TransferAckLevel,
+			TimerAckLevel:                shardInfo.TimerAckLevel,
+			ClusterTransferAckLevel:      clusterTransferAckLevel,
+			ClusterTimerAckLevel:         clusterTimerAckLevel,
+			NamespaceNotificationVersion: shardInfo.NamespaceNotificationVersion,
+			ClusterReplicationLevel:      clusterReplicationLevel,
+			UpdatedAt:                    shardInfo.UpdatedAt,
 		},
 		TransferFailoverLevels: transferFailoverLevels,
 		TimerFailoverLevels:    timerFailoverLevels,

@@ -327,17 +327,17 @@ func (b *historyBuilder) AddRequestCancelExternalWorkflowExecutionInitiatedEvent
 }
 
 func (b *historyBuilder) AddRequestCancelExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID int64,
-	domain, workflowID, runID string, cause enums.CancelExternalWorkflowExecutionFailedCause) *commonproto.HistoryEvent {
+	namespace, workflowID, runID string, cause enums.CancelExternalWorkflowExecutionFailedCause) *commonproto.HistoryEvent {
 	event := b.newRequestCancelExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID,
-		domain, workflowID, runID, cause)
+		namespace, workflowID, runID, cause)
 
 	return b.addEventToHistory(event)
 }
 
 func (b *historyBuilder) AddExternalWorkflowExecutionCancelRequested(initiatedEventID int64,
-	domain, workflowID, runID string) *commonproto.HistoryEvent {
+	namespace, workflowID, runID string) *commonproto.HistoryEvent {
 	event := b.newExternalWorkflowExecutionCancelRequestedEvent(initiatedEventID,
-		domain, workflowID, runID)
+		namespace, workflowID, runID)
 
 	return b.addEventToHistory(event)
 }
@@ -358,17 +358,17 @@ func (b *historyBuilder) AddUpsertWorkflowSearchAttributesEvent(
 }
 
 func (b *historyBuilder) AddSignalExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID int64,
-	domain, workflowID, runID string, control []byte, cause enums.SignalExternalWorkflowExecutionFailedCause) *commonproto.HistoryEvent {
+	namespace, workflowID, runID string, control []byte, cause enums.SignalExternalWorkflowExecutionFailedCause) *commonproto.HistoryEvent {
 	event := b.newSignalExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID,
-		domain, workflowID, runID, control, cause)
+		namespace, workflowID, runID, control, cause)
 
 	return b.addEventToHistory(event)
 }
 
 func (b *historyBuilder) AddExternalWorkflowExecutionSignaled(initiatedEventID int64,
-	domain, workflowID, runID string, control []byte) *commonproto.HistoryEvent {
+	namespace, workflowID, runID string, control []byte) *commonproto.HistoryEvent {
 	event := b.newExternalWorkflowExecutionSignaledEvent(initiatedEventID,
-		domain, workflowID, runID, control)
+		namespace, workflowID, runID, control)
 
 	return b.addEventToHistory(event)
 }
@@ -395,13 +395,13 @@ func (b *historyBuilder) AddStartChildWorkflowExecutionInitiatedEvent(decisionCo
 }
 
 func (b *historyBuilder) AddChildWorkflowExecutionStartedEvent(
-	domain string,
+	namespace string,
 	execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType,
 	initiatedID int64,
 	header *commonproto.Header,
 ) *commonproto.HistoryEvent {
-	event := b.newChildWorkflowExecutionStartedEvent(domain, execution, workflowType, initiatedID, header)
+	event := b.newChildWorkflowExecutionStartedEvent(namespace, execution, workflowType, initiatedID, header)
 
 	return b.addEventToHistory(event)
 }
@@ -414,46 +414,46 @@ func (b *historyBuilder) AddStartChildWorkflowExecutionFailedEvent(initiatedID i
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddChildWorkflowExecutionCompletedEvent(domain string, execution *commonproto.WorkflowExecution,
+func (b *historyBuilder) AddChildWorkflowExecutionCompletedEvent(namespace string, execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType, initiatedID, startedID int64,
 	completedAttributes *commonproto.WorkflowExecutionCompletedEventAttributes) *commonproto.HistoryEvent {
-	event := b.newChildWorkflowExecutionCompletedEvent(domain, execution, workflowType, initiatedID, startedID,
+	event := b.newChildWorkflowExecutionCompletedEvent(namespace, execution, workflowType, initiatedID, startedID,
 		completedAttributes)
 
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddChildWorkflowExecutionFailedEvent(domain string, execution *commonproto.WorkflowExecution,
+func (b *historyBuilder) AddChildWorkflowExecutionFailedEvent(namespace string, execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType, initiatedID, startedID int64,
 	failedAttributes *commonproto.WorkflowExecutionFailedEventAttributes) *commonproto.HistoryEvent {
-	event := b.newChildWorkflowExecutionFailedEvent(domain, execution, workflowType, initiatedID, startedID,
+	event := b.newChildWorkflowExecutionFailedEvent(namespace, execution, workflowType, initiatedID, startedID,
 		failedAttributes)
 
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddChildWorkflowExecutionCanceledEvent(domain string, execution *commonproto.WorkflowExecution,
+func (b *historyBuilder) AddChildWorkflowExecutionCanceledEvent(namespace string, execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType, initiatedID, startedID int64,
 	canceledAttributes *commonproto.WorkflowExecutionCanceledEventAttributes) *commonproto.HistoryEvent {
-	event := b.newChildWorkflowExecutionCanceledEvent(domain, execution, workflowType, initiatedID, startedID,
+	event := b.newChildWorkflowExecutionCanceledEvent(namespace, execution, workflowType, initiatedID, startedID,
 		canceledAttributes)
 
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddChildWorkflowExecutionTerminatedEvent(domain string, execution *commonproto.WorkflowExecution,
+func (b *historyBuilder) AddChildWorkflowExecutionTerminatedEvent(namespace string, execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType, initiatedID, startedID int64,
 	terminatedAttributes *commonproto.WorkflowExecutionTerminatedEventAttributes) *commonproto.HistoryEvent {
-	event := b.newChildWorkflowExecutionTerminatedEvent(domain, execution, workflowType, initiatedID, startedID,
+	event := b.newChildWorkflowExecutionTerminatedEvent(namespace, execution, workflowType, initiatedID, startedID,
 		terminatedAttributes)
 
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddChildWorkflowExecutionTimedOutEvent(domain string, execution *commonproto.WorkflowExecution,
+func (b *historyBuilder) AddChildWorkflowExecutionTimedOutEvent(namespace string, execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType, initiatedID, startedID int64,
 	timedOutAttributes *commonproto.WorkflowExecutionTimedOutEventAttributes) *commonproto.HistoryEvent {
-	event := b.newChildWorkflowExecutionTimedOutEvent(domain, execution, workflowType, initiatedID, startedID,
+	event := b.newChildWorkflowExecutionTimedOutEvent(namespace, execution, workflowType, initiatedID, startedID,
 		timedOutAttributes)
 
 	return b.addEventToHistory(event)
@@ -505,7 +505,7 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 
 	parentInfo := startRequest.ParentExecutionInfo
 	if parentInfo != nil {
-		attributes.ParentWorkflowDomain = parentInfo.Domain
+		attributes.ParentWorkflowNamespace = parentInfo.Namespace
 		attributes.ParentWorkflowExecution = parentInfo.Execution
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 	}
@@ -752,7 +752,7 @@ func (b *historyBuilder) newRequestCancelExternalWorkflowExecutionInitiatedEvent
 	event := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated)
 	attributes := &commonproto.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{}
 	attributes.DecisionTaskCompletedEventId = decisionTaskCompletedEventID
-	attributes.Domain = request.Domain
+	attributes.Namespace = request.Namespace
 	attributes.WorkflowExecution = &commonproto.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
 		RunId:      request.RunId,
@@ -765,12 +765,12 @@ func (b *historyBuilder) newRequestCancelExternalWorkflowExecutionInitiatedEvent
 }
 
 func (b *historyBuilder) newRequestCancelExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID int64,
-	domain, workflowID, runID string, cause enums.CancelExternalWorkflowExecutionFailedCause) *commonproto.HistoryEvent {
+	namespace, workflowID, runID string, cause enums.CancelExternalWorkflowExecutionFailedCause) *commonproto.HistoryEvent {
 	event := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeRequestCancelExternalWorkflowExecutionFailed)
 	attributes := &commonproto.RequestCancelExternalWorkflowExecutionFailedEventAttributes{}
 	attributes.DecisionTaskCompletedEventId = decisionTaskCompletedEventID
 	attributes.InitiatedEventId = initiatedEventID
-	attributes.Domain = domain
+	attributes.Namespace = namespace
 	attributes.WorkflowExecution = &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
@@ -782,11 +782,11 @@ func (b *historyBuilder) newRequestCancelExternalWorkflowExecutionFailedEvent(de
 }
 
 func (b *historyBuilder) newExternalWorkflowExecutionCancelRequestedEvent(initiatedEventID int64,
-	domain, workflowID, runID string) *commonproto.HistoryEvent {
+	namespace, workflowID, runID string) *commonproto.HistoryEvent {
 	event := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeExternalWorkflowExecutionCancelRequested)
 	attributes := &commonproto.ExternalWorkflowExecutionCancelRequestedEventAttributes{}
 	attributes.InitiatedEventId = initiatedEventID
-	attributes.Domain = domain
+	attributes.Namespace = namespace
 	attributes.WorkflowExecution = &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
@@ -801,7 +801,7 @@ func (b *historyBuilder) newSignalExternalWorkflowExecutionInitiatedEvent(decisi
 	event := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeSignalExternalWorkflowExecutionInitiated)
 	attributes := &commonproto.SignalExternalWorkflowExecutionInitiatedEventAttributes{}
 	attributes.DecisionTaskCompletedEventId = decisionTaskCompletedEventID
-	attributes.Domain = request.Domain
+	attributes.Namespace = request.Namespace
 	attributes.WorkflowExecution = &commonproto.WorkflowExecution{
 		WorkflowId: request.Execution.WorkflowId,
 		RunId:      request.Execution.RunId,
@@ -827,12 +827,12 @@ func (b *historyBuilder) newUpsertWorkflowSearchAttributesEvent(decisionTaskComp
 }
 
 func (b *historyBuilder) newSignalExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID int64,
-	domain, workflowID, runID string, control []byte, cause enums.SignalExternalWorkflowExecutionFailedCause) *commonproto.HistoryEvent {
+	namespace, workflowID, runID string, control []byte, cause enums.SignalExternalWorkflowExecutionFailedCause) *commonproto.HistoryEvent {
 	event := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeSignalExternalWorkflowExecutionFailed)
 	attributes := &commonproto.SignalExternalWorkflowExecutionFailedEventAttributes{}
 	attributes.DecisionTaskCompletedEventId = decisionTaskCompletedEventID
 	attributes.InitiatedEventId = initiatedEventID
-	attributes.Domain = domain
+	attributes.Namespace = namespace
 	attributes.WorkflowExecution = &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
@@ -845,11 +845,11 @@ func (b *historyBuilder) newSignalExternalWorkflowExecutionFailedEvent(decisionT
 }
 
 func (b *historyBuilder) newExternalWorkflowExecutionSignaledEvent(initiatedEventID int64,
-	domain, workflowID, runID string, control []byte) *commonproto.HistoryEvent {
+	namespace, workflowID, runID string, control []byte) *commonproto.HistoryEvent {
 	event := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeExternalWorkflowExecutionSignaled)
 	attributes := &commonproto.ExternalWorkflowExecutionSignaledEventAttributes{}
 	attributes.InitiatedEventId = initiatedEventID
-	attributes.Domain = domain
+	attributes.Namespace = namespace
 	attributes.WorkflowExecution = &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
@@ -888,7 +888,7 @@ func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(decisionTa
 	startAttributes *commonproto.StartChildWorkflowExecutionDecisionAttributes) *commonproto.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeStartChildWorkflowExecutionInitiated)
 	attributes := &commonproto.StartChildWorkflowExecutionInitiatedEventAttributes{}
-	attributes.Domain = startAttributes.Domain
+	attributes.Namespace = startAttributes.Namespace
 	attributes.WorkflowId = startAttributes.WorkflowId
 	attributes.WorkflowType = startAttributes.WorkflowType
 	attributes.TaskList = startAttributes.TaskList
@@ -910,7 +910,7 @@ func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(decisionTa
 }
 
 func (b *historyBuilder) newChildWorkflowExecutionStartedEvent(
-	domain string,
+	namespace string,
 	execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType,
 	initiatedID int64,
@@ -918,7 +918,7 @@ func (b *historyBuilder) newChildWorkflowExecutionStartedEvent(
 ) *commonproto.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeChildWorkflowExecutionStarted)
 	attributes := &commonproto.ChildWorkflowExecutionStartedEventAttributes{}
-	attributes.Domain = domain
+	attributes.Namespace = namespace
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType
 	attributes.InitiatedEventId = initiatedID
@@ -933,7 +933,7 @@ func (b *historyBuilder) newStartChildWorkflowExecutionFailedEvent(initiatedID i
 	initiatedEventAttributes *commonproto.StartChildWorkflowExecutionInitiatedEventAttributes) *commonproto.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeStartChildWorkflowExecutionFailed)
 	attributes := &commonproto.StartChildWorkflowExecutionFailedEventAttributes{}
-	attributes.Domain = initiatedEventAttributes.Domain
+	attributes.Namespace = initiatedEventAttributes.Namespace
 	attributes.WorkflowId = initiatedEventAttributes.WorkflowId
 	attributes.WorkflowType = initiatedEventAttributes.WorkflowType
 	attributes.InitiatedEventId = initiatedID
@@ -945,12 +945,12 @@ func (b *historyBuilder) newStartChildWorkflowExecutionFailedEvent(initiatedID i
 	return historyEvent
 }
 
-func (b *historyBuilder) newChildWorkflowExecutionCompletedEvent(domain string, execution *commonproto.WorkflowExecution,
+func (b *historyBuilder) newChildWorkflowExecutionCompletedEvent(namespace string, execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType, initiatedID, startedID int64,
 	completedAttributes *commonproto.WorkflowExecutionCompletedEventAttributes) *commonproto.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeChildWorkflowExecutionCompleted)
 	attributes := &commonproto.ChildWorkflowExecutionCompletedEventAttributes{}
-	attributes.Domain = domain
+	attributes.Namespace = namespace
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType
 	attributes.InitiatedEventId = initiatedID
@@ -961,12 +961,12 @@ func (b *historyBuilder) newChildWorkflowExecutionCompletedEvent(domain string, 
 	return historyEvent
 }
 
-func (b *historyBuilder) newChildWorkflowExecutionFailedEvent(domain string, execution *commonproto.WorkflowExecution,
+func (b *historyBuilder) newChildWorkflowExecutionFailedEvent(namespace string, execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType, initiatedID, startedID int64,
 	failedAttributes *commonproto.WorkflowExecutionFailedEventAttributes) *commonproto.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeChildWorkflowExecutionFailed)
 	attributes := &commonproto.ChildWorkflowExecutionFailedEventAttributes{}
-	attributes.Domain = domain
+	attributes.Namespace = namespace
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType
 	attributes.InitiatedEventId = initiatedID
@@ -978,12 +978,12 @@ func (b *historyBuilder) newChildWorkflowExecutionFailedEvent(domain string, exe
 	return historyEvent
 }
 
-func (b *historyBuilder) newChildWorkflowExecutionCanceledEvent(domain string, execution *commonproto.WorkflowExecution,
+func (b *historyBuilder) newChildWorkflowExecutionCanceledEvent(namespace string, execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType, initiatedID, startedID int64,
 	canceledAttributes *commonproto.WorkflowExecutionCanceledEventAttributes) *commonproto.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeChildWorkflowExecutionCanceled)
 	attributes := &commonproto.ChildWorkflowExecutionCanceledEventAttributes{}
-	attributes.Domain = domain
+	attributes.Namespace = namespace
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType
 	attributes.InitiatedEventId = initiatedID
@@ -994,12 +994,12 @@ func (b *historyBuilder) newChildWorkflowExecutionCanceledEvent(domain string, e
 	return historyEvent
 }
 
-func (b *historyBuilder) newChildWorkflowExecutionTerminatedEvent(domain string, execution *commonproto.WorkflowExecution,
+func (b *historyBuilder) newChildWorkflowExecutionTerminatedEvent(namespace string, execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType, initiatedID, startedID int64,
 	terminatedAttributes *commonproto.WorkflowExecutionTerminatedEventAttributes) *commonproto.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeChildWorkflowExecutionTerminated)
 	attributes := &commonproto.ChildWorkflowExecutionTerminatedEventAttributes{}
-	attributes.Domain = domain
+	attributes.Namespace = namespace
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType
 	attributes.InitiatedEventId = initiatedID
@@ -1009,12 +1009,12 @@ func (b *historyBuilder) newChildWorkflowExecutionTerminatedEvent(domain string,
 	return historyEvent
 }
 
-func (b *historyBuilder) newChildWorkflowExecutionTimedOutEvent(domain string, execution *commonproto.WorkflowExecution,
+func (b *historyBuilder) newChildWorkflowExecutionTimedOutEvent(namespace string, execution *commonproto.WorkflowExecution,
 	workflowType *commonproto.WorkflowType, initiatedID, startedID int64,
 	timedOutAttributes *commonproto.WorkflowExecutionTimedOutEventAttributes) *commonproto.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeChildWorkflowExecutionTimedOut)
 	attributes := &commonproto.ChildWorkflowExecutionTimedOutEventAttributes{}
-	attributes.Domain = domain
+	attributes.Namespace = namespace
 	attributes.TimeoutType = timedOutAttributes.TimeoutType
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType

@@ -43,7 +43,7 @@ func registerRetry(r registrar) {
 	registerActivity(r, retryOnFailureActivity, activityTypeRetryOnFailure)
 }
 
-func retryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func retryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	profile, err := beginWorkflow(ctx, wfTypeRetry, scheduledTimeNanos)
 	if err != nil {
 		return err

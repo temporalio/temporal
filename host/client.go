@@ -44,17 +44,17 @@ type HistoryClient interface {
 	historyservice.HistoryServiceClient
 }
 
-// NewAdminClient creates a client to cadence admin client
+// NewAdminClient creates a client to temporal admin client
 func NewAdminClient(connection *grpc.ClientConn) AdminClient {
 	return adminservice.NewAdminServiceClient(connection)
 }
 
-// NewFrontendClient creates a client to cadence frontend client
+// NewFrontendClient creates a client to temporal frontend client
 func NewFrontendClient(connection *grpc.ClientConn) workflowservice.WorkflowServiceClient {
 	return workflowservice.NewWorkflowServiceClient(connection)
 }
 
-// NewHistoryClient creates a client to cadence history service client
+// NewHistoryClient creates a client to temporal history service client
 func NewHistoryClient(connection *grpc.ClientConn) HistoryClient {
 	return historyservice.NewHistoryServiceClient(connection)
 }

@@ -47,76 +47,76 @@ const (
 func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
 	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
-	domainID := s.getDomainID(s.archivalDomainName)
+	namespaceID := s.getNamespaceID(s.archivalNamespace)
 	workflowID := "archival-timer-queue-processor-workflow-id"
 	workflowType := "archival-timer-queue-processor-type"
 	taskList := "archival-timer-queue-processor-task-list"
 	numActivities := 1
 	numRuns := 1
-	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns)[0]
+	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalNamespace, namespaceID, numActivities, numRuns)[0]
 
 	execution := &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	s.True(s.isHistoryArchived(s.archivalDomainName, execution))
+	s.True(s.isHistoryArchived(s.archivalNamespace, execution))
 	s.True(s.isHistoryDeleted(execution))
-	s.True(s.isMutableStateDeleted(domainID, execution))
+	s.True(s.isMutableStateDeleted(namespaceID, execution))
 }
 
 func (s *integrationSuite) TestArchival_ContinueAsNew() {
 	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
-	domainID := s.getDomainID(s.archivalDomainName)
+	namespaceID := s.getNamespaceID(s.archivalNamespace)
 	workflowID := "archival-continueAsNew-workflow-id"
 	workflowType := "archival-continueAsNew-workflow-type"
 	taskList := "archival-continueAsNew-task-list"
 	numActivities := 1
 	numRuns := 5
-	runIDs := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns)
+	runIDs := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalNamespace, namespaceID, numActivities, numRuns)
 
 	for _, runID := range runIDs {
 		execution := &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		}
-		s.True(s.isHistoryArchived(s.archivalDomainName, execution))
+		s.True(s.isHistoryArchived(s.archivalNamespace, execution))
 		s.True(s.isHistoryDeleted(execution))
-		s.True(s.isMutableStateDeleted(domainID, execution))
+		s.True(s.isMutableStateDeleted(namespaceID, execution))
 	}
 }
 
 func (s *integrationSuite) TestArchival_ArchiverWorker() {
 	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
-	domainID := s.getDomainID(s.archivalDomainName)
+	namespaceID := s.getNamespaceID(s.archivalNamespace)
 	workflowID := "archival-archiver-worker-workflow-id"
 	workflowType := "archival-archiver-worker-workflow-type"
 	taskList := "archival-archiver-worker-task-list"
 	numActivities := 10
-	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, 1)[0]
+	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalNamespace, namespaceID, numActivities, 1)[0]
 
 	execution := &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	s.True(s.isHistoryArchived(s.archivalDomainName, execution))
+	s.True(s.isHistoryArchived(s.archivalNamespace, execution))
 	s.True(s.isHistoryDeleted(execution))
-	s.True(s.isMutableStateDeleted(domainID, execution))
+	s.True(s.isMutableStateDeleted(namespaceID, execution))
 }
 
 func (s *integrationSuite) TestVisibilityArchival() {
 	s.True(s.testCluster.archiverBase.metadata.GetVisibilityConfig().ClusterConfiguredForArchival())
 
-	domainID := s.getDomainID(s.archivalDomainName)
+	namespaceID := s.getNamespaceID(s.archivalNamespace)
 	workflowID := "archival-visibility-workflow-id"
 	workflowType := "archival-visibility-workflow-type"
 	taskList := "archival-visibility-task-list"
 	numActivities := 3
 	numRuns := 5
 	startTime := time.Now().UnixNano()
-	s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns)
-	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskList, s.archivalDomainName, domainID, numActivities, numRuns)
+	s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalNamespace, namespaceID, numActivities, numRuns)
+	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskList, s.archivalNamespace, namespaceID, numActivities, numRuns)
 	endTime := time.Now().UnixNano()
 
 	var executions []*commonproto.WorkflowExecutionInfo
@@ -124,9 +124,9 @@ func (s *integrationSuite) TestVisibilityArchival() {
 	for i := 0; i != retryLimit; i++ {
 		executions = []*commonproto.WorkflowExecutionInfo{}
 		request := &workflowservice.ListArchivedWorkflowExecutionsRequest{
-			Domain:   s.archivalDomainName,
-			PageSize: 2,
-			Query:    fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType),
+			Namespace: s.archivalNamespace,
+			PageSize:  2,
+			Query:     fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType),
 		}
 		for len(executions) == 0 || request.NextPageToken != nil {
 			response, err := s.engine.ListArchivedWorkflowExecutions(NewContext(), request)
@@ -150,17 +150,17 @@ func (s *integrationSuite) TestVisibilityArchival() {
 	}
 }
 
-func (s *integrationSuite) getDomainID(domain string) string {
-	domainResp, err := s.engine.DescribeDomain(NewContext(), &workflowservice.DescribeDomainRequest{
-		Name: s.archivalDomainName,
+func (s *integrationSuite) getNamespaceID(namespace string) string {
+	namespaceResp, err := s.engine.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Name: s.archivalNamespace,
 	})
 	s.NoError(err)
-	return domainResp.DomainInfo.GetUuid()
+	return namespaceResp.NamespaceInfo.GetId()
 }
 
-func (s *integrationSuite) isHistoryArchived(domain string, execution *commonproto.WorkflowExecution) bool {
+func (s *integrationSuite) isHistoryArchived(namespace string, execution *commonproto.WorkflowExecution) bool {
 	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Domain:    s.archivalDomainName,
+		Namespace: s.archivalNamespace,
 		Execution: execution,
 	}
 
@@ -191,9 +191,9 @@ func (s *integrationSuite) isHistoryDeleted(execution *commonproto.WorkflowExecu
 	return false
 }
 
-func (s *integrationSuite) isMutableStateDeleted(domainID string, execution *commonproto.WorkflowExecution) bool {
+func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *commonproto.WorkflowExecution) bool {
 	request := &persistence.GetWorkflowExecutionRequest{
-		DomainID: domainID,
+		NamespaceID: namespaceID,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
@@ -210,7 +210,7 @@ func (s *integrationSuite) isMutableStateDeleted(domainID string, execution *com
 	return false
 }
 
-func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID string, numActivities, numRuns int) []string {
+func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespaceID string, numActivities, numRuns int) []string {
 	identity := "worker1"
 	activityName := "activity_type1"
 	workflowType := &commonproto.WorkflowType{
@@ -221,7 +221,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
-		Domain:                              domain,
+		Namespace:                           namespace,
 		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
@@ -314,7 +314,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 
 	poller := &TaskPoller{
 		Engine:          s.engine,
-		Domain:          domain,
+		Namespace:       namespace,
 		TaskList:        taskList,
 		Identity:        identity,
 		DecisionHandler: dtHandler,

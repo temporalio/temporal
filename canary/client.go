@@ -39,21 +39,21 @@ import (
 // the library exposes
 type cadenceClient struct {
 	client.Client
-	// domainClient only exposes domain API
-	client.DomainClient
+	// namespaceClient only exposes namespace API
+	client.NamespaceClient
 	// this is the service needed to start the workers
 	Service workflowservice.WorkflowServiceClient
 }
 
-// createDomain creates a cadence domain with the given name and description
-// if the domain already exist, this method silently returns success
-func (client *cadenceClient) createDomain(name string, desc string, owner string, archivalStatus enums.ArchivalStatus) error {
+// createNamespace creates a cadence namespace with the given name and description
+// if the namespace already exist, this method silently returns success
+func (client *cadenceClient) createNamespace(name string, desc string, owner string, archivalStatus enums.ArchivalStatus) error {
 	emitMetric := true
 	retention := int32(workflowRetentionDays)
 	if archivalStatus == enums.ArchivalStatusEnabled {
 		retention = int32(0)
 	}
-	req := &workflowservice.RegisterDomainRequest{
+	req := &workflowservice.RegisterNamespaceRequest{
 		Name:                                   name,
 		Description:                            desc,
 		OwnerEmail:                             owner,
@@ -63,7 +63,7 @@ func (client *cadenceClient) createDomain(name string, desc string, owner string
 	}
 	err := client.Register(context.Background(), req)
 	if err != nil {
-		if _, ok := err.(*serviceerror.DomainAlreadyExists); !ok {
+		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); !ok {
 			return err
 		}
 	}
@@ -71,12 +71,12 @@ func (client *cadenceClient) createDomain(name string, desc string, owner string
 }
 
 // newCadenceClient builds a cadenceClient from the runtimeContext
-func newCadenceClient(domain string, runtime *RuntimeContext) (cadenceClient, error) {
+func newCadenceClient(namespace string, runtime *RuntimeContext) (cadenceClient, error) {
 	tracer := opentracing.GlobalTracer()
 	cclient, err := client.NewClient(
 		client.Options{
 			HostPort:     runtime.hostPort,
-			DomainName:   domain,
+			Namespace:    namespace,
 			MetricsScope: runtime.metrics,
 			Tracer:       tracer,
 		},
@@ -86,7 +86,7 @@ func newCadenceClient(domain string, runtime *RuntimeContext) (cadenceClient, er
 		return cadenceClient{}, err
 	}
 
-	domainClient, err := client.NewDomainClient(
+	namespaceClient, err := client.NewNamespaceClient(
 		client.Options{
 			HostPort:     runtime.hostPort,
 			MetricsScope: runtime.metrics,
@@ -98,9 +98,9 @@ func newCadenceClient(domain string, runtime *RuntimeContext) (cadenceClient, er
 	}
 
 	return cadenceClient{
-		Client:       cclient,
-		DomainClient: domainClient,
-		Service:      runtime.service,
+		Client:          cclient,
+		NamespaceClient: namespaceClient,
+		Service:         runtime.service,
 	}, nil
 }
 
@@ -125,10 +125,10 @@ func newActivityOptions() workflow.ActivityOptions {
 	}
 }
 
-// newChildWorkflowOptions builds and returns childWorkflowOptions for given domain
-func newChildWorkflowOptions(domain string, wfID string) workflow.ChildWorkflowOptions {
+// newChildWorkflowOptions builds and returns childWorkflowOptions for given namespace
+func newChildWorkflowOptions(namespace string, wfID string) workflow.ChildWorkflowOptions {
 	return workflow.ChildWorkflowOptions{
-		Domain:                       domain,
+		Namespace:                    namespace,
 		WorkflowID:                   wfID,
 		TaskList:                     taskListName,
 		ExecutionStartToCloseTimeout: childWorkflowTimeout,

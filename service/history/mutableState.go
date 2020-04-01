@@ -123,7 +123,7 @@ type (
 		GetChildExecutionInitiatedEvent(int64) (*commonproto.HistoryEvent, error)
 		GetCompletionEvent() (*commonproto.HistoryEvent, error)
 		GetDecisionInfo(int64) (*decisionInfo, bool)
-		GetDomainEntry() *cache.DomainCacheEntry
+		GetNamespaceEntry() *cache.NamespaceCacheEntry
 		GetStartEvent() (*commonproto.HistoryEvent, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetVersionHistories() *persistence.VersionHistories
@@ -224,7 +224,7 @@ type (
 		SetUpdateCondition(int64)
 		GetUpdateCondition() int64
 
-		StartTransaction(entry *cache.DomainCacheEntry) (bool, error)
+		StartTransaction(entry *cache.NamespaceCacheEntry) (bool, error)
 		CloseTransactionAsMutation(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 	}

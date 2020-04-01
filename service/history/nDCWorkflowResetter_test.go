@@ -55,12 +55,12 @@ type (
 		logger           log.Logger
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
 
-		domainID   string
-		domainName string
-		workflowID string
-		baseRunID  string
-		newContext workflowExecutionContext
-		newRunID   string
+		namespaceID string
+		namespace   string
+		workflowID  string
+		baseRunID   string
+		newContext  workflowExecutionContext
+		newRunID    string
 
 		nDCWorkflowResetter *nDCWorkflowResetterImpl
 	}
@@ -84,8 +84,8 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          10,
-				RangeID:          1,
+				ShardId:          10,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
@@ -95,12 +95,12 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.domainID = uuid.New()
-	s.domainName = "some random domain name"
+	s.namespaceID = uuid.New()
+	s.namespace = "some random namespace name"
 	s.workflowID = "some random workflow ID"
 	s.baseRunID = uuid.New()
 	s.newContext = newWorkflowExecutionContext(
-		s.domainID,
+		s.namespaceID,
 		commonproto.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.newRunID,
@@ -112,7 +112,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.newRunID = uuid.New()
 
 	s.nDCWorkflowResetter = newNDCWorkflowResetter(
-		s.mockShard, s.mockTransactionMgr, s.domainID, s.workflowID, s.baseRunID, s.newContext, s.newRunID, s.logger,
+		s.mockShard, s.mockTransactionMgr, s.namespaceID, s.workflowID, s.baseRunID, s.newContext, s.newRunID, s.logger,
 	)
 	s.nDCWorkflowResetter.stateRebuilder = s.mockStateBuilder
 }
@@ -155,7 +155,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(
 		ctx,
-		s.domainID,
+		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
 	).Return(mockBaseWorkflow, nil).Times(1)
@@ -164,7 +164,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		ctx,
 		now,
 		definition.NewWorkflowIdentifier(
-			s.domainID,
+			s.namespaceID,
 			s.workflowID,
 			s.baseRunID,
 		),
@@ -172,7 +172,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		baseEventID,
 		baseVersion,
 		definition.NewWorkflowIdentifier(
-			s.domainID,
+			s.namespaceID,
 			s.workflowID,
 			s.newRunID,
 		),
@@ -184,7 +184,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: branchToken,
 		ForkNodeID:      baseEventID + 1,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.domainID, s.workflowID, s.newRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.newRunID),
 		ShardID:         &shardId,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil).Times(1)
 
@@ -229,7 +229,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(
 		ctx,
-		s.domainID,
+		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
 	).Return(mockBaseWorkflow, nil).Times(1)
@@ -250,7 +250,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	s.True(isRetryError)
 	expectedErr := serviceerror.NewRetryTaskV2(
 		resendOnResetWorkflowMessage,
-		s.domainID,
+		s.namespaceID,
 		s.workflowID,
 		s.newRunID,
 		common.EmptyEventID,

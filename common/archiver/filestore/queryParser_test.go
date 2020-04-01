@@ -53,21 +53,21 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 		parsedQuery *parsedQuery
 	}{
 		{
-			query:     "WorkflowID = \"random workflowID\"",
+			query:     "WorkflowId = \"random workflowID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				workflowID: common.StringPtr("random workflowID"),
 			},
 		},
 		{
-			query:     "WorkflowID = \"random workflowID\" and WorkflowID = \"random workflowID\"",
+			query:     "WorkflowId = \"random workflowID\" and WorkflowId = \"random workflowID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				workflowID: common.StringPtr("random workflowID"),
 			},
 		},
 		{
-			query:     "RunID = \"random runID\"",
+			query:     "RunId = \"random runID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				runID: common.StringPtr("random runID"),
@@ -81,7 +81,7 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 			},
 		},
 		{
-			query:     "WorkflowID = 'random workflowID'",
+			query:     "WorkflowId = 'random workflowID'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				workflowID: common.StringPtr("random workflowID"),
@@ -95,7 +95,7 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 			},
 		},
 		{
-			query:     "WorkflowType = 'random typeName' and (WorkflowID = \"random workflowID\" and RunID='random runID')",
+			query:     "WorkflowType = 'random typeName' and (WorkflowId = \"random workflowID\" and RunId='random runID')",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				workflowID:       common.StringPtr("random workflowID"),
@@ -104,15 +104,15 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 			},
 		},
 		{
-			query:     "runID = random workflowID",
+			query:     "runId = random workflowID",
 			expectErr: true,
 		},
 		{
-			query:     "WorkflowID = \"random workflowID\" or WorkflowID = \"another workflowID\"",
+			query:     "WorkflowId = \"random workflowID\" or WorkflowId = \"another workflowID\"",
 			expectErr: true,
 		},
 		{
-			query:     "WorkflowID = \"random workflowID\" or runID = \"random runID\"",
+			query:     "WorkflowId = \"random workflowID\" or runId = \"random runID\"",
 			expectErr: true,
 		},
 		{
@@ -120,7 +120,7 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 			expectErr: true,
 		},
 		{
-			query:     "runID > \"random workflowID\"",
+			query:     "runId > \"random workflowID\"",
 			expectErr: true,
 		},
 	}
@@ -281,7 +281,7 @@ func (s *queryParserSuite) TestParse() {
 		parsedQuery *parsedQuery
 	}{
 		{
-			query:     "CloseTime <= \"2019-01-01T11:11:11Z\" and WorkflowID = 'random workflowID'",
+			query:     "CloseTime <= \"2019-01-01T11:11:11Z\" and WorkflowId = 'random workflowID'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				earliestCloseTime: 0,
@@ -290,7 +290,7 @@ func (s *queryParserSuite) TestParse() {
 			},
 		},
 		{
-			query:     "CloseTime > 1999 and CloseTime < 10000 and RunID = 'random runID' and CloseStatus = 'Failed'",
+			query:     "CloseTime > 1999 and CloseTime < 10000 and RunId = 'random runID' and CloseStatus = 'Failed'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				earliestCloseTime: 2000,
@@ -300,7 +300,7 @@ func (s *queryParserSuite) TestParse() {
 			},
 		},
 		{
-			query:     "CloseTime > 2001 and CloseTime < 10000 and (RunID = 'random runID') and CloseStatus = 'Failed' and (RunID = 'another ID')",
+			query:     "CloseTime > 2001 and CloseTime < 10000 and (RunId = 'random runID') and CloseStatus = 'Failed' and (RunId = 'another ID')",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				emptyResult: true,

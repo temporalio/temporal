@@ -42,7 +42,7 @@ func registerSearchAttributes(r registrar) {
 }
 
 // searchAttributesWorkflow tests the search attributes apis
-func searchAttributesWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func searchAttributesWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	var err error
 	profile, err := beginWorkflow(ctx, wfTypeSearchAttributes, scheduledTimeNanos)
 	if err != nil {

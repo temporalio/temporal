@@ -56,11 +56,11 @@ type (
 		historyV2Mgr   persistence.HistoryManager
 		stateRebuilder nDCStateRebuilder
 
-		domainID   string
-		workflowID string
-		baseRunID  string
-		newContext workflowExecutionContext
-		newRunID   string
+		namespaceID string
+		workflowID  string
+		baseRunID   string
+		newContext  workflowExecutionContext
+		newRunID    string
 
 		logger log.Logger
 	}
@@ -71,7 +71,7 @@ var _ nDCWorkflowResetter = (*nDCWorkflowResetterImpl)(nil)
 func newNDCWorkflowResetter(
 	shard ShardContext,
 	transactionMgr nDCTransactionMgr,
-	domainID string,
+	namespaceID string,
 	workflowID string,
 	baseRunID string,
 	newContext workflowExecutionContext,
@@ -85,12 +85,12 @@ func newNDCWorkflowResetter(
 		historyV2Mgr:   shard.GetHistoryManager(),
 		stateRebuilder: newNDCStateRebuilder(shard, logger),
 
-		domainID:   domainID,
-		workflowID: workflowID,
-		baseRunID:  baseRunID,
-		newContext: newContext,
-		newRunID:   newRunID,
-		logger:     logger,
+		namespaceID: namespaceID,
+		workflowID:  workflowID,
+		baseRunID:   baseRunID,
+		newContext:  newContext,
+		newRunID:    newRunID,
+		logger:      logger,
 	}
 }
 
@@ -122,7 +122,7 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 		ctx,
 		now,
 		definition.NewWorkflowIdentifier(
-			r.domainID,
+			r.namespaceID,
 			r.workflowID,
 			r.baseRunID,
 		),
@@ -130,7 +130,7 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 		baseLastEventID,
 		baseLastEventVersion,
 		definition.NewWorkflowIdentifier(
-			r.domainID,
+			r.namespaceID,
 			r.workflowID,
 			r.newRunID,
 		),
@@ -156,7 +156,7 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 
 	baseWorkflow, err := r.transactionMgr.loadNDCWorkflow(
 		ctx,
-		r.domainID,
+		r.namespaceID,
 		r.workflowID,
 		r.baseRunID,
 	)
@@ -177,7 +177,7 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 		// the base branch event will eventually arrived
 		return nil, newNDCRetryTaskErrorWithHint(
 			resendOnResetWorkflowMessage,
-			r.domainID,
+			r.namespaceID,
 			r.workflowID,
 			r.newRunID,
 			common.EmptyEventID,
@@ -205,7 +205,7 @@ func (r *nDCWorkflowResetterImpl) getResetBranchToken(
 	resp, err := r.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseLastEventID + 1,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.domainID, r.workflowID, r.newRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID, r.workflowID, r.newRunID),
 		ShardID:         common.IntPtr(shardID),
 	})
 	if err != nil {

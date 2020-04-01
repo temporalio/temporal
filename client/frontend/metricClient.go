@@ -44,38 +44,38 @@ func NewMetricClient(client Client, metricsClient metrics.Client) Client {
 	}
 }
 
-func (c *metricClient) DeprecateDomain(
+func (c *metricClient) DeprecateNamespace(
 	ctx context.Context,
-	request *workflowservice.DeprecateDomainRequest,
+	request *workflowservice.DeprecateNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DeprecateDomainResponse, error) {
+) (*workflowservice.DeprecateNamespaceResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientDeprecateDomainScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientDeprecateNamespaceScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientDeprecateDomainScope, metrics.ClientLatency)
-	resp, err := c.client.DeprecateDomain(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientDeprecateNamespaceScope, metrics.ClientLatency)
+	resp, err := c.client.DeprecateNamespace(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientDeprecateDomainScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientDeprecateNamespaceScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
 
-func (c *metricClient) DescribeDomain(
+func (c *metricClient) DescribeNamespace(
 	ctx context.Context,
-	request *workflowservice.DescribeDomainRequest,
+	request *workflowservice.DescribeNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DescribeDomainResponse, error) {
+) (*workflowservice.DescribeNamespaceResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientDescribeDomainScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientDescribeNamespaceScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientDescribeDomainScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeDomain(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientDescribeNamespaceScope, metrics.ClientLatency)
+	resp, err := c.client.DescribeNamespace(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientDescribeDomainScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientDescribeNamespaceScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -205,20 +205,20 @@ func (c *metricClient) ListClosedWorkflowExecutions(
 	return resp, err
 }
 
-func (c *metricClient) ListDomains(
+func (c *metricClient) ListNamespaces(
 	ctx context.Context,
-	request *workflowservice.ListDomainsRequest,
+	request *workflowservice.ListNamespacesRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListDomainsResponse, error) {
+) (*workflowservice.ListNamespacesResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientListDomainsScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientListNamespacesScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientListDomainsScope, metrics.ClientLatency)
-	resp, err := c.client.ListDomains(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientListNamespacesScope, metrics.ClientLatency)
+	resp, err := c.client.ListNamespaces(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientListDomainsScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientListNamespacesScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -385,38 +385,38 @@ func (c *metricClient) RecordActivityTaskHeartbeat(
 	return resp, err
 }
 
-func (c *metricClient) RecordActivityTaskHeartbeatByID(
+func (c *metricClient) RecordActivityTaskHeartbeatById(
 	ctx context.Context,
-	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
+	request *workflowservice.RecordActivityTaskHeartbeatByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RecordActivityTaskHeartbeatByIDResponse, error) {
+) (*workflowservice.RecordActivityTaskHeartbeatByIdResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatByIDScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRecordActivityTaskHeartbeatByIDScope, metrics.ClientLatency)
-	resp, err := c.client.RecordActivityTaskHeartbeatByID(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope, metrics.ClientLatency)
+	resp, err := c.client.RecordActivityTaskHeartbeatById(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatByIDScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
 
-func (c *metricClient) RegisterDomain(
+func (c *metricClient) RegisterNamespace(
 	ctx context.Context,
-	request *workflowservice.RegisterDomainRequest,
+	request *workflowservice.RegisterNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RegisterDomainResponse, error) {
+) (*workflowservice.RegisterNamespaceResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRegisterDomainScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientRegisterNamespaceScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRegisterDomainScope, metrics.ClientLatency)
-	resp, err := c.client.RegisterDomain(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientRegisterNamespaceScope, metrics.ClientLatency)
+	resp, err := c.client.RegisterNamespace(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRegisterDomainScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientRegisterNamespaceScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -493,20 +493,20 @@ func (c *metricClient) RespondActivityTaskCanceled(
 	return resp, err
 }
 
-func (c *metricClient) RespondActivityTaskCanceledByID(
+func (c *metricClient) RespondActivityTaskCanceledById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
+	request *workflowservice.RespondActivityTaskCanceledByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCanceledByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskCanceledByIdResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledByIDScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledByIdScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCanceledByIDScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskCanceledByID(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCanceledByIdScope, metrics.ClientLatency)
+	resp, err := c.client.RespondActivityTaskCanceledById(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledByIDScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledByIdScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -529,20 +529,20 @@ func (c *metricClient) RespondActivityTaskCompleted(
 	return resp, err
 }
 
-func (c *metricClient) RespondActivityTaskCompletedByID(
+func (c *metricClient) RespondActivityTaskCompletedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
+	request *workflowservice.RespondActivityTaskCompletedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCompletedByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskCompletedByIdResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedByIDScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedByIdScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCompletedByIDScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskCompletedByID(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCompletedByIdScope, metrics.ClientLatency)
+	resp, err := c.client.RespondActivityTaskCompletedById(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedByIDScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedByIdScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -565,20 +565,20 @@ func (c *metricClient) RespondActivityTaskFailed(
 	return resp, err
 }
 
-func (c *metricClient) RespondActivityTaskFailedByID(
+func (c *metricClient) RespondActivityTaskFailedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskFailedByIDRequest,
+	request *workflowservice.RespondActivityTaskFailedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskFailedByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskFailedByIdResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedByIDScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedByIdScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskFailedByIDScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskFailedByID(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskFailedByIdScope, metrics.ClientLatency)
+	resp, err := c.client.RespondActivityTaskFailedById(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedByIDScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedByIdScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -709,20 +709,20 @@ func (c *metricClient) TerminateWorkflowExecution(
 	return resp, err
 }
 
-func (c *metricClient) UpdateDomain(
+func (c *metricClient) UpdateNamespace(
 	ctx context.Context,
-	request *workflowservice.UpdateDomainRequest,
+	request *workflowservice.UpdateNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateDomainResponse, error) {
+) (*workflowservice.UpdateNamespaceResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientUpdateDomainScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientUpdateNamespaceScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientUpdateDomainScope, metrics.ClientLatency)
-	resp, err := c.client.UpdateDomain(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientUpdateNamespaceScope, metrics.ClientLatency)
+	resp, err := c.client.UpdateNamespace(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientUpdateDomainScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientUpdateNamespaceScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

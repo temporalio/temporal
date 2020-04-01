@@ -23,9 +23,10 @@ package frontend
 import (
 	"context"
 
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/resource"
 )
@@ -57,11 +58,16 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 
 // TODO(vancexu): refactor frontend handler
 
-// Health is for health check
-func (a *AccessControlledWorkflowHandler) Health(context.Context, *healthservice.HealthRequest) (*healthservice.HealthStatus, error) {
+// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+func (a *AccessControlledWorkflowHandler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	a.GetLogger().Debug("Frontend service health check endpoint (gRPC) reached.")
-	hs := &healthservice.HealthStatus{Ok: true, Msg: "Frontend service is healthy."}
+	hs := &healthpb.HealthCheckResponse{
+		Status: healthpb.HealthCheckResponse_SERVING,
+	}
 	return hs, nil
+}
+func (a *AccessControlledWorkflowHandler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
+	return serviceerror.NewUnimplemented("Watch is not implemented.")
 }
 
 // CountWorkflowExecutions API call
@@ -71,8 +77,8 @@ func (a *AccessControlledWorkflowHandler) CountWorkflowExecutions(
 ) (*workflowservice.CountWorkflowExecutionsResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "CountWorkflowExecutions",
-		DomainName: request.GetDomain(),
+		APIName:   "CountWorkflowExecutions",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -85,15 +91,15 @@ func (a *AccessControlledWorkflowHandler) CountWorkflowExecutions(
 	return a.frontendHandler.CountWorkflowExecutions(ctx, request)
 }
 
-// DeprecateDomain API call
-func (a *AccessControlledWorkflowHandler) DeprecateDomain(
+// DeprecateNamespace API call
+func (a *AccessControlledWorkflowHandler) DeprecateNamespace(
 	ctx context.Context,
-	request *workflowservice.DeprecateDomainRequest,
-) (*workflowservice.DeprecateDomainResponse, error) {
+	request *workflowservice.DeprecateNamespaceRequest,
+) (*workflowservice.DeprecateNamespaceResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "DeprecateDomain",
-		DomainName: request.GetName(),
+		APIName:   "DeprecateNamespace",
+		Namespace: request.GetName(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -103,18 +109,18 @@ func (a *AccessControlledWorkflowHandler) DeprecateDomain(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.DeprecateDomain(ctx, request)
+	return a.frontendHandler.DeprecateNamespace(ctx, request)
 }
 
-// DescribeDomain API call
-func (a *AccessControlledWorkflowHandler) DescribeDomain(
+// DescribeNamespace API call
+func (a *AccessControlledWorkflowHandler) DescribeNamespace(
 	ctx context.Context,
-	request *workflowservice.DescribeDomainRequest,
-) (*workflowservice.DescribeDomainResponse, error) {
+	request *workflowservice.DescribeNamespaceRequest,
+) (*workflowservice.DescribeNamespaceResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "DescribeDomain",
-		DomainName: request.GetName(),
+		APIName:   "DescribeNamespace",
+		Namespace: request.GetName(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -124,7 +130,7 @@ func (a *AccessControlledWorkflowHandler) DescribeDomain(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.DescribeDomain(ctx, request)
+	return a.frontendHandler.DescribeNamespace(ctx, request)
 }
 
 // DescribeTaskList API call
@@ -134,8 +140,8 @@ func (a *AccessControlledWorkflowHandler) DescribeTaskList(
 ) (*workflowservice.DescribeTaskListResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "DescribeTaskList",
-		DomainName: request.GetDomain(),
+		APIName:   "DescribeTaskList",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -155,8 +161,8 @@ func (a *AccessControlledWorkflowHandler) DescribeWorkflowExecution(
 ) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "DescribeWorkflowExecution",
-		DomainName: request.GetDomain(),
+		APIName:   "DescribeWorkflowExecution",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -184,8 +190,8 @@ func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionHistory(
 ) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "GetWorkflowExecutionHistory",
-		DomainName: request.GetDomain(),
+		APIName:   "GetWorkflowExecutionHistory",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -205,8 +211,8 @@ func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionRawHistory(
 ) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "GetWorkflowExecutionRawHistory",
-		DomainName: request.GetDomain(),
+		APIName:   "GetWorkflowExecutionRawHistory",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -226,8 +232,8 @@ func (a *AccessControlledWorkflowHandler) PollForWorkflowExecutionRawHistory(
 ) (*workflowservice.PollForWorkflowExecutionRawHistoryResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "PollForWorkflowExecutionRawHistory",
-		DomainName: request.GetDomain(),
+		APIName:   "PollForWorkflowExecutionRawHistory",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -247,8 +253,8 @@ func (a *AccessControlledWorkflowHandler) ListArchivedWorkflowExecutions(
 ) (*workflowservice.ListArchivedWorkflowExecutionsResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "ListArchivedWorkflowExecutions",
-		DomainName: request.GetDomain(),
+		APIName:   "ListArchivedWorkflowExecutions",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -268,8 +274,8 @@ func (a *AccessControlledWorkflowHandler) ListClosedWorkflowExecutions(
 ) (*workflowservice.ListClosedWorkflowExecutionsResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "ListClosedWorkflowExecutions",
-		DomainName: request.GetDomain(),
+		APIName:   "ListClosedWorkflowExecutions",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -282,14 +288,14 @@ func (a *AccessControlledWorkflowHandler) ListClosedWorkflowExecutions(
 	return a.frontendHandler.ListClosedWorkflowExecutions(ctx, request)
 }
 
-// ListDomains API call
-func (a *AccessControlledWorkflowHandler) ListDomains(
+// ListNamespaces API call
+func (a *AccessControlledWorkflowHandler) ListNamespaces(
 	ctx context.Context,
-	request *workflowservice.ListDomainsRequest,
-) (*workflowservice.ListDomainsResponse, error) {
+	request *workflowservice.ListNamespacesRequest,
+) (*workflowservice.ListNamespacesResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName: "ListDomains",
+		APIName: "ListNamespaces",
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -299,7 +305,7 @@ func (a *AccessControlledWorkflowHandler) ListDomains(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.ListDomains(ctx, request)
+	return a.frontendHandler.ListNamespaces(ctx, request)
 }
 
 // ListOpenWorkflowExecutions API call
@@ -309,8 +315,8 @@ func (a *AccessControlledWorkflowHandler) ListOpenWorkflowExecutions(
 ) (*workflowservice.ListOpenWorkflowExecutionsResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "ListOpenWorkflowExecutions",
-		DomainName: request.GetDomain(),
+		APIName:   "ListOpenWorkflowExecutions",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -330,8 +336,8 @@ func (a *AccessControlledWorkflowHandler) ListWorkflowExecutions(
 ) (*workflowservice.ListWorkflowExecutionsResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "ListWorkflowExecutions",
-		DomainName: request.GetDomain(),
+		APIName:   "ListWorkflowExecutions",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -351,8 +357,8 @@ func (a *AccessControlledWorkflowHandler) PollForActivityTask(
 ) (*workflowservice.PollForActivityTaskResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "PollForActivityTask",
-		DomainName: request.GetDomain(),
+		APIName:   "PollForActivityTask",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -372,8 +378,8 @@ func (a *AccessControlledWorkflowHandler) PollForDecisionTask(
 ) (*workflowservice.PollForDecisionTaskResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "PollForDecisionTask",
-		DomainName: request.GetDomain(),
+		APIName:   "PollForDecisionTask",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -393,8 +399,8 @@ func (a *AccessControlledWorkflowHandler) QueryWorkflow(
 ) (*workflowservice.QueryWorkflowResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "QueryWorkflow",
-		DomainName: request.GetDomain(),
+		APIName:   "QueryWorkflow",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -424,23 +430,23 @@ func (a *AccessControlledWorkflowHandler) RecordActivityTaskHeartbeat(
 	return a.frontendHandler.RecordActivityTaskHeartbeat(ctx, request)
 }
 
-// RecordActivityTaskHeartbeatByID API call
-func (a *AccessControlledWorkflowHandler) RecordActivityTaskHeartbeatByID(
+// RecordActivityTaskHeartbeatById API call
+func (a *AccessControlledWorkflowHandler) RecordActivityTaskHeartbeatById(
 	ctx context.Context,
-	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
-) (*workflowservice.RecordActivityTaskHeartbeatByIDResponse, error) {
-	return a.frontendHandler.RecordActivityTaskHeartbeatByID(ctx, request)
+	request *workflowservice.RecordActivityTaskHeartbeatByIdRequest,
+) (*workflowservice.RecordActivityTaskHeartbeatByIdResponse, error) {
+	return a.frontendHandler.RecordActivityTaskHeartbeatById(ctx, request)
 }
 
-// RegisterDomain API call
-func (a *AccessControlledWorkflowHandler) RegisterDomain(
+// RegisterNamespace API call
+func (a *AccessControlledWorkflowHandler) RegisterNamespace(
 	ctx context.Context,
-	request *workflowservice.RegisterDomainRequest,
-) (*workflowservice.RegisterDomainResponse, error) {
+	request *workflowservice.RegisterNamespaceRequest,
+) (*workflowservice.RegisterNamespaceResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "RegisterDomain",
-		DomainName: request.GetName(),
+		APIName:   "RegisterNamespace",
+		Namespace: request.GetName(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -450,7 +456,7 @@ func (a *AccessControlledWorkflowHandler) RegisterDomain(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.RegisterDomain(ctx, request)
+	return a.frontendHandler.RegisterNamespace(ctx, request)
 }
 
 // RequestCancelWorkflowExecution API call
@@ -460,8 +466,8 @@ func (a *AccessControlledWorkflowHandler) RequestCancelWorkflowExecution(
 ) (*workflowservice.RequestCancelWorkflowExecutionResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "RequestCancelWorkflowExecution",
-		DomainName: request.GetDomain(),
+		APIName:   "RequestCancelWorkflowExecution",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -481,8 +487,8 @@ func (a *AccessControlledWorkflowHandler) ResetStickyTaskList(
 ) (*workflowservice.ResetStickyTaskListResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "ResetStickyTaskList",
-		DomainName: request.GetDomain(),
+		APIName:   "ResetStickyTaskList",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -502,8 +508,8 @@ func (a *AccessControlledWorkflowHandler) ResetWorkflowExecution(
 ) (*workflowservice.ResetWorkflowExecutionResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "ResetWorkflowExecution",
-		DomainName: request.GetDomain(),
+		APIName:   "ResetWorkflowExecution",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -524,12 +530,12 @@ func (a *AccessControlledWorkflowHandler) RespondActivityTaskCanceled(
 	return a.frontendHandler.RespondActivityTaskCanceled(ctx, request)
 }
 
-// RespondActivityTaskCanceledByID API call
-func (a *AccessControlledWorkflowHandler) RespondActivityTaskCanceledByID(
+// RespondActivityTaskCanceledById API call
+func (a *AccessControlledWorkflowHandler) RespondActivityTaskCanceledById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
-) (*workflowservice.RespondActivityTaskCanceledByIDResponse, error) {
-	return a.frontendHandler.RespondActivityTaskCanceledByID(ctx, request)
+	request *workflowservice.RespondActivityTaskCanceledByIdRequest,
+) (*workflowservice.RespondActivityTaskCanceledByIdResponse, error) {
+	return a.frontendHandler.RespondActivityTaskCanceledById(ctx, request)
 }
 
 // RespondActivityTaskCompleted API call
@@ -540,12 +546,12 @@ func (a *AccessControlledWorkflowHandler) RespondActivityTaskCompleted(
 	return a.frontendHandler.RespondActivityTaskCompleted(ctx, request)
 }
 
-// RespondActivityTaskCompletedByID API call
-func (a *AccessControlledWorkflowHandler) RespondActivityTaskCompletedByID(
+// RespondActivityTaskCompletedById API call
+func (a *AccessControlledWorkflowHandler) RespondActivityTaskCompletedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
-) (*workflowservice.RespondActivityTaskCompletedByIDResponse, error) {
-	return a.frontendHandler.RespondActivityTaskCompletedByID(ctx, request)
+	request *workflowservice.RespondActivityTaskCompletedByIdRequest,
+) (*workflowservice.RespondActivityTaskCompletedByIdResponse, error) {
+	return a.frontendHandler.RespondActivityTaskCompletedById(ctx, request)
 }
 
 // RespondActivityTaskFailed API call
@@ -556,12 +562,12 @@ func (a *AccessControlledWorkflowHandler) RespondActivityTaskFailed(
 	return a.frontendHandler.RespondActivityTaskFailed(ctx, request)
 }
 
-// RespondActivityTaskFailedByID API call
-func (a *AccessControlledWorkflowHandler) RespondActivityTaskFailedByID(
+// RespondActivityTaskFailedById API call
+func (a *AccessControlledWorkflowHandler) RespondActivityTaskFailedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskFailedByIDRequest,
-) (*workflowservice.RespondActivityTaskFailedByIDResponse, error) {
-	return a.frontendHandler.RespondActivityTaskFailedByID(ctx, request)
+	request *workflowservice.RespondActivityTaskFailedByIdRequest,
+) (*workflowservice.RespondActivityTaskFailedByIdResponse, error) {
+	return a.frontendHandler.RespondActivityTaskFailedById(ctx, request)
 }
 
 // RespondDecisionTaskCompleted API call
@@ -595,8 +601,8 @@ func (a *AccessControlledWorkflowHandler) ScanWorkflowExecutions(
 ) (*workflowservice.ScanWorkflowExecutionsResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "ScanWorkflowExecutions",
-		DomainName: request.GetDomain(),
+		APIName:   "ScanWorkflowExecutions",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -616,8 +622,8 @@ func (a *AccessControlledWorkflowHandler) SignalWithStartWorkflowExecution(
 ) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "SignalWithStartWorkflowExecution",
-		DomainName: request.GetDomain(),
+		APIName:   "SignalWithStartWorkflowExecution",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -637,8 +643,8 @@ func (a *AccessControlledWorkflowHandler) SignalWorkflowExecution(
 ) (*workflowservice.SignalWorkflowExecutionResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "SignalWorkflowExecution",
-		DomainName: request.GetDomain(),
+		APIName:   "SignalWorkflowExecution",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -658,8 +664,8 @@ func (a *AccessControlledWorkflowHandler) StartWorkflowExecution(
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "StartWorkflowExecution",
-		DomainName: request.GetDomain(),
+		APIName:   "StartWorkflowExecution",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -679,8 +685,8 @@ func (a *AccessControlledWorkflowHandler) TerminateWorkflowExecution(
 ) (*workflowservice.TerminateWorkflowExecutionResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "TerminateWorkflowExecution",
-		DomainName: request.GetDomain(),
+		APIName:   "TerminateWorkflowExecution",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -700,8 +706,8 @@ func (a *AccessControlledWorkflowHandler) ListTaskListPartitions(
 ) (*workflowservice.ListTaskListPartitionsResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "ListTaskListPartitions",
-		DomainName: request.GetDomain(),
+		APIName:   "ListTaskListPartitions",
+		Namespace: request.GetNamespace(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -714,15 +720,15 @@ func (a *AccessControlledWorkflowHandler) ListTaskListPartitions(
 	return a.frontendHandler.ListTaskListPartitions(ctx, request)
 }
 
-// UpdateDomain API call
-func (a *AccessControlledWorkflowHandler) UpdateDomain(
+// UpdateNamespace API call
+func (a *AccessControlledWorkflowHandler) UpdateNamespace(
 	ctx context.Context,
-	request *workflowservice.UpdateDomainRequest,
-) (*workflowservice.UpdateDomainResponse, error) {
+	request *workflowservice.UpdateNamespaceRequest,
+) (*workflowservice.UpdateNamespaceResponse, error) {
 
 	attr := &authorization.Attributes{
-		APIName:    "UpdateDomain",
-		DomainName: request.GetName(),
+		APIName:   "UpdateNamespace",
+		Namespace: request.GetName(),
 	}
 	isAuthorized, err := a.isAuthorized(ctx, attr)
 	if err != nil {
@@ -732,7 +738,7 @@ func (a *AccessControlledWorkflowHandler) UpdateDomain(
 		return nil, errUnauthorized
 	}
 
-	return a.frontendHandler.UpdateDomain(ctx, request)
+	return a.frontendHandler.UpdateNamespace(ctx, request)
 }
 
 func (a *AccessControlledWorkflowHandler) isAuthorized(

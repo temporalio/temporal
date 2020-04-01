@@ -56,10 +56,10 @@ type (
 
 	// ArchiveRequest is the request signal sent to the archival workflow
 	ArchiveRequest struct {
-		DomainID   string
-		DomainName string
-		WorkflowID string
-		RunID      string
+		NamespaceID string
+		Namespace   string
+		WorkflowID  string
+		RunID       string
 
 		// history archival
 		ShardID              int
@@ -91,7 +91,7 @@ type (
 	client struct {
 		metricsScope     metrics.Scope
 		logger           log.Logger
-		cadenceClient    sdkclient.Client
+		temporalClient   sdkclient.Client
 		numWorkflows     dynamicconfig.IntPropertyFn
 		rateLimiter      quotas.Limiter
 		archiverProvider provider.ArchiverProvider
@@ -124,10 +124,10 @@ func NewClient(
 	archiverProvider provider.ArchiverProvider,
 ) Client {
 	return &client{
-		metricsScope:  metricsClient.Scope(metrics.ArchiverClientScope),
-		logger:        logger,
-		cadenceClient: publicClient,
-		numWorkflows:  numWorkflows,
+		metricsScope:   metricsClient.Scope(metrics.ArchiverClientScope),
+		logger:         logger,
+		temporalClient: publicClient,
+		numWorkflows:   numWorkflows,
 		rateLimiter: quotas.NewDynamicRateLimiter(
 			func() float64 {
 				return float64(requestRPS())
@@ -210,8 +210,8 @@ func (c *client) archiveHistoryInline(ctx context.Context, request *ClientReques
 
 	err = historyArchiver.Archive(ctx, URI, &carchiver.ArchiveHistoryRequest{
 		ShardID:              request.ArchiveRequest.ShardID,
-		DomainID:             request.ArchiveRequest.DomainID,
-		DomainName:           request.ArchiveRequest.DomainName,
+		NamespaceID:          request.ArchiveRequest.NamespaceID,
+		Namespace:            request.ArchiveRequest.Namespace,
 		WorkflowID:           request.ArchiveRequest.WorkflowID,
 		RunID:                request.ArchiveRequest.RunID,
 		BranchToken:          request.ArchiveRequest.BranchToken,
@@ -243,10 +243,10 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 	}
 
 	err = visibilityArchiver.Archive(ctx, URI, &archiverproto.ArchiveVisibilityRequest{
-		DomainID:           request.ArchiveRequest.DomainID,
-		DomainName:         request.ArchiveRequest.DomainName,
-		WorkflowID:         request.ArchiveRequest.WorkflowID,
-		RunID:              request.ArchiveRequest.RunID,
+		NamespaceId:        request.ArchiveRequest.NamespaceID,
+		Namespace:          request.ArchiveRequest.Namespace,
+		WorkflowId:         request.ArchiveRequest.WorkflowID,
+		RunId:              request.ArchiveRequest.RunID,
 		WorkflowTypeName:   request.ArchiveRequest.WorkflowTypeName,
 		StartTimestamp:     request.ArchiveRequest.StartTimestamp,
 		ExecutionTimestamp: request.ArchiveRequest.ExecutionTimestamp,
@@ -277,11 +277,11 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
-	_, err := c.cadenceClient.SignalWithStartWorkflow(signalCtx, workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
+	_, err := c.temporalClient.SignalWithStartWorkflow(signalCtx, workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
 	if err != nil {
 		taggedLogger = taggedLogger.WithTags(
-			tag.ArchivalRequestDomainID(request.DomainID),
-			tag.ArchivalRequestDomainName(request.DomainName),
+			tag.ArchivalRequestNamespaceID(request.NamespaceID),
+			tag.ArchivalRequestNamespace(request.Namespace),
 			tag.ArchivalRequestWorkflowID(request.WorkflowID),
 			tag.ArchivalRequestRunID(request.RunID),
 			tag.WorkflowID(workflowID),

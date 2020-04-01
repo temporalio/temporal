@@ -69,7 +69,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(t.getDomainIDAndWorkflowExecution(task))
+	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(t.getNamespaceIDAndWorkflowExecution(task))
 	if err != nil {
 		return err
 	}
@@ -87,23 +87,23 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, lastWriteVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), lastWriteVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	domainCacheEntry, err := t.shard.GetDomainCache().GetDomainByID(primitives.UUIDString(task.DomainID))
+	namespaceCacheEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUIDString(task.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
 	clusterConfiguredForHistoryArchival := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	domainConfiguredForHistoryArchival := domainCacheEntry.GetConfig().HistoryArchivalStatus == enums.ArchivalStatusEnabled
-	archiveHistory := clusterConfiguredForHistoryArchival && domainConfiguredForHistoryArchival
+	namespaceConfiguredForHistoryArchival := namespaceCacheEntry.GetConfig().HistoryArchivalStatus == enums.ArchivalStatusEnabled
+	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
 
-	// TODO: @ycyang once archival backfill is in place cluster:paused && domain:enabled should be a nop rather than a delete
+	// TODO: @ycyang once archival backfill is in place cluster:paused && namespace:enabled should be a nop rather than a delete
 	if archiveHistory {
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupArchiveCount)
-		return t.archiveWorkflow(task, weContext, mutableState, domainCacheEntry)
+		return t.archiveWorkflow(task, weContext, mutableState, namespaceCacheEntry)
 	}
 
 	t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
@@ -141,7 +141,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 	task *persistenceblobs.TimerTaskInfo,
 	workflowContext workflowExecutionContext,
 	msBuilder mutableState,
-	domainCacheEntry *cache.DomainCacheEntry,
+	namespaceCacheEntry *cache.NamespaceCacheEntry,
 ) error {
 	branchToken, err := msBuilder.GetCurrentBranchToken()
 	if err != nil {
@@ -154,13 +154,13 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 
 	req := &archiver.ClientRequest{
 		ArchiveRequest: &archiver.ArchiveRequest{
-			DomainID:             primitives.UUIDString(task.DomainID),
-			WorkflowID:           task.WorkflowID,
-			RunID:                primitives.UUIDString(task.RunID),
-			DomainName:           domainCacheEntry.GetInfo().Name,
+			NamespaceID:          primitives.UUIDString(task.GetNamespaceId()),
+			WorkflowID:           task.GetWorkflowId(),
+			RunID:                primitives.UUIDString(task.GetRunId()),
+			Namespace:            namespaceCacheEntry.GetInfo().Name,
 			ShardID:              t.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
-			URI:                  domainCacheEntry.GetConfig().HistoryArchivalURI,
+			URI:                  namespaceCacheEntry.GetConfig().HistoryArchivalURI,
 			NextEventID:          msBuilder.GetNextEventID(),
 			BranchToken:          branchToken,
 			CloseFailoverVersion: closeFailoverVersion,
@@ -210,9 +210,9 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowExecution(
 
 	op := func() error {
 		return t.shard.GetExecutionManager().DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
-			DomainID:   primitives.UUIDString(task.DomainID),
-			WorkflowID: task.WorkflowID,
-			RunID:      primitives.UUIDString(task.RunID),
+			NamespaceID: primitives.UUIDString(task.GetNamespaceId()),
+			WorkflowID:  task.GetWorkflowId(),
+			RunID:       primitives.UUIDString(task.GetRunId()),
 		})
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
@@ -224,9 +224,9 @@ func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
 
 	op := func() error {
 		return t.shard.GetExecutionManager().DeleteCurrentWorkflowExecution(&persistence.DeleteCurrentWorkflowExecutionRequest{
-			DomainID:   primitives.UUIDString(task.DomainID),
-			WorkflowID: task.WorkflowID,
-			RunID:      primitives.UUIDString(task.RunID),
+			NamespaceID: primitives.UUIDString(task.GetNamespaceId()),
+			WorkflowID:  task.GetWorkflowId(),
+			RunID:       primitives.UUIDString(task.GetRunId()),
 		})
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
@@ -257,10 +257,10 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 
 	op := func() error {
 		request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
-			DomainID:   primitives.UUIDString(task.DomainID),
-			WorkflowID: task.WorkflowID,
-			RunID:      primitives.UUIDString(task.RunID),
-			TaskID:     task.TaskID,
+			NamespaceID: primitives.UUIDString(task.GetNamespaceId()),
+			WorkflowID:  task.GetWorkflowId(),
+			RunID:       primitives.UUIDString(task.GetRunId()),
+			TaskID:      task.GetTaskId(),
 		}
 		// TODO: expose GetVisibilityManager method on shardContext interface
 		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
@@ -268,12 +268,12 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
-func (t *timerQueueTaskExecutorBase) getDomainIDAndWorkflowExecution(
+func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TimerTaskInfo,
 ) (string, commonproto.WorkflowExecution) {
 
-	return primitives.UUIDString(task.DomainID), commonproto.WorkflowExecution{
-		WorkflowId: task.WorkflowID,
-		RunId:      primitives.UUIDString(task.RunID),
+	return primitives.UUIDString(task.GetNamespaceId()), commonproto.WorkflowExecution{
+		WorkflowId: task.GetWorkflowId(),
+		RunId:      primitives.UUIDString(task.GetRunId()),
 	}
 }

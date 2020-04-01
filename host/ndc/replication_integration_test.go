@@ -40,7 +40,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 	tasklist := "event-generator-taskList"
 
 	var historyBatch []*commonproto.History
-	s.generator = test.InitializeHistoryEventGenerator(s.domainName, 1)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
@@ -83,7 +83,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	tasklist := "event-generator-taskList"
 
 	var historyBatch []*commonproto.History
-	s.generator = test.InitializeHistoryEventGenerator(s.domainName, 1)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
 
 	events := s.generator.GetNextVertices()
 	historyEvents := &commonproto.History{}
@@ -136,7 +136,7 @@ Loop:
 			token = response.NextPageToken
 
 			for _, task := range response.Tasks {
-				firstEventID := task.FirstEventID
+				firstEventID := task.GetFirstEventId()
 				actualDLQMsgs[firstEventID] = true
 			}
 		}

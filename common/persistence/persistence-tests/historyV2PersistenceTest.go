@@ -219,7 +219,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 		MaxEventID:    10,
 		PageSize:      4,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(int(s.ShardInfo.ShardID)),
+		ShardID:       common.IntPtr(int(s.ShardInfo.GetShardId())),
 	}
 	// first page
 	resp, err := s.HistoryV2Mgr.ReadHistoryBranch(req)
@@ -281,7 +281,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 		MaxEventID:    21,
 		PageSize:      3,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(int(s.ShardInfo.ShardID)),
+		ShardID:       common.IntPtr(int(s.ShardInfo.GetShardId())),
 	}
 
 	// first page
@@ -505,7 +505,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 	branches = s.descTree(treeID)
 	s.Equal(1, len(branches))
-	mbrID := branches[0].BranchID
+	mbrID := branches[0].BranchId
 
 	txn := int64(1)
 	getTxnLock := sync.Mutex{}
@@ -642,7 +642,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			masterCnt++
 		} else {
 			s.Equal(1, len(b.Ancestors))
-			s.Equal(mbrID, b.Ancestors[0].BranchID)
+			s.Equal(mbrID, b.Ancestors[0].GetBranchId())
 		}
 	}
 	s.Equal(forkOnLevel1, actualForkOnLevel1)
@@ -711,7 +711,7 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 		var err error
 		err = s.HistoryV2Mgr.DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 			BranchToken: branch,
-			ShardID:     common.IntPtr(int(s.ShardInfo.ShardID)),
+			ShardID:     common.IntPtr(int(s.ShardInfo.GetShardId())),
 		})
 		return err
 	}
@@ -723,7 +723,7 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistenceblobs.HistoryBranch {
 	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
 		BranchToken: br,
-		ShardID:     common.IntPtr(int(s.ShardInfo.ShardID)),
+		ShardID:     common.IntPtr(int(s.ShardInfo.GetShardId())),
 	})
 	s.Nil(err)
 	return resp.Branches
@@ -732,7 +732,7 @@ func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistenceblo
 func (s *HistoryV2PersistenceSuite) descTree(treeID []byte) []*persistenceblobs.HistoryBranch {
 	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID:  treeID,
-		ShardID: common.IntPtr(int(s.ShardInfo.ShardID)),
+		ShardID: common.IntPtr(int(s.ShardInfo.GetShardId())),
 	})
 	s.Nil(err)
 	return resp.Branches
@@ -758,7 +758,7 @@ func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID in
 			MaxEventID:    maxID,
 			PageSize:      randPageSize,
 			NextPageToken: token,
-			ShardID:       common.IntPtr(int(s.ShardInfo.ShardID)),
+			ShardID:       common.IntPtr(int(s.ShardInfo.GetShardId())),
 		})
 		if err != nil {
 			return nil, err
@@ -808,7 +808,7 @@ func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*commonproto.
 			Events:        events,
 			TransactionID: txnID,
 			Encoding:      common.EncodingTypeProto3,
-			ShardID:       common.IntPtr(int(s.ShardInfo.ShardID)),
+			ShardID:       common.IntPtr(int(s.ShardInfo.GetShardId())),
 		})
 		return err
 	}
@@ -833,7 +833,7 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 			ForkBranchToken: forkBranch,
 			ForkNodeID:      forkNodeID,
 			Info:            testForkRunID,
-			ShardID:         common.IntPtr(int(s.ShardInfo.ShardID)),
+			ShardID:         common.IntPtr(int(s.ShardInfo.GetShardId())),
 		})
 		if resp != nil {
 			bi = resp.NewBranchToken

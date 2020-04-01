@@ -26,14 +26,14 @@ import (
 	"fmt"
 	"hash/crc32"
 
-	"github.com/temporalio/temporal/common/codec"
+	"github.com/gogo/protobuf/proto"
 )
 
 // GenerateCRC32 generates an IEEE crc32 checksum on the
 // serilized byte array of the given thrift object. The
 // serialization proto used will be of type thriftRW
 func GenerateCRC32(
-	payload codec.ProtoObject,
+	payload proto.Marshaler,
 	payloadVersion int,
 ) (Checksum, error) {
 
@@ -56,7 +56,7 @@ func GenerateCRC32(
 // given thrift object matches the specified expected checksum
 // Return ErrMismatch when checksums mismatch
 func Verify(
-	payload codec.ProtoObject,
+	payload proto.Marshaler,
 	checksum Checksum,
 ) error {
 

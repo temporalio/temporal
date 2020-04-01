@@ -109,7 +109,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 	startVersion := newWorkflow.StartVersion
 	lastWriteVersion := newWorkflow.LastWriteVersion
 	shardID := m.shardID
-	domainID := primitives.MustParseUUID(executionInfo.DomainID)
+	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceID)
 	workflowID := executionInfo.WorkflowID
 	runID := primitives.MustParseUUID(executionInfo.RunID)
 
@@ -128,7 +128,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 
 	var err error
 	var row *sqlplugin.CurrentExecutionsRow
-	if row, err = lockCurrentExecutionIfExists(tx, m.shardID, domainID, workflowID); err != nil {
+	if row, err = lockCurrentExecutionIfExists(tx, m.shardID, namespaceID, workflowID); err != nil {
 		return nil, err
 	}
 
@@ -184,7 +184,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 	if err := createOrUpdateCurrentExecution(tx,
 		request.Mode,
 		m.shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		runID,
 		executionInfo.State,
@@ -206,11 +206,11 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	request *p.GetWorkflowExecutionRequest,
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
 
-	domainID := primitives.MustParseUUID(request.DomainID)
+	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.Execution.RunId)
 	wfID := request.Execution.WorkflowId
 	execution, err := m.db.SelectFromExecutions(&sqlplugin.ExecutionsFilter{
-		ShardID: m.shardID, DomainID: domainID, WorkflowID: wfID, RunID: runID})
+		ShardID: m.shardID, NamespaceID: namespaceID, WorkflowID: wfID, RunID: runID})
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -236,12 +236,12 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 
 	state := &p.InternalWorkflowMutableState{ExecutionInfo: executionInfo}
 
-	if info.LastWriteEventID != nil {
+	if info.LastWriteEventId != nil {
 		state.ReplicationState = &p.ReplicationState{}
 		state.ReplicationState.StartVersion = info.GetStartVersion()
 		state.ReplicationState.CurrentVersion = info.GetCurrentVersion()
 		state.ReplicationState.LastWriteVersion = execution.LastWriteVersion
-		state.ReplicationState.LastWriteEventID = info.GetLastWriteEventID().Value
+		state.ReplicationState.LastWriteEventID = info.GetLastWriteEventId().Value
 		state.ReplicationState.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(info.LastReplicationInfo))
 		for k, v := range info.LastReplicationInfo {
 			state.ReplicationState.LastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.LastEventId}
@@ -260,7 +260,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		var err error
 		state.ActivityInfos, err = getActivityInfoMap(m.db,
 			m.shardID,
-			domainID,
+			namespaceID,
 			wfID,
 			runID)
 		if err != nil {
@@ -272,7 +272,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		var err error
 		state.TimerInfos, err = getTimerInfoMap(m.db,
 			m.shardID,
-			domainID,
+			namespaceID,
 			wfID,
 			runID)
 		if err != nil {
@@ -284,7 +284,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		var err error
 		state.ChildExecutionInfos, err = getChildExecutionInfoMap(m.db,
 			m.shardID,
-			domainID,
+			namespaceID,
 			wfID,
 			runID)
 		if err != nil {
@@ -296,7 +296,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		var err error
 		state.RequestCancelInfos, err = getRequestCancelInfoMap(m.db,
 			m.shardID,
-			domainID,
+			namespaceID,
 			wfID,
 			runID)
 		if err != nil {
@@ -308,7 +308,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		var err error
 		state.SignalInfos, err = getSignalInfoMap(m.db,
 			m.shardID,
-			domainID,
+			namespaceID,
 			wfID,
 			runID)
 		if err != nil {
@@ -320,7 +320,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		var err error
 		state.BufferedEvents, err = getBufferedEvents(m.db,
 			m.shardID,
-			domainID,
+			namespaceID,
 			wfID,
 			runID)
 		if err != nil {
@@ -332,7 +332,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		var err error
 		state.SignalRequestedIDs, err = getSignalsRequested(m.db,
 			m.shardID,
-			domainID,
+			namespaceID,
 			wfID,
 			runID)
 		if err != nil {
@@ -361,7 +361,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 	newWorkflow := request.NewWorkflowSnapshot
 
 	executionInfo := updateWorkflow.ExecutionInfo
-	domainID := primitives.MustParseUUID(executionInfo.DomainID)
+	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceID)
 	workflowID := executionInfo.WorkflowID
 	runID := primitives.MustParseUUID(executionInfo.RunID)
 	shardID := m.shardID
@@ -378,7 +378,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 	case p.UpdateWorkflowModeBypassCurrent:
 		if err := assertNotCurrentExecution(tx,
 			shardID,
-			domainID,
+			namespaceID,
 			workflowID,
 			runID); err != nil {
 			return err
@@ -389,16 +389,16 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 			newExecutionInfo := newWorkflow.ExecutionInfo
 			startVersion := newWorkflow.StartVersion
 			lastWriteVersion := newWorkflow.LastWriteVersion
-			newDomainID := primitives.MustParseUUID(newExecutionInfo.DomainID)
+			newNamespaceID := primitives.MustParseUUID(newExecutionInfo.NamespaceID)
 			newRunID := primitives.MustParseUUID(newExecutionInfo.RunID)
 
-			if !bytes.Equal(domainID, newDomainID) {
-				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another domain"))
+			if !bytes.Equal(namespaceID, newNamespaceID) {
+				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
 			}
 
 			if err := assertRunIDAndUpdateCurrentExecution(tx,
 				shardID,
-				domainID,
+				namespaceID,
 				workflowID,
 				newRunID,
 				runID,
@@ -415,7 +415,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 			// this is only to update the current record
 			if err := assertRunIDAndUpdateCurrentExecution(tx,
 				shardID,
-				domainID,
+				namespaceID,
 				workflowID,
 				runID,
 				runID,
@@ -459,7 +459,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 
 	shardID := m.shardID
 
-	domainID := primitives.MustParseUUID(request.NewWorkflowSnapshot.ExecutionInfo.DomainID)
+	namespaceID := primitives.MustParseUUID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceID)
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowID
 
 	baseRunID := primitives.MustParseUUID(request.BaseRunID)
@@ -476,7 +476,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 	// 1. update current execution
 	if err := updateCurrentExecution(tx,
 		shardID,
-		domainID,
+		namespaceID,
 		workflowID,
 		newWorkflowRunID,
 		newExecutionInfo.CreateRequestID,
@@ -491,7 +491,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 	// 2. lock base run: we want to grab a read-lock for base run to prevent race condition
 	// It is only needed when base run is not current run. Because we will obtain a lock on current run anyway.
 	if !bytes.Equal(baseRunID, currentRunID) {
-		if err := lockAndCheckNextEventID(tx, shardID, domainID, workflowID, baseRunID, baseRunNextEventID); err != nil {
+		if err := lockAndCheckNextEventID(tx, shardID, namespaceID, workflowID, baseRunID, baseRunNextEventID); err != nil {
 			switch err.(type) {
 			case *p.ConditionFailedError:
 				return err
@@ -510,7 +510,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 		// even the current run is not running, we need to lock the current run:
 		// 1). in case it is changed by conflict resolution
 		// 2). in case delete history timer kicks in if the base is current
-		if err := lockAndCheckNextEventID(tx, shardID, domainID, workflowID, currentRunID, currentRunNextEventID); err != nil {
+		if err := lockAndCheckNextEventID(tx, shardID, namespaceID, workflowID, currentRunID, currentRunNextEventID); err != nil {
 			switch err.(type) {
 			case *p.ConditionFailedError:
 				return err
@@ -544,7 +544,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 
 	shardID := m.shardID
 
-	domainID := primitives.MustParseUUID(resetWorkflow.ExecutionInfo.DomainID)
+	namespaceID := primitives.MustParseUUID(resetWorkflow.ExecutionInfo.NamespaceID)
 	workflowID := resetWorkflow.ExecutionInfo.WorkflowID
 
 	if err := p.ValidateConflictResolveWorkflowModeState(
@@ -560,7 +560,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 	case p.ConflictResolveWorkflowModeBypassCurrent:
 		if err := assertNotCurrentExecution(tx,
 			shardID,
-			domainID,
+			namespaceID,
 			workflowID,
 			primitives.MustParseUUID(resetWorkflow.ExecutionInfo.RunID)); err != nil {
 			return err
@@ -587,7 +587,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 
 			if err := assertAndUpdateCurrentExecution(tx,
 				m.shardID,
-				domainID,
+				namespaceID,
 				workflowID,
 				runID,
 				prevRunID,
@@ -605,7 +605,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 
 			if err := assertRunIDAndUpdateCurrentExecution(tx,
 				m.shardID,
-				domainID,
+				namespaceID,
 				workflowID,
 				runID,
 				prevRunID,
@@ -622,7 +622,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 
 			if err := assertRunIDAndUpdateCurrentExecution(tx,
 				m.shardID,
-				domainID,
+				namespaceID,
 				workflowID,
 				runID,
 				prevRunID,
@@ -665,13 +665,13 @@ func (m *sqlExecutionManager) DeleteWorkflowExecution(
 	request *p.DeleteWorkflowExecutionRequest,
 ) error {
 
-	domainID := primitives.MustParseUUID(request.DomainID)
+	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
 	_, err := m.db.DeleteFromExecutions(&sqlplugin.ExecutionsFilter{
-		ShardID:    m.shardID,
-		DomainID:   domainID,
-		WorkflowID: request.WorkflowID,
-		RunID:      runID,
+		ShardID:     m.shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  request.WorkflowID,
+		RunID:       runID,
 	})
 	return err
 }
@@ -684,13 +684,13 @@ func (m *sqlExecutionManager) DeleteCurrentWorkflowExecution(
 	request *p.DeleteCurrentWorkflowExecutionRequest,
 ) error {
 
-	domainID := primitives.MustParseUUID(request.DomainID)
+	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
 	_, err := m.db.DeleteFromCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
-		ShardID:    int64(m.shardID),
-		DomainID:   domainID,
-		WorkflowID: request.WorkflowID,
-		RunID:      runID,
+		ShardID:     int64(m.shardID),
+		NamespaceID: namespaceID,
+		WorkflowID:  request.WorkflowID,
+		RunID:       runID,
 	})
 	return err
 }
@@ -700,9 +700,9 @@ func (m *sqlExecutionManager) GetCurrentExecution(
 ) (*p.GetCurrentExecutionResponse, error) {
 
 	row, err := m.db.SelectFromCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
-		ShardID:    int64(m.shardID),
-		DomainID:   primitives.MustParseUUID(request.DomainID),
-		WorkflowID: request.WorkflowID,
+		ShardID:     int64(m.shardID),
+		NamespaceID: primitives.MustParseUUID(request.NamespaceID),
+		WorkflowID:  request.WorkflowID,
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -989,7 +989,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 		}
 
 		pageToken = &timerTaskPageToken{
-			TaskID:    resp.Timers[request.BatchSize].TaskID,
+			TaskID:    resp.Timers[request.BatchSize].GetTaskId(),
 			Timestamp: goVisibilityTimestamp,
 		}
 		resp.Timers = resp.Timers[:request.BatchSize]
@@ -1044,7 +1044,7 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 	row := &sqlplugin.ReplicationTaskDLQRow{
 		SourceClusterName: request.SourceClusterName,
 		ShardID:           m.shardID,
-		TaskID:            replicationTask.TaskID,
+		TaskID:            replicationTask.GetTaskId(),
 		Data:              blob.Data,
 		DataEncoding:      string(blob.Encoding),
 	}

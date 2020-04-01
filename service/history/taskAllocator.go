@@ -32,9 +32,9 @@ import (
 
 type (
 	taskAllocator interface {
-		verifyActiveTask(taskDomainID string, task interface{}) (bool, error)
-		verifyFailoverActiveTask(targetDomainIDs map[string]struct{}, taskDomainID string, task interface{}) (bool, error)
-		verifyStandbyTask(standbyCluster string, taskDomainID string, task interface{}) (bool, error)
+		verifyActiveTask(taskNamespaceID string, task interface{}) (bool, error)
+		verifyFailoverActiveTask(targetNamespaceIDs map[string]struct{}, taskNamespaceID string, task interface{}) (bool, error)
+		verifyStandbyTask(standbyCluster string, taskNamespaceID string, task interface{}) (bool, error)
 		lock()
 		unlock()
 	}
@@ -42,7 +42,7 @@ type (
 	taskAllocatorImpl struct {
 		currentClusterName string
 		shard              ShardContext
-		domainCache        cache.DomainCache
+		namespaceCache     cache.NamespaceCache
 		logger             log.Logger
 
 		locker sync.RWMutex
@@ -54,73 +54,73 @@ func newTaskAllocator(shard ShardContext) taskAllocator {
 	return &taskAllocatorImpl{
 		currentClusterName: shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              shard,
-		domainCache:        shard.GetDomainCache(),
+		namespaceCache:     shard.GetNamespaceCache(),
 		logger:             shard.GetLogger(),
 	}
 }
 
 // verifyActiveTask, will return true if task activeness check is successful
-func (t *taskAllocatorImpl) verifyActiveTask(taskDomainID string, task interface{}) (bool, error) {
+func (t *taskAllocatorImpl) verifyActiveTask(taskNamespaceID string, task interface{}) (bool, error) {
 	t.locker.RLock()
 	defer t.locker.RUnlock()
 
-	domainEntry, err := t.domainCache.GetDomainByID(taskDomainID)
+	namespaceEntry, err := t.namespaceCache.GetNamespaceByID(taskNamespaceID)
 	if err != nil {
-		// it is possible that the domain is deleted
-		// we should treat that domain as active
+		// it is possible that the namespace is deleted
+		// we should treat that namespace as active
 		if _, ok := err.(*serviceerror.NotFound); !ok {
-			t.logger.Warn("Cannot find domain", tag.WorkflowDomainID(taskDomainID))
+			t.logger.Warn("Cannot find namespace", tag.WorkflowNamespaceID(taskNamespaceID))
 			return false, err
 		}
-		t.logger.Warn("Cannot find domain, default to process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+		t.logger.Warn("Cannot find namespace, default to process task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 		return true, nil
 	}
-	if domainEntry.IsGlobalDomain() && t.currentClusterName != domainEntry.GetReplicationConfig().ActiveClusterName {
+	if namespaceEntry.IsGlobalNamespace() && t.currentClusterName != namespaceEntry.GetReplicationConfig().ActiveClusterName {
 		// timer task does not belong to cluster name
-		t.logger.Debug("Domain is not active, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+		t.logger.Debug("Namespace is not active, skip task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 		return false, nil
 	}
-	t.logger.Debug("Domain is active, process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+	t.logger.Debug("Namespace is active, process task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 	return true, nil
 }
 
 // verifyFailoverActiveTask, will return true if task activeness check is successful
-func (t *taskAllocatorImpl) verifyFailoverActiveTask(targetDomainIDs map[string]struct{}, taskDomainID string, task interface{}) (bool, error) {
-	_, ok := targetDomainIDs[taskDomainID]
+func (t *taskAllocatorImpl) verifyFailoverActiveTask(targetNamespaceIDs map[string]struct{}, taskNamespaceID string, task interface{}) (bool, error) {
+	_, ok := targetNamespaceIDs[taskNamespaceID]
 	if ok {
-		t.logger.Debug("Failover Domain is active, process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+		t.logger.Debug("Failover Namespace is active, process task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 		return true, nil
 	}
-	t.logger.Debug("Failover Domain is not active, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+	t.logger.Debug("Failover Namespace is not active, skip task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 	return false, nil
 }
 
 // verifyStandbyTask, will return true if task standbyness check is successful
-func (t *taskAllocatorImpl) verifyStandbyTask(standbyCluster string, taskDomainID string, task interface{}) (bool, error) {
+func (t *taskAllocatorImpl) verifyStandbyTask(standbyCluster string, taskNamespaceID string, task interface{}) (bool, error) {
 	t.locker.RLock()
 	defer t.locker.RUnlock()
 
-	domainEntry, err := t.domainCache.GetDomainByID(taskDomainID)
+	namespaceEntry, err := t.namespaceCache.GetNamespaceByID(taskNamespaceID)
 	if err != nil {
-		// it is possible that the domain is deleted
-		// we should treat that domain as not active
+		// it is possible that the namespace is deleted
+		// we should treat that namespace as not active
 		if _, ok := err.(*serviceerror.NotFound); !ok {
-			t.logger.Warn("Cannot find domain", tag.WorkflowDomainID(taskDomainID))
+			t.logger.Warn("Cannot find namespace", tag.WorkflowNamespaceID(taskNamespaceID))
 			return false, err
 		}
-		t.logger.Warn("Cannot find domain, default to not process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+		t.logger.Warn("Cannot find namespace, default to not process task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 		return false, nil
 	}
-	if !domainEntry.IsGlobalDomain() {
-		// non global domain, timer task does not belong here
-		t.logger.Debug("Domain is not global, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+	if !namespaceEntry.IsGlobalNamespace() {
+		// non global namespace, timer task does not belong here
+		t.logger.Debug("Namespace is not global, skip task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 		return false, nil
-	} else if domainEntry.IsGlobalDomain() && domainEntry.GetReplicationConfig().ActiveClusterName != standbyCluster {
+	} else if namespaceEntry.IsGlobalNamespace() && namespaceEntry.GetReplicationConfig().ActiveClusterName != standbyCluster {
 		// timer task does not belong here
-		t.logger.Debug("Domain is not standby, skip task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+		t.logger.Debug("Namespace is not standby, skip task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 		return false, nil
 	}
-	t.logger.Debug("Domain is standby, process task.", tag.WorkflowDomainID(taskDomainID), tag.Value(task))
+	t.logger.Debug("Namespace is standby, process task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 	return true, nil
 }
 

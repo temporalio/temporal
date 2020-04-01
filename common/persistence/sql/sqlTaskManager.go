@@ -62,17 +62,17 @@ func newTaskPersistence(db sqlplugin.DB, nShards int, log log.Logger) (persisten
 func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest) (*persistence.LeaseTaskListResponse, error) {
 	var rangeID int64
 	var ackLevel int64
-	shardID := m.shardID(request.DomainID, request.TaskList)
-	domainID := request.DomainID
+	shardID := m.shardID(request.NamespaceID, request.TaskList)
+	namespaceID := request.NamespaceID
 	rows, err := m.db.SelectFromTaskLists(&sqlplugin.TaskListsFilter{
-		ShardID:  shardID,
-		DomainID: &domainID,
-		Name:     &request.TaskList,
-		TaskType: common.Int64Ptr(int64(request.TaskType))})
+		ShardID:     shardID,
+		NamespaceID: &namespaceID,
+		Name:        &request.TaskList,
+		TaskType:    common.Int64Ptr(int64(request.TaskType))})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			tlInfo := &persistenceblobs.TaskListInfo{
-				DomainID:    domainID,
+				NamespaceId: namespaceID,
 				Name:        request.TaskList,
 				TaskType:    request.TaskType,
 				AckLevel:    ackLevel,
@@ -86,7 +86,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 			}
 			row := sqlplugin.TaskListsRow{
 				ShardID:      shardID,
-				DomainID:     domainID,
+				NamespaceID:  namespaceID,
 				Name:         request.TaskList,
 				TaskType:     int64(request.TaskType),
 				Data:         blob.Data,
@@ -120,7 +120,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 		// We need to separately check the condition and do the
 		// update because we want to throw different error codes.
 		// Since we need to do things separately (in a transaction), we need to take a lock.
-		err1 := lockTaskList(tx, shardID, domainID, request.TaskList, request.TaskType, rangeID)
+		err1 := lockTaskList(tx, shardID, namespaceID, request.TaskList, request.TaskType, rangeID)
 		if err1 != nil {
 			return err1
 		}
@@ -134,7 +134,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 		}
 		result, err1 := tx.UpdateTaskLists(&sqlplugin.TaskListsRow{
 			ShardID:      shardID,
-			DomainID:     row.DomainID,
+			NamespaceID:  row.NamespaceID,
 			RangeID:      row.RangeID + 1,
 			Name:         row.Name,
 			TaskType:     row.TaskType,
@@ -161,8 +161,8 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 }
 
 func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequest) (*persistence.UpdateTaskListResponse, error) {
-	shardID := m.shardID(request.TaskListInfo.DomainID, request.TaskListInfo.Name)
-	domainID := request.TaskListInfo.DomainID
+	shardID := m.shardID(request.TaskListInfo.GetNamespaceId(), request.TaskListInfo.Name)
+	namespaceID := request.TaskListInfo.GetNamespaceId()
 
 	tl := request.TaskListInfo
 	tl.LastUpdated = types.TimestampNow()
@@ -180,7 +180,7 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 		}
 		if _, err := m.db.ReplaceIntoTaskLists(&sqlplugin.TaskListsRow{
 			ShardID:      shardID,
-			DomainID:     domainID,
+			NamespaceID:  namespaceID,
 			RangeID:      request.RangeID,
 			Name:         request.TaskListInfo.Name,
 			TaskType:     int64(request.TaskListInfo.TaskType),
@@ -197,13 +197,13 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 	}
 	err = m.txExecute("UpdateTaskList", func(tx sqlplugin.Tx) error {
 		err1 := lockTaskList(
-			tx, shardID, domainID, request.TaskListInfo.Name, request.TaskListInfo.TaskType, request.RangeID)
+			tx, shardID, namespaceID, request.TaskListInfo.Name, request.TaskListInfo.TaskType, request.RangeID)
 		if err1 != nil {
 			return err1
 		}
 		result, err1 := tx.UpdateTaskLists(&sqlplugin.TaskListsRow{
 			ShardID:      shardID,
-			DomainID:     domainID,
+			NamespaceID:  namespaceID,
 			RangeID:      request.RangeID,
 			Name:         request.TaskListInfo.Name,
 			TaskType:     int64(request.TaskListInfo.TaskType),
@@ -227,14 +227,14 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 }
 
 type taskListPageToken struct {
-	ShardID  int
-	DomainID string
-	Name     string
-	TaskType int64
+	ShardID     int
+	NamespaceID string
+	Name        string
+	TaskType    int64
 }
 
 func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) (*persistence.ListTaskListResponse, error) {
-	pageToken := taskListPageToken{TaskType: math.MinInt16, DomainID: minUUID}
+	pageToken := taskListPageToken{TaskType: math.MinInt16, NamespaceID: minUUID}
 	if request.PageToken != nil {
 		if err := gobDeserialize(request.PageToken, &pageToken); err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("error deserializing page token: %v", err))
@@ -242,14 +242,14 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 	}
 	var err error
 	var rows []sqlplugin.TaskListsRow
-	domainID := primitives.MustParseUUID(pageToken.DomainID)
+	namespaceID := primitives.MustParseUUID(pageToken.NamespaceID)
 	for pageToken.ShardID < m.nShards {
 		rows, err = m.db.SelectFromTaskLists(&sqlplugin.TaskListsFilter{
-			ShardID:             pageToken.ShardID,
-			DomainIDGreaterThan: &domainID,
-			NameGreaterThan:     &pageToken.Name,
-			TaskTypeGreaterThan: &pageToken.TaskType,
-			PageSize:            &request.PageSize,
+			ShardID:                pageToken.ShardID,
+			NamespaceIDGreaterThan: &namespaceID,
+			NameGreaterThan:        &pageToken.Name,
+			TaskTypeGreaterThan:    &pageToken.TaskType,
+			PageSize:               &request.PageSize,
 		})
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())
@@ -257,7 +257,7 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 		if len(rows) > 0 {
 			break
 		}
-		pageToken = taskListPageToken{ShardID: pageToken.ShardID + 1, TaskType: math.MinInt16, DomainID: minUUID}
+		pageToken = taskListPageToken{ShardID: pageToken.ShardID + 1, TaskType: math.MinInt16, NamespaceID: minUUID}
 	}
 
 	var nextPageToken []byte
@@ -265,10 +265,10 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 	case len(rows) >= request.PageSize:
 		lastRow := &rows[request.PageSize-1]
 		nextPageToken, err = gobSerialize(&taskListPageToken{
-			ShardID:  pageToken.ShardID,
-			DomainID: lastRow.DomainID.String(),
-			Name:     lastRow.Name,
-			TaskType: lastRow.TaskType,
+			ShardID:     pageToken.ShardID,
+			NamespaceID: lastRow.NamespaceID.String(),
+			Name:        lastRow.Name,
+			TaskType:    lastRow.TaskType,
 		})
 	case pageToken.ShardID+1 < m.nShards:
 		nextPageToken, err = gobSerialize(&taskListPageToken{ShardID: pageToken.ShardID + 1, TaskType: math.MinInt16})
@@ -298,13 +298,13 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 }
 
 func (m *sqlTaskManager) DeleteTaskList(request *persistence.DeleteTaskListRequest) error {
-	domainID := request.TaskList.DomainID
+	namespaceID := request.TaskList.NamespaceID
 	result, err := m.db.DeleteFromTaskLists(&sqlplugin.TaskListsFilter{
-		ShardID:  m.shardID(domainID, request.TaskList.Name),
-		DomainID: &domainID,
-		Name:     &request.TaskList.Name,
-		TaskType: common.Int64Ptr(int64(request.TaskList.TaskType)),
-		RangeID:  &request.RangeID,
+		ShardID:     m.shardID(namespaceID, request.TaskList.Name),
+		NamespaceID: &namespaceID,
+		Name:        &request.TaskList.Name,
+		TaskType:    common.Int64Ptr(int64(request.TaskList.TaskType)),
+		RangeID:     &request.RangeID,
 	})
 	if err != nil {
 		return serviceerror.NewInternal(err.Error())
@@ -328,10 +328,10 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 			return nil, err
 		}
 		tasksRows[i] = sqlplugin.TasksRow{
-			DomainID:     v.Data.DomainID,
+			NamespaceID:  v.Data.GetNamespaceId(),
 			TaskListName: request.TaskListInfo.Data.Name,
 			TaskType:     int64(request.TaskListInfo.Data.TaskType),
-			TaskID:       v.TaskID,
+			TaskID:       v.GetTaskId(),
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
 		}
@@ -343,9 +343,9 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 		}
 		// Lock task list before committing.
 		err1 := lockTaskList(tx,
-			m.shardID(request.TaskListInfo.Data.DomainID,
+			m.shardID(request.TaskListInfo.Data.GetNamespaceId(),
 				request.TaskListInfo.Data.Name),
-			request.TaskListInfo.Data.DomainID,
+			request.TaskListInfo.Data.GetNamespaceId(),
 			request.TaskListInfo.Data.Name,
 			request.TaskListInfo.Data.TaskType,
 			request.TaskListInfo.RangeID)
@@ -360,7 +360,7 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 
 func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
 	rows, err := m.db.SelectFromTasks(&sqlplugin.TasksFilter{
-		DomainID:     request.DomainID,
+		NamespaceID:  request.NamespaceID,
 		TaskListName: request.TaskList,
 		TaskType:     int64(request.TaskType),
 		MinTaskID:    &request.ReadLevel,
@@ -387,7 +387,7 @@ func (m *sqlTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) 
 	taskID := request.TaskID
 	taskList := request.TaskList
 	_, err := m.db.DeleteFromTasks(&sqlplugin.TasksFilter{
-		DomainID:     taskList.DomainID,
+		NamespaceID:  taskList.NamespaceID,
 		TaskListName: taskList.Name,
 		TaskType:     int64(taskList.TaskType),
 		TaskID:       &taskID})
@@ -399,7 +399,7 @@ func (m *sqlTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) 
 
 func (m *sqlTaskManager) CompleteTasksLessThan(request *persistence.CompleteTasksLessThanRequest) (int, error) {
 	result, err := m.db.DeleteFromTasks(&sqlplugin.TasksFilter{
-		DomainID:             request.DomainID,
+		NamespaceID:          request.NamespaceID,
 		TaskListName:         request.TaskListName,
 		TaskType:             int64(request.TaskType),
 		TaskIDLessThanEquals: &request.TaskID,
@@ -415,14 +415,14 @@ func (m *sqlTaskManager) CompleteTasksLessThan(request *persistence.CompleteTask
 	return int(nRows), nil
 }
 
-func (m *sqlTaskManager) shardID(domainID primitives.UUID, name string) int {
-	id := farm.Hash32(append(domainID, []byte("_"+name)...)) % uint32(m.nShards)
+func (m *sqlTaskManager) shardID(namespaceID primitives.UUID, name string) int {
+	id := farm.Hash32(append(namespaceID, []byte("_"+name)...)) % uint32(m.nShards)
 	return int(id)
 }
 
-func lockTaskList(tx sqlplugin.Tx, shardID int, domainID primitives.UUID, name string, taskListType int32, oldRangeID int64) error {
+func lockTaskList(tx sqlplugin.Tx, shardID int, namespaceID primitives.UUID, name string, taskListType int32, oldRangeID int64) error {
 	rangeID, err := tx.LockTaskLists(&sqlplugin.TaskListsFilter{
-		ShardID: shardID, DomainID: &domainID, Name: &name, TaskType: common.Int64Ptr(int64(taskListType))})
+		ShardID: shardID, NamespaceID: &namespaceID, Name: &name, TaskType: common.Int64Ptr(int64(taskListType))})
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock task list. Error: %v", err))
 	}

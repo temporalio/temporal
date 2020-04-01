@@ -2,7 +2,7 @@
 Temporal visibility APIs allow users to list open or closed workflows with filters such as WorkflowType or WorkflowID.   
 With Cassandra, there are issues around scalability and performance, for example: 
  - list large amount of workflows may kill Cassandra node.
- - data is partitioned by domain, which means writing large amount of workflow to one domain will cause Cassandra nodes hotspots.
+ - data is partitioned by namespace, which means writing large amount of workflow to one namespace will cause Cassandra nodes hotspots.
  - query with filter is slow for large data.
 
 (With MySQL, there might be similar issues but not tested)
@@ -18,7 +18,7 @@ That's why Temporal add support for enhanced visibility features on top of Elast
 2. Get docker compose file. Run `curl -O https://raw.githubusercontent.com/temporalio/temporal/master/docker/docker-compose-es.yml`
 3. Start temporal docker which contains Kafka, Zookeeper and ElasticSearch. Run `docker-compose -f docker-compose-es.yml up`
 4. From docker output log, make sure ES and temporal started correctly. If encounter disk space not enough, try `docker system prune -a --volumes`
-5. Register local domain and start using it. `tctl --do samples-domain d re`
+5. Register local namespace and start using it. `tctl --ns samples-namespace d re`
  
 
 ## CLI Search Attributes Support 
@@ -28,15 +28,15 @@ Make sure Temporal CLI version is 0.6.4+
 ### new list API examples
 
 ```
-tctl --do samples-domain wf list -q 'WorkflowType = "main.Workflow" and (WorkflowID = "1645a588-4772-4dab-b276-5f9db108b3a8" or RunID = "be66519b-5f09-40cd-b2e8-20e4106244dc")'
-tctl --do samples-domain wf list -q 'WorkflowType = "main.Workflow" StartTime > "2019-06-07T16:46:34-08:00" and CloseTime = missing'
+tctl --ns samples-namespace wf list -q 'WorkflowType = "main.Workflow" and (WorkflowID = "1645a588-4772-4dab-b276-5f9db108b3a8" or RunID = "be66519b-5f09-40cd-b2e8-20e4106244dc")'
+tctl --ns samples-namespace wf list -q 'WorkflowType = "main.Workflow" StartTime > "2019-06-07T16:46:34-08:00" and CloseTime = missing'
 ```
 To list only open workflows, add `CloseTime = missing` to the end of query.  
 
 ### start workflow with search attributes 
 
 ```
-tctl --do samples-domain workflow start --tl helloWorldGroup --wt main.Workflow --et 60 --dt 10 -i '"input arg"' -search_attr_key 'CustomIntField | CustomKeywordField | CustomStringField |  CustomBoolField | CustomDatetimeField' -search_attr_value '5 | keyword1 | my test | true | 2019-06-07T16:16:36-08:00'
+tctl --ns samples-namespace workflow start --tl helloWorldGroup --wt main.Workflow --et 60 --dt 10 -i '"input arg"' -search_attr_key 'CustomIntField | CustomKeywordField | CustomStringField |  CustomBoolField | CustomDatetimeField' -search_attr_value '5 | keyword1 | my test | true | 2019-06-07T16:16:36-08:00'
 ```
 
 Note: start workflow with search attributes but without ES will succeed as normal, but will not be searchable and will not be shown in list result.
@@ -44,8 +44,8 @@ Note: start workflow with search attributes but without ES will succeed as norma
 ### search workflow with new list API 
 
 ```
-tctl --do samples-domain wf list -q '(CustomKeywordField = "keyword1" and CustomIntField >= 5) or CustomKeywordField = "keyword2"' -psa
-tctl --do samples-domain wf list -q 'CustomKeywordField in ("keyword2", "keyword1") and CustomIntField >= 5 and CloseTime between "2018-06-07T16:16:36-08:00" and "2019-06-07T16:46:34-08:00" order by CustomDatetimeField desc' -psa
+tctl --ns samples-namespace wf list -q '(CustomKeywordField = "keyword1" and CustomIntField >= 5) or CustomKeywordField = "keyword2"' -psa
+tctl --ns samples-namespace wf list -q 'CustomKeywordField in ("keyword2", "keyword1") and CustomIntField >= 5 and CloseTime between "2018-06-07T16:16:36-08:00" and "2019-06-07T16:46:34-08:00" order by CustomDatetimeField desc' -psa
 ```
 
 (Search attributes can be updated inside workflow, see example [here](https://github.com/temporalio/temporal-go-samples/tree/master/cmd/samples/recipes/searchattributes).

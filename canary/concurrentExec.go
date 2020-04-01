@@ -43,7 +43,7 @@ func registerConcurrentExec(r registrar) {
 // concurrentExecWorkflow is the workflow implementation to test
 // 1. client side events pagination when reconstructing workflow state
 // 2. concurrent execution of activities
-func concurrentExecWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func concurrentExecWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	profile, err := beginWorkflow(ctx, wfTypeConcurrentExec, scheduledTimeNanos)
 	if err != nil {
 		return err

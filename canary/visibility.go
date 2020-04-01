@@ -45,7 +45,7 @@ func registerVisibility(r registrar) {
 }
 
 // visibilityWorkflow tests the visibility apis
-func visibilityWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
+func visibilityWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace string) error {
 	var err error
 	profile, err := beginWorkflow(ctx, wfTypeVisibility, scheduledTimeNanos)
 	if err != nil {
