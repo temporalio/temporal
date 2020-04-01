@@ -221,19 +221,23 @@ func newAdminShardManagementCommands() []cli.Command {
 		{
 			Name:    "removeTask",
 			Aliases: []string{"rmtk"},
-			Usage:   "remove a task based on shardID, typeID and taskID",
+			Usage:   "remove a task based on shardID, task type, taskID, and task visibility timestamp",
 			Flags: []cli.Flag{
 				cli.IntFlag{
 					Name:  FlagShardID,
-					Usage: "ShardID for the cadence cluster to manage",
+					Usage: "shardID",
 				},
 				cli.Int64Flag{
-					Name:  FlagRemoveTaskID,
-					Usage: "task id which user want to specify",
+					Name:  FlagTaskID,
+					Usage: "taskID",
 				},
 				cli.IntFlag{
-					Name:  FlagRemoveTypeID,
-					Usage: "type id which user want to specify: 2 (transfer task), 3 (timer task), 4 (replication task)",
+					Name:  FlagTaskType,
+					Usage: "task type : 2 (transfer task), 3 (timer task) or 4 (replication task)",
+				},
+				cli.Int64Flag{
+					Name:  FlagTaskVisibilityTimestamp,
+					Usage: "task visibility timestamp in nano (required for removing timer task)",
 				},
 			},
 			Action: func(c *cli.Context) {

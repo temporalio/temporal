@@ -25,12 +25,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/uber/cadence/common/checksum"
-
 	"github.com/pborman/uuid"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/checksum"
 	"github.com/uber/cadence/common/codec"
 )
 
@@ -926,14 +925,6 @@ type (
 		RunID      string
 	}
 
-	// DeleteTaskRequest is used to detele a task that corrupted and need to be removed
-	// 	e.g. corrupted history event batch, eventID is not continouous
-	DeleteTaskRequest struct {
-		TaskID  int64
-		Type    int
-		ShardID int
-	}
-
 	// DeleteCurrentWorkflowExecutionRequest is used to delete the current workflow execution
 	DeleteCurrentWorkflowExecutionRequest struct {
 		DomainID   string
@@ -1502,9 +1493,6 @@ type (
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
-
-		// Remove Task due to corrupted data
-		DeleteTask(request *DeleteTaskRequest) error
 	}
 
 	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard

@@ -137,7 +137,7 @@ func newTransferQueueStandbyProcessor(
 			historyService.metricsClient.Scope(
 				getTransferTaskMetricsScope(taskInfo.GetTaskType(), false),
 			),
-			logger,
+			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			transferTaskFilter,
 			processor.taskExecutor,
 			redispatchQueue,

@@ -142,3 +142,17 @@ const (
 
 // DomainDataKeyForManagedFailover is key of DomainData for managed failover
 const DomainDataKeyForManagedFailover = "IsManagedByCadence"
+
+type (
+	// TaskType is the enum for representing different task types
+	TaskType int
+)
+
+const (
+	// TaskTypeTransfer is the task type for transfer task
+	TaskTypeTransfer TaskType = iota + 2 // starting from 2 here to be consistent with the row type define for cassandra
+	// TaskTypeTimer is the task type for timer task
+	TaskTypeTimer
+	// TaskTypeReplication is the task type for replication task
+	TaskTypeReplication
+)

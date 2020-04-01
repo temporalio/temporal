@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pborman/uuid"
 	"go.uber.org/yarpc/yarpcerrors"
@@ -77,6 +78,7 @@ var (
 	errSourceClusterNotSet     = &gen.BadRequestError{Message: "Source Cluster not set on request."}
 	errShardIDNotSet           = &gen.BadRequestError{Message: "Shard ID not set on request."}
 	errTimestampNotSet         = &gen.BadRequestError{Message: "Timestamp not set on request."}
+	errInvalidTaskType         = &gen.BadRequestError{Message: "Invalid task type"}
 	errHistoryHostThrottle     = &gen.ServiceBusyError{Message: "History host rps exceeded"}
 	errShuttingDown            = &gen.InternalServiceError{Message: "Shutting down"}
 )
@@ -724,13 +726,24 @@ func (h *Handler) RemoveTask(
 	if err != nil {
 		return err
 	}
-	deleteTaskRequest := &persistence.DeleteTaskRequest{
-		TaskID:  request.GetTaskID(),
-		Type:    int(request.GetType()),
-		ShardID: int(request.GetShardID()),
+
+	switch taskType := common.TaskType(request.GetType()); taskType {
+	case common.TaskTypeTransfer:
+		return executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
+			TaskID: request.GetTaskID(),
+		})
+	case common.TaskTypeTimer:
+		return executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
+			VisibilityTimestamp: time.Unix(0, request.GetVisibilityTimestamp()),
+			TaskID:              request.GetTaskID(),
+		})
+	case common.TaskTypeReplication:
+		return executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
+			TaskID: request.GetTaskID(),
+		})
+	default:
+		return errInvalidTaskType
 	}
-	err = executionMgr.DeleteTask(deleteTaskRequest)
-	return err
 }
 
 // CloseShard closes a shard hosted by this instance
