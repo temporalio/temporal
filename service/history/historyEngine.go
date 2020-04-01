@@ -191,13 +191,13 @@ var (
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
 	ErrConsistentQueryBufferExceeded = serviceerror.NewInternal("consistent query buffer is full, cannot accept new consistent queries")
 
-	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
+	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
-	FailedWorkflowCloseState = map[int]bool{
-		persistence.WorkflowCloseStatusFailed:     true,
-		persistence.WorkflowCloseStatusCanceled:   true,
-		persistence.WorkflowCloseStatusTerminated: true,
-		persistence.WorkflowCloseStatusTimedOut:   true,
+	FailedWorkflowStatuses = map[enums.WorkflowExecutionStatus]bool{
+		enums.WorkflowExecutionStatusFailed:     true,
+		enums.WorkflowExecutionStatusCanceled:   true,
+		enums.WorkflowExecutionStatusTerminated: true,
+		enums.WorkflowExecutionStatusTimedOut:   true,
 	}
 )
 
@@ -2790,7 +2790,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 
 	switch wfIDReusePolicy {
 	case enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly:
-		if _, ok := FailedWorkflowCloseState[int(prevStatus)]; !ok {
+		if _, ok := FailedWorkflowStatuses[prevStatus]; !ok {
 			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: allow duplicate workflow ID if last run failed."
 			return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 		}

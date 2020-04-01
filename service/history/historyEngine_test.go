@@ -432,7 +432,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			int64(1),
 			[]byte{1},
 			persistence.WorkflowStateCreated,
-			persistence.WorkflowCloseStatusRunning))
+			enums.WorkflowExecutionStatusRunning))
 	}
 
 	// return immediately, since the expected next event ID appears

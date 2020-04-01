@@ -759,7 +759,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
 	compareCurrExeInfo.State = persistence.WorkflowStateCompleted
-	compareCurrExeInfo.Status = persistence.WorkflowCloseStatusTerminated
+	compareCurrExeInfo.Status = enums.WorkflowExecutionStatusTerminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.CompletionEventBatchID = 1
 	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
@@ -2043,7 +2043,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
 	compareCurrExeInfo.State = persistence.WorkflowStateCompleted
-	compareCurrExeInfo.Status = persistence.WorkflowCloseStatusTerminated
+	compareCurrExeInfo.Status = enums.WorkflowExecutionStatusTerminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.LastFirstEventID = 1
 	compareCurrExeInfo.CompletionEventBatchID = 1

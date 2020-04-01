@@ -829,7 +829,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 	}
 	currentRunID := resp.RunID
 	currentState := resp.State
-	currentCloseStatus := resp.Status
+	currentStatus := resp.Status
 	currentLastWriteVetsion := resp.LastWriteVersion
 
 	// this handle the edge case where
@@ -843,7 +843,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 		return "", 0, 0, nil
 	}
 
-	if currentCloseStatus != persistence.WorkflowCloseStatusRunning {
+	if currentStatus != enums.WorkflowExecutionStatusRunning {
 		// current workflow finished
 		// note, it is impossible that a current workflow ends with continue as new as close status
 		logger.Info("Conflict resolution current workflow finished.")

@@ -136,7 +136,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 	if state != persistence.WorkflowStateZombie {
 		if err := m.msb.UpdateWorkflowStateStatus(
 			persistence.WorkflowStateRunning,
-			persistence.WorkflowCloseStatusRunning,
+			enums.WorkflowExecutionStatusRunning,
 		); err != nil {
 			return nil, err
 		}

@@ -138,7 +138,7 @@ func (r *nDCWorkflowImpl) revive() error {
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
 		state,
-		persistence.WorkflowCloseStatusRunning,
+		enums.WorkflowExecutionStatusRunning,
 	)
 }
 
@@ -270,7 +270,7 @@ func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
 
 	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateStatus(
 		persistence.WorkflowStateZombie,
-		persistence.WorkflowCloseStatusRunning,
+		enums.WorkflowExecutionStatusRunning,
 	)
 }
 

@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
@@ -199,7 +200,7 @@ func (s *conflictResolverSuite) TestReset() {
 		WorkflowTimeout:             event1.GetWorkflowExecutionStartedEventAttributes().ExecutionStartToCloseTimeoutSeconds,
 		DecisionStartToCloseTimeout: event1.GetWorkflowExecutionStartedEventAttributes().TaskStartToCloseTimeoutSeconds,
 		State:                       persistence.WorkflowStateCreated,
-		Status:                      persistence.WorkflowCloseStatusRunning,
+		Status:                      enums.WorkflowExecutionStatusRunning,
 		LastFirstEventID:            event1.GetEventId(),
 		NextEventID:                 nextEventID,
 		LastProcessedEvent:          common.EmptyEventID,

@@ -239,7 +239,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.Status != persistence.WorkflowCloseStatusContinuedAsNew
+	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.Status != enums.WorkflowExecutionStatusContinuedAsNew
 	completionEvent, err := mutableState.GetCompletionEvent()
 	if err != nil {
 		return err

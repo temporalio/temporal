@@ -54,24 +54,24 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	case WorkflowStateCreated:
 		switch state {
 		case WorkflowStateCreated:
-			if status != WorkflowCloseStatusRunning {
+			if status != enums.WorkflowExecutionStatusRunning {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateRunning:
-			if status != WorkflowCloseStatusRunning {
+			if status != enums.WorkflowExecutionStatusRunning {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if status != WorkflowCloseStatusTerminated &&
-				status != WorkflowCloseStatusTimedOut &&
-				status != WorkflowCloseStatusContinuedAsNew {
+			if status != enums.WorkflowExecutionStatusTerminated &&
+				status != enums.WorkflowExecutionStatusTimedOut &&
+				status != enums.WorkflowExecutionStatusContinuedAsNew {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if status != WorkflowCloseStatusRunning {
+			if status != enums.WorkflowExecutionStatusRunning {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
@@ -84,17 +84,17 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		case WorkflowStateRunning:
-			if status != WorkflowCloseStatusRunning {
+			if status != enums.WorkflowExecutionStatusRunning {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if status == WorkflowCloseStatusRunning {
+			if status == enums.WorkflowExecutionStatusRunning {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if status != WorkflowCloseStatusRunning {
+			if status != enums.WorkflowExecutionStatusRunning {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
@@ -123,22 +123,22 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	case WorkflowStateZombie:
 		switch state {
 		case WorkflowStateCreated:
-			if status != WorkflowCloseStatusRunning {
+			if status != enums.WorkflowExecutionStatusRunning {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateRunning:
-			if status != WorkflowCloseStatusRunning {
+			if status != enums.WorkflowExecutionStatusRunning {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if status == WorkflowCloseStatusRunning {
+			if status == enums.WorkflowExecutionStatusRunning {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if status == WorkflowCloseStatusRunning {
+			if status == enums.WorkflowExecutionStatusRunning {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 

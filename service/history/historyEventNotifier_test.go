@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/definition"
@@ -85,7 +86,7 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
 	workflowState := persistence.WorkflowStateCreated
-	workflowCloseState := persistence.WorkflowCloseStatusRunning
+	workflowCloseState := enums.WorkflowExecutionStatusRunning
 	branchToken := make([]byte, 0)
 	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowCloseState)
 	timerChan := time.NewTimer(time.Second * 2).C
@@ -118,9 +119,9 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
 	workflowState := persistence.WorkflowStateCreated
-	workflowCloseState := persistence.WorkflowCloseStatusRunning
+	workflowStatus := enums.WorkflowExecutionStatusRunning
 	branchToken := make([]byte, 0)
-	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowCloseState)
+	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 5).C
 
 	subscriberCount := 100

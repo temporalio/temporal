@@ -125,18 +125,6 @@ const (
 	WorkflowStateCorrupted
 )
 
-// Workflow execution close status
-const (
-	_ = iota
-	WorkflowCloseStatusRunning
-	WorkflowCloseStatusCompleted
-	WorkflowCloseStatusFailed
-	WorkflowCloseStatusCanceled
-	WorkflowCloseStatusTerminated
-	WorkflowCloseStatusContinuedAsNew
-	WorkflowCloseStatusTimedOut
-)
-
 // Types of task lists
 const (
 	TaskListTypeDecision int32 = iota
