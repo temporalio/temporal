@@ -26,6 +26,10 @@ ifndef GOARCH
 GOARCH := $(shell go env GOARCH)
 endif
 
+ifndef GOPATH
+GOPATH := $(shell go env GOPATH)
+endif
+
 MODULE_ROOT := github.com/temporalio/temporal
 BUILD := ./build
 COLOR := "\e[1;36m%s\e[0m\n"

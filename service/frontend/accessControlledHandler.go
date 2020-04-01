@@ -23,9 +23,10 @@ package frontend
 import (
 	"context"
 
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/resource"
 )
@@ -57,11 +58,16 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 
 // TODO(vancexu): refactor frontend handler
 
-// Health is for health check
-func (a *AccessControlledWorkflowHandler) Health(context.Context, *healthservice.HealthRequest) (*healthservice.HealthStatus, error) {
+// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+func (a *AccessControlledWorkflowHandler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	a.GetLogger().Debug("Frontend service health check endpoint (gRPC) reached.")
-	hs := &healthservice.HealthStatus{Ok: true, Msg: "Frontend service is healthy."}
+	hs := &healthpb.HealthCheckResponse{
+		Status: healthpb.HealthCheckResponse_SERVING,
+	}
 	return hs, nil
+}
+func (a *AccessControlledWorkflowHandler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
+	return serviceerror.NewUnimplemented("Watch is not implemented.")
 }
 
 // CountWorkflowExecutions API call
