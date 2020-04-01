@@ -144,7 +144,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow() {
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
-	query := fmt.Sprintf(`WorkflowID = "%s"`, id)
+	query := fmt.Sprintf(`WorkflowId = "%s"`, id)
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 }
 
@@ -164,10 +164,10 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 	weCron, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
-	query := fmt.Sprintf(`(WorkflowID = "%s" or WorkflowID = "%s") and ExecutionTime < %v`, id, cronID, time.Now().UnixNano()+int64(time.Minute))
+	query := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") and ExecutionTime < %v`, id, cronID, time.Now().UnixNano()+int64(time.Minute))
 	s.testHelperForReadOnce(weCron.GetRunId(), query, false)
 
-	query = fmt.Sprintf(`WorkflowID = "%s"`, id)
+	query = fmt.Sprintf(`WorkflowId = "%s"`, id)
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 }
 
@@ -187,7 +187,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
-	query := fmt.Sprintf(`WorkflowID = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
+	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 
 	// test upsert
@@ -716,7 +716,7 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow() {
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
-	query := fmt.Sprintf(`WorkflowID = "%s"`, id)
+	query := fmt.Sprintf(`WorkflowId = "%s"`, id)
 	s.testHelperForReadOnce(we.GetRunId(), query, true)
 }
 
@@ -736,7 +736,7 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow_SearchAttribute() {
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
-	query := fmt.Sprintf(`WorkflowID = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
+	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	s.testHelperForReadOnce(we.GetRunId(), query, true)
 }
 
@@ -783,7 +783,7 @@ func (s *elasticsearchIntegrationSuite) TestCountWorkflow() {
 	_, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
-	query := fmt.Sprintf(`WorkflowID = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
+	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		Query:     query,
@@ -799,7 +799,7 @@ func (s *elasticsearchIntegrationSuite) TestCountWorkflow() {
 	}
 	s.Equal(int64(1), resp.GetCount())
 
-	query = fmt.Sprintf(`WorkflowID = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, "noMatch")
+	query = fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, "noMatch")
 	countRequest.Query = query
 	resp, err = s.engine.CountWorkflowExecutions(NewContext(), countRequest)
 	s.NoError(err)

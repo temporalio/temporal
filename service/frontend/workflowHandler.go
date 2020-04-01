@@ -312,7 +312,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 
 	wh.GetLogger().Debug(
-		"Received StartWorkflowExecution. WorkflowID",
+		"Received StartWorkflowExecution",
 		tag.WorkflowID(request.GetWorkflowId()))
 
 	if request.WorkflowType == nil || request.WorkflowType.GetName() == "" {

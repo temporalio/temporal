@@ -95,7 +95,7 @@ func listWorkflow(client cadenceClient, wfID string, scope tally.Scope) error {
 	pageSz := int32(1)
 	startTime := time.Now().UnixNano() - int64(timeSkewToleranceDuration)
 	endTime := time.Now().UnixNano() + int64(timeSkewToleranceDuration)
-	queryStr := fmt.Sprintf("WorkflowID = '%s' and CustomKeywordField = '%s' and StartTime between %d and %d",
+	queryStr := fmt.Sprintf("WorkflowId = '%s' and CustomKeywordField = '%s' and StartTime between %d and %d",
 		wfID, "canaryTest", startTime, endTime)
 	request := &workflowservice.ListWorkflowExecutionsRequest{
 		PageSize: pageSz,

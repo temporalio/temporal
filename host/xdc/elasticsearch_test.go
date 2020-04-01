@@ -203,7 +203,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	startFilter := &commonproto.StartTimeFilter{}
 	startFilter.EarliestTime = startTime
-	query := fmt.Sprintf(`WorkflowID = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
+	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: namespace,
 		PageSize:  5,

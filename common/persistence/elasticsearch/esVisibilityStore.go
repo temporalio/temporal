@@ -418,7 +418,7 @@ func (v *esVisibilityStore) ScanWorkflowExecutions(
 	isLastPage := false
 	if err == io.EOF { // no more result
 		isLastPage = true
-		scrollService.Clear(context.Background()) //nolint:errcheck
+		scrollService.Clear(context.Background()) // nolint:errcheck
 	} else if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %v", err))
 	}
@@ -447,8 +447,8 @@ func (v *esVisibilityStore) CountWorkflowExecutions(request *p.CountWorkflowExec
 const (
 	jsonMissingCloseTime     = `{"missing":{"field":"CloseTime"}}`
 	jsonRangeOnExecutionTime = `{"range":{"ExecutionTime":`
-	jsonSortForOpen          = `[{"StartTime":"desc"},{"RunID":"desc"}]`
-	jsonSortWithTieBreaker   = `{"RunID":"desc"}`
+	jsonSortForOpen          = `[{"StartTime":"desc"},{"RunId":"desc"}]`
+	jsonSortWithTieBreaker   = `{"RunId":"desc"}`
 
 	dslFieldSort        = "sort"
 	dslFieldSearchAfter = "search_after"
@@ -593,7 +593,7 @@ func addNamespaceToQuery(dsl *fastjson.Value, namespaceID string) {
 		return
 	}
 
-	namespaceQueryString := fmt.Sprintf(`{"match_phrase":{"NamespaceID":{"query":"%s"}}}`, namespaceID)
+	namespaceQueryString := fmt.Sprintf(`{"match_phrase":{"NamespaceId":{"query":"%s"}}}`, namespaceID)
 	addMustQuery(dsl, namespaceQueryString)
 }
 

@@ -1858,7 +1858,7 @@ func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, fro
 	firstEvent := resp.History.Events[0]
 	resetBaseRunID = firstEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId()
 	if resetBaseRunID == "" {
-		return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", fmt.Errorf("cannot get resetBaseRunID"))
+		return "", 0, printErrorAndReturn("GetWorkflowExecutionHistory failed", fmt.Errorf("cannot get resetBaseRunId"))
 	}
 
 	req = &workflowservice.GetWorkflowExecutionHistoryRequest{

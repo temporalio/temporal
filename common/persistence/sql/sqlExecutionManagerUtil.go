@@ -974,7 +974,7 @@ func assertRunIDAndUpdateCurrentExecution(
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
 			return &p.ConditionFailedError{Msg: fmt.Sprintf(
-				"assertRunIDAndUpdateCurrentExecution failed. Current run ID was %v, expected %v",
+				"assertRunIDAndUpdateCurrentExecution failed. Current RunId was %v, expected %v",
 				currentRow.RunID,
 				previousRunID,
 			)}
@@ -1058,7 +1058,7 @@ func assertRunIDMismatch(runID primitives.UUID, currentRunID primitives.UUID) er
 	// zombie workflow creation with existence of current record, this is a noop
 	if bytes.Equal(currentRunID, runID) {
 		return &p.ConditionFailedError{Msg: fmt.Sprintf(
-			"assertRunIDMismatch failed. Current run ID was %v, input %v",
+			"assertRunIDMismatch failed. Current RunId was %v, input %v",
 			currentRunID,
 			runID,
 		)}

@@ -207,7 +207,7 @@ func (v *filestoreVisibilityArchivalValidator) getQuery(
 ) string {
 	v.expectedRunID = runID
 	return fmt.Sprintf(
-		"WorkflowType = '%s' and WorkflowID = '%s' and CloseTime >= %v and CloseTime <= %v",
+		"WorkflowType = '%s' and WorkflowId = '%s' and CloseTime >= %v and CloseTime <= %v",
 		workflowType,
 		workflowID,
 		startTime.UnixNano(),

@@ -999,16 +999,16 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 
 				if prevRunID := previous["current_run_id"].(gocql.UUID).String(); prevRunID != request.PreviousRunID {
 					// currentRunID on previous run has been changed, return to caller to handle
-					msg := fmt.Sprintf("Workflow execution creation condition failed by mismatch runID. WorkflowId: %v, Expected Current RunID: %v, Actual Current RunID: %v",
+					msg := fmt.Sprintf("Workflow execution creation condition failed by mismatch runID. WorkflowId: %v, Expected Current RunId: %v, Actual Current RunId: %v",
 						executionInfo.WorkflowID, request.PreviousRunID, prevRunID)
 					return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
 				}
 
-				msg := fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, CurrentRunID: %v, columns: (%v)",
+				msg := fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, CurrentRunId: %v, columns: (%v)",
 					executionInfo.WorkflowID, executionInfo.RunID, strings.Join(columns, ","))
 				return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
 			} else if rowType == rowTypeExecution && runID == executionInfo.RunID {
-				msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v",
+				msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeId: %v",
 					executionInfo.WorkflowID, executionInfo.RunID, request.RangeID)
 				lastWriteVersion = common.EmptyVersion
 				protoReplVersions, err := ProtoReplicationVersionsFromResultMap(previous)
@@ -1734,14 +1734,14 @@ GetFailureReasonLoop:
 
 	if runIDUnmatch {
 		return &p.CurrentWorkflowConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update mutable state.  Request Condition: %v, Actual Value: %v, Request Current RunID: %v, Actual Value: %v",
+			Msg: fmt.Sprintf("Failed to update mutable state.  Request Condition: %v, Actual Value: %v, Request Current RunId: %v, Actual Value: %v",
 				requestCondition, actualNextEventID, requestConditionalRunID, actualCurrRunID),
 		}
 	}
 
 	if nextEventIDUnmatch {
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update mutable state.  Request Condition: %v, Actual Value: %v, Request Current RunID: %v, Actual Value: %v",
+			Msg: fmt.Sprintf("Failed to update mutable state.  Request Condition: %v, Actual Value: %v, Request Current RunId: %v, Actual Value: %v",
 				requestCondition, actualNextEventID, requestConditionalRunID, actualCurrRunID),
 		}
 	}
@@ -1756,7 +1756,7 @@ GetFailureReasonLoop:
 		columnID++
 	}
 	return &p.ConditionFailedError{
-		Msg: fmt.Sprintf("Failed to reset mutable state. ShardID: %v, RangeID: %v, Condition: %v, Request Current RunID: %v, columns: (%v)",
+		Msg: fmt.Sprintf("Failed to reset mutable state. ShardId: %v, RangeId: %v, Condition: %v, Request Current RunId: %v, columns: (%v)",
 			d.shardID, requestRangeID, requestCondition, requestConditionalRunID, strings.Join(columns, ",")),
 	}
 }

@@ -320,16 +320,16 @@ func (s *fileBasedClientSuite) TestUpdateConfig() {
 	// pre-check existing config
 	current, err := client.GetMapValue(key, nil, nil)
 	s.NoError(err)
-	currentNamespaceVal, ok := current["NamespaceID"]
+	currentNamespaceVal, ok := current["NamespaceId"]
 	s.True(ok)
 	s.Equal(1, currentNamespaceVal)
-	_, ok = current["WorkflowID"]
+	_, ok = current["WorkflowId"]
 	s.False(ok)
 
 	// update config
 	v := map[string]interface{}{
-		"WorkflowID":  1,
-		"NamespaceID": 2,
+		"WorkflowId":  1,
+		"NamespaceId": 2,
 	}
 	err = client.UpdateValue(key, v)
 	s.NoError(err)
@@ -337,16 +337,16 @@ func (s *fileBasedClientSuite) TestUpdateConfig() {
 	// verify update result
 	current, err = client.GetMapValue(key, nil, nil)
 	s.NoError(err)
-	currentNamespaceVal, ok = current["NamespaceID"]
+	currentNamespaceVal, ok = current["NamespaceId"]
 	s.True(ok)
 	s.Equal(2, currentNamespaceVal)
-	currentWorkflowIDVal, ok := current["WorkflowID"]
+	currentWorkflowIDVal, ok := current["WorkflowId"]
 	s.True(ok)
 	s.Equal(1, currentWorkflowIDVal)
 
 	// revert test file back
 	v = map[string]interface{}{
-		"NamespaceID": 1,
+		"NamespaceId": 1,
 	}
 	err = client.UpdateValue(key, v)
 	s.NoError(err)

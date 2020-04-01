@@ -547,7 +547,7 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	if attributes.GetWorkflowId() == "" {
-		return serviceerror.NewInvalidArgument("Required field WorkflowID is not set on decision.")
+		return serviceerror.NewInvalidArgument("Required field WorkflowId is not set on decision.")
 	}
 
 	if attributes.WorkflowType == nil || attributes.WorkflowType.GetName() == "" {

@@ -87,10 +87,10 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 		return nil, err
 	}
 	if parsedQuery.workflowID == nil && parsedQuery.workflowTypeName == nil {
-		return nil, errors.New("WorkflowID or WorkflowTypeName is required in query")
+		return nil, errors.New("WorkflowId or WorkflowTypeName is required in query")
 	}
 	if parsedQuery.workflowID != nil && parsedQuery.workflowTypeName != nil {
-		return nil, errors.New("only one of WorkflowID or WorkflowTypeName can be specified in a query")
+		return nil, errors.New("only one of WorkflowId or WorkflowTypeName can be specified in a query")
 	}
 	if parsedQuery.closeTime != nil && parsedQuery.startTime != nil {
 		return nil, errors.New("only one of StartTime or CloseTime can be specified in a query")

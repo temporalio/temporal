@@ -165,7 +165,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 			if runIDStr != request.PreviousRunID {
 				return nil, &p.CurrentWorkflowConditionFailedError{
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
-						"RunID: %v, PreviousRunID: %v",
+						"RunId: %v, PreviousRunId: %v",
 						workflowID, runIDStr, request.PreviousRunID),
 				}
 			}

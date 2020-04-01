@@ -29,10 +29,10 @@ import (
 )
 
 var (
-	errEmptyNamespaceID      = errors.New("NamespaceID is empty")
+	errEmptyNamespaceID      = errors.New("NamespaceId is empty")
 	errEmptyNamespace        = errors.New("Namespace is empty")
-	errEmptyWorkflowID       = errors.New("WorkflowID is empty")
-	errEmptyRunID            = errors.New("RunID is empty")
+	errEmptyWorkflowID       = errors.New("WorkflowId is empty")
+	errEmptyRunID            = errors.New("RunId is empty")
 	errInvalidPageSize       = errors.New("PageSize should be greater than 0")
 	errEmptyWorkflowTypeName = errors.New("WorkflowTypeName is empty")
 	errEmptyStartTime        = errors.New("StartTimestamp is empty")

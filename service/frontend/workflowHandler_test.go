@@ -1137,7 +1137,7 @@ func (s *workflowHandlerSuite) TestScantWorkflowExecutions() {
 	}
 	ctx := context.Background()
 
-	query := "WorkflowID = 'wid'"
+	query := "WorkflowId = 'wid'"
 	listRequest.Query = query
 	_, err := wh.ScanWorkflowExecutions(ctx, scanRequest)
 	s.NoError(err)
