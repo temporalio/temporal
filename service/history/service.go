@@ -27,8 +27,8 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
@@ -428,7 +428,7 @@ func (s *Service) Start() {
 	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 	nilCheckHandler := NewNilCheckHandler(s.handler)
 	historyservice.RegisterHistoryServiceServer(s.server, nilCheckHandler)
-	healthservice.RegisterMetaServer(s.server, s.handler)
+	healthpb.RegisterHealthServer(s.server, s.handler)
 
 	listener := s.GetGRPCListener()
 	logger.Info("Starting to serve on history listener")

@@ -28,9 +28,9 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -238,7 +238,7 @@ func (s *Service) Start() {
 	workflowNilCheckHandler := NewWorkflowNilCheckHandler(accessControlledWorkflowHandler)
 
 	workflowservice.RegisterWorkflowServiceServer(s.server, workflowNilCheckHandler)
-	healthservice.RegisterMetaServer(s.server, accessControlledWorkflowHandler)
+	healthpb.RegisterHealthServer(s.server, accessControlledWorkflowHandler)
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
 	adminNilCheckHandler := NewAdminNilCheckHandler(s.adminHandler)
