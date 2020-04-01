@@ -45,8 +45,8 @@ type (
 const (
 	// FlavorUnknown represents an unknown/uninitialized checksum flavor
 	FlavorUnknown Flavor = iota
-	// FlavorIEEECRC32OverThriftBinary represents crc32 checksum generated over thriftRW serialized payload
-	FlavorIEEECRC32OverThriftBinary
+	// FlavorIEEECRC32OverProto3Binary represents crc32 checksum generated over proto3 serialized payload
+	FlavorIEEECRC32OverProto3Binary
 	maxFlavors
 )
 

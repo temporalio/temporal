@@ -62,9 +62,9 @@ message GetMutableStateRequest {
 message GetMutableStateResponse {
     common.WorkflowExecution execution = 1;
     common.WorkflowType workflowType = 2;
-    int64 NextEventId = 3;
-    int64 PreviousStartedEventId = 4;
-    int64 LastFirstEventId = 5;
+    int64 nextEventId = 3;
+    int64 previousStartedEventId = 4;
+    int64 lastFirstEventId = 5;
     common.TaskList taskList = 6;
     common.TaskList stickyTaskList = 7;
     string clientLibraryVersion = 8;
@@ -95,9 +95,9 @@ message PollMutableStateRequest {
 message PollMutableStateResponse {
     common.WorkflowExecution execution = 1;
     common.WorkflowType workflowType = 2;
-    int64 NextEventId = 3;
-    int64 PreviousStartedEventId = 4;
-    int64 LastFirstEventId = 5;
+    int64 nextEventId = 3;
+    int64 previousStartedEventId = 4;
+    int64 lastFirstEventId = 5;
     common.TaskList taskList = 6;
     common.TaskList stickyTaskList = 7;
     string clientLibraryVersion = 8;

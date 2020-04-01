@@ -61,7 +61,7 @@ type (
 
 var testWorkflowChecksum = checksum.Checksum{
 	Version: 22,
-	Flavor:  checksum.FlavorIEEECRC32OverThriftBinary,
+	Flavor:  checksum.FlavorIEEECRC32OverProto3Binary,
 	Value:   []byte("test-checksum"),
 }
 
@@ -86,7 +86,7 @@ func (s *ExecutionManagerSuite) SetupTest() {
 
 func (s *ExecutionManagerSuite) newRandomChecksum() checksum.Checksum {
 	return checksum.Checksum{
-		Flavor:  checksum.FlavorIEEECRC32OverThriftBinary,
+		Flavor:  checksum.FlavorIEEECRC32OverProto3Binary,
 		Version: 22,
 		Value:   []byte(uuid.NewRandom()),
 	}
