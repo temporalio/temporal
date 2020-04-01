@@ -33,7 +33,7 @@ const (
 	StartTime       = "StartTime"
 	ExecutionTime   = "ExecutionTime"
 	CloseTime       = "CloseTime"
-	Status          = "Status"
+	ExecutionStatus = "ExecutionStatus"
 	HistoryLength   = "HistoryLength"
 	Encoding        = "Encoding"
 	KafkaKey        = "KafkaKey"
@@ -83,15 +83,15 @@ func GetDefaultIndexedKeys() map[string]interface{} {
 
 // systemIndexedKeys is Temporal created visibility keys
 var systemIndexedKeys = map[string]interface{}{
-	NamespaceID:   enums.IndexedValueTypeKeyword,
-	WorkflowID:    enums.IndexedValueTypeKeyword,
-	RunID:         enums.IndexedValueTypeKeyword,
-	WorkflowType:  enums.IndexedValueTypeKeyword,
-	StartTime:     enums.IndexedValueTypeInt,
-	ExecutionTime: enums.IndexedValueTypeInt,
-	CloseTime:     enums.IndexedValueTypeInt,
-	Status:        enums.IndexedValueTypeInt,
-	HistoryLength: enums.IndexedValueTypeInt,
+	NamespaceID:     enums.IndexedValueTypeKeyword,
+	WorkflowID:      enums.IndexedValueTypeKeyword,
+	RunID:           enums.IndexedValueTypeKeyword,
+	WorkflowType:    enums.IndexedValueTypeKeyword,
+	StartTime:       enums.IndexedValueTypeInt,
+	ExecutionTime:   enums.IndexedValueTypeInt,
+	CloseTime:       enums.IndexedValueTypeInt,
+	ExecutionStatus: enums.IndexedValueTypeInt,
+	HistoryLength:   enums.IndexedValueTypeInt,
 }
 
 // IsSystemIndexedKey return true is key is system added

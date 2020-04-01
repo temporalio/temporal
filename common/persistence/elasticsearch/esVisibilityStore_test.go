@@ -86,12 +86,12 @@ var (
 	}
 	errTestESSearch = errors.New("ES error")
 
-	filterOpen     = "must_not:map[exists:map[field:Status]]"
-	filterClose    = "map[exists:map[field:Status]]"
-	filterByType   = fmt.Sprintf("map[match:map[WorkflowType:map[query:%s]]]", testWorkflowType)
-	filterByWID    = fmt.Sprintf("map[match:map[WorkflowID:map[query:%s]]]", testWorkflowID)
-	filterByRunID  = fmt.Sprintf("map[match:map[RunID:map[query:%s]]]", testRunID)
-	filterByStatus = fmt.Sprintf("map[match:map[Status:map[query:%d]]]", testStatus)
+	filterOpen              = "must_not:map[exists:map[field:ExecutionStatus]]"
+	filterClose             = "map[exists:map[field:ExecutionStatus]]"
+	filterByType            = fmt.Sprintf("map[match:map[WorkflowType:map[query:%s]]]", testWorkflowType)
+	filterByWID             = fmt.Sprintf("map[match:map[WorkflowID:map[query:%s]]]", testWorkflowID)
+	filterByRunID           = fmt.Sprintf("map[match:map[RunID:map[query:%s]]]", testRunID)
+	filterByExecutionStatus = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%d]]]", testStatus)
 )
 
 func TestESVisibilitySuite(t *testing.T) {
@@ -191,7 +191,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 		s.Equal(memoBytes, fields[es.Memo].GetBinaryData())
 		s.Equal(string(common.EncodingTypeProto3), fields[es.Encoding].GetStringData())
 		s.Equal(request.CloseTimestamp, fields[es.CloseTime].GetIntData())
-		s.EqualValues(request.Status, fields[es.Status].GetIntData())
+		s.EqualValues(request.Status, fields[es.ExecutionStatus].GetIntData())
 		s.Equal(request.HistoryLength, fields[es.HistoryLength].GetIntData())
 		return true
 	})).Return(nil).Once()
@@ -346,7 +346,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 	s.mockESClient.On("Search", mock.Anything, mock.MatchedBy(func(input *es.SearchParameters) bool {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
-		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByStatus))
+		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByExecutionStatus))
 		return true
 	})).Return(testSearchResult, nil).Once()
 
@@ -433,7 +433,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	token := &esVisibilityPageToken{From: from}
 
 	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
-	existClosedStatusQuery := elastic.NewExistsQuery(es.Status)
+	existExecutionStatusQuery := elastic.NewExistsQuery(es.ExecutionStatus)
 	tieBreakerSorter := elastic.NewFieldSort(es.RunID).Desc()
 
 	earliestTime := strconv.FormatInt(request.EarliestStartTime-oneMilliSecondInNano, 10)
@@ -442,7 +442,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	// test for open
 	isOpen := true
 	rangeQuery := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(latestTime)
-	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).MustNot(existClosedStatusQuery)
+	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).MustNot(existExecutionStatusQuery)
 	params := &es.SearchParameters{
 		Index:    testIndex,
 		Query:    boolQuery,
@@ -457,7 +457,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	// test request latestTime overflow
 	request.LatestStartTime = math.MaxInt64
 	rangeQuery1 := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(strconv.FormatInt(request.LatestStartTime, 10))
-	boolQuery1 := elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery1).MustNot(existClosedStatusQuery)
+	boolQuery1 := elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery1).MustNot(existExecutionStatusQuery)
 	param1 := &es.SearchParameters{
 		Index:    testIndex,
 		Query:    boolQuery1,
@@ -473,7 +473,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	// test for closed
 	isOpen = false
 	rangeQuery = elastic.NewRangeQuery(es.CloseTime).Gte(earliestTime).Lte(latestTime)
-	boolQuery = elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).Must(existClosedStatusQuery)
+	boolQuery = elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).Must(existExecutionStatusQuery)
 	params.Query = boolQuery
 	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(es.CloseTime).Desc(), tieBreakerSorter}
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
@@ -481,8 +481,8 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	s.NoError(err)
 
 	// test for additional matchQuery
-	matchQuery := elastic.NewMatchQuery(es.Status, int32(0))
-	boolQuery = elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).Must(matchQuery).Must(existClosedStatusQuery)
+	matchQuery := elastic.NewMatchQuery(es.ExecutionStatus, int32(0))
+	boolQuery = elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).Must(matchQuery).Must(existExecutionStatusQuery)
 	params.Query = boolQuery
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
 	_, err = s.visibilityStore.getSearchResult(request, token, matchQuery, isOpen)
@@ -512,7 +512,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(0, len(resp.Executions))
 
 	// test for one hits
-	data := []byte(`{"Status": 1,
+	data := []byte(`{"ExecutionStatus": 1,
           "CloseTime": 1547596872817380000,
           "NamespaceID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -621,7 +621,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 }
 
 func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
-	data := []byte(`{"Status": 2,
+	data := []byte(`{"ExecutionStatus": 2,
           "CloseTime": 1547596872817380000,
           "NamespaceID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -651,7 +651,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	s.Equal("TestWorkflowExecute", info.TypeName)
 	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
 	s.Equal(int64(1547596872817380000), info.CloseTime.UnixNano())
-	s.EqualValues(enums.WorkflowExecutionStatusCompleted, *info.Status)
+	s.Equal(enums.WorkflowExecutionStatusCompleted, *info.Status)
 	s.Equal(int64(29), info.HistoryLength)
 
 	// test for error case
@@ -842,7 +842,7 @@ func (s *ESVisibilitySuite) TestAddNamespaceToQuery() {
 
 func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	s.mockESClient.On("SearchWithDSL", mock.Anything, mock.Anything, mock.MatchedBy(func(input string) bool {
-		s.True(strings.Contains(input, `{"match_phrase":{"Status":{"query":"5"}}}`))
+		s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
 		return true
 	})).Return(testSearchResult, nil).Once()
 
@@ -850,7 +850,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		PageSize:    10,
-		Query:       `Status = 5`,
+		Query:       `ExecutionStatus = 5`,
 	}
 	_, err := s.visibilityStore.ListWorkflowExecutions(request)
 	s.NoError(err)
@@ -873,7 +873,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	// test first page
 	s.mockESClient.On("ScrollFirstPage", mock.Anything, testIndex, mock.MatchedBy(func(input string) bool {
-		s.True(strings.Contains(input, `{"match_phrase":{"Status":{"query":"5"}}}`))
+		s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
 		return true
 	})).Return(testSearchResult, nil, nil).Once()
 
@@ -881,7 +881,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		PageSize:    10,
-		Query:       `Status = 5`,
+		Query:       `ExecutionStatus = 5`,
 	}
 	_, err := s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
@@ -924,14 +924,14 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 
 func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	s.mockESClient.On("Count", mock.Anything, testIndex, mock.MatchedBy(func(input string) bool {
-		s.True(strings.Contains(input, `{"match_phrase":{"Status":{"query":"5"}}}`))
+		s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
 		return true
 	})).Return(int64(1), nil).Once()
 
 	request := &p.CountWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
-		Query:       `Status = 5`,
+		Query:       `ExecutionStatus = 5`,
 	}
 	resp, err := s.visibilityStore.CountWorkflowExecutions(request)
 	s.NoError(err)

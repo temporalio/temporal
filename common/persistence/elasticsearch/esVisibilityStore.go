@@ -74,17 +74,17 @@ type (
 	}
 
 	visibilityRecord struct {
-		WorkflowID    string
-		RunID         string
-		WorkflowType  string
-		StartTime     int64
-		ExecutionTime int64
-		CloseTime     int64
-		Status        enums.WorkflowExecutionStatus
-		HistoryLength int64
-		Memo          []byte
-		Encoding      string
-		Attr          map[string]interface{}
+		WorkflowID      string
+		RunID           string
+		WorkflowType    string
+		StartTime       int64
+		ExecutionTime   int64
+		CloseTime       int64
+		ExecutionStatus enums.WorkflowExecutionStatus
+		HistoryLength   int64
+		Memo            []byte
+		Encoding        string
+		Attr            map[string]interface{}
 	}
 )
 
@@ -309,7 +309,7 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByStatus(
 	}
 
 	isOpen := false
-	matchQuery := elastic.NewMatchQuery(es.Status, int32(request.Status))
+	matchQuery := elastic.NewMatchQuery(es.ExecutionStatus, int32(request.Status))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, matchQuery, isOpen)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %v", err))
@@ -327,9 +327,9 @@ func (v *esVisibilityStore) GetClosedWorkflowExecution(
 	request *p.GetClosedWorkflowExecutionRequest) (*p.InternalGetClosedWorkflowExecutionResponse, error) {
 
 	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
-	existClosedStatusQuery := elastic.NewExistsQuery(es.Status)
+	existExecutionStatusQuery := elastic.NewExistsQuery(es.ExecutionStatus)
 	matchWorkflowIDQuery := elastic.NewMatchQuery(es.WorkflowID, request.Execution.GetWorkflowId())
-	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).Must(existClosedStatusQuery).Must(matchWorkflowIDQuery)
+	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).Must(existExecutionStatusQuery).Must(matchWorkflowIDQuery)
 	rid := request.Execution.GetRunId()
 	if rid != "" {
 		matchRunIDQuery := elastic.NewMatchQuery(es.RunID, rid)
@@ -714,7 +714,7 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 	matchQuery *elastic.MatchQuery, isOpen bool) (*elastic.SearchResult, error) {
 
 	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
-	existClosedStatusQuery := elastic.NewExistsQuery(es.Status)
+	existExecutionStatusQuery := elastic.NewExistsQuery(es.ExecutionStatus)
 	var rangeQuery *elastic.RangeQuery
 	if isOpen {
 		rangeQuery = elastic.NewRangeQuery(es.StartTime)
@@ -741,9 +741,9 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 		boolQuery = boolQuery.Must(matchQuery)
 	}
 	if isOpen {
-		boolQuery = boolQuery.MustNot(existClosedStatusQuery)
+		boolQuery = boolQuery.MustNot(existExecutionStatusQuery)
 	} else {
-		boolQuery = boolQuery.Must(existClosedStatusQuery)
+		boolQuery = boolQuery.Must(existExecutionStatusQuery)
 	}
 
 	ctx := context.Background()
@@ -876,7 +876,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	}
 	if source.CloseTime != 0 {
 		record.CloseTime = time.Unix(0, source.CloseTime)
-		record.Status = &source.Status
+		record.Status = &source.ExecutionStatus
 		record.HistoryLength = source.HistoryLength
 	}
 
@@ -919,12 +919,12 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 
 	msgType := enums.MessageTypeIndex
 	fields := map[string]*indexer.Field{
-		es.WorkflowType:  {Type: es.FieldTypeString, StringData: workflowTypeName},
-		es.StartTime:     {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
-		es.ExecutionTime: {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
-		es.CloseTime:     {Type: es.FieldTypeInt, IntData: endTimeUnixNano},
-		es.Status:        {Type: es.FieldTypeInt, IntData: int64(status)},
-		es.HistoryLength: {Type: es.FieldTypeInt, IntData: historyLength},
+		es.WorkflowType:    {Type: es.FieldTypeString, StringData: workflowTypeName},
+		es.StartTime:       {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
+		es.ExecutionTime:   {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
+		es.CloseTime:       {Type: es.FieldTypeInt, IntData: endTimeUnixNano},
+		es.ExecutionStatus: {Type: es.FieldTypeInt, IntData: int64(status)},
+		es.HistoryLength:   {Type: es.FieldTypeInt, IntData: historyLength},
 	}
 	if len(memo) != 0 {
 		fields[es.Memo] = &indexer.Field{Type: es.FieldTypeBinary, BinaryData: memo}
