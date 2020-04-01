@@ -253,7 +253,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 
 	workflowTypeName := executionInfo.WorkflowTypeName
 	workflowCloseTimestamp := wfCloseTime
-	workflowCloseStatus := executionInfo.Status
+	workflowStatus := executionInfo.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
 
 	startEvent, err := mutableState.GetStartEvent()
@@ -278,7 +278,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		workflowStartTimestamp,
 		workflowExecutionTimestamp.UnixNano(),
 		workflowCloseTimestamp,
-		workflowCloseStatus,
+		workflowStatus,
 		workflowHistoryLength,
 		task.GetTaskId(),
 		visibilityMemo,

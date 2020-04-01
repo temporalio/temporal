@@ -109,7 +109,7 @@ message PollMutableStateResponse {
     common.VersionHistories versionHistories = 14;
     // TODO: when migrating to gRPC, make this a enum
     // TODO: when migrating to gRPC, unify internal & external representation
-    // NOTE: workflowState & workflowCloseStatus are the same as persistence representation (???)
+    // NOTE: workflowState & workflowStatus are the same as persistence representation (???)
     int32 workflowState = 15;
     enums.WorkflowExecutionStatus workflowStatus = 16;
 }

@@ -759,7 +759,7 @@ func ArchivalRequestCloseTimestamp(requestCloseTimeStamp int64) Tag {
 	return newInt64("archival-request-close-timestamp", requestCloseTimeStamp)
 }
 
-// ArchivalRequestStatus returns tag for RequestCloseStatus
+// ArchivalRequestStatus returns tag for RequestStatus
 func ArchivalRequestStatus(requestStatus string) Tag {
 	return newStringTag("archival-request-status", requestStatus)
 }

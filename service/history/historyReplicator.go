@@ -867,7 +867,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 	return currentRunID, currentLastWriteVetsion, persistence.WorkflowStateCompleted, nil
 }
 
-// func (r *historyReplicator) getCurrentWorkflowInfo(namespaceID string, workflowID string) (runID string, lastWriteVersion int64, closeStatus int, retError error) {
+// func (r *historyReplicator) getCurrentWorkflowInfo(namespaceID string, workflowID string) (runID string, lastWriteVersion int64, status int, retError error) {
 func (r *historyReplicator) getCurrentWorkflowMutableState(
 	ctx context.Context,
 	namespaceID string,

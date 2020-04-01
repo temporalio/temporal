@@ -309,7 +309,7 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByStatus(
 	}
 
 	isOpen := false
-	matchQuery := elastic.NewMatchQuery(es.CloseStatus, int32(request.Status))
+	matchQuery := elastic.NewMatchQuery(es.Status, int32(request.Status))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, matchQuery, isOpen)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %v", err))
@@ -327,7 +327,7 @@ func (v *esVisibilityStore) GetClosedWorkflowExecution(
 	request *p.GetClosedWorkflowExecutionRequest) (*p.InternalGetClosedWorkflowExecutionResponse, error) {
 
 	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
-	existClosedStatusQuery := elastic.NewExistsQuery(es.CloseStatus)
+	existClosedStatusQuery := elastic.NewExistsQuery(es.Status)
 	matchWorkflowIDQuery := elastic.NewMatchQuery(es.WorkflowID, request.Execution.GetWorkflowId())
 	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).Must(existClosedStatusQuery).Must(matchWorkflowIDQuery)
 	rid := request.Execution.GetRunId()
@@ -714,7 +714,7 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 	matchQuery *elastic.MatchQuery, isOpen bool) (*elastic.SearchResult, error) {
 
 	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
-	existClosedStatusQuery := elastic.NewExistsQuery(es.CloseStatus)
+	existClosedStatusQuery := elastic.NewExistsQuery(es.Status)
 	var rangeQuery *elastic.RangeQuery
 	if isOpen {
 		rangeQuery = elastic.NewRangeQuery(es.StartTime)
@@ -923,7 +923,7 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 		es.StartTime:     {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
 		es.ExecutionTime: {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
 		es.CloseTime:     {Type: es.FieldTypeInt, IntData: endTimeUnixNano},
-		es.CloseStatus:   {Type: es.FieldTypeInt, IntData: int64(status)},
+		es.Status:        {Type: es.FieldTypeInt, IntData: int64(status)},
 		es.HistoryLength: {Type: es.FieldTypeInt, IntData: historyLength},
 	}
 	if len(memo) != 0 {

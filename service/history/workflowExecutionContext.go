@@ -465,7 +465,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		return err
 	}
 
-	workflowState, workflowCloseState := resetMutableState.GetWorkflowStateStatus()
+	workflowState, workflowStatus := resetMutableState.GetWorkflowStateStatus()
 	// Current branch changed and notify the watchers
 	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
 		c.namespaceID,
@@ -475,7 +475,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		resetMutableState.GetPreviousStartedEventID(),
 		currentBranchToken,
 		workflowState,
-		workflowCloseState,
+		workflowStatus,
 	))
 
 	c.notifyTasks(
@@ -663,7 +663,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	if err != nil {
 		return err
 	}
-	workflowState, workflowCloseState := c.mutableState.GetWorkflowStateStatus()
+	workflowState, workflowStatus := c.mutableState.GetWorkflowStateStatus()
 	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
 		c.namespaceID,
 		&c.workflowExecution,
@@ -672,7 +672,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		c.mutableState.GetPreviousStartedEventID(),
 		currentBranchToken,
 		workflowState,
-		workflowCloseState,
+		workflowStatus,
 	))
 
 	// notify current workflow tasks

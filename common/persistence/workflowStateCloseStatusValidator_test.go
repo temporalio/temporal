@@ -28,32 +28,32 @@ import (
 )
 
 type (
-	workflowStateCloseStatusSuite struct {
+	workflowStateStatusSuite struct {
 		suite.Suite
 	}
 )
 
-func TestWorkflowStateCloseStatusSuite(t *testing.T) {
-	s := new(workflowStateCloseStatusSuite)
+func TestWorkflowStateStatusSuite(t *testing.T) {
+	s := new(workflowStateStatusSuite)
 	suite.Run(t, s)
 }
 
-func (s *workflowStateCloseStatusSuite) SetupSuite() {
+func (s *workflowStateStatusSuite) SetupSuite() {
 }
 
-func (s *workflowStateCloseStatusSuite) TearDownSuite() {
-
-}
-
-func (s *workflowStateCloseStatusSuite) SetupTest() {
+func (s *workflowStateStatusSuite) TearDownSuite() {
 
 }
 
-func (s *workflowStateCloseStatusSuite) TearDownTest() {
+func (s *workflowStateStatusSuite) SetupTest() {
 
 }
 
-func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_WorkflowStateCreated() {
+func (s *workflowStateStatusSuite) TearDownTest() {
+
+}
+
+func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCreated() {
 	statuses := []enums.WorkflowExecutionStatus{
 		enums.WorkflowExecutionStatusCompleted,
 		enums.WorkflowExecutionStatusFailed,
@@ -70,7 +70,7 @@ func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_Workf
 	}
 }
 
-func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_WorkflowStateRunning() {
+func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateRunning() {
 	statuses := []enums.WorkflowExecutionStatus{
 		enums.WorkflowExecutionStatusCompleted,
 		enums.WorkflowExecutionStatusFailed,
@@ -87,7 +87,7 @@ func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_Workf
 	}
 }
 
-func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_WorkflowStateCompleted() {
+func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCompleted() {
 	statuses := []enums.WorkflowExecutionStatus{
 		enums.WorkflowExecutionStatusRunning,
 		enums.WorkflowExecutionStatusCompleted,
@@ -103,7 +103,7 @@ func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_Workf
 	}
 }
 
-func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_WorkflowStateZombie() {
+func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateZombie() {
 	statuses := []enums.WorkflowExecutionStatus{
 		enums.WorkflowExecutionStatusCompleted,
 		enums.WorkflowExecutionStatusFailed,
@@ -122,7 +122,7 @@ func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_Workf
 
 // TODO
 
-func (s *workflowStateCloseStatusSuite) TestUpdateWorkflowStateCloseStatus_WorkflowStateCreated() {
+func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCreated() {
 	statuses := []enums.WorkflowExecutionStatus{
 		enums.WorkflowExecutionStatusCompleted,
 		enums.WorkflowExecutionStatusFailed,
@@ -139,7 +139,7 @@ func (s *workflowStateCloseStatusSuite) TestUpdateWorkflowStateCloseStatus_Workf
 	}
 }
 
-func (s *workflowStateCloseStatusSuite) TestUpdateWorkflowStateCloseStatus_WorkflowStateRunning() {
+func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateRunning() {
 	statuses := []enums.WorkflowExecutionStatus{
 		enums.WorkflowExecutionStatusCompleted,
 		enums.WorkflowExecutionStatusFailed,
@@ -156,7 +156,7 @@ func (s *workflowStateCloseStatusSuite) TestUpdateWorkflowStateCloseStatus_Workf
 	}
 }
 
-func (s *workflowStateCloseStatusSuite) TestUpdateWorkflowStateCloseStatus_WorkflowStateCompleted() {
+func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCompleted() {
 	statuses := []enums.WorkflowExecutionStatus{
 		enums.WorkflowExecutionStatusCompleted,
 		enums.WorkflowExecutionStatusFailed,
@@ -173,7 +173,7 @@ func (s *workflowStateCloseStatusSuite) TestUpdateWorkflowStateCloseStatus_Workf
 	}
 }
 
-func (s *workflowStateCloseStatusSuite) TestUpdateWorkflowStateCloseStatus_WorkflowStateZombie() {
+func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateZombie() {
 	statuses := []enums.WorkflowExecutionStatus{
 		enums.WorkflowExecutionStatusCompleted,
 		enums.WorkflowExecutionStatusFailed,

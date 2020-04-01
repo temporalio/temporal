@@ -33,7 +33,7 @@ const (
 	StartTime     = "StartTime"
 	ExecutionTime = "ExecutionTime"
 	CloseTime     = "CloseTime"
-	CloseStatus   = "Status"
+	Status        = "Status"
 	HistoryLength = "HistoryLength"
 	Memo          = "Memo"
 	Encoding      = "Encoding"

@@ -34,7 +34,7 @@
         "CloseTime": {
           "type": "long"
         },
-        "CloseStatus": {
+        "Status": {
           "type": "integer"
         },
         "HistoryLength": {

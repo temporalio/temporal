@@ -212,7 +212,7 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByStatus(request *p.Lis
 				MaxStartTime: &readLevel.Time,
 				Closed:       true,
 				RunID:        &readLevel.RunID,
-				CloseStatus:  common.Int32Ptr(int32(request.Status)),
+				Status:       common.Int32Ptr(int32(request.Status)),
 				PageSize:     &request.PageSize,
 			})
 		})

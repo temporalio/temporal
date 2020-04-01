@@ -414,8 +414,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	s.assertClosedExecutionEquals(closeReq, resp.Executions[0])
 }
 
-// TestFilteringByCloseStatus test
-func (s *VisibilityPersistenceSuite) TestFilteringByCloseStatus() {
+// TestFilteringByStatus test
+func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 	testNamespaceUUID := uuid.New()
 	startTime := time.Now().UnixNano()
 

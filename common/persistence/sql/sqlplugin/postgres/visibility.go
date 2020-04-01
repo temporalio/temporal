@@ -92,7 +92,7 @@ const (
 	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id=$1 AND run_id=$2"
 )
 
-var errCloseParams = errors.New("missing one of {closeStatus, closeTime, historyLength} params")
+var errCloseParams = errors.New("missing one of {status, closeTime, historyLength} params")
 
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made
@@ -182,10 +182,10 @@ func (pdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			*filter.RunID,
 			*filter.MaxStartTime,
 			*filter.PageSize)
-	case filter.MinStartTime != nil && filter.CloseStatus != nil:
+	case filter.MinStartTime != nil && filter.Status != nil:
 		err = pdb.conn.Select(&rows,
 			templateGetClosedWorkflowExecutionsByStatus,
-			*filter.CloseStatus,
+			*filter.Status,
 			filter.NamespaceID,
 			pdb.converter.ToPostgresDateTime(*filter.MinStartTime),
 			pdb.converter.ToPostgresDateTime(*filter.MaxStartTime),

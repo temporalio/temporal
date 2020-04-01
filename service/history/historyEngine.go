@@ -2750,13 +2750,13 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 	prevStartRequestID := prevExecutionInfo.CreateRequestID
 	prevRunID := prevExecutionInfo.RunID
 	prevState := prevExecutionInfo.State
-	prevCloseState := prevExecutionInfo.Status
+	prevStatus := prevExecutionInfo.Status
 
 	return e.applyWorkflowIDReusePolicyHelper(
 		prevStartRequestID,
 		prevRunID,
 		prevState,
-		prevCloseState,
+		prevStatus,
 		namespaceID,
 		execution,
 		wfIDReusePolicy,

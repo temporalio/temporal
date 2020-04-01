@@ -72,7 +72,7 @@ var (
 	testWorkflowType = "test-wf-type"
 	testWorkflowID   = "test-wid"
 	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
-	testCloseStatus  = enums.WorkflowExecutionStatusFailed
+	testStatus       = enums.WorkflowExecutionStatusFailed
 
 	testRequest = &p.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceID,
@@ -91,7 +91,7 @@ var (
 	filterByType   = fmt.Sprintf("map[match:map[WorkflowType:map[query:%s]]]", testWorkflowType)
 	filterByWID    = fmt.Sprintf("map[match:map[WorkflowID:map[query:%s]]]", testWorkflowID)
 	filterByRunID  = fmt.Sprintf("map[match:map[RunID:map[query:%s]]]", testRunID)
-	filterByStatus = fmt.Sprintf("map[match:map[Status:map[query:%d]]]", testCloseStatus)
+	filterByStatus = fmt.Sprintf("map[match:map[Status:map[query:%d]]]", testStatus)
 )
 
 func TestESVisibilitySuite(t *testing.T) {
@@ -191,7 +191,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 		s.Equal(memoBytes, fields[es.Memo].GetBinaryData())
 		s.Equal(string(common.EncodingTypeProto3), fields[es.Encoding].GetStringData())
 		s.Equal(request.CloseTimestamp, fields[es.CloseTime].GetIntData())
-		s.EqualValues(request.Status, fields[es.CloseStatus].GetIntData())
+		s.EqualValues(request.Status, fields[es.Status].GetIntData())
 		s.Equal(request.HistoryLength, fields[es.HistoryLength].GetIntData())
 		return true
 	})).Return(nil).Once()
@@ -352,7 +352,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 
 	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
-		Status:                        testCloseStatus,
+		Status:                        testStatus,
 	}
 	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
 	s.NoError(err)
@@ -433,7 +433,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	token := &esVisibilityPageToken{From: from}
 
 	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
-	existClosedStatusQuery := elastic.NewExistsQuery(es.CloseStatus)
+	existClosedStatusQuery := elastic.NewExistsQuery(es.Status)
 	tieBreakerSorter := elastic.NewFieldSort(es.RunID).Desc()
 
 	earliestTime := strconv.FormatInt(request.EarliestStartTime-oneMilliSecondInNano, 10)
@@ -481,7 +481,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	s.NoError(err)
 
 	// test for additional matchQuery
-	matchQuery := elastic.NewMatchQuery(es.CloseStatus, int32(0))
+	matchQuery := elastic.NewMatchQuery(es.Status, int32(0))
 	boolQuery = elastic.NewBoolQuery().Must(matchNamespaceQuery).Filter(rangeQuery).Must(matchQuery).Must(existClosedStatusQuery)
 	params.Query = boolQuery
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()

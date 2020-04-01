@@ -389,7 +389,7 @@ func (s *cliAppSuite) TestQueryWorkflow_Failed() {
 }
 
 var (
-	closeStatus = enums.WorkflowExecutionCloseStatusCompleted
+	status = enums.WorkflowExecutionStatusCompleted
 
 	listClosedWorkflowExecutionsResponse = &workflowservice.ListClosedWorkflowExecutionsResponse{
 		Executions: []*commonproto.WorkflowExecutionInfo{
@@ -403,7 +403,7 @@ var (
 				},
 				StartTime:     &types.Int64Value{Value: time.Now().UnixNano()},
 				CloseTime:     &types.Int64Value{Value: time.Now().Add(time.Hour).UnixNano()},
-				CloseStatus:   closeStatus,
+				Status:        status,
 				HistoryLength: 12,
 			},
 		},
@@ -706,16 +706,16 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 		"TestKey": []byte("testValue"),
 	}
 	execution := &commonproto.WorkflowExecutionInfo{
-		CloseStatus: enums.WorkflowExecutionCloseStatusRunning,
-		Memo:        &commonproto.Memo{Fields: fields},
+		Status: enums.WorkflowExecutionStatusRunning,
+		Memo:   &commonproto.Memo{Fields: fields},
 	}
-	s.Equal("{Status:WorkflowExecutionCloseStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
+	s.Equal("{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
 
 	fields["TestKey2"] = []byte(`anotherTestValue`)
 	execution.Memo = &commonproto.Memo{Fields: fields}
 	got := anyToString(execution, true, 0)
-	expected := got == "{Status:WorkflowExecutionCloseStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
-		got == "{Status:WorkflowExecutionCloseStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
+	expected := got == "{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
+		got == "{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
 	s.True(expected)
 }
 

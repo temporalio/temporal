@@ -516,7 +516,7 @@ type (
 		RunID            *string
 		WorkflowID       *string
 		WorkflowTypeName *string
-		CloseStatus      *int32
+		Status           *int32
 		MinStartTime     *time.Time
 		MaxStartTime     *time.Time
 		PageSize         *int
@@ -733,7 +733,7 @@ type (
 		//   - MUST specify following required params:
 		//     - namespaceID, minStartTime, maxStartTime, runID and pageSize where some or all of these may come from previous page token
 		//   - OPTIONALLY specify one of following params
-		//     - workflowID, workflowTypeName, closeStatus (along with closed=true)
+		//     - workflowID, workflowTypeName, status (along with closed=true)
 		SelectFromVisibility(filter *VisibilityFilter) ([]VisibilityRow, error)
 		DeleteFromVisibility(filter *VisibilityFilter) (sql.Result, error)
 

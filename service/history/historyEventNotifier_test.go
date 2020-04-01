@@ -86,9 +86,9 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
 	workflowState := persistence.WorkflowStateCreated
-	workflowCloseState := enums.WorkflowExecutionStatusRunning
+	workflowStatus := enums.WorkflowExecutionStatusRunning
 	branchToken := make([]byte, 0)
-	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowCloseState)
+	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 2).C
 
 	subscriberID, channel, err := s.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))

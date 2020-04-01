@@ -578,7 +578,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 		runID := primitives.MustParseUUID(executionInfo.RunID)
 		createRequestID := executionInfo.CreateRequestID
 		state := executionInfo.State
-		closeStatus := executionInfo.Status
+		status := executionInfo.Status
 
 		if request.CurrentWorkflowCAS != nil {
 			prevRunID := primitives.MustParseUUID(request.CurrentWorkflowCAS.PrevRunID)
@@ -595,7 +595,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				prevState,
 				createRequestID,
 				state,
-				closeStatus,
+				status,
 				startVersion,
 				lastWriteVersion); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
@@ -611,7 +611,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				prevRunID,
 				createRequestID,
 				state,
-				closeStatus,
+				status,
 				startVersion,
 				lastWriteVersion); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
@@ -628,7 +628,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				prevRunID,
 				createRequestID,
 				state,
-				closeStatus,
+				status,
 				startVersion,
 				lastWriteVersion); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
