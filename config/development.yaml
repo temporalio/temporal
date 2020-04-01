@@ -7,6 +7,8 @@ persistence:
       cassandra:
         hosts: "127.0.0.1"
         keyspace: "temporal"
+        user: "mark"
+        password: "password"
     cass-visibility:
       cassandra:
         hosts: "127.0.0.1"

@@ -82,8 +82,8 @@ func (s *mutableStateSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          0,
-				RangeID:          1,
+				ShardId:          0,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),
@@ -760,8 +760,8 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	timerInfos := map[string]*persistenceblobs.TimerInfo{
 		"25": {
 			Version:    failoverVersion,
-			TimerID:    "25",
-			StartedID:  85,
+			TimerId:    "25",
+			StartedId:  85,
 			ExpiryTime: expiryTime,
 		},
 	}
@@ -782,9 +782,9 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	signalInfos := map[int64]*persistenceblobs.SignalInfo{
 		75: {
 			Version:               failoverVersion,
-			InitiatedID:           75,
-			InitiatedEventBatchID: 17,
-			RequestID:             uuid.New(),
+			InitiatedId:           75,
+			InitiatedEventBatchId: 17,
+			RequestId:             uuid.New(),
 			Name:                  "test-signal-75",
 			Input:                 []byte("signal-input-75"),
 		},

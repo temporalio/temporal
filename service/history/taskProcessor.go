@@ -249,7 +249,7 @@ func (t *taskProcessor) processTaskOnce(
 
 	startTime := t.timeSource.Now()
 	scopeIdx, err := task.processor.process(task)
-	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(primitives.UUIDString(task.task.GetNamespaceID())))
+	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(primitives.UUIDString(task.task.GetNamespaceId())))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
 		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))

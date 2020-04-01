@@ -241,12 +241,12 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistenceblobs.TimerTaskIn
 
 TaskFilterLoop:
 	for _, task := range tasks {
-		timerKey := timerKeyFromGogoTime(task.GetVisibilityTimestamp(), task.TaskID)
+		timerKey := timerKeyFromGogoTime(task.GetVisibilityTimestamp(), task.GetTaskId())
 		_, isLoaded := t.outstandingTasks[*timerKey]
 		if isLoaded {
 			// timer already loaded
 			t.logger.Debug("Skipping timer task",
-				tag.Task(timerKey), tag.WorkflowID(task.WorkflowID), tag.WorkflowRunIDBytes(task.RunID), tag.TaskType(task.TaskType))
+				tag.Task(timerKey), tag.WorkflowID(task.GetWorkflowId()), tag.WorkflowRunIDBytes(task.GetRunId()), tag.TaskType(task.TaskType))
 			continue TaskFilterLoop
 		}
 
@@ -310,7 +310,7 @@ func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistenceblobs.TimerTaskI
 }
 
 func (t *timerQueueAckMgrImpl) completeTimerTask(timerTask *persistenceblobs.TimerTaskInfo) {
-	timerKey := timerKeyFromGogoTime(timerTask.GetVisibilityTimestamp(), timerTask.TaskID)
+	timerKey := timerKeyFromGogoTime(timerTask.GetVisibilityTimestamp(), timerTask.GetTaskId())
 	t.Lock()
 	defer t.Unlock()
 

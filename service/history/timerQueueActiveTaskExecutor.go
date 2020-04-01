@@ -140,7 +140,7 @@ Loop:
 			break Loop
 		}
 
-		if _, err := mutableState.AddTimerFiredEvent(timerInfo.TimerID); err != nil {
+		if _, err := mutableState.AddTimerFiredEvent(timerInfo.GetTimerId()); err != nil {
 			return err
 		}
 		timerFired = true
@@ -184,7 +184,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
 	isHeartBeatTask := task.TimeoutType == int32(enums.TimeoutTypeHeartbeat)
-	activityInfo, ok := mutableState.GetActivityInfo(task.EventID)
+	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
 	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTimestamp)
 	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibility <= goVisibilityTS.Unix() {
 		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
@@ -271,13 +271,13 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 		return nil
 	}
 
-	scheduleID := task.EventID
+	scheduleID := task.GetEventId()
 	decision, ok := mutableState.GetDecisionInfo(scheduleID)
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TaskTypeDecisionTimeout))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TaskTypeDecisionTimeout))
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.NamespaceID, decision.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -379,7 +379,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 
 	// generate activity task
-	scheduledID := task.EventID
+	scheduledID := task.GetEventId()
 	activityInfo, ok := mutableState.GetActivityInfo(scheduledID)
 	if !ok || task.ScheduleAttempt < int64(activityInfo.Attempt) || activityInfo.StartedID != common.EmptyEventID {
 		if ok {
@@ -395,12 +395,12 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		}
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.NamespaceID, activityInfo.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), activityInfo.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	namespaceID := primitives.UUIDString(task.NamespaceID)
+	namespaceID := primitives.UUIDString(task.GetNamespaceId())
 	targetNamespaceID := namespaceID
 	if activityInfo.NamespaceID != "" {
 		targetNamespaceID = activityInfo.NamespaceID
@@ -423,8 +423,8 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 
 	execution := &commonproto.WorkflowExecution{
-		WorkflowId: task.WorkflowID,
-		RunId:      primitives.UUIDString(task.RunID)}
+		WorkflowId: task.GetWorkflowId(),
+		RunId:      primitives.UUIDString(task.GetRunId())}
 	taskList := &commonproto.TaskList{
 		Name: activityInfo.TaskList,
 	}
@@ -433,8 +433,8 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	release(nil) // release earlier as we don't need the lock anymore
 
 	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
-		NamespaceUUID:                 targetNamespaceID,
-		SourceNamespaceUUID:           namespaceID,
+		NamespaceId:                   targetNamespaceID,
+		SourceNamespaceId:             namespaceID,
 		Execution:                     execution,
 		TaskList:                      taskList,
 		ScheduleId:                    scheduledID,
@@ -468,7 +468,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, startVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), startVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}

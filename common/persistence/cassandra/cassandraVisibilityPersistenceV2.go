@@ -143,7 +143,7 @@ func (v *cassandraVisibilityPersistenceV2) GetClosedWorkflowExecution(
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutions(
 	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsV2,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
@@ -177,7 +177,7 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutions(
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByType(
 	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByTypeV2,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
@@ -212,7 +212,7 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByType(
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByWorkflowID(
 	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByIDV2,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
@@ -247,7 +247,7 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByWorkflo
 func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByStatus(
 	request *p.ListClosedWorkflowExecutionsByStatusRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByStatusV2,
-		request.NamespaceUUID,
+		request.NamespaceID,
 		namespacePartition,
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),

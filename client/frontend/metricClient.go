@@ -385,20 +385,20 @@ func (c *metricClient) RecordActivityTaskHeartbeat(
 	return resp, err
 }
 
-func (c *metricClient) RecordActivityTaskHeartbeatByID(
+func (c *metricClient) RecordActivityTaskHeartbeatById(
 	ctx context.Context,
-	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
+	request *workflowservice.RecordActivityTaskHeartbeatByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RecordActivityTaskHeartbeatByIDResponse, error) {
+) (*workflowservice.RecordActivityTaskHeartbeatByIdResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatByIDScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRecordActivityTaskHeartbeatByIDScope, metrics.ClientLatency)
-	resp, err := c.client.RecordActivityTaskHeartbeatByID(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope, metrics.ClientLatency)
+	resp, err := c.client.RecordActivityTaskHeartbeatById(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatByIDScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -493,20 +493,20 @@ func (c *metricClient) RespondActivityTaskCanceled(
 	return resp, err
 }
 
-func (c *metricClient) RespondActivityTaskCanceledByID(
+func (c *metricClient) RespondActivityTaskCanceledById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
+	request *workflowservice.RespondActivityTaskCanceledByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCanceledByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskCanceledByIdResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledByIDScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledByIdScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCanceledByIDScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskCanceledByID(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCanceledByIdScope, metrics.ClientLatency)
+	resp, err := c.client.RespondActivityTaskCanceledById(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledByIDScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledByIdScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -529,20 +529,20 @@ func (c *metricClient) RespondActivityTaskCompleted(
 	return resp, err
 }
 
-func (c *metricClient) RespondActivityTaskCompletedByID(
+func (c *metricClient) RespondActivityTaskCompletedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
+	request *workflowservice.RespondActivityTaskCompletedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCompletedByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskCompletedByIdResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedByIDScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedByIdScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCompletedByIDScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskCompletedByID(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCompletedByIdScope, metrics.ClientLatency)
+	resp, err := c.client.RespondActivityTaskCompletedById(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedByIDScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedByIdScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -565,20 +565,20 @@ func (c *metricClient) RespondActivityTaskFailed(
 	return resp, err
 }
 
-func (c *metricClient) RespondActivityTaskFailedByID(
+func (c *metricClient) RespondActivityTaskFailedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskFailedByIDRequest,
+	request *workflowservice.RespondActivityTaskFailedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskFailedByIDResponse, error) {
+) (*workflowservice.RespondActivityTaskFailedByIdResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedByIDScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedByIdScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskFailedByIDScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskFailedByID(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskFailedByIdScope, metrics.ClientLatency)
+	resp, err := c.client.RespondActivityTaskFailedById(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedByIDScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedByIdScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

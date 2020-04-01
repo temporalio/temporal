@@ -71,7 +71,7 @@ func newTimerQueueStandbyProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyStandbyTask(clusterName, primitives.UUIDString(timer.NamespaceID), timer)
+		return taskAllocator.verifyStandbyTask(clusterName, primitives.UUIDString(timer.GetNamespaceId()), timer)
 	}
 
 	timerGate := NewRemoteTimerGate()

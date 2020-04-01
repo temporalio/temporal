@@ -138,7 +138,7 @@ func (v *visibilityArchiver) Archive(
 	indexes := createIndexesToArchive(request)
 	// Upload archive to all indexes
 	for _, element := range indexes {
-		key := constructTimestampIndex(URI.Path(), request.NamespaceID, element.primaryIndex, element.primaryIndexValue, element.secondaryIndex, element.secondaryIndexTimestamp, request.RunID)
+		key := constructTimestampIndex(URI.Path(), request.GetNamespaceId(), element.primaryIndex, element.primaryIndexValue, element.secondaryIndex, element.secondaryIndexTimestamp, request.GetRunId())
 		if err := upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord); err != nil {
 			archiveFailReason = errWriteKey
 			return err
@@ -151,8 +151,8 @@ func createIndexesToArchive(request *archiverproto.ArchiveVisibilityRequest) []i
 	return []indexToArchive{
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyCloseTimeout, request.CloseTimestamp},
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyStartTimeout, request.StartTimestamp},
-		{primaryIndexKeyWorkflowID, request.WorkflowID, secondaryIndexKeyCloseTimeout, request.CloseTimestamp},
-		{primaryIndexKeyWorkflowID, request.WorkflowID, secondaryIndexKeyStartTimeout, request.StartTimestamp},
+		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyCloseTimeout, request.CloseTimestamp},
+		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyStartTimeout, request.StartTimestamp},
 	}
 }
 

@@ -108,8 +108,8 @@ func (s *historyReplicatorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          testShardID,
-				RangeID:          1,
+				ShardId:          testShardID,
+				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
 		NewDynamicConfigForTest(),

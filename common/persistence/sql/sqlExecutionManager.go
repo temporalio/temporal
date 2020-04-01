@@ -238,10 +238,11 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 
 	if info.ReplicationData != nil {
 		state.ReplicationState = &p.ReplicationState{}
+
 		state.ReplicationState.StartVersion = info.StartVersion
 		state.ReplicationState.CurrentVersion = info.CurrentVersion
 		state.ReplicationState.LastWriteVersion = executionsRow.LastWriteVersion
-		state.ReplicationState.LastWriteEventID = info.ReplicationData.LastWriteEventID
+		state.ReplicationState.LastWriteEventID = info.ReplicationData.LastWriteEventId
 		state.ReplicationState.LastReplicationInfo = info.ReplicationData.LastReplicationInfo
 
 		if state.ReplicationState.LastReplicationInfo == nil {
@@ -990,7 +991,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 		}
 
 		pageToken = &timerTaskPageToken{
-			TaskID:    resp.Timers[request.BatchSize].TaskID,
+			TaskID:    resp.Timers[request.BatchSize].GetTaskId(),
 			Timestamp: goVisibilityTimestamp,
 		}
 		resp.Timers = resp.Timers[:request.BatchSize]
@@ -1045,7 +1046,7 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 	row := &sqlplugin.ReplicationTaskDLQRow{
 		SourceClusterName: request.SourceClusterName,
 		ShardID:           m.shardID,
-		TaskID:            replicationTask.TaskID,
+		TaskID:            replicationTask.GetTaskId(),
 		Data:              blob.Data,
 		DataEncoding:      string(blob.Encoding),
 	}

@@ -23,9 +23,10 @@ package frontend
 import (
 	"context"
 
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/resource"
 )
@@ -57,11 +58,16 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 
 // TODO(vancexu): refactor frontend handler
 
-// Health is for health check
-func (a *AccessControlledWorkflowHandler) Health(context.Context, *healthservice.HealthRequest) (*healthservice.HealthStatus, error) {
+// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+func (a *AccessControlledWorkflowHandler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	a.GetLogger().Debug("Frontend service health check endpoint (gRPC) reached.")
-	hs := &healthservice.HealthStatus{Ok: true, Msg: "Frontend service is healthy."}
+	hs := &healthpb.HealthCheckResponse{
+		Status: healthpb.HealthCheckResponse_SERVING,
+	}
 	return hs, nil
+}
+func (a *AccessControlledWorkflowHandler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
+	return serviceerror.NewUnimplemented("Watch is not implemented.")
 }
 
 // CountWorkflowExecutions API call
@@ -424,12 +430,12 @@ func (a *AccessControlledWorkflowHandler) RecordActivityTaskHeartbeat(
 	return a.frontendHandler.RecordActivityTaskHeartbeat(ctx, request)
 }
 
-// RecordActivityTaskHeartbeatByID API call
-func (a *AccessControlledWorkflowHandler) RecordActivityTaskHeartbeatByID(
+// RecordActivityTaskHeartbeatById API call
+func (a *AccessControlledWorkflowHandler) RecordActivityTaskHeartbeatById(
 	ctx context.Context,
-	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
-) (*workflowservice.RecordActivityTaskHeartbeatByIDResponse, error) {
-	return a.frontendHandler.RecordActivityTaskHeartbeatByID(ctx, request)
+	request *workflowservice.RecordActivityTaskHeartbeatByIdRequest,
+) (*workflowservice.RecordActivityTaskHeartbeatByIdResponse, error) {
+	return a.frontendHandler.RecordActivityTaskHeartbeatById(ctx, request)
 }
 
 // RegisterNamespace API call
@@ -524,12 +530,12 @@ func (a *AccessControlledWorkflowHandler) RespondActivityTaskCanceled(
 	return a.frontendHandler.RespondActivityTaskCanceled(ctx, request)
 }
 
-// RespondActivityTaskCanceledByID API call
-func (a *AccessControlledWorkflowHandler) RespondActivityTaskCanceledByID(
+// RespondActivityTaskCanceledById API call
+func (a *AccessControlledWorkflowHandler) RespondActivityTaskCanceledById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
-) (*workflowservice.RespondActivityTaskCanceledByIDResponse, error) {
-	return a.frontendHandler.RespondActivityTaskCanceledByID(ctx, request)
+	request *workflowservice.RespondActivityTaskCanceledByIdRequest,
+) (*workflowservice.RespondActivityTaskCanceledByIdResponse, error) {
+	return a.frontendHandler.RespondActivityTaskCanceledById(ctx, request)
 }
 
 // RespondActivityTaskCompleted API call
@@ -540,12 +546,12 @@ func (a *AccessControlledWorkflowHandler) RespondActivityTaskCompleted(
 	return a.frontendHandler.RespondActivityTaskCompleted(ctx, request)
 }
 
-// RespondActivityTaskCompletedByID API call
-func (a *AccessControlledWorkflowHandler) RespondActivityTaskCompletedByID(
+// RespondActivityTaskCompletedById API call
+func (a *AccessControlledWorkflowHandler) RespondActivityTaskCompletedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
-) (*workflowservice.RespondActivityTaskCompletedByIDResponse, error) {
-	return a.frontendHandler.RespondActivityTaskCompletedByID(ctx, request)
+	request *workflowservice.RespondActivityTaskCompletedByIdRequest,
+) (*workflowservice.RespondActivityTaskCompletedByIdResponse, error) {
+	return a.frontendHandler.RespondActivityTaskCompletedById(ctx, request)
 }
 
 // RespondActivityTaskFailed API call
@@ -556,12 +562,12 @@ func (a *AccessControlledWorkflowHandler) RespondActivityTaskFailed(
 	return a.frontendHandler.RespondActivityTaskFailed(ctx, request)
 }
 
-// RespondActivityTaskFailedByID API call
-func (a *AccessControlledWorkflowHandler) RespondActivityTaskFailedByID(
+// RespondActivityTaskFailedById API call
+func (a *AccessControlledWorkflowHandler) RespondActivityTaskFailedById(
 	ctx context.Context,
-	request *workflowservice.RespondActivityTaskFailedByIDRequest,
-) (*workflowservice.RespondActivityTaskFailedByIDResponse, error) {
-	return a.frontendHandler.RespondActivityTaskFailedByID(ctx, request)
+	request *workflowservice.RespondActivityTaskFailedByIdRequest,
+) (*workflowservice.RespondActivityTaskFailedByIdResponse, error) {
+	return a.frontendHandler.RespondActivityTaskFailedById(ctx, request)
 }
 
 // RespondDecisionTaskCompleted API call

@@ -98,8 +98,8 @@ func (s *engine3Suite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&p.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{
-			ShardID:          0,
-			RangeID:          1,
+			ShardId:          0,
+			RangeId:          1,
 			TransferAckLevel: 0,
 		}},
 		s.config,
@@ -184,7 +184,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	}, nil).Once()
 
 	request := historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceUUID:     namespaceID,
+		NamespaceId:       namespaceID,
 		WorkflowExecution: &we,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -241,7 +241,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 
 	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
@@ -275,7 +275,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	signalName := "my signal name"
 	input := []byte("test input")
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:  namespaceID,
 			WorkflowId: workflowID,
@@ -323,7 +323,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	input := []byte("test input")
 	requestID := uuid.New()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
+		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,

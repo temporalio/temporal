@@ -28,8 +28,9 @@
 package cache
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockNamespaceCache is a mock of NamespaceCache interface.
@@ -133,19 +134,19 @@ func (mr *MockNamespaceCacheMockRecorder) GetNamespaceByID(id interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceByID", reflect.TypeOf((*MockNamespaceCache)(nil).GetNamespaceByID), id)
 }
 
-// GetNamespaceID mocks base method.
+// GetNamespaceId mocks base method.
 func (m *MockNamespaceCache) GetNamespaceID(name string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespaceID", name)
+	ret := m.ctrl.Call(m, "GetNamespaceId", name)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetNamespaceID indicates an expected call of GetNamespaceID.
+// GetNamespaceId indicates an expected call of GetNamespaceId.
 func (mr *MockNamespaceCacheMockRecorder) GetNamespaceID(name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceID", reflect.TypeOf((*MockNamespaceCache)(nil).GetNamespaceID), name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceId", reflect.TypeOf((*MockNamespaceCache)(nil).GetNamespaceID), name)
 }
 
 // GetNamespaceName mocks base method.

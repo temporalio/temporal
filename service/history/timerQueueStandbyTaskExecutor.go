@@ -210,7 +210,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, err
 		}
 		isHeartBeatTask := timerTask.TimeoutType == int32(enums.TimeoutTypeHeartbeat)
-		if activityInfo, ok := mutableState.GetActivityInfo(timerTask.EventID); isHeartBeatTask && ok {
+		if activityInfo, ok := mutableState.GetActivityInfo(timerTask.GetEventId()); isHeartBeatTask && ok {
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 			if err := mutableState.UpdateActivity(activityInfo); err != nil {
 				return nil, err
@@ -268,12 +268,12 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		decision, isPending := mutableState.GetDecisionInfo(timerTask.EventID)
+		decision, isPending := mutableState.GetDecisionInfo(timerTask.GetEventId())
 		if !isPending {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.NamespaceID, decision.Version, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.GetNamespaceId(), decision.Version, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -347,7 +347,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.NamespaceID, startVersion, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.GetNamespaceId(), startVersion, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -447,9 +447,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			primitives.UUIDString(timerTask.NamespaceID),
-			timerTask.WorkflowID,
-			primitives.UUIDString(timerTask.RunID),
+			primitives.UUIDString(timerTask.GetNamespaceId()),
+			timerTask.GetWorkflowId(),
+			primitives.UUIDString(timerTask.GetRunId()),
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
 			common.EmptyEventID,
@@ -457,11 +457,11 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			primitives.UUIDString(timerTask.NamespaceID),
-			timerTask.WorkflowID,
-			primitives.UUIDString(timerTask.RunID),
+			primitives.UUIDString(timerTask.GetNamespaceId()),
+			timerTask.GetWorkflowId(),
+			primitives.UUIDString(timerTask.GetRunId()),
 			*resendInfo.nextEventID,
-			primitives.UUIDString(timerTask.RunID),
+			primitives.UUIDString(timerTask.GetRunId()),
 			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
@@ -471,9 +471,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowNamespaceIDBytes(timerTask.NamespaceID),
-			tag.WorkflowID(timerTask.WorkflowID),
-			tag.WorkflowRunIDBytes(timerTask.RunID),
+			tag.WorkflowNamespaceIDBytes(timerTask.GetNamespaceId()),
+			tag.WorkflowID(timerTask.GetWorkflowId()),
+			tag.WorkflowRunIDBytes(timerTask.GetRunId()),
 			tag.ClusterName(t.clusterName))
 	}
 

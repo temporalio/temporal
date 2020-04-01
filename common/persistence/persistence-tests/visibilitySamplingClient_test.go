@@ -83,7 +83,7 @@ func (s *VisibilitySamplingSuite) TearDownTest() {
 
 func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
 	request := &p.RecordWorkflowExecutionStartedRequest{
-		NamespaceUUID:    testNamespaceUUID,
+		NamespaceID:      testNamespaceUUID,
 		Namespace:        testNamespace,
 		Execution:        testWorkflowExecution,
 		WorkflowTypeName: testWorkflowTypeName,
@@ -99,14 +99,14 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
 
 func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 	request := &p.RecordWorkflowExecutionClosedRequest{
-		NamespaceUUID:    testNamespaceUUID,
+		NamespaceID:      testNamespaceUUID,
 		Namespace:        testNamespace,
 		Execution:        testWorkflowExecution,
 		WorkflowTypeName: testWorkflowTypeName,
 		Status:           enums.WorkflowExecutionCloseStatusCompleted,
 	}
 	request2 := &p.RecordWorkflowExecutionClosedRequest{
-		NamespaceUUID:    testNamespaceUUID,
+		NamespaceID:      testNamespaceUUID,
 		Namespace:        testNamespace,
 		Execution:        testWorkflowExecution,
 		WorkflowTypeName: testWorkflowTypeName,
@@ -127,8 +127,8 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 
 func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutions() {
 	request := &p.ListWorkflowExecutionsRequest{
-		NamespaceUUID: testNamespaceUUID,
-		Namespace:     testNamespace,
+		NamespaceID: testNamespaceUUID,
+		Namespace:   testNamespace,
 	}
 	s.persistence.On("ListOpenWorkflowExecutions", request).Return(nil, nil).Once()
 	_, err := s.client.ListOpenWorkflowExecutions(request)
@@ -144,8 +144,8 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutions() {
 
 func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutions() {
 	request := &p.ListWorkflowExecutionsRequest{
-		NamespaceUUID: testNamespaceUUID,
-		Namespace:     testNamespace,
+		NamespaceID: testNamespaceUUID,
+		Namespace:   testNamespace,
 	}
 	s.persistence.On("ListClosedWorkflowExecutions", request).Return(nil, nil).Once()
 	_, err := s.client.ListClosedWorkflowExecutions(request)
@@ -161,8 +161,8 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutions() {
 
 func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByType() {
 	req := p.ListWorkflowExecutionsRequest{
-		NamespaceUUID: testNamespaceUUID,
-		Namespace:     testNamespace,
+		NamespaceID: testNamespaceUUID,
+		Namespace:   testNamespace,
 	}
 	request := &p.ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: req,
@@ -182,8 +182,8 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByType() {
 
 func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByType() {
 	req := p.ListWorkflowExecutionsRequest{
-		NamespaceUUID: testNamespaceUUID,
-		Namespace:     testNamespace,
+		NamespaceID: testNamespaceUUID,
+		Namespace:   testNamespace,
 	}
 	request := &p.ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: req,
@@ -203,8 +203,8 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByType() {
 
 func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 	req := p.ListWorkflowExecutionsRequest{
-		NamespaceUUID: testNamespaceUUID,
-		Namespace:     testNamespace,
+		NamespaceID: testNamespaceUUID,
+		Namespace:   testNamespace,
 	}
 	request := &p.ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: req,
@@ -224,8 +224,8 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 
 func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 	req := p.ListWorkflowExecutionsRequest{
-		NamespaceUUID: testNamespaceUUID,
-		Namespace:     testNamespace,
+		NamespaceID: testNamespaceUUID,
+		Namespace:   testNamespace,
 	}
 	request := &p.ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: req,
@@ -245,8 +245,8 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByWorkflowID()
 
 func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByStatus() {
 	req := p.ListWorkflowExecutionsRequest{
-		NamespaceUUID: testNamespaceUUID,
-		Namespace:     testNamespace,
+		NamespaceID: testNamespaceUUID,
+		Namespace:   testNamespace,
 	}
 	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: req,

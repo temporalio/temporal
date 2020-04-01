@@ -182,8 +182,8 @@ func (c *clientImpl) RemoveTask(
 	opts ...grpc.CallOption) (*historyservice.RemoveTaskResponse, error) {
 	var err error
 	var client historyservice.HistoryServiceClient
-	if request.GetShardID() != 0 {
-		client, err = c.getClientForShardID(int(request.GetShardID()))
+	if request.GetShardId() != 0 {
+		client, err = c.getClientForShardID(int(request.GetShardId()))
 		if err != nil {
 			return nil, err
 		}
@@ -211,8 +211,8 @@ func (c *clientImpl) CloseShard(
 
 	var err error
 	var client historyservice.HistoryServiceClient
-	if request.ShardID != 0 {
-		client, err = c.getClientForShardID(int(request.GetShardID()))
+	if request.ShardId != 0 {
+		client, err = c.getClientForShardID(int(request.GetShardId()))
 		if err != nil {
 			return nil, err
 		}
@@ -876,7 +876,7 @@ func (c *clientImpl) GetReplicationMessages(
 	requestsByClient := make(map[historyservice.HistoryServiceClient]*historyservice.GetReplicationMessagesRequest)
 
 	for _, token := range request.Tokens {
-		client, err := c.getClientForShardID(int(token.GetShardID()))
+		client, err := c.getClientForShardID(int(token.GetShardId()))
 		if err != nil {
 			return nil, err
 		}
@@ -973,7 +973,7 @@ func (c *clientImpl) ReadDLQMessages(
 	opts ...grpc.CallOption,
 ) (*historyservice.ReadDLQMessagesResponse, error) {
 
-	client, err := c.getClientForShardID(int(request.GetShardID()))
+	client, err := c.getClientForShardID(int(request.GetShardId()))
 	if err != nil {
 		return nil, err
 	}
@@ -986,7 +986,7 @@ func (c *clientImpl) PurgeDLQMessages(
 	opts ...grpc.CallOption,
 ) (*historyservice.PurgeDLQMessagesResponse, error) {
 
-	client, err := c.getClientForShardID(int(request.GetShardID()))
+	client, err := c.getClientForShardID(int(request.GetShardId()))
 	if err != nil {
 		return nil, err
 	}
@@ -999,7 +999,7 @@ func (c *clientImpl) MergeDLQMessages(
 	opts ...grpc.CallOption,
 ) (*historyservice.MergeDLQMessagesResponse, error) {
 
-	client, err := c.getClientForShardID(int(request.GetShardID()))
+	client, err := c.getClientForShardID(int(request.GetShardId()))
 	if err != nil {
 		return nil, err
 	}

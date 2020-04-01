@@ -150,7 +150,7 @@ func (m *historyV2ManagerImpl) GetHistoryTree(
 		if err != nil {
 			return nil, err
 		}
-		request.TreeID = branch.GetTreeID()
+		request.TreeID = branch.GetTreeId()
 	}
 	return m.persistence.GetHistoryTree(request)
 }
@@ -295,8 +295,8 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	if err != nil {
 		return nil, nil, 0, nil, err
 	}
-	treeID := branch.TreeID
-	branchID := branch.BranchID
+	treeID := branch.TreeId
+	branchID := branch.BranchId
 
 	if request.PageSize <= 0 || request.MinEventID >= request.MaxEventID {
 		return nil, nil, 0, nil, &InvalidPersistenceRequestError{
@@ -322,22 +322,22 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	// We may also query the current branch from beginNodeID
 	beginNodeID := common.FirstEventID
 	if len(branch.Ancestors) > 0 {
-		beginNodeID = branch.Ancestors[len(branch.Ancestors)-1].EndNodeID
+		beginNodeID = branch.Ancestors[len(branch.Ancestors)-1].GetEndNodeId()
 	}
 	allBRs = append(allBRs, &persistenceblobs.HistoryBranchRange{
-		BranchID:    branchID,
-		BeginNodeID: beginNodeID,
-		EndNodeID:   request.MaxEventID,
+		BranchId:    branchID,
+		BeginNodeId: beginNodeID,
+		EndNodeId:   request.MaxEventID,
 	})
 
 	if token.CurrentRangeIndex == notStartedIndex {
 		for idx, br := range allBRs {
 			// this range won't contain any nodes needed
-			if request.MinEventID >= br.EndNodeID {
+			if request.MinEventID >= br.GetEndNodeId() {
 				continue
 			}
 			// similarly, the ranges and the rest won't contain any nodes needed,
-			if request.MaxEventID <= br.BeginNodeID {
+			if request.MaxEventID <= br.GetBeginNodeId() {
 				break
 			}
 
@@ -353,7 +353,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	}
 
 	minNodeID := request.MinEventID
-	maxNodeID := allBRs[token.CurrentRangeIndex].EndNodeID
+	maxNodeID := allBRs[token.CurrentRangeIndex].GetEndNodeId()
 	if request.MaxEventID < maxNodeID {
 		maxNodeID = request.MaxEventID
 	}
@@ -366,7 +366,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	}
 	req := &InternalReadHistoryBranchRequest{
 		TreeID:            treeID,
-		BranchID:          allBRs[token.CurrentRangeIndex].BranchID,
+		BranchID:          allBRs[token.CurrentRangeIndex].GetBranchId(),
 		MinNodeID:         minNodeID,
 		MaxNodeID:         maxNodeID,
 		NextPageToken:     token.StoreToken,
@@ -396,7 +396,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 
 	// NOTE: in this method, we need to make sure eventVersion is NOT
 	// decreasing(otherwise we skip the events), eventID should be continuous(otherwise return error)
-	logger := m.logger.WithTags(tag.WorkflowBranchIDBytes(branch.BranchID), tag.WorkflowTreeIDBytes(branch.TreeID))
+	logger := m.logger.WithTags(tag.WorkflowBranchIDBytes(branch.BranchId), tag.WorkflowTreeIDBytes(branch.TreeId))
 
 	return dataBlobs, token, dataSize, logger, nil
 }

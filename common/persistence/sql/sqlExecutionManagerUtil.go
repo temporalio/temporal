@@ -661,13 +661,13 @@ func createTransferTasks(
 	transferTasksRows := make([]sqlplugin.TransferTasksRow, len(transferTasks))
 	for i, task := range transferTasks {
 		info := &persistenceblobs.TransferTaskInfo{
-			NamespaceID:       namespaceID,
-			WorkflowID:        workflowID,
-			RunID:             runID,
-			TargetNamespaceID: namespaceID,
-			TargetWorkflowID:  p.TransferTaskTransferTargetWorkflowID,
-			ScheduleID:        0,
-			TaskID:            task.GetTaskID(),
+			NamespaceId:       namespaceID,
+			WorkflowId:        workflowID,
+			RunId:             runID,
+			TargetNamespaceId: namespaceID,
+			TargetWorkflowId:  p.TransferTaskTransferTargetWorkflowID,
+			ScheduleId:        0,
+			TaskId:            task.GetTaskID(),
 		}
 
 		transferTasksRows[i].ShardID = shardID
@@ -675,37 +675,37 @@ func createTransferTasks(
 
 		switch task.GetType() {
 		case p.TransferTaskTypeActivityTask:
-			info.TargetNamespaceID = primitives.MustParseUUID(task.(*p.ActivityTask).NamespaceID)
+			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.ActivityTask).NamespaceID)
 			info.TaskList = task.(*p.ActivityTask).TaskList
-			info.ScheduleID = task.(*p.ActivityTask).ScheduleID
+			info.ScheduleId = task.(*p.ActivityTask).ScheduleID
 
 		case p.TransferTaskTypeDecisionTask:
-			info.TargetNamespaceID = primitives.MustParseUUID(task.(*p.DecisionTask).NamespaceID)
+			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.DecisionTask).NamespaceID)
 			info.TaskList = task.(*p.DecisionTask).TaskList
-			info.ScheduleID = task.(*p.DecisionTask).ScheduleID
+			info.ScheduleId = task.(*p.DecisionTask).ScheduleID
 
 		case p.TransferTaskTypeCancelExecution:
-			info.TargetNamespaceID = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetNamespaceID)
-			info.TargetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
+			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetNamespaceID)
+			info.TargetWorkflowId = task.(*p.CancelExecutionTask).TargetWorkflowID
 			if task.(*p.CancelExecutionTask).TargetRunID != "" {
-				info.TargetRunID = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetRunID)
+				info.TargetRunId = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetRunID)
 			}
 			info.TargetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
-			info.ScheduleID = task.(*p.CancelExecutionTask).InitiatedID
+			info.ScheduleId = task.(*p.CancelExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeSignalExecution:
-			info.TargetNamespaceID = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetNamespaceID)
-			info.TargetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
+			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetNamespaceID)
+			info.TargetWorkflowId = task.(*p.SignalExecutionTask).TargetWorkflowID
 			if task.(*p.SignalExecutionTask).TargetRunID != "" {
-				info.TargetRunID = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetRunID)
+				info.TargetRunId = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetRunID)
 			}
 			info.TargetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
-			info.ScheduleID = task.(*p.SignalExecutionTask).InitiatedID
+			info.ScheduleId = task.(*p.SignalExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeStartChildExecution:
-			info.TargetNamespaceID = primitives.MustParseUUID(task.(*p.StartChildExecutionTask).TargetNamespaceID)
-			info.TargetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
-			info.ScheduleID = task.(*p.StartChildExecutionTask).InitiatedID
+			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.StartChildExecutionTask).TargetNamespaceID)
+			info.TargetWorkflowId = task.(*p.StartChildExecutionTask).TargetWorkflowID
+			info.ScheduleId = task.(*p.StartChildExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeCloseExecution,
 			p.TransferTaskTypeRecordWorkflowStarted,
@@ -804,16 +804,16 @@ func createReplicationTasks(
 		}
 
 		blob, err := serialization.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
-			TaskID:                  task.GetTaskID(),
-			NamespaceID:             namespaceID,
-			WorkflowID:              workflowID,
-			RunID:                   runID,
+			TaskId:                  task.GetTaskID(),
+			NamespaceId:             namespaceID,
+			WorkflowId:              workflowID,
+			RunId:                   runID,
 			TaskType:                int32(task.GetType()),
-			FirstEventID:            firstEventID,
-			NextEventID:             nextEventID,
+			FirstEventId:            firstEventID,
+			NextEventId:             nextEventID,
 			Version:                 version,
 			LastReplicationInfo:     lastReplicationInfo,
-			ScheduledID:             activityScheduleID,
+			ScheduledId:             activityScheduleID,
 			EventStoreVersion:       p.EventStoreVersion,
 			NewRunEventStoreVersion: p.EventStoreVersion,
 			BranchToken:             branchToken,
@@ -862,24 +862,24 @@ func createTimerTasks(
 			info := &persistenceblobs.TimerTaskInfo{}
 			switch t := task.(type) {
 			case *p.DecisionTimeoutTask:
-				info.EventID = t.EventID
+				info.EventId = t.EventID
 				info.TimeoutType = int32(t.TimeoutType)
 				info.ScheduleAttempt = t.ScheduleAttempt
 
 			case *p.ActivityTimeoutTask:
-				info.EventID = t.EventID
+				info.EventId = t.EventID
 				info.TimeoutType = int32(t.TimeoutType)
 				info.ScheduleAttempt = t.Attempt
 
 			case *p.UserTimerTask:
-				info.EventID = t.EventID
+				info.EventId = t.EventID
 
 			case *p.ActivityRetryTimerTask:
-				info.EventID = t.EventID
+				info.EventId = t.EventID
 				info.ScheduleAttempt = int64(t.Attempt)
 
 			case *p.WorkflowBackoffTimerTask:
-				info.EventID = t.EventID
+				info.EventId = t.EventID
 				info.TimeoutType = int32(t.TimeoutType)
 
 			case *p.WorkflowTimeoutTask:
@@ -892,12 +892,12 @@ func createTimerTasks(
 				return serviceerror.NewInternal(fmt.Sprintf("createTimerTasks failed. Unknown timer task: %v", task.GetType()))
 			}
 
-			info.NamespaceID = namespaceID
-			info.WorkflowID = workflowID
-			info.RunID = runID
+			info.NamespaceId = namespaceID
+			info.WorkflowId = workflowID
+			info.RunId = runID
 			info.Version = task.GetVersion()
 			info.TaskType = int32(task.GetType())
-			info.TaskID = task.GetTaskID()
+			info.TaskId = task.GetTaskID()
 
 			goVisTs := task.GetVisibilityTimestamp()
 			protoVisTs, err := types.TimestampProto(goVisTs)

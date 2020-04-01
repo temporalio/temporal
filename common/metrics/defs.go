@@ -392,8 +392,8 @@ const (
 	FrontendClientQueryWorkflowScope
 	// FrontendClientRecordActivityTaskHeartbeatScope tracks RPC calls to frontend service
 	FrontendClientRecordActivityTaskHeartbeatScope
-	// FrontendClientRecordActivityTaskHeartbeatByIDScope tracks RPC calls to frontend service
-	FrontendClientRecordActivityTaskHeartbeatByIDScope
+	// FrontendClientRecordActivityTaskHeartbeatByIdScope tracks RPC calls to frontend service
+	FrontendClientRecordActivityTaskHeartbeatByIdScope
 	// FrontendClientRegisterNamespaceScope tracks RPC calls to frontend service
 	FrontendClientRegisterNamespaceScope
 	// FrontendClientRequestCancelWorkflowExecutionScope tracks RPC calls to frontend service
@@ -404,16 +404,16 @@ const (
 	FrontendClientResetWorkflowExecutionScope
 	// FrontendClientRespondActivityTaskCanceledScope tracks RPC calls to frontend service
 	FrontendClientRespondActivityTaskCanceledScope
-	// FrontendClientRespondActivityTaskCanceledByIDScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskCanceledByIDScope
+	// FrontendClientRespondActivityTaskCanceledByIdScope tracks RPC calls to frontend service
+	FrontendClientRespondActivityTaskCanceledByIdScope
 	// FrontendClientRespondActivityTaskCompletedScope tracks RPC calls to frontend service
 	FrontendClientRespondActivityTaskCompletedScope
-	// FrontendClientRespondActivityTaskCompletedByIDScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskCompletedByIDScope
+	// FrontendClientRespondActivityTaskCompletedByIdScope tracks RPC calls to frontend service
+	FrontendClientRespondActivityTaskCompletedByIdScope
 	// FrontendClientRespondActivityTaskFailedScope tracks RPC calls to frontend service
 	FrontendClientRespondActivityTaskFailedScope
-	// FrontendClientRespondActivityTaskFailedByIDScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskFailedByIDScope
+	// FrontendClientRespondActivityTaskFailedByIdScope tracks RPC calls to frontend service
+	FrontendClientRespondActivityTaskFailedByIdScope
 	// FrontendClientRespondDecisionTaskCompletedScope tracks RPC calls to frontend service
 	FrontendClientRespondDecisionTaskCompletedScope
 	// FrontendClientRespondDecisionTaskFailedScope tracks RPC calls to frontend service
@@ -510,8 +510,8 @@ const (
 	DCRedirectionQueryWorkflowScope
 	// DCRedirectionRecordActivityTaskHeartbeatScope tracks RPC calls for dc redirection
 	DCRedirectionRecordActivityTaskHeartbeatScope
-	// DCRedirectionRecordActivityTaskHeartbeatByIDScope tracks RPC calls for dc redirection
-	DCRedirectionRecordActivityTaskHeartbeatByIDScope
+	// DCRedirectionRecordActivityTaskHeartbeatByIdScope tracks RPC calls for dc redirection
+	DCRedirectionRecordActivityTaskHeartbeatByIdScope
 	// DCRedirectionRegisterNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionRegisterNamespaceScope
 	// DCRedirectionRequestCancelWorkflowExecutionScope tracks RPC calls for dc redirection
@@ -522,16 +522,16 @@ const (
 	DCRedirectionResetWorkflowExecutionScope
 	// DCRedirectionRespondActivityTaskCanceledScope tracks RPC calls for dc redirection
 	DCRedirectionRespondActivityTaskCanceledScope
-	// DCRedirectionRespondActivityTaskCanceledByIDScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskCanceledByIDScope
+	// DCRedirectionRespondActivityTaskCanceledByIdScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskCanceledByIdScope
 	// DCRedirectionRespondActivityTaskCompletedScope tracks RPC calls for dc redirection
 	DCRedirectionRespondActivityTaskCompletedScope
-	// DCRedirectionRespondActivityTaskCompletedByIDScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskCompletedByIDScope
+	// DCRedirectionRespondActivityTaskCompletedByIdScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskCompletedByIdScope
 	// DCRedirectionRespondActivityTaskFailedScope tracks RPC calls for dc redirection
 	DCRedirectionRespondActivityTaskFailedScope
-	// DCRedirectionRespondActivityTaskFailedByIDScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskFailedByIDScope
+	// DCRedirectionRespondActivityTaskFailedByIdScope tracks RPC calls for dc redirection
+	DCRedirectionRespondActivityTaskFailedByIdScope
 	// DCRedirectionRespondDecisionTaskCompletedScope tracks RPC calls for dc redirection
 	DCRedirectionRespondDecisionTaskCompletedScope
 	// DCRedirectionRespondDecisionTaskFailedScope tracks RPC calls for dc redirection
@@ -697,8 +697,8 @@ const (
 	FrontendPollForActivityTaskScope
 	// FrontendRecordActivityTaskHeartbeatScope is the metric scope for frontend.RecordActivityTaskHeartbeat
 	FrontendRecordActivityTaskHeartbeatScope
-	// FrontendRecordActivityTaskHeartbeatByIDScope is the metric scope for frontend.RespondDecisionTaskCompleted
-	FrontendRecordActivityTaskHeartbeatByIDScope
+	// FrontendRecordActivityTaskHeartbeatByIdScope is the metric scope for frontend.RespondDecisionTaskCompleted
+	FrontendRecordActivityTaskHeartbeatByIdScope
 	// FrontendRespondDecisionTaskCompletedScope is the metric scope for frontend.RespondDecisionTaskCompleted
 	FrontendRespondDecisionTaskCompletedScope
 	// FrontendRespondDecisionTaskFailedScope is the metric scope for frontend.RespondDecisionTaskFailed
@@ -711,12 +711,12 @@ const (
 	FrontendRespondActivityTaskFailedScope
 	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceled
 	FrontendRespondActivityTaskCanceledScope
-	// FrontendRespondActivityTaskCompletedScope is the metric scope for frontend.RespondActivityTaskCompletedByID
-	FrontendRespondActivityTaskCompletedByIDScope
-	// FrontendRespondActivityTaskFailedScope is the metric scope for frontend.RespondActivityTaskFailedByID
-	FrontendRespondActivityTaskFailedByIDScope
-	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceledByID
-	FrontendRespondActivityTaskCanceledByIDScope
+	// FrontendRespondActivityTaskCompletedScope is the metric scope for frontend.RespondActivityTaskCompletedById
+	FrontendRespondActivityTaskCompletedByIdScope
+	// FrontendRespondActivityTaskFailedScope is the metric scope for frontend.RespondActivityTaskFailedById
+	FrontendRespondActivityTaskFailedByIdScope
+	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceledById
+	FrontendRespondActivityTaskCanceledByIdScope
 	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for frontend.GetWorkflowExecutionHistory
 	FrontendGetWorkflowExecutionHistoryScope
 	// FrontendGetWorkflowExecutionRawHistoryScope is the metric scope for frontend.GetWorkflowExecutionRawHistory
@@ -1196,17 +1196,17 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientPollForDecisionTaskScope:                {operation: "FrontendClientPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientQueryWorkflowScope:                      {operation: "FrontendClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRecordActivityTaskHeartbeatScope:        {operation: "FrontendClientRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRecordActivityTaskHeartbeatByIDScope:    {operation: "FrontendClientRecordActivityTaskHeartbeatByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRecordActivityTaskHeartbeatByIdScope:    {operation: "FrontendClientRecordActivityTaskHeartbeatById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRegisterNamespaceScope:                  {operation: "FrontendClientRegisterNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRequestCancelWorkflowExecutionScope:     {operation: "FrontendClientRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientResetStickyTaskListScope:                {operation: "FrontendClientResetStickyTaskList", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientResetWorkflowExecutionScope:             {operation: "FrontendClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskCanceledScope:        {operation: "FrontendClientRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskCanceledByIDScope:    {operation: "FrontendClientRespondActivityTaskCanceledByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskCanceledByIdScope:    {operation: "FrontendClientRespondActivityTaskCanceledById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskCompletedScope:       {operation: "FrontendClientRespondActivityTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskCompletedByIDScope:   {operation: "FrontendClientRespondActivityTaskCompletedByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskCompletedByIdScope:   {operation: "FrontendClientRespondActivityTaskCompletedById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondActivityTaskFailedScope:          {operation: "FrontendClientRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientRespondActivityTaskFailedByIDScope:      {operation: "FrontendClientRespondActivityTaskFailedByID", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientRespondActivityTaskFailedByIdScope:      {operation: "FrontendClientRespondActivityTaskFailedById", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondDecisionTaskCompletedScope:       {operation: "FrontendClientRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondDecisionTaskFailedScope:          {operation: "FrontendClientRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientRespondQueryTaskCompletedScope:          {operation: "FrontendClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1255,17 +1255,17 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionPollForDecisionTaskScope:                 {operation: "DCRedirectionPollForDecisionTask", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionQueryWorkflowScope:                       {operation: "DCRedirectionQueryWorkflow", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRecordActivityTaskHeartbeatScope:         {operation: "DCRedirectionRecordActivityTaskHeartbeat", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRecordActivityTaskHeartbeatByIDScope:     {operation: "DCRedirectionRecordActivityTaskHeartbeatByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRecordActivityTaskHeartbeatByIdScope:     {operation: "DCRedirectionRecordActivityTaskHeartbeatById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRegisterNamespaceScope:                   {operation: "DCRedirectionRegisterNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRequestCancelWorkflowExecutionScope:      {operation: "DCRedirectionRequestCancelWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionResetStickyTaskListScope:                 {operation: "DCRedirectionResetStickyTaskList", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionResetWorkflowExecutionScope:              {operation: "DCRedirectionResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondActivityTaskCanceledScope:         {operation: "DCRedirectionRespondActivityTaskCanceled", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskCanceledByIDScope:     {operation: "DCRedirectionRespondActivityTaskCanceledByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCanceledByIdScope:     {operation: "DCRedirectionRespondActivityTaskCanceledById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondActivityTaskCompletedScope:        {operation: "DCRedirectionRespondActivityTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskCompletedByIDScope:    {operation: "DCRedirectionRespondActivityTaskCompletedByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskCompletedByIdScope:    {operation: "DCRedirectionRespondActivityTaskCompletedById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondActivityTaskFailedScope:           {operation: "DCRedirectionRespondActivityTaskFailed", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionRespondActivityTaskFailedByIDScope:       {operation: "DCRedirectionRespondActivityTaskFailedByID", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionRespondActivityTaskFailedByIdScope:       {operation: "DCRedirectionRespondActivityTaskFailedById", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondDecisionTaskCompletedScope:        {operation: "DCRedirectionRespondDecisionTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondDecisionTaskFailedScope:           {operation: "DCRedirectionRespondDecisionTaskFailed", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionRespondQueryTaskCompletedScope:           {operation: "DCRedirectionRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1338,16 +1338,16 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendPollForDecisionTaskScope:                {operation: "PollForDecisionTask"},
 		FrontendPollForActivityTaskScope:                {operation: "PollForActivityTask"},
 		FrontendRecordActivityTaskHeartbeatScope:        {operation: "RecordActivityTaskHeartbeat"},
-		FrontendRecordActivityTaskHeartbeatByIDScope:    {operation: "RecordActivityTaskHeartbeatByID"},
+		FrontendRecordActivityTaskHeartbeatByIdScope:    {operation: "RecordActivityTaskHeartbeatById"},
 		FrontendRespondDecisionTaskCompletedScope:       {operation: "RespondDecisionTaskCompleted"},
 		FrontendRespondDecisionTaskFailedScope:          {operation: "RespondDecisionTaskFailed"},
 		FrontendRespondQueryTaskCompletedScope:          {operation: "RespondQueryTaskCompleted"},
 		FrontendRespondActivityTaskCompletedScope:       {operation: "RespondActivityTaskCompleted"},
 		FrontendRespondActivityTaskFailedScope:          {operation: "RespondActivityTaskFailed"},
 		FrontendRespondActivityTaskCanceledScope:        {operation: "RespondActivityTaskCanceled"},
-		FrontendRespondActivityTaskCompletedByIDScope:   {operation: "RespondActivityTaskCompletedByID"},
-		FrontendRespondActivityTaskFailedByIDScope:      {operation: "RespondActivityTaskFailedByID"},
-		FrontendRespondActivityTaskCanceledByIDScope:    {operation: "RespondActivityTaskCanceledByID"},
+		FrontendRespondActivityTaskCompletedByIdScope:   {operation: "RespondActivityTaskCompletedById"},
+		FrontendRespondActivityTaskFailedByIdScope:      {operation: "RespondActivityTaskFailedById"},
+		FrontendRespondActivityTaskCanceledByIdScope:    {operation: "RespondActivityTaskCanceledById"},
 		FrontendGetWorkflowExecutionHistoryScope:        {operation: "GetWorkflowExecutionHistory"},
 		FrontendGetWorkflowExecutionRawHistoryScope:     {operation: "GetWorkflowExecutionRawHistory"},
 		FrontendPollForWorkflowExecutionRawHistoryScope: {operation: "PollForWorkflowExecutionRawHistory"},

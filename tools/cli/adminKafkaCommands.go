@@ -154,10 +154,10 @@ func buildFilterFn(workflowID, runID string) filterFn {
 
 func buildFilterFnForVisibility(workflowID, runID string) filterFnForVisibility {
 	return func(msg *indexer.Message) bool {
-		if len(workflowID) != 0 && msg.GetWorkflowID() != workflowID {
+		if len(workflowID) != 0 && msg.GetWorkflowId() != workflowID {
 			return false
 		}
-		if len(runID) != 0 && msg.GetRunID() != runID {
+		if len(runID) != 0 && msg.GetRunId() != runID {
 			return false
 		}
 		return true
@@ -341,9 +341,9 @@ Loop:
 				} else {
 					outStr = fmt.Sprintf(
 						"%v, %v, %v, %v, %v",
-						msg.GetNamespaceID(),
-						msg.GetWorkflowID(),
-						msg.GetRunID(),
+						msg.GetNamespaceId(),
+						msg.GetWorkflowId(),
+						msg.GetRunId(),
 						msg.GetMessageType().String(),
 						msg.GetVersion(),
 					)
@@ -516,9 +516,9 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 
 		exeInfo := resp.State.ExecutionInfo
 		taskTemplate := &persistenceblobs.ReplicationTaskInfo{
-			NamespaceID:         primitives.MustParseUUID(namespaceID),
-			WorkflowID:          wid,
-			RunID:               primitives.MustParseUUID(rid),
+			NamespaceId:         primitives.MustParseUUID(namespaceID),
+			WorkflowId:          wid,
+			RunId:               primitives.MustParseUUID(rid),
 			Version:             currVersion,
 			LastReplicationInfo: repInfo,
 			BranchToken:         exeInfo.BranchToken,
@@ -554,8 +554,8 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 				taskTemplate.NewRunBranchToken = resp.State.ExecutionInfo.BranchToken
 			}
 			taskTemplate.Version = firstEvent.GetVersion()
-			taskTemplate.FirstEventID = firstEvent.GetEventId()
-			taskTemplate.NextEventID = lastEvent.GetEventId() + 1
+			taskTemplate.FirstEventId = firstEvent.GetEventId()
+			taskTemplate.NextEventId = lastEvent.GetEventId() + 1
 			task, _, err := history.GenerateReplicationTask(targets, taskTemplate, historyV2Mgr, nil, batch, common.IntPtr(shardID))
 			if err != nil {
 				ErrorAndExit("GenerateReplicationTask error", err)
@@ -564,7 +564,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 			if err != nil {
 				ErrorAndExit("Publish task error", err)
 			}
-			fmt.Printf("publish task successfully firstEventID %v, lastEventID %v \n", firstEvent.GetEventId(), lastEvent.GetEventId())
+			fmt.Printf("publish task successfully firstEventId %v, lastEventId %v \n", firstEvent.GetEventId(), lastEvent.GetEventId())
 		}
 
 		fmt.Printf("Done rereplicate for wid: %v, rid:%v \n", wid, rid)
@@ -741,7 +741,7 @@ func AdminMergeDLQ(c *cli.Context) {
 				fmt.Printf("cannot publish task %v to topic \n", idx)
 				ErrorAndExit("", err)
 			} else {
-				fmt.Printf("replication task sent: %v firstID %v, nextID %v \n", idx, t.GetHistoryTaskAttributes().GetFirstEventId(), t.GetHistoryTaskAttributes().GetNextEventId())
+				fmt.Printf("replication task sent: %v firstId %v, nextId %v \n", idx, t.GetHistoryTaskAttributes().GetFirstEventId(), t.GetHistoryTaskAttributes().GetNextEventId())
 			}
 		}
 	} else {

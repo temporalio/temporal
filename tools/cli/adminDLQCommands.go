@@ -62,7 +62,7 @@ func AdminGetDLQMessages(c *cli.Context) {
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		resp, err := adminClient.ReadDLQMessages(ctx, &adminservice.ReadDLQMessagesRequest{
 			Type:                  toQueueType(dlqType),
-			InclusiveEndMessageID: lastMessageID,
+			InclusiveEndMessageId: lastMessageID,
 			MaximumPageSize:       defaultPageSize,
 			NextPageToken:         paginationToken,
 		})
@@ -117,7 +117,7 @@ func AdminPurgeDLQMessages(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
 	if _, err := adminClient.PurgeDLQMessages(ctx, &adminservice.PurgeDLQMessagesRequest{
 		Type:                  toQueueType(dlqType),
-		InclusiveEndMessageID: lastMessageID,
+		InclusiveEndMessageId: lastMessageID,
 	}); err != nil {
 		ErrorAndExit("Failed to purge dlq", nil)
 	}
@@ -141,7 +141,7 @@ func AdminMergeDLQMessages(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
 	request := &adminservice.MergeDLQMessagesRequest{
 		Type:                  toQueueType(dlqType),
-		InclusiveEndMessageID: lastMessageID,
+		InclusiveEndMessageId: lastMessageID,
 		MaximumPageSize:       defaultPageSize,
 	}
 

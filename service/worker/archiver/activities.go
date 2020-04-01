@@ -148,10 +148,10 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		return errArchiveVisibilityNonRetriable
 	}
 	err = visibilityArchiver.Archive(ctx, URI, &archiverproto.ArchiveVisibilityRequest{
-		NamespaceID:        request.NamespaceID,
+		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
-		WorkflowID:         request.WorkflowID,
-		RunID:              request.RunID,
+		WorkflowId:         request.WorkflowID,
+		RunId:              request.RunID,
 		WorkflowTypeName:   request.WorkflowTypeName,
 		StartTimestamp:     request.StartTimestamp,
 		ExecutionTimestamp: request.ExecutionTimestamp,

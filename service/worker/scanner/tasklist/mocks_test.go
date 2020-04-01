@@ -57,7 +57,7 @@ func newMockTaskTable() *mockTaskTable {
 func (tbl *mockTaskListTable) generate(name string, idle bool) {
 	tl := p.PersistedTaskListInfo{
 		Data: &persistenceblobs.TaskListInfo{
-			NamespaceID: uuid.NewRandom(),
+			NamespaceId: uuid.NewRandom(),
 			Name:        name,
 			LastUpdated: types.TimestampNow(),
 		},
@@ -116,13 +116,13 @@ func (tbl *mockTaskTable) generate(count int, expired bool) {
 		exp, _ := types.TimestampProto(time.Now().Add(time.Hour))
 		ti := &persistenceblobs.AllocatedTaskInfo{
 			Data: &persistenceblobs.TaskInfo{
-				NamespaceID: tbl.namespaceID,
-				WorkflowID:  tbl.workflowID,
-				RunID:       tbl.runID,
-				ScheduleID:  3,
+				NamespaceId: tbl.namespaceID,
+				WorkflowId:  tbl.workflowID,
+				RunId:       tbl.runID,
+				ScheduleId:  3,
 				Expiry:      exp,
 			},
-			TaskID: tbl.nextTaskID,
+			TaskId: tbl.nextTaskID,
 		}
 		if expired {
 			ti.Data.Expiry, _ = types.TimestampProto(time.Unix(0, time.Now().UnixNano()-int64(time.Second*33)))
@@ -142,7 +142,7 @@ func (tbl *mockTaskTable) get(count int) []*persistenceblobs.AllocatedTaskInfo {
 func (tbl *mockTaskTable) deleteLessThan(id int64, limit int) int {
 	count := 0
 	for _, t := range tbl.tasks {
-		if t.TaskID <= id && count < limit {
+		if t.GetTaskId() <= id && count < limit {
 			count++
 			continue
 		}

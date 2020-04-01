@@ -102,10 +102,10 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		resp, err := s.GetTasks(namespaceID, tlName, p.TaskListTypeActivity, 100)
 		s.NoError(err)
 		s.Equal(1, len(resp.Tasks))
-		s.EqualValues(namespaceID, resp.Tasks[0].Data.NamespaceID)
-		s.Equal(workflowExecution.WorkflowId, resp.Tasks[0].Data.WorkflowID)
-		s.EqualValues(primitives.MustParseUUID(workflowExecution.RunId), resp.Tasks[0].Data.RunID)
-		s.Equal(sid, resp.Tasks[0].Data.ScheduleID)
+		s.EqualValues(namespaceID, resp.Tasks[0].Data.GetNamespaceId())
+		s.Equal(workflowExecution.WorkflowId, resp.Tasks[0].Data.GetWorkflowId())
+		s.EqualValues(primitives.MustParseUUID(workflowExecution.RunId), resp.Tasks[0].Data.GetRunId())
+		s.Equal(sid, resp.Tasks[0].Data.GetScheduleId())
 		cTime, err := types.TimestampFromProto(resp.Tasks[0].Data.CreatedTime)
 		s.NoError(err)
 		eTime, err := types.TimestampFromProto(resp.Tasks[0].Data.Expiry)
@@ -133,7 +133,7 @@ func (s *MatchingPersistenceSuite) TestGetDecisionTasks() {
 	s.NoError(err1)
 	s.NotNil(tasks1Response.Tasks, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 decision task.")
-	s.Equal(int64(5), tasks1Response.Tasks[0].Data.ScheduleID)
+	s.Equal(int64(5), tasks1Response.Tasks[0].Data.GetScheduleId())
 }
 
 // TestGetTasksWithNoMaxReadLevel test
@@ -179,7 +179,7 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 			s.NoError(err)
 			s.Equal(len(tc.taskIDs), len(response.Tasks), "wrong number of tasks")
 			for i := range tc.taskIDs {
-				s.Equal(tc.taskIDs[i], response.Tasks[i].TaskID, "wrong set of tasks")
+				s.Equal(tc.taskIDs[i], response.Tasks[i].GetTaskId(), "wrong set of tasks")
 			}
 		})
 	}
@@ -213,12 +213,12 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 
 	s.Equal(5, len(tasksWithID1), "Expected 5 activity tasks.")
 	for _, t := range tasksWithID1 {
-		s.EqualValues(namespaceID, t.Data.NamespaceID)
-		s.Equal(workflowExecution.WorkflowId, t.Data.WorkflowID)
-		s.EqualValues(primitives.MustParseUUID(workflowExecution.RunId), t.Data.RunID)
-		s.True(t.TaskID > 0)
+		s.EqualValues(namespaceID, t.Data.GetNamespaceId())
+		s.Equal(workflowExecution.WorkflowId, t.Data.GetWorkflowId())
+		s.EqualValues(primitives.MustParseUUID(workflowExecution.RunId), t.Data.GetRunId())
+		s.True(t.GetTaskId() > 0)
 
-		err2 := s.CompleteTask(namespaceID, taskList, p.TaskListTypeActivity, t.TaskID)
+		err2 := s.CompleteTask(namespaceID, taskList, p.TaskListTypeActivity, t.GetTaskId())
 		s.NoError(err2)
 	}
 }
@@ -254,17 +254,17 @@ func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 		output []int64
 	}{
 		{
-			taskID: tasks[5].TaskID,
+			taskID: tasks[5].GetTaskId(),
 			limit:  1,
-			output: []int64{tasks[1].TaskID, tasks[2].TaskID, tasks[3].TaskID, tasks[4].TaskID, tasks[5].TaskID},
+			output: []int64{tasks[1].GetTaskId(), tasks[2].GetTaskId(), tasks[3].GetTaskId(), tasks[4].GetTaskId(), tasks[5].GetTaskId()},
 		},
 		{
-			taskID: tasks[5].TaskID,
+			taskID: tasks[5].GetTaskId(),
 			limit:  2,
-			output: []int64{tasks[3].TaskID, tasks[4].TaskID, tasks[5].TaskID},
+			output: []int64{tasks[3].GetTaskId(), tasks[4].GetTaskId(), tasks[5].GetTaskId()},
 		},
 		{
-			taskID: tasks[5].TaskID,
+			taskID: tasks[5].GetTaskId(),
 			limit:  10,
 			output: []int64{},
 		},
@@ -287,7 +287,7 @@ func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 		s.Equal(remaining-len(tc.output), nRows, "expected only LIMIT number of rows to be deleted")
 		s.Equal(len(tc.output), len(resp.Tasks), "rangeCompleteTask deleted wrong set of tasks")
 		for i := range tc.output {
-			s.Equal(tc.output[i], resp.Tasks[i].TaskID)
+			s.Equal(tc.output[i], resp.Tasks[i].GetTaskId())
 		}
 		remaining = len(tc.output)
 	}
@@ -337,7 +337,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	s.True(ok)
 
 	taskListInfo := &persistenceblobs.TaskListInfo{
-		NamespaceID: namespaceID,
+		NamespaceId: namespaceID,
 		Name:        taskList,
 		TaskType:    p.TaskListTypeActivity,
 		AckLevel:    0,
@@ -374,7 +374,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskListSticky() {
 	s.EqualValues(p.TaskListKindSticky, tli.Data.Kind)
 
 	taskListInfo := &persistenceblobs.TaskListInfo{
-		NamespaceID: namespaceID,
+		NamespaceId: namespaceID,
 		Name:        taskList,
 		TaskType:    p.TaskListTypeDecision,
 		AckLevel:    0,
@@ -396,7 +396,7 @@ func (s *MatchingPersistenceSuite) deleteAllTaskList() {
 			it := i.Data
 			err = s.TaskMgr.DeleteTaskList(&p.DeleteTaskListRequest{
 				TaskList: &p.TaskListKey{
-					NamespaceID: it.NamespaceID,
+					NamespaceID: it.GetNamespaceId(),
 					Name:        it.Name,
 					TaskType:    it.TaskType,
 				},
@@ -440,7 +440,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 		s.NoError(err)
 
 		s.Equal(1, len(resp.Items))
-		s.EqualValues(namespaceID, resp.Items[0].Data.NamespaceID)
+		s.EqualValues(namespaceID, resp.Items[0].Data.GetNamespaceId())
 		s.Equal("list-task-list-test-tl0", resp.Items[0].Data.Name)
 		s.Equal(p.TaskListTypeActivity, resp.Items[0].Data.TaskType)
 		s.EqualValues(p.TaskListKindSticky, resp.Items[0].Data.Kind)
@@ -496,7 +496,7 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskList() {
 			s.NoError(err)
 			for _, i := range resp.Items {
 				it := i.Data
-				s.EqualValues(primitives.MustParseUUID(namespaceID), it.NamespaceID)
+				s.EqualValues(primitives.MustParseUUID(namespaceID), it.GetNamespaceId())
 				s.Equal(p.TaskListTypeActivity, it.TaskType)
 				s.Equal(p.TaskListKindNormal, it.Kind)
 				_, ok := listedNames[it.Name]

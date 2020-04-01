@@ -58,13 +58,13 @@ func TagLoggerWithArchiveHistoryRequestAndURI(logger log.Logger, request *Archiv
 // TagLoggerWithArchiveVisibilityRequestAndURI tags logger with fields in the archive visibility request and the URI
 func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archiver.ArchiveVisibilityRequest, URI string) log.Logger {
 	return logger.WithTags(
-		tag.ArchivalRequestNamespaceID(request.NamespaceID),
-		tag.ArchivalRequestNamespace(request.Namespace),
-		tag.ArchivalRequestWorkflowID(request.WorkflowID),
-		tag.ArchivalRequestRunID(request.RunID),
-		tag.ArchvialRequestWorkflowType(request.WorkflowTypeName),
-		tag.ArchivalRequestCloseTimestamp(request.CloseTimestamp),
-		tag.ArchivalRequestCloseStatus(request.CloseStatus.String()),
+		tag.ArchivalRequestNamespaceID(request.GetNamespaceId()),
+		tag.ArchivalRequestNamespace(request.GetNamespace()),
+		tag.ArchivalRequestWorkflowID(request.GetWorkflowId()),
+		tag.ArchivalRequestRunID(request.GetRunId()),
+		tag.ArchvialRequestWorkflowType(request.GetWorkflowTypeName()),
+		tag.ArchivalRequestCloseTimestamp(request.GetCloseTimestamp()),
+		tag.ArchivalRequestCloseStatus(request.GetCloseStatus().String()),
 		tag.ArchivalURI(URI),
 	)
 }
@@ -105,25 +105,25 @@ func ValidateGetRequest(request *GetHistoryRequest) error {
 
 // ValidateVisibilityArchivalRequest validates the archive visibility request
 func ValidateVisibilityArchivalRequest(request *archiver.ArchiveVisibilityRequest) error {
-	if request.NamespaceID == "" {
+	if request.GetNamespaceId() == "" {
 		return errEmptyNamespaceID
 	}
-	if request.Namespace == "" {
+	if request.GetNamespace() == "" {
 		return errEmptyNamespace
 	}
-	if request.WorkflowID == "" {
+	if request.GetWorkflowId() == "" {
 		return errEmptyWorkflowID
 	}
-	if request.RunID == "" {
+	if request.GetRunId() == "" {
 		return errEmptyRunID
 	}
-	if request.WorkflowTypeName == "" {
+	if request.GetWorkflowTypeName() == "" {
 		return errEmptyWorkflowTypeName
 	}
-	if request.StartTimestamp == 0 {
+	if request.GetStartTimestamp() == 0 {
 		return errEmptyStartTime
 	}
-	if request.CloseTimestamp == 0 {
+	if request.GetCloseTimestamp() == 0 {
 		return errEmptyCloseTime
 	}
 	return nil

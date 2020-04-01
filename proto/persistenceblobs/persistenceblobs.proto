@@ -35,22 +35,22 @@ message ImmutableClusterMetadata {
 
 message ActivityInfo {
     int64 version = 1;
-    int64 scheduledEventBatchID = 2;
+    int64 scheduledEventBatchId = 2;
     bytes scheduledEvent = 3;
     string scheduledEventEncoding = 4;
     int64 scheduledTimeNanos = 5;
-    int64 startedID = 6;
+    int64 startedId = 6;
     bytes startedEvent = 7;
     string startedEventEncoding = 8;
     int64 startedTimeNanos = 9;
-    string activityID = 10;
-    string requestID = 11;
+    string activityId = 10;
+    string requestId = 11;
     int32 scheduleToStartTimeoutSeconds = 12;
     int32 scheduleToCloseTimeoutSeconds = 13;
     int32 startToCloseTimeoutSeconds = 14;
     int32 heartbeatTimeoutSeconds = 15;
     bool cancelRequested = 16;
-    int64 cancelRequestID = 17;
+    int64 cancelRequestId = 17;
     int32 timerTaskStatus = 18;
     int32 attempt = 19;
     string taskList = 20;
@@ -65,16 +65,16 @@ message ActivityInfo {
     string retryLastFailureReason = 29;
     string retryLastWorkerIdentity = 30;
     bytes retryLastFailureDetails = 31;
-    bytes namespaceID = 32;
-    int64 scheduleID = 33;
+    bytes namespaceId = 32;
+    int64 scheduleId = 33;
     bytes lastHeartbeatDetails = 34;
     google.protobuf.Timestamp lastHeartbeatUpdatedTime = 35;
 
 }
 
 message ShardInfo {
-    int32 shardID = 1;
-    int64 rangeID = 2;
+    int32 shardId = 1;
+    int64 rangeId = 2;
     string owner = 3;
     int64 replicationAckLevel = 4;
     int64 transferAckLevel = 5;
@@ -89,67 +89,67 @@ message ShardInfo {
 }
 
 message ReplicationTaskInfo {
-    bytes namespaceID = 1;
-    string workflowID = 2;
-    bytes runID = 3;
+    bytes namespaceId = 1;
+    string workflowId = 2;
+    bytes runId = 3;
     int32 taskType = 4;
     int64 version = 5;
-    int64 firstEventID = 6;
-    int64 nextEventID = 7;
-    int64 scheduledID = 8;
+    int64 firstEventId = 6;
+    int64 nextEventId = 7;
+    int64 scheduledId = 8;
     int32 eventStoreVersion = 9;
     int32 newRunEventStoreVersion = 10;
     bytes branch_token = 11;
     map<string, replication.ReplicationInfo> lastReplicationInfo = 12;
     bytes newRunBranchToken = 13;
     bool resetWorkflow = 14;
-    int64 taskID = 15;
+    int64 taskId = 15;
 }
 
 message TimerTaskInfo {
-    bytes namespaceID = 1;
-    string workflowID = 2;
-    bytes runID = 3;
+    bytes namespaceId = 1;
+    string workflowId = 2;
+    bytes runId = 3;
     int32 taskType = 4;
     int32 timeoutType = 5;
     int64 version = 6;
     int64 scheduleAttempt = 7;
-    int64 eventID = 8;
-    int64 taskID = 9;
+    int64 eventId = 8;
+    int64 taskId = 9;
     google.protobuf.Timestamp VisibilityTimestamp = 10;
 }
 
 message TransferTaskInfo {
-    bytes namespaceID = 1;
-    string workflowID = 2;
-    bytes runID = 3;
+    bytes namespaceId = 1;
+    string workflowId = 2;
+    bytes runId = 3;
     int32 taskType = 4;
-    bytes targetNamespaceID = 5;
-    string targetWorkflowID = 6;
-    bytes targetRunID = 7;
+    bytes targetNamespaceId = 5;
+    string targetWorkflowId = 6;
+    bytes targetRunId = 7;
     string taskList = 8;
     bool targetChildWorkflowOnly = 9;
-    int64 scheduleID = 10;
+    int64 scheduleId = 10;
     int64 version = 11;
-    int64 taskID = 12;
+    int64 taskId = 12;
     google.protobuf.Timestamp visibilityTimestamp = 13;
     bool recordVisibility = 14;
 }
 
 // HistoryBranchRange represents a piece of range for a branch.
 message HistoryBranchRange {
-    // BranchID of original branch forked from.
-    bytes branchID = 1;
+    // BranchId of original branch forked from.
+    bytes branchId = 1;
     // Beginning node for the range, inclusive.
-    int64 beginNodeID = 2;
+    int64 beginNodeId = 2;
     // Ending node for the range, exclusive.
-    int64 endNodeID = 3;
+    int64 endNodeId = 3;
 }
 
 // For history persistence to serialize/deserialize branch details.
 message HistoryBranch {
-    bytes treeID = 1;
-    bytes branchID = 2;
+    bytes treeId = 1;
+    bytes branchId = 2;
     repeated HistoryBranchRange ancestors = 3;
 }
 
@@ -164,31 +164,29 @@ message HistoryTreeInfo {
 
 message TimerInfo {
     int64 version = 1;
-    int64 startedID = 2;
+    int64 startedId = 2;
     google.protobuf.Timestamp expiryTime = 3;
-    // taskID is a misleading variable, it actually serves
-    // the purpose of indicating whether a timer task is
-    // generated for this timer info
     int64 taskStatus = 4;
-    string timerID = 5;
+    // timerId serves the purpose of indicating whether a timer task is generated for this timer info.
+    string timerId = 5;
 }
 
 message TaskInfo {
-    bytes namespaceID = 1;
-    string workflowID = 2;
-    bytes runID = 3;
-    int64 scheduleID = 4;
+    bytes namespaceId = 1;
+    string workflowId = 2;
+    bytes runId = 3;
+    int64 scheduleId = 4;
     google.protobuf.Timestamp createdTime = 5;
     google.protobuf.Timestamp expiry = 6;
 }
 
 message AllocatedTaskInfo {
     TaskInfo data = 1;
-    int64 taskID = 8;
+    int64 taskId = 8;
 }
 
 message TaskListInfo {
-    bytes namespaceID = 1;
+    bytes namespaceId = 1;
     string name = 2;
     int32 taskType = 3;
     // {Normal, Sticky}
@@ -200,36 +198,36 @@ message TaskListInfo {
 
 message SignalInfo {
     int64 version = 1;
-    int64 initiatedEventBatchID = 2;
-    string requestID = 3;
+    int64 initiatedEventBatchId = 2;
+    string requestId = 3;
     string name = 4;
     bytes input = 5;
     bytes control = 6;
-    int64 initiatedID = 7;
+    int64 initiatedId = 7;
 }
 
 message RequestCancelInfo {
     int64 version = 1;
-    int64 initiatedEventBatchID = 2;
-    string cancelRequestID = 3;
-    int64 initiatedID = 4;
+    int64 initiatedEventBatchId = 2;
+    string cancelRequestId = 3;
+    int64 initiatedId = 4;
 }
 
 message WorkflowExecutionState {
-    string createRequestID = 1;
-    bytes runID = 2;
+    string createRequestId = 1;
+    bytes runId = 2;
     int32 state = 3;
     int32 closeStatus = 4;
 }
 
 message WorkflowExecutionInfo {
-    bytes namespaceID = 61;
-    string workflowID = 62;
-    bytes parentNamespaceID = 1;
-    string parentWorkflowID = 2;
-    bytes parentRunID = 3;
-    int64 initiatedID = 4;
-    int64 completionEventBatchID = 5;
+    bytes namespaceId = 61;
+    string workflowId = 62;
+    bytes parentNamespaceId = 1;
+    string parentWorkflowId = 2;
+    bytes parentRunId = 3;
+    int64 initiatedId = 4;
+    int64 completionEventBatchId = 5;
     bytes completionEvent = 6;
     string completionEventEncoding = 7;
     string taskList = 8;
@@ -240,22 +238,22 @@ message WorkflowExecutionInfo {
     int64 startVersion = 15;
     int64 currentVersion = 16;
     ReplicationData replicationData = 17;
-    int64 lastEventTaskID = 19;
-    int64 lastFirstEventID = 20;
+    int64 lastEventTaskId = 19;
+    int64 lastFirstEventId = 20;
     int64 lastProcessedEvent = 21;
     int64 startTimeNanos = 22;
     int64 lastUpdatedTimeNanos = 23;
     int64 decisionVersion = 24;
-    int64 decisionScheduleID = 25;
-    int64 decisionStartedID = 26;
+    int64 decisionScheduleId = 25;
+    int64 decisionStartedId = 26;
     int32 decisionTimeout = 27;
     int64 decisionAttempt = 28;
     int64 decisionStartedTimestampNanos = 29;
     int64 decisionScheduledTimestampNanos = 30;
     bool cancelRequested = 31;
     int64 decisionOriginalScheduledTimestampNanos = 32;
-    string decisionRequestID = 34;
-    string cancelRequestID = 35;
+    string decisionRequestId = 34;
+    string cancelRequestId = 35;
     string stickyTaskList = 36;
     int64 stickyScheduleToStartTimeout = 37;
     int64 retryAttempt = 38;
@@ -295,19 +293,19 @@ message Checksum {
 
 message ChildExecutionInfo {
     int64 version = 1;
-    int64 initiatedEventBatchID = 2;
-    int64 startedID = 3;
+    int64 initiatedEventBatchId = 2;
+    int64 startedId = 3;
     bytes initiatedEvent = 4;
     string initiatedEventEncoding = 5;
-    string startedWorkflowID = 6;
-    bytes startedRunID = 7;
+    string startedWorkflowId = 6;
+    bytes startedRunId = 7;
     bytes startedEvent = 8;
     string startedEventEncoding = 9;
-    string createRequestID = 10;
+    string createRequestId = 10;
     string namespace = 11;
     string workflowTypeName = 12;
     int32 parentClosePolicy = 13;
-    int64 initiatedID = 14;
+    int64 initiatedId = 14;
 }
 
 message NamespaceInfo {
@@ -338,7 +336,7 @@ message NamespaceInfo {
 // This information is used by replication protocol when applying events from remote clusters
 // only used in cassandra
 message ReplicationData {
-    int64 lastWriteEventID = 1;
+    int64 lastWriteEventId = 1;
     map<string, replication.ReplicationInfo> lastReplicationInfo = 2;
 }
 

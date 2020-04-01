@@ -51,7 +51,7 @@ message WorkflowExecutionInfo {
 }
 
 message PendingActivityInfo {
-    string activityID = 1;
+    string activityId = 1;
     common.ActivityType activityType = 2;
     enums.PendingActivityState state = 3;
     string heartbeatDetails = 4;

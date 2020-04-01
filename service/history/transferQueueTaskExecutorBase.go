@@ -81,9 +81,9 @@ func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TransferTaskInfo,
 ) (string, commonproto.WorkflowExecution) {
 
-	return primitives.UUIDString(task.NamespaceID), commonproto.WorkflowExecution{
-		WorkflowId: task.WorkflowID,
-		RunId:      primitives.UUIDString(task.RunID),
+	return primitives.UUIDString(task.GetNamespaceId()), commonproto.WorkflowExecution{
+		WorkflowId: task.GetWorkflowId(),
+		RunId:      primitives.UUIDString(task.GetRunId()),
 	}
 }
 
@@ -100,14 +100,14 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	}
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
-		NamespaceUUID:       primitives.UUIDString(task.TargetNamespaceID),
-		SourceNamespaceUUID: primitives.UUIDString(task.NamespaceID),
+		NamespaceId:       primitives.UUIDString(task.GetTargetNamespaceId()),
+		SourceNamespaceId: primitives.UUIDString(task.GetNamespaceId()),
 		Execution: &commonproto.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      primitives.UUIDString(task.RunID),
+			WorkflowId: task.GetWorkflowId(),
+			RunId:      primitives.UUIDString(task.GetRunId()),
 		},
 		TaskList:                      &commonproto.TaskList{Name: task.TaskList},
-		ScheduleId:                    task.ScheduleID,
+		ScheduleId:                    task.GetScheduleId(),
 		ScheduleToStartTimeoutSeconds: activityScheduleToStartTimeout,
 	})
 
@@ -128,13 +128,13 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 	}
 
 	_, err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
-		NamespaceUUID: primitives.UUIDString(task.NamespaceID),
+		NamespaceId: primitives.UUIDString(task.GetNamespaceId()),
 		Execution: &commonproto.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      primitives.UUIDString(task.RunID),
+			WorkflowId: task.GetWorkflowId(),
+			RunId:      primitives.UUIDString(task.GetRunId()),
 		},
 		TaskList:                      tasklist,
-		ScheduleId:                    task.ScheduleID,
+		ScheduleId:                    task.GetScheduleId(),
 		ScheduleToStartTimeoutSeconds: decisionScheduleToStartTimeout,
 	})
 	return err
@@ -169,8 +169,8 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	}
 
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
-		NamespaceUUID: namespaceID,
-		Namespace:     namespace,
+		NamespaceID: namespaceID,
+		Namespace:   namespace,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -211,8 +211,8 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	}
 
 	request := &persistence.UpsertWorkflowExecutionRequest{
-		NamespaceUUID: namespaceID,
-		Namespace:     namespace,
+		NamespaceID: namespaceID,
+		Namespace:   namespace,
 		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -272,8 +272,8 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 	if recordWorkflowClose {
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
-			NamespaceUUID: namespaceID,
-			Namespace:     namespace,
+			NamespaceID: namespaceID,
+			Namespace:   namespace,
 			Execution: commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,

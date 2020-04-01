@@ -288,13 +288,13 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 	namespaceID := c.String(FlagNamespaceID)
 
 	if namespaceID == "" && namespace == "" {
-		ErrorAndExit("At least namespaceID or namespace must be provided.", nil)
+		ErrorAndExit("At least namespaceId or namespace must be provided.", nil)
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
 	resp, err := d.describeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 		Name: namespace,
-		Uuid: namespaceID,
+		Id:   namespaceID,
 	})
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
@@ -303,11 +303,11 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 		ErrorAndExit(fmt.Sprintf("Namespace %s does not exist.", namespace), err)
 	}
 
-	var formatStr = "Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nStatus: %v\nRetentionInDays: %v\n" +
+	var formatStr = "Name: %v\nId: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nStatus: %v\nRetentionInDays: %v\n" +
 		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nHistoryArchivalStatus: %v\n"
 	descValues := []interface{}{
 		resp.NamespaceInfo.GetName(),
-		resp.NamespaceInfo.GetUuid(),
+		resp.NamespaceInfo.GetId(),
 		resp.NamespaceInfo.GetDescription(),
 		resp.NamespaceInfo.GetOwnerEmail(),
 		resp.NamespaceInfo.Data,

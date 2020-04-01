@@ -87,12 +87,12 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, lastWriteVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), lastWriteVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	namespaceCacheEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUIDString(task.NamespaceID))
+	namespaceCacheEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(primitives.UUIDString(task.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -154,9 +154,9 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 
 	req := &archiver.ClientRequest{
 		ArchiveRequest: &archiver.ArchiveRequest{
-			NamespaceID:          primitives.UUIDString(task.NamespaceID),
-			WorkflowID:           task.WorkflowID,
-			RunID:                primitives.UUIDString(task.RunID),
+			NamespaceID:          primitives.UUIDString(task.GetNamespaceId()),
+			WorkflowID:           task.GetWorkflowId(),
+			RunID:                primitives.UUIDString(task.GetRunId()),
 			Namespace:            namespaceCacheEntry.GetInfo().Name,
 			ShardID:              t.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
@@ -210,9 +210,9 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowExecution(
 
 	op := func() error {
 		return t.shard.GetExecutionManager().DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
-			NamespaceID: primitives.UUIDString(task.NamespaceID),
-			WorkflowID:  task.WorkflowID,
-			RunID:       primitives.UUIDString(task.RunID),
+			NamespaceID: primitives.UUIDString(task.GetNamespaceId()),
+			WorkflowID:  task.GetWorkflowId(),
+			RunID:       primitives.UUIDString(task.GetRunId()),
 		})
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
@@ -224,9 +224,9 @@ func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
 
 	op := func() error {
 		return t.shard.GetExecutionManager().DeleteCurrentWorkflowExecution(&persistence.DeleteCurrentWorkflowExecutionRequest{
-			NamespaceID: primitives.UUIDString(task.NamespaceID),
-			WorkflowID:  task.WorkflowID,
-			RunID:       primitives.UUIDString(task.RunID),
+			NamespaceID: primitives.UUIDString(task.GetNamespaceId()),
+			WorkflowID:  task.GetWorkflowId(),
+			RunID:       primitives.UUIDString(task.GetRunId()),
 		})
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
@@ -257,10 +257,10 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 
 	op := func() error {
 		request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
-			NamespaceID: primitives.UUIDString(task.NamespaceID),
-			WorkflowID:  task.WorkflowID,
-			RunID:       primitives.UUIDString(task.RunID),
-			TaskID:      task.TaskID,
+			NamespaceID: primitives.UUIDString(task.GetNamespaceId()),
+			WorkflowID:  task.GetWorkflowId(),
+			RunID:       primitives.UUIDString(task.GetRunId()),
+			TaskID:      task.GetTaskId(),
 		}
 		// TODO: expose GetVisibilityManager method on shardContext interface
 		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
@@ -272,8 +272,8 @@ func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TimerTaskInfo,
 ) (string, commonproto.WorkflowExecution) {
 
-	return primitives.UUIDString(task.NamespaceID), commonproto.WorkflowExecution{
-		WorkflowId: task.WorkflowID,
-		RunId:      primitives.UUIDString(task.RunID),
+	return primitives.UUIDString(task.GetNamespaceId()), commonproto.WorkflowExecution{
+		WorkflowId: task.GetWorkflowId(),
+		RunId:      primitives.UUIDString(task.GetRunId()),
 	}
 }

@@ -497,7 +497,7 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 			},
 			req: &historyservice.ReplicateEventsRequest{
 				SourceCluster: s.sourceCluster,
-				NamespaceUUID: replicationAttr.NamespaceId,
+				NamespaceId:   replicationAttr.NamespaceId,
 				WorkflowExecution: &commonproto.WorkflowExecution{
 					WorkflowId: replicationAttr.WorkflowId,
 					RunId:      replicationAttr.RunId,
