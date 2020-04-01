@@ -2791,13 +2791,13 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	switch wfIDReusePolicy {
 	case enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly:
 		if _, ok := FailedWorkflowStatuses[prevStatus]; !ok {
-			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: allow duplicate workflow ID if last run failed."
+			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: allow duplicate workflow Id if last run failed."
 			return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 		}
 	case enums.WorkflowIdReusePolicyAllowDuplicate:
 		// as long as workflow not running, so this case has no check
 	case enums.WorkflowIdReusePolicyRejectDuplicate:
-		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: reject duplicate workflow ID."
+		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
 		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 	default:
 		return serviceerror.NewInternal("Failed to process start workflow reuse policy.")

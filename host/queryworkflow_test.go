@@ -522,8 +522,8 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.Nil(queryResult.Resp.QueryResult)
-	s.NotNil(queryResult.Resp.QueryRejected.CloseStatus)
-	s.EqualValues(enums.WorkflowExecutionCloseStatusCompleted, queryResult.Resp.QueryRejected.CloseStatus)
+	s.NotNil(queryResult.Resp.QueryRejected.GetStatus())
+	s.Equal(enums.WorkflowExecutionStatusCompleted, queryResult.Resp.QueryRejected.GetStatus())
 
 	rejectCondition = enums.QueryRejectConditionNotCompletedCleanly
 	go queryWorkflowFn(queryType, rejectCondition)

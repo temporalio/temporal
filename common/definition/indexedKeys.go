@@ -33,7 +33,7 @@ const (
 	StartTime       = "StartTime"
 	ExecutionTime   = "ExecutionTime"
 	CloseTime       = "CloseTime"
-	CloseStatus     = "Status"
+	Status          = "Status"
 	HistoryLength   = "HistoryLength"
 	Encoding        = "Encoding"
 	KafkaKey        = "KafkaKey"
@@ -90,7 +90,7 @@ var systemIndexedKeys = map[string]interface{}{
 	StartTime:     enums.IndexedValueTypeInt,
 	ExecutionTime: enums.IndexedValueTypeInt,
 	CloseTime:     enums.IndexedValueTypeInt,
-	CloseStatus:   enums.IndexedValueTypeInt,
+	Status:        enums.IndexedValueTypeInt,
 	HistoryLength: enums.IndexedValueTypeInt,
 }
 

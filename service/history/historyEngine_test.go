@@ -537,7 +537,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.EqualValues(enums.WorkflowExecutionCloseStatusCompleted, resp.GetResponse().GetQueryRejected().CloseStatus)
+	s.Equal(enums.WorkflowExecutionStatusCompleted, resp.GetResponse().GetQueryRejected().GetStatus())
 }
 
 func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
@@ -571,7 +571,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.EqualValues(enums.WorkflowExecutionCloseStatusFailed, resp.GetResponse().GetQueryRejected().CloseStatus)
+	s.Equal(enums.WorkflowExecutionStatusFailed, resp.GetResponse().GetQueryRejected().GetStatus())
 
 	request = &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
@@ -585,7 +585,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.EqualValues(enums.WorkflowExecutionCloseStatusFailed, resp.GetResponse().GetQueryRejected().CloseStatus)
+	s.Equal(enums.WorkflowExecutionStatusFailed, resp.GetResponse().GetQueryRejected().GetStatus())
 }
 
 func (s *engineSuite) TestQueryWorkflow_FirstDecisionNotCompleted() {

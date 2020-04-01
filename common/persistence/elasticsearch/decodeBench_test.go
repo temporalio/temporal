@@ -83,7 +83,7 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 		startTime, _ := source[definition.StartTime].(json.Number).Int64()
 		executionTime, _ := source[definition.StartTime].(json.Number).Int64()
 		closeTime, _ := source[definition.CloseTime].(json.Number).Int64()
-		closeStatus, _ := source[definition.CloseStatus].(json.Number).Int64()
+		status, _ := source[definition.Status].(json.Number).Int64()
 		historyLen, _ := source[definition.HistoryLength].(json.Number).Int64()
 
 		record := &p.VisibilityWorkflowExecutionInfo{
@@ -95,8 +95,8 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 			Memo:          p.NewDataBlob([]byte(source[definition.Memo].(string)), common.EncodingType(source[definition.Encoding].(string))),
 		}
 		record.CloseTime = time.Unix(0, closeTime)
-		status := enums.WorkflowExecutionCloseStatus(closeStatus)
-		record.Status = &status
+		statusEnum := enums.WorkflowExecutionStatus(status)
+		record.Status = &statusEnum
 		record.HistoryLength = historyLen
 	}
 }

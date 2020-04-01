@@ -72,7 +72,7 @@ var (
 	testWorkflowType = "test-wf-type"
 	testWorkflowID   = "test-wid"
 	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
-	testCloseStatus  = enums.WorkflowExecutionCloseStatusFailed
+	testCloseStatus  = enums.WorkflowExecutionStatusFailed
 
 	testRequest = &p.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceID,
@@ -177,7 +177,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	memoBytes := []byte(`test bytes`)
 	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeProto3)
 	request.CloseTimestamp = int64(999)
-	request.Status = enums.WorkflowExecutionCloseStatusTerminated
+	request.Status = enums.WorkflowExecutionStatusTerminated
 	request.HistoryLength = int64(20)
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
 		fields := input.Fields
@@ -651,7 +651,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	s.Equal("TestWorkflowExecute", info.TypeName)
 	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
 	s.Equal(int64(1547596872817380000), info.CloseTime.UnixNano())
-	s.EqualValues(enums.WorkflowExecutionCloseStatusCompleted, *info.Status)
+	s.EqualValues(enums.WorkflowExecutionStatusCompleted, *info.Status)
 	s.Equal(int64(29), info.HistoryLength)
 
 	// test for error case
