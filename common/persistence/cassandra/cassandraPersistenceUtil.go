@@ -502,11 +502,10 @@ func createExecution(
 			checksumDatablob.Data,
 			checksumDatablob.Encoding.String())
 	} else if replicationState != nil {
-		lastReplicationInfo := make(map[string]map[string]interface{})
-		for k, v := range replicationState.LastReplicationInfo {
-			lastReplicationInfo[k] = createReplicationInfoMap(v)
+		replicationVersions, err := serialization.ReplicationVersionsToBlob(replicationState.GenerateVersionProto())
+		if err != nil {
+			return err
 		}
-
 		batch.Query(templateCreateWorkflowExecutionWithReplicationQuery,
 			shardID,
 			namespaceID,
@@ -517,11 +516,8 @@ func createExecution(
 			executionDatablob.Encoding.String(),
 			executionStateDatablob.Data,
 			executionStateDatablob.Encoding.String(),
-			replicationState.CurrentVersion,
-			replicationState.StartVersion,
-			replicationState.LastWriteVersion,
-			replicationState.LastWriteEventID,
-			lastReplicationInfo,
+			replicationVersions.Data,
+			replicationVersions.Encoding.String(),
 			executionInfo.NextEventID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
@@ -620,21 +616,17 @@ func updateExecution(
 			rowTypeExecutionTaskID,
 			condition)
 	} else if replicationState != nil {
-		lastReplicationInfo := make(map[string]map[string]interface{})
-		for k, v := range replicationState.LastReplicationInfo {
-			lastReplicationInfo[k] = createReplicationInfoMap(v)
+		replicationVersions, err := serialization.ReplicationVersionsToBlob(replicationState.GenerateVersionProto())
+		if err != nil {
+			return err
 		}
-
 		batch.Query(templateUpdateWorkflowExecutionWithReplicationQuery,
 			executionDatablob.Data,
 			executionDatablob.Encoding.String(),
 			executionStateDatablob.Data,
 			executionStateDatablob.Encoding.String(),
-			replicationState.CurrentVersion,
-			replicationState.StartVersion,
-			replicationState.LastWriteVersion,
-			replicationState.LastWriteEventID,
-			lastReplicationInfo,
+			replicationVersions.Data,
+			replicationVersions.Encoding.String(),
 			executionInfo.NextEventID,
 			checksumDatablob.Data,
 			checksumDatablob.Encoding.String(),
@@ -995,14 +987,24 @@ func createOrUpdateCurrentExecution(
 		return err
 	}
 
+	replicationVersions, err := serialization.ReplicationVersionsToBlob(
+		&persistenceblobs.ReplicationVersions{
+			StartVersion: &types.Int64Value{Value: startVersion},
+			LastWriteVersion: &types.Int64Value{Value: startVersion},
+		})
+
+	if err != nil {
+		return err
+	}
+
 	switch createMode {
 	case p.CreateWorkflowModeContinueAsNew:
 		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 			runID,
 			executionStateDatablob.Data,
-			executionStateDatablob.Encoding,
-			startVersion,
-			lastWriteVersion,
+			executionStateDatablob.Encoding.String(),
+			replicationVersions.Data,
+			replicationVersions.Encoding.String(),
 			lastWriteVersion,
 			state,
 			shardID,
@@ -1018,9 +1020,9 @@ func createOrUpdateCurrentExecution(
 		batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
 			runID,
 			executionStateDatablob.Data,
-			executionStateDatablob.Encoding,
-			startVersion,
-			lastWriteVersion,
+			executionStateDatablob.Encoding.String(),
+			replicationVersions.Data,
+			replicationVersions.Encoding.String(),
 			lastWriteVersion,
 			state,
 			shardID,
@@ -1045,9 +1047,9 @@ func createOrUpdateCurrentExecution(
 			rowTypeExecutionTaskID,
 			runID,
 			executionStateDatablob.Data,
-			executionStateDatablob.Encoding,
-			startVersion,
-			lastWriteVersion,
+			executionStateDatablob.Encoding.String(),
+			replicationVersions.Data,
+			replicationVersions.Encoding.String(),
 			lastWriteVersion,
 			state,
 		)
@@ -1537,32 +1539,26 @@ func updateBufferedEvents(
 	}
 }
 
-func createReplicationState(
-	result map[string]interface{},
-) *p.ReplicationState {
-
-	if len(result) == 0 {
+func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv *persistenceblobs.ReplicationVersions) *p.ReplicationState {
+	if rv == nil && wei.ReplicationData == nil {
 		return nil
 	}
 
 	info := &p.ReplicationState{}
-	for k, v := range result {
-		switch k {
-		case "current_version":
-			info.CurrentVersion = v.(int64)
-		case "start_version":
-			info.StartVersion = v.(int64)
-		case "last_write_version":
-			info.LastWriteVersion = v.(int64)
-		case "last_write_event_id":
-			info.LastWriteEventID = v.(int64)
-		case "last_replication_info":
-			info.LastReplicationInfo = make(map[string]*replication.ReplicationInfo)
-			replicationInfoMap := v.(map[string]map[string]interface{})
-			for key, value := range replicationInfoMap {
-				info.LastReplicationInfo[key] = createReplicationInfo(value)
-			}
-		}
+	info.CurrentVersion = wei.CurrentVersion
+
+	if rv != nil {
+		info.StartVersion = rv.GetStartVersion().GetValue()
+		info.LastWriteVersion = rv.GetLastWriteVersion().GetValue()
+	}
+
+	if wei.ReplicationData != nil {
+		info.LastReplicationInfo = wei.ReplicationData.LastReplicationInfo
+		info.LastWriteEventID = wei.ReplicationData.LastWriteEventId
+	}
+
+	if info.LastReplicationInfo == nil {
+		info.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, 0)
 	}
 
 	return info

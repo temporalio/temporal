@@ -238,8 +238,7 @@ message WorkflowExecutionInfo {
     bytes executionContext = 12;
     int64 startVersion = 15;
     int64 currentVersion = 16;
-    google.protobuf.Int64Value lastWriteEventId = 17;
-    map<string, replication.ReplicationInfo> lastReplicationInfo = 18;
+    ReplicationData replicationData = 17;
     int64 lastEventTaskId = 19;
     int64 lastFirstEventId = 20;
     int64 lastProcessedEvent = 21;
@@ -332,4 +331,17 @@ message NamespaceInfo {
     string historyArchivalURI = 19;
     int32 visibilityArchivalStatus = 20;
     string visibilityArchivalURI = 21;
+}
+
+// ReplicationData represents mutable state information for global domains.
+// This information is used by replication protocol when applying events from remote clusters
+// only used in cassandra
+message ReplicationData {
+    int64 lastWriteEventId = 1;
+    map<string, replication.ReplicationInfo> lastReplicationInfo = 2;
+}
+
+message ReplicationVersions {
+    google.protobuf.Int64Value startVersion = 15;
+    google.protobuf.Int64Value lastWriteVersion = 16;
 }

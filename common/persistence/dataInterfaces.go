@@ -2324,6 +2324,13 @@ func NewGetReplicationTasksFromDLQRequest(
 	}
 }
 
+func (r *ReplicationState) GenerateVersionProto() *persistenceblobs.ReplicationVersions {
+	return &persistenceblobs.ReplicationVersions{
+		StartVersion: &types.Int64Value{Value: r.StartVersion},
+		LastWriteVersion: &types.Int64Value{ Value: r.LastWriteVersion},
+	}
+}
+
 type ServiceType int
 
 const (
