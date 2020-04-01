@@ -61,7 +61,7 @@ const (
 	WorkflowType = "WorkflowType"
 	CloseTime    = "CloseTime"
 	// Field name can't be just "Status" because it is reserved keyword in MySQL parser.
-	CloseStatus = "CloseStatus"
+	ExecutionStatus = "ExecutionStatus"
 )
 
 const (
@@ -172,13 +172,13 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			return nil
 		}
 		parsedQuery.workflowTypeName = common.StringPtr(val)
-	case CloseStatus:
+	case ExecutionStatus:
 		val, err := extractStringValue(valStr)
 		if err != nil {
 			return err
 		}
 		if op != "=" {
-			return fmt.Errorf("only operation = is support for %s", CloseStatus)
+			return fmt.Errorf("only operation = is support for %s", ExecutionStatus)
 		}
 		status, err := convertStatusStr(val)
 		if err != nil {

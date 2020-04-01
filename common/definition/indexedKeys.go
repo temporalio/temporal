@@ -26,9 +26,9 @@ import (
 
 // valid indexed fields on ES
 const (
-	NamespaceID     = "NamespaceID"
-	WorkflowID      = "WorkflowID"
-	RunID           = "RunID"
+	NamespaceID     = "NamespaceId"
+	WorkflowID      = "WorkflowId"
+	RunID           = "RunId"
 	WorkflowType    = "WorkflowType"
 	StartTime       = "StartTime"
 	ExecutionTime   = "ExecutionTime"
