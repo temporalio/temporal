@@ -162,6 +162,13 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			},
 		},
 		{
+			query:     "CloseStatus = 'TIMED_OUT'",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				closeStatus: shared.WorkflowExecutionCloseStatusTimedOut.Ptr(),
+			},
+		},
+		{
 			query:     "CloseStatus = 'Failed' and CloseStatus = \"Failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
@@ -189,6 +196,17 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 		},
 		{
 			query:     "CloseStatus > \"Failed\"",
+			expectErr: true,
+		},
+		{
+			query:     "CloseStatus = 1",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				closeStatus: shared.WorkflowExecutionCloseStatusFailed.Ptr(),
+			},
+		},
+		{
+			query:     "CloseStatus = 10",
 			expectErr: true,
 		},
 	}
