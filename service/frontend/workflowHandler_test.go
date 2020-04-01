@@ -1104,7 +1104,7 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	}
 	ctx := context.Background()
 
-	query := "WorkflowID = 'wid'"
+	query := "WorkflowId = 'wid'"
 	listRequest.Query = query
 	_, err := wh.ListWorkflowExecutions(ctx, listRequest)
 	s.NoError(err)
@@ -1164,7 +1164,7 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 	}
 	ctx := context.Background()
 
-	query := "WorkflowID = 'wid'"
+	query := "WorkflowId = 'wid'"
 	countRequest.Query = query
 	_, err := wh.CountWorkflowExecutions(ctx, countRequest)
 	s.NoError(err)
