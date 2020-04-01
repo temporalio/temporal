@@ -1500,7 +1500,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	resp, err := s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
 	s.Error(err)
-	s.True(strings.Contains(err.Error(), "reject duplicate workflow ID"))
+	s.True(strings.Contains(err.Error(), "reject duplicate workflow Id"))
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
@@ -1509,7 +1509,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
 	s.Error(err)
-	s.True(strings.Contains(err.Error(), "allow duplicate workflow ID if last run failed"))
+	s.True(strings.Contains(err.Error(), "allow duplicate workflow Id if last run failed"))
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test policy WorkflowIdReusePolicyAllowDuplicate
