@@ -88,9 +88,6 @@ type (
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
-
-		// Remove corrupted task
-		DeleteTask(request *DeleteTaskRequest) error
 	}
 
 	// HistoryStore is to manager workflow history events

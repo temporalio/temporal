@@ -1,17 +1,17 @@
 // The MIT License (MIT)
-// 
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -31,14 +31,15 @@ import (
 	json "encoding/json"
 	errors "errors"
 	fmt "fmt"
+	math "math"
+	strconv "strconv"
+	strings "strings"
+
 	multierr "go.uber.org/multierr"
 	ptr "go.uber.org/thriftrw/ptr"
 	thriftreflect "go.uber.org/thriftrw/thriftreflect"
 	wire "go.uber.org/thriftrw/wire"
 	zapcore "go.uber.org/zap/zapcore"
-	math "math"
-	strconv "strconv"
-	strings "strings"
 )
 
 type AccessDeniedError struct {
@@ -34629,9 +34630,10 @@ func (v *RegisterDomainRequest) IsSetVisibilityArchivalURI() bool {
 }
 
 type RemoveTaskRequest struct {
-	ShardID *int32 `json:"shardID,omitempty"`
-	Type    *int32 `json:"type,omitempty"`
-	TaskID  *int64 `json:"taskID,omitempty"`
+	ShardID             *int32 `json:"shardID,omitempty"`
+	Type                *int32 `json:"type,omitempty"`
+	TaskID              *int64 `json:"taskID,omitempty"`
+	VisibilityTimestamp *int64 `json:"visibilityTimestamp,omitempty"`
 }
 
 // ToWire translates a RemoveTaskRequest struct into a Thrift-level intermediate
@@ -34651,7 +34653,7 @@ type RemoveTaskRequest struct {
 //   }
 func (v *RemoveTaskRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -34679,6 +34681,14 @@ func (v *RemoveTaskRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.VisibilityTimestamp != nil {
+		w, err = wire.NewValueI64(*(v.VisibilityTimestamp)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
 		i++
 	}
 
@@ -34737,6 +34747,16 @@ func (v *RemoveTaskRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.VisibilityTimestamp = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -34750,7 +34770,7 @@ func (v *RemoveTaskRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [4]string
 	i := 0
 	if v.ShardID != nil {
 		fields[i] = fmt.Sprintf("ShardID: %v", *(v.ShardID))
@@ -34762,6 +34782,10 @@ func (v *RemoveTaskRequest) String() string {
 	}
 	if v.TaskID != nil {
 		fields[i] = fmt.Sprintf("TaskID: %v", *(v.TaskID))
+		i++
+	}
+	if v.VisibilityTimestamp != nil {
+		fields[i] = fmt.Sprintf("VisibilityTimestamp: %v", *(v.VisibilityTimestamp))
 		i++
 	}
 
@@ -34787,6 +34811,9 @@ func (v *RemoveTaskRequest) Equals(rhs *RemoveTaskRequest) bool {
 	if !_I64_EqualsPtr(v.TaskID, rhs.TaskID) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.VisibilityTimestamp, rhs.VisibilityTimestamp) {
+		return false
+	}
 
 	return true
 }
@@ -34805,6 +34832,9 @@ func (v *RemoveTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err err
 	}
 	if v.TaskID != nil {
 		enc.AddInt64("taskID", *v.TaskID)
+	}
+	if v.VisibilityTimestamp != nil {
+		enc.AddInt64("visibilityTimestamp", *v.VisibilityTimestamp)
 	}
 	return err
 }
@@ -34852,6 +34882,21 @@ func (v *RemoveTaskRequest) GetTaskID() (o int64) {
 // IsSetTaskID returns true if TaskID is not nil.
 func (v *RemoveTaskRequest) IsSetTaskID() bool {
 	return v != nil && v.TaskID != nil
+}
+
+// GetVisibilityTimestamp returns the value of VisibilityTimestamp if it is set or its
+// zero value if it is unset.
+func (v *RemoveTaskRequest) GetVisibilityTimestamp() (o int64) {
+	if v != nil && v.VisibilityTimestamp != nil {
+		return *v.VisibilityTimestamp
+	}
+
+	return
+}
+
+// IsSetVisibilityTimestamp returns true if VisibilityTimestamp is not nil.
+func (v *RemoveTaskRequest) IsSetVisibilityTimestamp() bool {
+	return v != nil && v.VisibilityTimestamp != nil
 }
 
 type ReplicationInfo struct {

@@ -109,7 +109,38 @@ func newTimerQueueStandbyProcessor(
 			shard.GetConfig(),
 		),
 	}
-	processor.timerQueueProcessorBase.timerProcessor = processor
+
+	timerQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
+		return newTimerQueueTask(
+			shard,
+			taskInfo,
+			historyService.metricsClient.Scope(
+				getTimerTaskMetricScope(taskInfo.GetTaskType(), false),
+			),
+			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+			timerTaskFilter,
+			processor.taskExecutor,
+			redispatchQueue,
+			shard.GetTimeSource(),
+			shard.GetConfig().TimerTaskMaxRetryCount,
+			timerQueueAckMgr,
+		)
+	}
+
+	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
+		metrics.TimerStandbyQueueProcessorScope,
+		shard,
+		historyService,
+		processor,
+		queueTaskProcessor,
+		timerQueueAckMgr,
+		redispatchQueue,
+		timerQueueTaskInitializer,
+		timerGate,
+		shard.GetConfig().TimerProcessorMaxPollRPS,
+		logger,
+	)
+
 	return processor
 }
 

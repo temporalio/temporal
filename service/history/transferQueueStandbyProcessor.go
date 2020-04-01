@@ -115,8 +115,46 @@ func newTransferQueueStandbyProcessor(
 		),
 	}
 
-	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(clusterName), logger)
-	queueProcessorBase := newQueueProcessorBase(clusterName, shard, options, processor, queueAckMgr, historyService.historyCache, logger)
+	queueAckMgr := newQueueAckMgr(
+		shard,
+		options,
+		processor,
+		shard.GetTransferClusterAckLevel(clusterName),
+		logger,
+	)
+
+	redispatchQueue := collection.NewConcurrentQueue()
+
+	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
+		return newTransferQueueTask(
+			shard,
+			taskInfo,
+			historyService.metricsClient.Scope(
+				getTransferTaskMetricsScope(taskInfo.GetTaskType(), false),
+			),
+			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+			transferTaskFilter,
+			processor.taskExecutor,
+			redispatchQueue,
+			shard.GetTimeSource(),
+			options.MaxRetryCount,
+			queueAckMgr,
+		)
+	}
+
+	queueProcessorBase := newQueueProcessorBase(
+		clusterName,
+		shard,
+		options,
+		processor,
+		queueTaskProcessor,
+		queueAckMgr,
+		redispatchQueue,
+		historyService.historyCache,
+		transferQueueTaskInitializer,
+		logger,
+	)
+
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 

@@ -20,8 +20,10 @@
 
 package mocks
 
-import "github.com/uber/cadence/common/persistence"
-import "github.com/stretchr/testify/mock"
+import (
+	"github.com/stretchr/testify/mock"
+	"github.com/uber/cadence/common/persistence"
+)
 
 // ExecutionManager mock implementation
 type ExecutionManager struct {
@@ -145,20 +147,6 @@ func (_m *ExecutionManager) ResetWorkflowExecution(request *persistence.ResetWor
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(*persistence.ResetWorkflowExecutionRequest) error); ok {
-		r0 = rf(request)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// DeleteTask provides a mock function with given fields: request
-func (_m *ExecutionManager) DeleteTask(request *persistence.DeleteTaskRequest) error {
-	ret := _m.Called(request)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(executionRequest *persistence.DeleteTaskRequest) error); ok {
 		r0 = rf(request)
 	} else {
 		r0 = ret.Error(0)

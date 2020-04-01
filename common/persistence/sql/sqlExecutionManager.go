@@ -770,12 +770,6 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 	return nil
 }
 
-func (m *sqlExecutionManager) DeleteTask(request *p.DeleteTaskRequest) error {
-	//TODO: This needs implement when we use sql for tasks.
-	// 		https://github.com/uber/cadence/issues/2479
-	return nil
-}
-
 func (m *sqlExecutionManager) DeleteWorkflowExecution(
 	request *p.DeleteWorkflowExecutionRequest,
 ) error {

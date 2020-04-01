@@ -27,20 +27,18 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/uber/cadence/common/auth"
-
-	"github.com/uber/cadence/common/service/config"
-
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/auth"
 	"github.com/uber/cadence/common/codec"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/persistence"
 	cassp "github.com/uber/cadence/common/persistence/cassandra"
+	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/tools/cassandra"
 )
 
@@ -364,18 +362,23 @@ func AdminGetShardID(c *cli.Context) {
 func AdminRemoveTask(c *cli.Context) {
 	adminClient := cFactory.ServerAdminClient(c)
 
-	sid := getRequiredIntOption(c, FlagShardID)
-	taskID := getRequiredInt64Option(c, FlagRemoveTaskID)
-	typeID := getRequiredIntOption(c, FlagRemoveTypeID)
+	shardID := getRequiredIntOption(c, FlagShardID)
+	taskID := getRequiredInt64Option(c, FlagTaskID)
+	typeID := getRequiredIntOption(c, FlagTaskType)
+	var visibilityTimestamp int64
+	if common.TaskType(typeID) == common.TaskTypeTimer {
+		visibilityTimestamp = getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
+	}
 
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	req := &shared.RemoveTaskRequest{}
-
-	req.ShardID = common.Int32Ptr(int32(sid))
-	req.TaskID = common.Int64Ptr(int64(taskID))
-	req.Type = common.Int32Ptr(int32(typeID))
+	req := &shared.RemoveTaskRequest{
+		ShardID:             common.Int32Ptr(int32(shardID)),
+		Type:                common.Int32Ptr(int32(typeID)),
+		TaskID:              common.Int64Ptr(taskID),
+		VisibilityTimestamp: common.Int64Ptr(visibilityTimestamp),
+	}
 
 	err := adminClient.RemoveTask(ctx, req)
 	if err != nil {

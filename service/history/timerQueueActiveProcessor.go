@@ -107,6 +107,36 @@ func newTimerQueueActiveProcessor(
 		historyService.metricsClient,
 		shard.GetConfig(),
 	)
+	timerQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
+		return newTimerQueueTask(
+			shard,
+			taskInfo,
+			historyService.metricsClient.Scope(
+				getTimerTaskMetricScope(taskInfo.GetTaskType(), true),
+			),
+			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+			timerTaskFilter,
+			processor.taskExecutor,
+			redispatchQueue,
+			shard.GetTimeSource(),
+			shard.GetConfig().TimerTaskMaxRetryCount,
+			timerQueueAckMgr,
+		)
+	}
+	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
+		metrics.TimerActiveQueueProcessorScope,
+		shard,
+		historyService,
+		processor,
+		queueTaskProcessor,
+		timerQueueAckMgr,
+		redispatchQueue,
+		timerQueueTaskInitializer,
+		timerGate,
+		shard.GetConfig().TimerProcessorMaxPollRPS,
+		logger,
+	)
+
 	return processor
 }
 
@@ -197,6 +227,36 @@ func newTimerQueueFailoverProcessor(
 		historyService.metricsClient,
 		shard.GetConfig(),
 	)
+	timerQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
+		return newTimerQueueTask(
+			shard,
+			taskInfo,
+			historyService.metricsClient.Scope(
+				getTimerTaskMetricScope(taskInfo.GetTaskType(), true),
+			),
+			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+			timerTaskFilter,
+			processor.taskExecutor,
+			redispatchQueue,
+			shard.GetTimeSource(),
+			shard.GetConfig().TimerTaskMaxRetryCount,
+			timerQueueAckMgr,
+		)
+	}
+	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
+		metrics.TimerActiveQueueProcessorScope,
+		shard,
+		historyService,
+		processor,
+		queueTaskProcessor,
+		timerQueueAckMgr,
+		redispatchQueue,
+		timerQueueTaskInitializer,
+		timerGate,
+		shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
+		logger,
+	)
+
 	return updateShardAckLevel, processor
 }
 
