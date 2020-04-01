@@ -1307,7 +1307,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 	err = s.timerQueueActiveTaskExecutor.execute(timerTask, true)
 	s.NoError(err)
 
-	state, closeStatus := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetWorkflowStateCloseStatus()
+	state, closeStatus := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetWorkflowStateStatus()
 	s.Equal(persistence.WorkflowStateCompleted, state)
 	s.EqualValues(persistence.WorkflowCloseStatusContinuedAsNew, closeStatus)
 }
@@ -1366,7 +1366,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cr
 	err = s.timerQueueActiveTaskExecutor.execute(timerTask, true)
 	s.NoError(err)
 
-	state, closeStatus := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetWorkflowStateCloseStatus()
+	state, closeStatus := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetWorkflowStateStatus()
 	s.Equal(persistence.WorkflowStateCompleted, state)
 	s.EqualValues(persistence.WorkflowCloseStatusContinuedAsNew, closeStatus)
 }

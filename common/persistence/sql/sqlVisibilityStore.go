@@ -86,7 +86,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRe
 		ExecutionTime:    time.Unix(0, request.ExecutionTimestamp),
 		WorkflowTypeName: request.WorkflowTypeName,
 		CloseTime:        &closeTime,
-		CloseStatus:      common.Int32Ptr(int32(request.Status)),
+		Status:           common.Int32Ptr(int32(request.Status)),
 		HistoryLength:    &request.HistoryLength,
 		Memo:             request.Memo.Data,
 		Encoding:         string(request.Memo.GetEncoding()),
@@ -273,8 +273,8 @@ func (s *sqlVisibilityStore) rowToInfo(row *sqlplugin.VisibilityRow) *p.Visibili
 		ExecutionTime: row.ExecutionTime,
 		Memo:          p.NewDataBlob(row.Memo, common.EncodingType(row.Encoding)),
 	}
-	if row.CloseStatus != nil {
-		status := enums.WorkflowExecutionCloseStatus(*row.CloseStatus)
+	if row.Status != nil {
+		status := enums.WorkflowExecutionStatus(*row.Status)
 		info.Status = &status
 		info.CloseTime = *row.CloseTime
 		info.HistoryLength = *row.HistoryLength

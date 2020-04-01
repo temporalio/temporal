@@ -47,43 +47,43 @@ var (
 	}
 )
 
-// ValidateCreateWorkflowStateCloseStatus validate workflow state and close status
-func ValidateCreateWorkflowStateCloseStatus(
+// ValidateCreateWorkflowStateStatus validate workflow state and close status
+func ValidateCreateWorkflowStateStatus(
 	state int,
-	closeStatus enums.WorkflowExecutionCloseStatus,
+	status enums.WorkflowExecutionStatus,
 ) error {
 
 	if err := validateWorkflowState(state); err != nil {
 		return err
 	}
-	if err := validateWorkflowCloseStatus(closeStatus); err != nil {
+	if err := validateWorkflowStatus(status); err != nil {
 		return err
 	}
 
 	// validate workflow state & close status
-	if state == WorkflowStateCompleted || closeStatus != WorkflowCloseStatusRunning {
-		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or close status: %v", state, closeStatus))
+	if state == WorkflowStateCompleted || status != WorkflowCloseStatusRunning {
+		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or close status: %v", state, status))
 	}
 	return nil
 }
 
-// ValidateUpdateWorkflowStateCloseStatus validate workflow state and close status
-func ValidateUpdateWorkflowStateCloseStatus(
+// ValidateUpdateWorkflowStateStatus validate workflow state and close status
+func ValidateUpdateWorkflowStateStatus(
 	state int,
-	closeStatus enums.WorkflowExecutionCloseStatus,
+	status enums.WorkflowExecutionStatus,
 ) error {
 
 	if err := validateWorkflowState(state); err != nil {
 		return err
 	}
-	if err := validateWorkflowCloseStatus(closeStatus); err != nil {
+	if err := validateWorkflowStatus(status); err != nil {
 		return err
 	}
 
 	// validate workflow state & close status
-	if closeStatus == WorkflowCloseStatusRunning {
+	if status == WorkflowCloseStatusRunning {
 		if state == WorkflowStateCompleted {
-			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, closeStatus))
+			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	} else {
 		// WorkflowCloseStatusCompleted
@@ -93,7 +93,7 @@ func ValidateUpdateWorkflowStateCloseStatus(
 		// WorkflowCloseStatusContinuedAsNew
 		// WorkflowCloseStatusTimedOut
 		if state != WorkflowStateCompleted {
-			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, closeStatus))
+			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	}
 	return nil
@@ -111,37 +111,14 @@ func validateWorkflowState(
 	return nil
 }
 
-// validateWorkflowCloseStatus validate workflow close status
-func validateWorkflowCloseStatus(
-	closeStatus enums.WorkflowExecutionCloseStatus,
+// validateWorkflowStatus validate workflow close status
+func validateWorkflowStatus(
+	status enums.WorkflowExecutionStatus,
 ) error {
 
-	if _, ok := validWorkflowCloseStatuses[int32(closeStatus)]; !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow close status: %v", closeStatus))
+	if _, ok := validWorkflowCloseStatuses[int32(status)]; !ok {
+		return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow close status: %v", status))
 	}
 
 	return nil
-}
-
-// ToProtoWorkflowExecutionCloseStatus convert persistence representation of close status to thrift representation
-func ToProtoWorkflowExecutionCloseStatus(
-	closeStatus int,
-) enums.WorkflowExecutionCloseStatus {
-
-	switch closeStatus {
-	case WorkflowCloseStatusCompleted:
-		return enums.WorkflowExecutionCloseStatusCompleted
-	case WorkflowCloseStatusFailed:
-		return enums.WorkflowExecutionCloseStatusFailed
-	case WorkflowCloseStatusCanceled:
-		return enums.WorkflowExecutionCloseStatusCanceled
-	case WorkflowCloseStatusTerminated:
-		return enums.WorkflowExecutionCloseStatusTerminated
-	case WorkflowCloseStatusContinuedAsNew:
-		return enums.WorkflowExecutionCloseStatusContinuedAsNew
-	case WorkflowCloseStatusTimedOut:
-		return enums.WorkflowExecutionCloseStatusTimedOut
-	default:
-		panic("Invalid value for enum WorkflowExecutionCloseStatus")
-	}
 }

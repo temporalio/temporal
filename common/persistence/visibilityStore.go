@@ -288,7 +288,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 		convertedExecution.CloseTime = &types.Int64Value{
 			Value: execution.CloseTime.UnixNano(),
 		}
-		convertedExecution.CloseStatus = *execution.Status
+		convertedExecution.Status = *execution.Status
 		convertedExecution.HistoryLength = execution.HistoryLength
 	}
 

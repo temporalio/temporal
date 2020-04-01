@@ -709,13 +709,13 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 		CloseStatus: enums.WorkflowExecutionCloseStatusRunning,
 		Memo:        &commonproto.Memo{Fields: fields},
 	}
-	s.Equal("{CloseStatus:WorkflowExecutionCloseStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
+	s.Equal("{Status:WorkflowExecutionCloseStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
 
 	fields["TestKey2"] = []byte(`anotherTestValue`)
 	execution.Memo = &commonproto.Memo{Fields: fields}
 	got := anyToString(execution, true, 0)
-	expected := got == "{CloseStatus:WorkflowExecutionCloseStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
-		got == "{CloseStatus:WorkflowExecutionCloseStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
+	expected := got == "{Status:WorkflowExecutionCloseStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
+		got == "{Status:WorkflowExecutionCloseStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
 	s.True(expected)
 }
 

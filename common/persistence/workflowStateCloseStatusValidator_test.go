@@ -63,10 +63,10 @@ func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_Workf
 		WorkflowCloseStatusTimedOut,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateCloseStatus(WorkflowStateCreated, WorkflowCloseStatusRunning))
+	s.Nil(ValidateCreateWorkflowStateStatus(WorkflowStateCreated, WorkflowCloseStatusRunning))
 
 	for _, closeStatus := range closeStatuses {
-		s.NotNil(ValidateCreateWorkflowStateCloseStatus(WorkflowStateCreated, enums.WorkflowExecutionCloseStatus(closeStatus)))
+		s.NotNil(ValidateCreateWorkflowStateStatus(WorkflowStateCreated, enums.WorkflowExecutionCloseStatus(closeStatus)))
 	}
 }
 
@@ -80,10 +80,10 @@ func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_Workf
 		WorkflowCloseStatusTimedOut,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateCloseStatus(WorkflowStateRunning, WorkflowCloseStatusRunning))
+	s.Nil(ValidateCreateWorkflowStateStatus(WorkflowStateRunning, WorkflowCloseStatusRunning))
 
 	for _, closeStatus := range closeStatuses {
-		s.NotNil(ValidateCreateWorkflowStateCloseStatus(WorkflowStateRunning, enums.WorkflowExecutionCloseStatus(closeStatus)))
+		s.NotNil(ValidateCreateWorkflowStateStatus(WorkflowStateRunning, enums.WorkflowExecutionCloseStatus(closeStatus)))
 	}
 }
 
@@ -99,7 +99,7 @@ func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_Workf
 	}
 
 	for _, closeStatus := range closeStatuses {
-		s.NotNil(ValidateCreateWorkflowStateCloseStatus(WorkflowStateCompleted, enums.WorkflowExecutionCloseStatus(closeStatus)))
+		s.NotNil(ValidateCreateWorkflowStateStatus(WorkflowStateCompleted, enums.WorkflowExecutionCloseStatus(closeStatus)))
 	}
 }
 
@@ -113,10 +113,10 @@ func (s *workflowStateCloseStatusSuite) TestCreateWorkflowStateCloseStatus_Workf
 		WorkflowCloseStatusTimedOut,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateCloseStatus(WorkflowStateZombie, WorkflowCloseStatusRunning))
+	s.Nil(ValidateCreateWorkflowStateStatus(WorkflowStateZombie, WorkflowCloseStatusRunning))
 
 	for _, closeStatus := range closeStatuses {
-		s.NotNil(ValidateCreateWorkflowStateCloseStatus(WorkflowStateZombie, enums.WorkflowExecutionCloseStatus(closeStatus)))
+		s.NotNil(ValidateCreateWorkflowStateStatus(WorkflowStateZombie, enums.WorkflowExecutionCloseStatus(closeStatus)))
 	}
 }
 
@@ -132,10 +132,10 @@ func (s *workflowStateCloseStatusSuite) TestUpdateWorkflowStateCloseStatus_Workf
 		WorkflowCloseStatusTimedOut,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateCloseStatus(WorkflowStateCreated, WorkflowCloseStatusRunning))
+	s.Nil(ValidateUpdateWorkflowStateStatus(WorkflowStateCreated, WorkflowCloseStatusRunning))
 
 	for _, closeStatus := range closeStatuses {
-		s.NotNil(ValidateUpdateWorkflowStateCloseStatus(WorkflowStateCreated, enums.WorkflowExecutionCloseStatus(closeStatus)))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(WorkflowStateCreated, enums.WorkflowExecutionCloseStatus(closeStatus)))
 	}
 }
 
@@ -149,10 +149,10 @@ func (s *workflowStateCloseStatusSuite) TestUpdateWorkflowStateCloseStatus_Workf
 		WorkflowCloseStatusTimedOut,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateCloseStatus(WorkflowStateRunning, WorkflowCloseStatusRunning))
+	s.Nil(ValidateUpdateWorkflowStateStatus(WorkflowStateRunning, WorkflowCloseStatusRunning))
 
 	for _, closeStatus := range closeStatuses {
-		s.NotNil(ValidateUpdateWorkflowStateCloseStatus(WorkflowStateRunning, enums.WorkflowExecutionCloseStatus(closeStatus)))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(WorkflowStateRunning, enums.WorkflowExecutionCloseStatus(closeStatus)))
 	}
 }
 
@@ -166,10 +166,10 @@ func (s *workflowStateCloseStatusSuite) TestUpdateWorkflowStateCloseStatus_Workf
 		WorkflowCloseStatusTimedOut,
 	}
 
-	s.NotNil(ValidateUpdateWorkflowStateCloseStatus(WorkflowStateCompleted, WorkflowCloseStatusRunning))
+	s.NotNil(ValidateUpdateWorkflowStateStatus(WorkflowStateCompleted, WorkflowCloseStatusRunning))
 
 	for _, closeStatus := range closeStatuses {
-		s.Nil(ValidateUpdateWorkflowStateCloseStatus(WorkflowStateCompleted, enums.WorkflowExecutionCloseStatus(closeStatus)))
+		s.Nil(ValidateUpdateWorkflowStateStatus(WorkflowStateCompleted, enums.WorkflowExecutionCloseStatus(closeStatus)))
 	}
 }
 
@@ -183,9 +183,9 @@ func (s *workflowStateCloseStatusSuite) TestUpdateWorkflowStateCloseStatus_Workf
 		WorkflowCloseStatusTimedOut,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateCloseStatus(WorkflowStateZombie, WorkflowCloseStatusRunning))
+	s.Nil(ValidateUpdateWorkflowStateStatus(WorkflowStateZombie, WorkflowCloseStatusRunning))
 
 	for _, closeStatus := range closeStatuses {
-		s.NotNil(ValidateUpdateWorkflowStateCloseStatus(WorkflowStateZombie, enums.WorkflowExecutionCloseStatus(closeStatus)))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(WorkflowStateZombie, enums.WorkflowExecutionCloseStatus(closeStatus)))
 	}
 }

@@ -49,7 +49,7 @@ type (
 		workflowID        *string
 		runID             *string
 		workflowTypeName  *string
-		closeStatus       *enums.WorkflowExecutionCloseStatus
+		status            *enums.WorkflowExecutionStatus
 		emptyResult       bool
 	}
 )
@@ -60,7 +60,7 @@ const (
 	RunID        = "RunId"
 	WorkflowType = "WorkflowType"
 	CloseTime    = "CloseTime"
-	CloseStatus  = "CloseStatus"
+	Status       = "Status"
 )
 
 const (
@@ -171,23 +171,23 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			return nil
 		}
 		parsedQuery.workflowTypeName = common.StringPtr(val)
-	case CloseStatus:
+	case Status:
 		val, err := extractStringValue(valStr)
 		if err != nil {
 			return err
 		}
 		if op != "=" {
-			return fmt.Errorf("only operation = is support for %s", CloseStatus)
+			return fmt.Errorf("only operation = is support for %s", Status)
 		}
 		status, err := convertStatusStr(val)
 		if err != nil {
 			return err
 		}
-		if parsedQuery.closeStatus != nil && *parsedQuery.closeStatus != status {
+		if parsedQuery.status != nil && *parsedQuery.status != status {
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.closeStatus = &status
+		parsedQuery.status = &status
 	case CloseTime:
 		timestamp, err := convertToTimestamp(valStr)
 		if err != nil {
@@ -240,19 +240,19 @@ func convertToTimestamp(timeStr string) (int64, error) {
 	return parsedTime.UnixNano(), nil
 }
 
-func convertStatusStr(statusStr string) (enums.WorkflowExecutionCloseStatus, error) {
+func convertStatusStr(statusStr string) (enums.WorkflowExecutionStatus, error) {
 	statusStr = strings.ToLower(statusStr)
 	switch statusStr {
 	case "completed":
-		return enums.WorkflowExecutionCloseStatusCompleted, nil
+		return enums.WorkflowExecutionStatusCompleted, nil
 	case "failed":
-		return enums.WorkflowExecutionCloseStatusFailed, nil
+		return enums.WorkflowExecutionStatusFailed, nil
 	case "canceled":
-		return enums.WorkflowExecutionCloseStatusCanceled, nil
+		return enums.WorkflowExecutionStatusCanceled, nil
 	case "continuedasnew":
-		return enums.WorkflowExecutionCloseStatusContinuedAsNew, nil
+		return enums.WorkflowExecutionStatusContinuedAsNew, nil
 	case "timedout":
-		return enums.WorkflowExecutionCloseStatusTimedOut, nil
+		return enums.WorkflowExecutionStatusTimedOut, nil
 	default:
 		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)
 	}

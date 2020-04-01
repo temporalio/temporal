@@ -34,7 +34,7 @@ import (
 )
 
 var (
-	data = []byte(`{"CloseStatus": 1,
+	data = []byte(`{"Status": 1,
          "CloseTime": 1547596872817380000,
          "NamespaceID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
          "HistoryLength": 29,
@@ -67,7 +67,7 @@ func BenchmarkJSONDecodeToType(b *testing.B) {
 			Memo:          p.NewDataBlob(source.Memo, common.EncodingType(source.Encoding)),
 		}
 		record.CloseTime = time.Unix(0, source.CloseTime)
-		record.Status = &source.CloseStatus
+		record.Status = &source.Status
 		record.HistoryLength = source.HistoryLength
 	}
 }

@@ -537,7 +537,7 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 	}
 
 	if queryResponse.QueryRejected != nil {
-		fmt.Printf("Query was rejected, workflow is in state: %v\n", queryResponse.QueryRejected.CloseStatus)
+		fmt.Printf("Query was rejected, workflow has status: %v\n", queryResponse.QueryRejected.GetStatus())
 	} else {
 		// assume it is json encoded
 		fmt.Printf("Query result as JSON:\n%v\n", string(queryResponse.QueryResult))
@@ -867,17 +867,17 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 
 	info := resp.WorkflowExecutionInfo
 	executionInfo := &cliproto.WorkflowExecutionInfo{
-		Execution:         info.Execution,
-		Type:              info.Type,
+		Execution:         info.GetExecution(),
+		Type:              info.GetType(),
 		CloseTime:         convertTime(info.GetCloseTime().GetValue(), false),
 		StartTime:         convertTime(info.GetStartTime().GetValue(), false),
-		Status:            info.CloseStatus,
-		HistoryLength:     info.HistoryLength,
-		ParentNamespaceId: info.ParentNamespaceId,
-		ParentExecution:   info.ParentExecution,
-		Memo:              info.Memo,
-		SearchAttributes:  convertSearchAttributes(info.SearchAttributes, wfClient, c),
-		AutoResetPoints:   info.AutoResetPoints,
+		Status:            info.GetStatus(),
+		HistoryLength:     info.GetHistoryLength(),
+		ParentNamespaceId: info.GetParentNamespaceId(),
+		ParentExecution:   info.GetParentExecution(),
+		Memo:              info.GetMemo(),
+		SearchAttributes:  convertSearchAttributes(info.GetSearchAttributes(), wfClient, c),
+		AutoResetPoints:   info.GetAutoResetPoints(),
 	}
 
 	var pendingActs []*cliproto.PendingActivityInfo
@@ -1005,7 +1005,7 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 		pageSize = defaultPageSizeForList
 	}
 
-	var workflowStatus enums.WorkflowExecutionCloseStatus
+	var workflowStatus enums.WorkflowExecutionStatus
 	if c.IsSet(FlagWorkflowStatus) {
 		if queryOpen {
 			ErrorAndExit(optionErr, errors.New("you can only filter on status for closed workflow, not open workflow"))
@@ -1160,7 +1160,7 @@ func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTi
 }
 
 func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
-	workflowStatus enums.WorkflowExecutionCloseStatus, nextPageToken []byte, c *cli.Context) ([]*commonproto.WorkflowExecutionInfo, []byte) {
+	workflowStatus enums.WorkflowExecutionStatus, nextPageToken []byte, c *cli.Context) ([]*commonproto.WorkflowExecutionInfo, []byte) {
 
 	request := &workflowservice.ListClosedWorkflowExecutionsRequest{
 		MaximumPageSize: int32(pageSize),
@@ -1177,7 +1177,7 @@ func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latest
 		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonproto.WorkflowTypeFilter{Name: workflowType}}
 	}
 	if workflowStatus != workflowStatusNotSet {
-		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &commonproto.StatusFilter{CloseStatus: workflowStatus}}
+		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &commonproto.StatusFilter{Status: workflowStatus}}
 	}
 
 	ctx, cancel := newContextForLongPoll(c)
@@ -1201,7 +1201,7 @@ func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([
 		pageSize = defaultPageSizeForList
 	}
 
-	var workflowStatus enums.WorkflowExecutionCloseStatus
+	var workflowStatus enums.WorkflowExecutionStatus
 	if c.IsSet(FlagWorkflowStatus) {
 		if queryOpen {
 			ErrorAndExit(optionErr, errors.New("you can only filter on status for closed workflow, not open workflow"))
@@ -1302,12 +1302,12 @@ func scanWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 	}
 	return prepareTable
 }
-func getWorkflowStatus(statusStr string) enums.WorkflowExecutionCloseStatus {
+func getWorkflowStatus(statusStr string) enums.WorkflowExecutionStatus {
 	if status, ok := workflowClosedStatusMap[strings.ToLower(statusStr)]; ok {
 		return status
 	}
 	ErrorAndExit(optionErr, errors.New("option status is not one of allowed values "+
-		"[completed, failed, canceled, terminated, continueasnew, timedout]"))
+		"[running, completed, failed, canceled, terminated, continueasnew, timedout]"))
 	return 0
 }
 
@@ -1619,7 +1619,7 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 		rid = currentRunID
 	}
 
-	if resp.WorkflowExecutionInfo.CloseStatus == enums.WorkflowExecutionCloseStatusRunning || resp.WorkflowExecutionInfo.CloseTime == nil {
+	if resp.WorkflowExecutionInfo.GetStatus() == enums.WorkflowExecutionStatusRunning || resp.WorkflowExecutionInfo.CloseTime == nil {
 		if params.skipOpen {
 			fmt.Println("skip because current run is open: ", wid, rid, currentRunID)
 			//skip and not terminate current if open

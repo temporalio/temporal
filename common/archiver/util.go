@@ -64,7 +64,7 @@ func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *arc
 		tag.ArchivalRequestRunID(request.GetRunId()),
 		tag.ArchvialRequestWorkflowType(request.GetWorkflowTypeName()),
 		tag.ArchivalRequestCloseTimestamp(request.GetCloseTimestamp()),
-		tag.ArchivalRequestCloseStatus(request.GetCloseStatus().String()),
+		tag.ArchivalRequestStatus(request.GetStatus().String()),
 		tag.ArchivalURI(URI),
 	)
 }

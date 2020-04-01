@@ -59,7 +59,7 @@ const (
 	WorkflowType    = "WorkflowType"
 	CloseTime       = "CloseTime"
 	StartTime       = "StartTime"
-	CloseStatus     = "CloseStatus"
+	CloseStatus     = "Status"
 	SearchPrecision = "SearchPrecision"
 )
 

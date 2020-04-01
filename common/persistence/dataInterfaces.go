@@ -197,7 +197,7 @@ const (
 	TransferTaskTransferTargetWorkflowID = "20000000-0000-f000-f000-000000000001"
 
 	// indicate invalid workflow state transition
-	invalidStateTransitionMsg = "unable to change workflow state from %v to %v, close status %v"
+	invalidStateTransitionMsg = "unable to change workflow state from %v to %v, status %v"
 )
 
 const numItemsInGarbageInfo = 3

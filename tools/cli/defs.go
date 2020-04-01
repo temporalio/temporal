@@ -97,24 +97,26 @@ var (
 	tableHeaderBlue         = tablewriter.Colors{tablewriter.FgHiBlueColor}
 	optionErr               = "there is something wrong with your command options"
 	osExit                  = os.Exit
-	workflowClosedStatusMap = map[string]enums.WorkflowExecutionCloseStatus{
-		"completed":      enums.WorkflowExecutionCloseStatusCompleted,
-		"failed":         enums.WorkflowExecutionCloseStatusFailed,
-		"canceled":       enums.WorkflowExecutionCloseStatusCanceled,
-		"terminated":     enums.WorkflowExecutionCloseStatusTerminated,
-		"continuedasnew": enums.WorkflowExecutionCloseStatusContinuedAsNew,
-		"continueasnew":  enums.WorkflowExecutionCloseStatusContinuedAsNew,
-		"timedout":       enums.WorkflowExecutionCloseStatusTimedOut,
+	workflowClosedStatusMap = map[string]enums.WorkflowExecutionStatus{
+		"running":        enums.WorkflowExecutionStatusRunning,
+		"completed":      enums.WorkflowExecutionStatusCompleted,
+		"failed":         enums.WorkflowExecutionStatusFailed,
+		"canceled":       enums.WorkflowExecutionStatusCanceled,
+		"terminated":     enums.WorkflowExecutionStatusTerminated,
+		"continuedasnew": enums.WorkflowExecutionStatusContinuedAsNew,
+		"continueasnew":  enums.WorkflowExecutionStatusContinuedAsNew,
+		"timedout":       enums.WorkflowExecutionStatusTimedOut,
 		// below are some alias
-		"c":         enums.WorkflowExecutionCloseStatusCompleted,
-		"complete":  enums.WorkflowExecutionCloseStatusCompleted,
-		"f":         enums.WorkflowExecutionCloseStatusFailed,
-		"fail":      enums.WorkflowExecutionCloseStatusFailed,
-		"cancel":    enums.WorkflowExecutionCloseStatusCanceled,
-		"terminate": enums.WorkflowExecutionCloseStatusTerminated,
-		"term":      enums.WorkflowExecutionCloseStatusTerminated,
-		"continue":  enums.WorkflowExecutionCloseStatusContinuedAsNew,
-		"cont":      enums.WorkflowExecutionCloseStatusContinuedAsNew,
-		"timeout":   enums.WorkflowExecutionCloseStatusTimedOut,
+		"r":         enums.WorkflowExecutionStatusRunning,
+		"c":         enums.WorkflowExecutionStatusCompleted,
+		"complete":  enums.WorkflowExecutionStatusCompleted,
+		"f":         enums.WorkflowExecutionStatusFailed,
+		"fail":      enums.WorkflowExecutionStatusFailed,
+		"cancel":    enums.WorkflowExecutionStatusCanceled,
+		"terminate": enums.WorkflowExecutionStatusTerminated,
+		"term":      enums.WorkflowExecutionStatusTerminated,
+		"continue":  enums.WorkflowExecutionStatusContinuedAsNew,
+		"cont":      enums.WorkflowExecutionStatusContinuedAsNew,
+		"timeout":   enums.WorkflowExecutionStatusTimedOut,
 	}
 )

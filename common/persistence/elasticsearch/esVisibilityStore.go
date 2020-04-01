@@ -80,7 +80,7 @@ type (
 		StartTime     int64
 		ExecutionTime int64
 		CloseTime     int64
-		CloseStatus   enums.WorkflowExecutionCloseStatus
+		Status        enums.WorkflowExecutionStatus
 		HistoryLength int64
 		Memo          []byte
 		Encoding      string
@@ -876,7 +876,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	}
 	if source.CloseTime != 0 {
 		record.CloseTime = time.Unix(0, source.CloseTime)
-		record.Status = &source.CloseStatus
+		record.Status = &source.Status
 		record.HistoryLength = source.HistoryLength
 	}
 
@@ -913,7 +913,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 }
 
 func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, workflowTypeName string,
-	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, closeStatus enums.WorkflowExecutionCloseStatus,
+	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status enums.WorkflowExecutionStatus,
 	historyLength int64, taskID int64, memo []byte, encoding common.EncodingType,
 	searchAttributes map[string][]byte) *indexer.Message {
 
@@ -923,7 +923,7 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 		es.StartTime:     {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
 		es.ExecutionTime: {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
 		es.CloseTime:     {Type: es.FieldTypeInt, IntData: endTimeUnixNano},
-		es.CloseStatus:   {Type: es.FieldTypeInt, IntData: int64(closeStatus)},
+		es.CloseStatus:   {Type: es.FieldTypeInt, IntData: int64(status)},
 		es.HistoryLength: {Type: es.FieldTypeInt, IntData: historyLength},
 	}
 	if len(memo) != 0 {

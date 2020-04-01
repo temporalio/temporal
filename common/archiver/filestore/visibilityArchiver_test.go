@@ -268,7 +268,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				earliestCloseTime: int64(1000),
 				latestCloseTime:   int64(12345),
 				workflowTypeName:  common.StringPtr("some random type name"),
-				closeStatus:       toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusContinuedAsNew),
+				status:            toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusContinuedAsNew),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp:   int64(12345),
@@ -427,7 +427,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: int64(1),
 		latestCloseTime:   int64(10001),
-		closeStatus:       toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusFailed),
+		status:            toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusFailed),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -464,7 +464,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: int64(10),
 		latestCloseTime:   int64(10001),
-		closeStatus:       toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusFailed),
+		status:            toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusFailed),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	URI, err := archiver.NewURI("file://" + dir)

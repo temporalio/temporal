@@ -148,47 +148,47 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 		parsedQuery *parsedQuery
 	}{
 		{
-			query:     "CloseStatus = \"Completed\"",
+			query:     "Status = \"Completed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeStatus: toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusCompleted),
+				status: toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusCompleted),
 			},
 		},
 		{
-			query:     "CloseStatus = 'continuedasnew'",
+			query:     "Status = 'continuedasnew'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeStatus: toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusContinuedAsNew),
+				status: toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusContinuedAsNew),
 			},
 		},
 		{
-			query:     "CloseStatus = 'Failed' and CloseStatus = \"Failed\"",
+			query:     "Status = 'Failed' and Status = \"Failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeStatus: toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusFailed),
+				status: toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusFailed),
 			},
 		},
 		{
-			query:     "(CloseStatus = 'Timedout' and CloseStatus = \"canceled\")",
+			query:     "(Status = 'Timedout' and Status = \"canceled\")",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				emptyResult: true,
 			},
 		},
 		{
-			query:     "closeStatus = \"Failed\"",
+			query:     "status = \"Failed\"",
 			expectErr: true,
 		},
 		{
-			query:     "CloseStatus = \"Failed\" or CloseStatus = \"Failed\"",
+			query:     "Status = \"Failed\" or Status = \"Failed\"",
 			expectErr: true,
 		},
 		{
-			query:     "CloseStatus = \"unknown\"",
+			query:     "Status = \"unknown\"",
 			expectErr: true,
 		},
 		{
-			query:     "CloseStatus > \"Failed\"",
+			query:     "Status > \"Failed\"",
 			expectErr: true,
 		},
 	}
@@ -202,7 +202,7 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 		s.NoError(err)
 		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
 		if !tc.parsedQuery.emptyResult {
-			s.EqualValues(tc.parsedQuery.closeStatus, parsedQuery.closeStatus)
+			s.EqualValues(tc.parsedQuery.status, parsedQuery.status)
 		}
 	}
 }
@@ -254,7 +254,7 @@ func (s *queryParserSuite) TestParseCloseTime() {
 			expectErr: true,
 		},
 		{
-			query:     "CloseStatus > 2000 or CloseStatus < 1000",
+			query:     "Status > 2000 or Status < 1000",
 			expectErr: true,
 		},
 	}
@@ -290,17 +290,17 @@ func (s *queryParserSuite) TestParse() {
 			},
 		},
 		{
-			query:     "CloseTime > 1999 and CloseTime < 10000 and RunId = 'random runID' and CloseStatus = 'Failed'",
+			query:     "CloseTime > 1999 and CloseTime < 10000 and RunId = 'random runID' and Status = 'Failed'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				earliestCloseTime: 2000,
 				latestCloseTime:   9999,
 				runID:             common.StringPtr("random runID"),
-				closeStatus:       toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusFailed),
+				status:            toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusFailed),
 			},
 		},
 		{
-			query:     "CloseTime > 2001 and CloseTime < 10000 and (RunId = 'random runID') and CloseStatus = 'Failed' and (RunId = 'another ID')",
+			query:     "CloseTime > 2001 and CloseTime < 10000 and (RunId = 'random runID') and Status = 'Failed' and (RunId = 'another ID')",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				emptyResult: true,

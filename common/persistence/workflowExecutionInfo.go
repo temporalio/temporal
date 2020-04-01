@@ -42,10 +42,10 @@ func (e *WorkflowExecutionInfo) SetLastFirstEventID(id int64) {
 	e.LastFirstEventID = id
 }
 
-// UpdateWorkflowStateCloseStatus update the workflow state
-func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
+// UpdateWorkflowStateStatus update the workflow state
+func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	state int,
-	closeStatus enums.WorkflowExecutionCloseStatus,
+	status enums.WorkflowExecutionStatus,
 ) error {
 
 	switch e.State {
@@ -54,25 +54,25 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 	case WorkflowStateCreated:
 		switch state {
 		case WorkflowStateCreated:
-			if closeStatus != WorkflowCloseStatusRunning {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status != WorkflowCloseStatusRunning {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateRunning:
-			if closeStatus != WorkflowCloseStatusRunning {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status != WorkflowCloseStatusRunning {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if closeStatus != WorkflowCloseStatusTerminated &&
-				closeStatus != WorkflowCloseStatusTimedOut &&
-				closeStatus != WorkflowCloseStatusContinuedAsNew {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status != WorkflowCloseStatusTerminated &&
+				status != WorkflowCloseStatusTimedOut &&
+				status != WorkflowCloseStatusContinuedAsNew {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if closeStatus != WorkflowCloseStatusRunning {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status != WorkflowCloseStatusRunning {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		default:
@@ -81,21 +81,21 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 	case WorkflowStateRunning:
 		switch state {
 		case WorkflowStateCreated:
-			return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		case WorkflowStateRunning:
-			if closeStatus != WorkflowCloseStatusRunning {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status != WorkflowCloseStatusRunning {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if closeStatus == WorkflowCloseStatusRunning {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status == WorkflowCloseStatusRunning {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if closeStatus != WorkflowCloseStatusRunning {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status != WorkflowCloseStatusRunning {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		default:
@@ -104,18 +104,18 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 	case WorkflowStateCompleted:
 		switch state {
 		case WorkflowStateCreated:
-			return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		case WorkflowStateRunning:
-			return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		case WorkflowStateCompleted:
-			if closeStatus != e.Status {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status != e.Status {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 
 			}
 		case WorkflowStateZombie:
-			return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
@@ -123,23 +123,23 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 	case WorkflowStateZombie:
 		switch state {
 		case WorkflowStateCreated:
-			if closeStatus != WorkflowCloseStatusRunning {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status != WorkflowCloseStatusRunning {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateRunning:
-			if closeStatus != WorkflowCloseStatusRunning {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status != WorkflowCloseStatusRunning {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if closeStatus == WorkflowCloseStatusRunning {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status == WorkflowCloseStatusRunning {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if closeStatus == WorkflowCloseStatusRunning {
-				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+			if status == WorkflowCloseStatusRunning {
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		default:
@@ -150,16 +150,16 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 	}
 
 	e.State = state
-	e.Status = closeStatus
+	e.Status = status
 	return nil
 
 }
 
-// UpdateWorkflowStateCloseStatus update the workflow state
+// UpdateWorkflowStateStatus update the workflow state
 func (e *WorkflowExecutionInfo) createInvalidStateTransitionErr(
 	currentState int,
 	targetState int,
-	targetCloseStatus enums.WorkflowExecutionCloseStatus,
+	targetStatus enums.WorkflowExecutionStatus,
 ) error {
-	return serviceerror.NewInternal(fmt.Sprintf(invalidStateTransitionMsg, currentState, targetState, targetCloseStatus))
+	return serviceerror.NewInternal(fmt.Sprintf(invalidStateTransitionMsg, currentState, targetState, targetStatus))
 }

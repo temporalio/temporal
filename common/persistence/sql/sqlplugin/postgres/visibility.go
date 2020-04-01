@@ -112,7 +112,7 @@ func (pdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, e
 // ReplaceIntoVisibility replaces an existing row if it exist or creates a new row in visibility table
 func (pdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
 	switch {
-	case row.CloseStatus != nil && row.CloseTime != nil && row.HistoryLength != nil:
+	case row.Status != nil && row.CloseTime != nil && row.HistoryLength != nil:
 		row.StartTime = pdb.converter.ToPostgresDateTime(row.StartTime)
 		closeTime := pdb.converter.ToPostgresDateTime(*row.CloseTime)
 		return pdb.conn.Exec(templateCreateWorkflowExecutionClosed,
@@ -123,7 +123,7 @@ func (pdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, 
 			row.ExecutionTime,
 			row.WorkflowTypeName,
 			closeTime,
-			*row.CloseStatus,
+			*row.Status,
 			*row.HistoryLength,
 			row.Memo,
 			row.Encoding)

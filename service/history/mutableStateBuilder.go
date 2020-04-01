@@ -478,7 +478,7 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if state, _ := e.GetWorkflowStateCloseStatus(); state == persistence.WorkflowStateCompleted {
+	if state, _ := e.GetWorkflowStateStatus(); state == persistence.WorkflowStateCompleted {
 		// do not update current version only when workflow is completed
 		return nil
 	}
@@ -1785,7 +1785,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTimeout = event.GetExecutionStartToCloseTimeoutSeconds()
 	e.executionInfo.DecisionStartToCloseTimeout = event.GetTaskStartToCloseTimeoutSeconds()
 
-	if err := e.UpdateWorkflowStateCloseStatus(
+	if err := e.UpdateWorkflowStateStatus(
 		persistence.WorkflowStateCreated,
 		persistence.WorkflowCloseStatusRunning,
 	); err != nil {
@@ -2545,7 +2545,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCompletedEvent(
 	event *commonproto.HistoryEvent,
 ) error {
 
-	if err := e.UpdateWorkflowStateCloseStatus(
+	if err := e.UpdateWorkflowStateStatus(
 		persistence.WorkflowStateCompleted,
 		persistence.WorkflowCloseStatusCompleted,
 	); err != nil {
@@ -2585,7 +2585,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionFailedEvent(
 	event *commonproto.HistoryEvent,
 ) error {
 
-	if err := e.UpdateWorkflowStateCloseStatus(
+	if err := e.UpdateWorkflowStateStatus(
 		persistence.WorkflowStateCompleted,
 		persistence.WorkflowCloseStatusFailed,
 	); err != nil {
@@ -2624,7 +2624,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTimedoutEvent(
 	event *commonproto.HistoryEvent,
 ) error {
 
-	if err := e.UpdateWorkflowStateCloseStatus(
+	if err := e.UpdateWorkflowStateStatus(
 		persistence.WorkflowStateCompleted,
 		persistence.WorkflowCloseStatusTimedOut,
 	); err != nil {
@@ -2702,7 +2702,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCanceledEvent(
 	firstEventID int64,
 	event *commonproto.HistoryEvent,
 ) error {
-	if err := e.UpdateWorkflowStateCloseStatus(
+	if err := e.UpdateWorkflowStateStatus(
 		persistence.WorkflowStateCompleted,
 		persistence.WorkflowCloseStatusCanceled,
 	); err != nil {
@@ -3218,7 +3218,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTerminatedEvent(
 	event *commonproto.HistoryEvent,
 ) error {
 
-	if err := e.UpdateWorkflowStateCloseStatus(
+	if err := e.UpdateWorkflowStateStatus(
 		persistence.WorkflowStateCompleted,
 		persistence.WorkflowCloseStatusTerminated,
 	); err != nil {
@@ -3380,7 +3380,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 	continueAsNewEvent *commonproto.HistoryEvent,
 ) error {
 
-	if err := e.UpdateWorkflowStateCloseStatus(
+	if err := e.UpdateWorkflowStateStatus(
 		persistence.WorkflowStateCompleted,
 		persistence.WorkflowCloseStatusContinuedAsNew,
 	); err != nil {
@@ -3831,18 +3831,18 @@ func (e *mutableStateBuilder) GetUpdateCondition() int64 {
 	return e.nextEventIDInDB
 }
 
-func (e *mutableStateBuilder) GetWorkflowStateCloseStatus() (int, int) {
+func (e *mutableStateBuilder) GetWorkflowStateStatus() (int, enums.WorkflowExecutionStatus) {
 
 	executionInfo := e.executionInfo
-	return executionInfo.State, int(executionInfo.Status)
+	return executionInfo.State, executionInfo.Status
 }
 
-func (e *mutableStateBuilder) UpdateWorkflowStateCloseStatus(
+func (e *mutableStateBuilder) UpdateWorkflowStateStatus(
 	state int,
-	closeStatus int,
+	status enums.WorkflowExecutionStatus,
 ) error {
 
-	return e.executionInfo.UpdateWorkflowStateCloseStatus(state, enums.WorkflowExecutionCloseStatus(closeStatus))
+	return e.executionInfo.UpdateWorkflowStateStatus(state, status)
 }
 
 func (e *mutableStateBuilder) StartTransaction(

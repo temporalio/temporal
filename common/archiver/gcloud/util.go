@@ -161,7 +161,7 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *com
 		StartTime:     &types.Int64Value{Value: record.StartTimestamp},
 		ExecutionTime: record.ExecutionTimestamp,
 		CloseTime:     &types.Int64Value{Value: record.CloseTimestamp},
-		CloseStatus:   record.Status,
+		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,
 		SearchAttributes: &commonproto.SearchAttributes{

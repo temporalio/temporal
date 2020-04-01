@@ -691,7 +691,7 @@ func (e *historyEngineImpl) PollMutableState(
 		ReplicationInfo:                      response.ReplicationInfo,
 		VersionHistories:                     response.VersionHistories,
 		WorkflowState:                        response.WorkflowState,
-		WorkflowCloseState:                   response.WorkflowCloseState,
+		WorkflowStatus:                       response.WorkflowStatus,
 	}, nil
 }
 
@@ -759,10 +759,10 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 			case event := <-channel:
 				response.LastFirstEventId = event.lastFirstEventID
 				response.NextEventId = event.nextEventID
-				response.IsWorkflowRunning = event.workflowCloseState == persistence.WorkflowCloseStatusRunning
+				response.IsWorkflowRunning = event.workflowStatus == enums.WorkflowExecutionStatusRunning
 				response.PreviousStartedEventId = event.previousStartedEventID
 				response.WorkflowState = int32(event.workflowState)
-				response.WorkflowCloseState = int32(event.workflowCloseState)
+				response.WorkflowStatus = event.workflowStatus
 				if !bytes.Equal(request.CurrentBranchToken, event.currentBranchToken) {
 					return nil, serviceerror.NewCurrentBranchChanged("Current branch token and request branch token doesn't match.", event.currentBranchToken)
 				}
@@ -799,13 +799,13 @@ func (e *historyEngineImpl) QueryWorkflow(
 	req := request.GetRequest()
 	if !mutableStateResp.GetIsWorkflowRunning() && req.QueryRejectCondition != enums.QueryRejectConditionNone {
 		notOpenReject := req.GetQueryRejectCondition() == enums.QueryRejectConditionNotOpen
-		closeStatus := mutableStateResp.GetWorkflowCloseState()
-		notCompletedCleanlyReject := req.GetQueryRejectCondition() == enums.QueryRejectConditionNotCompletedCleanly && closeStatus != persistence.WorkflowCloseStatusCompleted
+		status := mutableStateResp.GetWorkflowStatus()
+		notCompletedCleanlyReject := req.GetQueryRejectCondition() == enums.QueryRejectConditionNotCompletedCleanly && status != enums.WorkflowExecutionStatusCompleted
 		if notOpenReject || notCompletedCleanlyReject {
 			return &historyservice.QueryWorkflowResponse{
 				Response: &workflowservice.QueryWorkflowResponse{
 					QueryRejected: &commonproto.QueryRejected{
-						CloseStatus: persistence.ToProtoWorkflowExecutionCloseStatus(int(closeStatus)),
+						Status: status,
 					},
 				},
 			}, nil
@@ -1056,7 +1056,7 @@ func (e *historyEngineImpl) getMutableState(
 
 	executionInfo := mutableState.GetExecutionInfo()
 	execution.RunId = context.getExecution().RunId
-	workflowState, workflowCloseState := mutableState.GetWorkflowStateCloseStatus()
+	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	retResp = &historyservice.GetMutableStateResponse{
 		Execution:                            &execution,
 		WorkflowType:                         &commonproto.WorkflowType{Name: executionInfo.WorkflowTypeName},
@@ -1072,7 +1072,7 @@ func (e *historyEngineImpl) getMutableState(
 		StickyTaskListScheduleToStartTimeout: executionInfo.StickyScheduleToStartTimeout,
 		CurrentBranchToken:                   currentBranchToken,
 		WorkflowState:                        int32(workflowState),
-		WorkflowCloseState:                   int32(workflowCloseState),
+		WorkflowStatus:                       workflowStatus,
 		IsStickyTaskListEnabled:              mutableState.IsStickyTaskListEnabled(),
 	}
 	replicationState := mutableState.GetReplicationState()
@@ -1221,7 +1221,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			AutoResetPoints:  executionInfo.AutoResetPoints,
 			Memo:             &commonproto.Memo{Fields: executionInfo.Memo},
 			SearchAttributes: &commonproto.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
-			CloseStatus:      executionInfo.Status,
+			Status:           executionInfo.Status,
 		},
 	}
 
@@ -1244,7 +1244,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	}
 	if executionInfo.State == persistence.WorkflowStateCompleted {
 		// for closed workflow
-		result.WorkflowExecutionInfo.CloseStatus = executionInfo.Status
+		result.WorkflowExecutionInfo.Status = executionInfo.Status
 		completionEvent, err := mutableState.GetCompletionEvent()
 		if err != nil {
 			return nil, err
@@ -2768,7 +2768,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	prevStartRequestID,
 	prevRunID string,
 	prevState int,
-	prevCloseState enums.WorkflowExecutionCloseStatus,
+	prevStatus enums.WorkflowExecutionStatus,
 	namespaceID string,
 	execution commonproto.WorkflowExecution,
 	wfIDReusePolicy enums.WorkflowIdReusePolicy,
@@ -2790,7 +2790,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 
 	switch wfIDReusePolicy {
 	case enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly:
-		if _, ok := FailedWorkflowCloseState[int(prevCloseState)]; !ok {
+		if _, ok := FailedWorkflowCloseState[int(prevStatus)]; !ok {
 			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: allow duplicate workflow ID if last run failed."
 			return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 		}

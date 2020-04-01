@@ -451,7 +451,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByCloseStatus() {
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
 		CloseTimestamp:   time.Now().UnixNano(),
-		Status:           enums.WorkflowExecutionCloseStatusCompleted,
+		Status:           enums.WorkflowExecutionStatusCompleted,
 	})
 	s.Nil(err2)
 
@@ -460,7 +460,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByCloseStatus() {
 		Execution:        workflowExecution2,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           enums.WorkflowExecutionCloseStatusFailed,
+		Status:           enums.WorkflowExecutionStatusFailed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -475,7 +475,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByCloseStatus() {
 			EarliestStartTime: startTime,
 			LatestStartTime:   startTime,
 		},
-		Status: enums.WorkflowExecutionCloseStatusFailed,
+		Status: enums.WorkflowExecutionStatusFailed,
 	})
 	s.Nil(err4)
 	s.Equal(1, len(resp.Executions))
@@ -514,7 +514,7 @@ func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           enums.WorkflowExecutionCloseStatusFailed,
+		Status:           enums.WorkflowExecutionStatusFailed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -551,7 +551,7 @@ func (s *VisibilityPersistenceSuite) TestClosedWithoutStarted() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   time.Now().Add(time.Second * -5).UnixNano(),
-		Status:           enums.WorkflowExecutionCloseStatusFailed,
+		Status:           enums.WorkflowExecutionStatusFailed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -581,7 +581,7 @@ func (s *VisibilityPersistenceSuite) TestMultipleUpserts() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           enums.WorkflowExecutionCloseStatusFailed,
+		Status:           enums.WorkflowExecutionStatusFailed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -635,7 +635,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
 			StartTimestamp:   startTime,
-			Status:           enums.WorkflowExecutionCloseStatusFailed,
+			Status:           enums.WorkflowExecutionStatusFailed,
 			CloseTimestamp:   time.Now().UnixNano(),
 			HistoryLength:    3,
 		}
@@ -723,7 +723,7 @@ func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().GetValue()))
 	s.Equal(s.nanosToMillis(req.CloseTimestamp), s.nanosToMillis(resp.GetCloseTime().GetValue()))
-	s.EqualValues(req.Status, resp.GetCloseStatus())
+	s.Equal(req.Status, resp.GetStatus())
 	s.Equal(req.HistoryLength, resp.HistoryLength)
 }
 
@@ -734,7 +734,7 @@ func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().GetValue()))
 	s.Nil(resp.CloseTime)
-	s.EqualValues(resp.CloseStatus, enums.WorkflowExecutionCloseStatusUnknown)
+	s.Equal(resp.Status, enums.WorkflowExecutionStatusUnknown)
 	s.Zero(resp.HistoryLength)
 }
 

@@ -164,7 +164,7 @@ type (
 		RunID            primitives.UUID
 		CreateRequestID  string
 		State            int
-		CloseStatus      enums.WorkflowExecutionCloseStatus
+		Status           enums.WorkflowExecutionStatus
 		LastWriteVersion int64
 		StartVersion     int64
 	}
@@ -501,7 +501,7 @@ type (
 		WorkflowID       string
 		StartTime        time.Time
 		ExecutionTime    time.Time
-		CloseStatus      *int32
+		Status           *int32
 		CloseTime        *time.Time
 		HistoryLength    *int64
 		Memo             []byte

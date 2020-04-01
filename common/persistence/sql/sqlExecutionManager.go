@@ -142,7 +142,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 				StartRequestID:   row.CreateRequestID,
 				RunID:            row.RunID.String(),
 				State:            row.State,
-				Status:           row.CloseStatus,
+				Status:           row.Status,
 				LastWriteVersion: row.LastWriteVersion,
 			}
 
@@ -713,8 +713,8 @@ func (m *sqlExecutionManager) GetCurrentExecution(
 	return &p.GetCurrentExecutionResponse{
 		StartRequestID:   row.CreateRequestID,
 		RunID:            row.RunID.String(),
-		State:            int(row.State),
-		Status:           int(row.CloseStatus),
+		State:            row.State,
+		Status:           row.Status,
 		LastWriteVersion: row.LastWriteVersion,
 	}, nil
 }

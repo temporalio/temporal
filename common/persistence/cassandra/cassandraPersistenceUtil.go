@@ -430,7 +430,7 @@ func createExecution(
 ) error {
 
 	// validate workflow state & close status
-	if err := p.ValidateCreateWorkflowStateCloseStatus(
+	if err := p.ValidateCreateWorkflowStateStatus(
 		executionInfo.State,
 		executionInfo.Status); err != nil {
 		return err
@@ -547,7 +547,7 @@ func updateExecution(
 ) error {
 
 	// validate workflow state & close status
-	if err := p.ValidateUpdateWorkflowStateCloseStatus(
+	if err := p.ValidateUpdateWorkflowStateStatus(
 		executionInfo.State,
 		executionInfo.Status); err != nil {
 		return err

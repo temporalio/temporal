@@ -93,7 +93,7 @@ func (mdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, e
 // ReplaceIntoVisibility replaces an existing row if it exist or creates a new row in visibility table
 func (mdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
 	switch {
-	case row.CloseStatus != nil && row.CloseTime != nil && row.HistoryLength != nil:
+	case row.Status != nil && row.CloseTime != nil && row.HistoryLength != nil:
 		row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
 		closeTime := mdb.converter.ToMySQLDateTime(*row.CloseTime)
 		return mdb.conn.Exec(templateCreateWorkflowExecutionClosed,
@@ -104,7 +104,7 @@ func (mdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, 
 			row.ExecutionTime,
 			row.WorkflowTypeName,
 			closeTime,
-			*row.CloseStatus,
+			*row.Status,
 			*row.HistoryLength,
 			row.Memo,
 			row.Encoding)

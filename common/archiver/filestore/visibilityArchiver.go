@@ -316,7 +316,7 @@ func matchQuery(record *archiverproto.ArchiveVisibilityRequest, query *parsedQue
 	if query.workflowTypeName != nil && record.WorkflowTypeName != *query.workflowTypeName {
 		return false
 	}
-	if query.closeStatus != nil && record.Status != *query.closeStatus {
+	if query.status != nil && record.Status != *query.status {
 		return false
 	}
 	return true
@@ -336,7 +336,7 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *com
 		ExecutionTime: record.ExecutionTimestamp,
 		CloseTime: &types.Int64Value{
 			Value: record.CloseTimestamp},
-		CloseStatus:   record.Status,
+		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,
 		SearchAttributes: &commonproto.SearchAttributes{

@@ -465,7 +465,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		return err
 	}
 
-	workflowState, workflowCloseState := resetMutableState.GetWorkflowStateCloseStatus()
+	workflowState, workflowCloseState := resetMutableState.GetWorkflowStateStatus()
 	// Current branch changed and notify the watchers
 	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
 		c.namespaceID,
@@ -663,7 +663,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	if err != nil {
 		return err
 	}
-	workflowState, workflowCloseState := c.mutableState.GetWorkflowStateCloseStatus()
+	workflowState, workflowCloseState := c.mutableState.GetWorkflowStateStatus()
 	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
 		c.namespaceID,
 		&c.workflowExecution,
