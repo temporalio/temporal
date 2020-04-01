@@ -24,8 +24,9 @@ package persistenceblobs;
 option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs";
 
 import "google/protobuf/timestamp.proto";
-import "replication/replication.proto";
 import "google/protobuf/wrappers.proto";
+import "replication/replication.proto";
+import "enums/enums.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -217,7 +218,7 @@ message WorkflowExecutionState {
     string createRequestId = 1;
     bytes runId = 2;
     int32 state = 3;
-    int32 closeStatus = 4;
+    enums.WorkflowExecutionStatus status = 4;
 }
 
 message WorkflowExecutionInfo {

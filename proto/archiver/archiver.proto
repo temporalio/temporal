@@ -58,7 +58,7 @@ message ArchiveVisibilityRequest {
     int64 StartTimestamp = 6;
     int64 ExecutionTimestamp = 7;
     int64 CloseTimestamp = 8;
-    enums.WorkflowExecutionCloseStatus CloseStatus = 9;
+    enums.WorkflowExecutionStatus Status = 9;
     int64 HistoryLength = 10;
     common.Memo Memo = 11;
     map<string, string> SearchAttributes = 12;

@@ -28,7 +28,7 @@ import "common/common.proto";
 message MutableStateChecksumPayload {
     bool cancelRequested = 1;
     int32 state = 2;
-    int32 closeStatus = 3;
+    int32 status = 3;
 
     int64 lastWriteVersion = 4;
     int64 lastWriteEventId = 5;

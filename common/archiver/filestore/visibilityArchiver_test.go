@@ -130,7 +130,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
-		CloseStatus:        enums.WorkflowExecutionCloseStatusFailed,
+		Status:             enums.WorkflowExecutionCloseStatusFailed,
 		HistoryLength:      int64(101),
 	}
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
@@ -171,7 +171,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     closeTimestamp.UnixNano(),
-		CloseStatus:        enums.WorkflowExecutionCloseStatusFailed,
+		Status:             enums.WorkflowExecutionCloseStatusFailed,
 		HistoryLength:      int64(101),
 		Memo: &commonproto.Memo{
 			Fields: map[string][]byte{
@@ -272,7 +272,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp:   int64(12345),
-				CloseStatus:      enums.WorkflowExecutionCloseStatusContinuedAsNew,
+				Status:           enums.WorkflowExecutionCloseStatusContinuedAsNew,
 				WorkflowTypeName: "some random type name",
 			},
 			shouldMatch: true,
@@ -512,7 +512,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   10000,
-			CloseStatus:      enums.WorkflowExecutionCloseStatusFailed,
+			Status:           enums.WorkflowExecutionCloseStatusFailed,
 			HistoryLength:    101,
 		},
 		{
@@ -524,7 +524,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     2,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     1000,
-			CloseStatus:        enums.WorkflowExecutionCloseStatusFailed,
+			Status:             enums.WorkflowExecutionCloseStatusFailed,
 			HistoryLength:      123,
 		},
 		{
@@ -536,7 +536,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     10,
-			CloseStatus:        enums.WorkflowExecutionCloseStatusContinuedAsNew,
+			Status:             enums.WorkflowExecutionCloseStatusContinuedAsNew,
 			HistoryLength:      456,
 		},
 		{
@@ -548,7 +548,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     5,
-			CloseStatus:        enums.WorkflowExecutionCloseStatusFailed,
+			Status:             enums.WorkflowExecutionCloseStatusFailed,
 			HistoryLength:      456,
 		},
 		{
@@ -560,7 +560,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     10000,
-			CloseStatus:        enums.WorkflowExecutionCloseStatusContinuedAsNew,
+			Status:             enums.WorkflowExecutionCloseStatusContinuedAsNew,
 			HistoryLength:      456,
 		},
 	}

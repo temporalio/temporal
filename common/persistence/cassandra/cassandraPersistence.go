@@ -28,7 +28,6 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -1004,7 +1003,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 			workflowID,
 			runID,
 			executionInfo.State,
-			executionInfo.CloseStatus,
+			executionInfo.Status,
 			executionInfo.CreateRequestID,
 			startVersion,
 			lastWriteVersion,
@@ -1106,7 +1105,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 							StartRequestID:   protoState.CreateRequestId,
 							RunID:            primitives.UUIDString(protoState.RunId),
 							State:            int(protoState.State),
-							CloseStatus:      enums.WorkflowExecutionCloseStatus(protoState.CloseStatus),
+							Status:           protoState.Status,
 							LastWriteVersion: lastWriteVersion,
 						}
 					}
@@ -1136,7 +1135,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 					StartRequestID:   executionInfo.CreateRequestID,
 					RunID:            executionInfo.RunID,
 					State:            executionInfo.State,
-					CloseStatus:      executionInfo.CloseStatus,
+					Status:           executionInfo.Status,
 					LastWriteVersion: lastWriteVersion,
 				}
 			}
@@ -1399,7 +1398,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				newWorkflowID,
 				newRunID,
 				newExecutionInfo.State,
-				newExecutionInfo.CloseStatus,
+				newExecutionInfo.Status,
 				newExecutionInfo.CreateRequestID,
 				newStartVersion,
 				newLastWriteVersion,
@@ -1417,7 +1416,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				RunId:           primitives.MustParseUUID(runID),
 				CreateRequestId: executionInfo.CreateRequestID,
 				State:           int32(executionInfo.State),
-				CloseStatus:     int32(executionInfo.CloseStatus),
+				Status:          executionInfo.Status,
 			})
 
 			if err != nil {
@@ -1522,7 +1521,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	stateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: newExecutionInfo.CreateRequestID,
 		State:           int32(newExecutionInfo.State),
-		CloseStatus:     int32(newExecutionInfo.CloseStatus),
+		Status:          newExecutionInfo.Status,
 		RunId:           primitives.MustParseUUID(newRunID),
 	})
 	if err != nil {
@@ -1670,13 +1669,13 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		runID := executionInfo.RunID
 		createRequestID := executionInfo.CreateRequestID
 		state := executionInfo.State
-		closeStatus := executionInfo.CloseStatus
+		status := executionInfo.Status
 
 		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
 			RunId:           primitives.MustParseUUID(runID),
 			CreateRequestId: createRequestID,
 			State:           int32(state),
-			CloseStatus:     int32(closeStatus),
+			Status:          status,
 		})
 
 		if err != nil {
@@ -2036,7 +2035,7 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 		RunID:            currentRunID,
 		StartRequestID:   executionInfo.CreateRequestId,
 		State:            int(executionInfo.State),
-		CloseStatus:      int(executionInfo.CloseStatus),
+		Status:           executionInfo.Status,
 		LastWriteVersion: replicationState.LastWriteVersion,
 	}, nil
 }

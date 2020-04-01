@@ -110,7 +110,7 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 			return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 
 		case WorkflowStateCompleted:
-			if closeStatus != e.CloseStatus {
+			if closeStatus != e.Status {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 
 			}
@@ -150,7 +150,7 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 	}
 
 	e.State = state
-	e.CloseStatus = closeStatus
+	e.Status = closeStatus
 	return nil
 
 }

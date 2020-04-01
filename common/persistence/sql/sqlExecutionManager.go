@@ -142,7 +142,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 				StartRequestID:   row.CreateRequestID,
 				RunID:            row.RunID.String(),
 				State:            row.State,
-				CloseStatus:      row.CloseStatus,
+				Status:           row.CloseStatus,
 				LastWriteVersion: row.LastWriteVersion,
 			}
 
@@ -188,7 +188,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 		workflowID,
 		runID,
 		executionInfo.State,
-		executionInfo.CloseStatus,
+		executionInfo.Status,
 		executionInfo.CreateRequestID,
 		startVersion,
 		lastWriteVersion); err != nil {
@@ -404,7 +404,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				runID,
 				newWorkflow.ExecutionInfo.CreateRequestID,
 				newWorkflow.ExecutionInfo.State,
-				newWorkflow.ExecutionInfo.CloseStatus,
+				newWorkflow.ExecutionInfo.Status,
 				startVersion,
 				lastWriteVersion); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: failed to continue as new current execution. Error: %v", err))
@@ -421,7 +421,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				runID,
 				executionInfo.CreateRequestID,
 				executionInfo.State,
-				executionInfo.CloseStatus,
+				executionInfo.Status,
 				startVersion,
 				lastWriteVersion); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: failed to update current execution. Error: %v", err))
@@ -481,7 +481,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 		newWorkflowRunID,
 		newExecutionInfo.CreateRequestID,
 		newExecutionInfo.State,
-		newExecutionInfo.CloseStatus,
+		newExecutionInfo.Status,
 		startVersion,
 		lastWriteVersion,
 	); err != nil {
@@ -578,7 +578,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 		runID := primitives.MustParseUUID(executionInfo.RunID)
 		createRequestID := executionInfo.CreateRequestID
 		state := executionInfo.State
-		closeStatus := executionInfo.CloseStatus
+		closeStatus := executionInfo.Status
 
 		if request.CurrentWorkflowCAS != nil {
 			prevRunID := primitives.MustParseUUID(request.CurrentWorkflowCAS.PrevRunID)
@@ -714,7 +714,7 @@ func (m *sqlExecutionManager) GetCurrentExecution(
 		StartRequestID:   row.CreateRequestID,
 		RunID:            row.RunID.String(),
 		State:            int(row.State),
-		CloseStatus:      int(row.CloseStatus),
+		Status:           int(row.CloseStatus),
 		LastWriteVersion: row.LastWriteVersion,
 	}, nil
 }

@@ -629,7 +629,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				t.StartRequestID,
 				prevRunID,
 				t.State,
-				t.CloseStatus,
+				t.Status,
 				namespaceID,
 				execution,
 				startRequest.StartRequest.GetWorkflowIdReusePolicy(),
@@ -1221,7 +1221,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			AutoResetPoints:  executionInfo.AutoResetPoints,
 			Memo:             &commonproto.Memo{Fields: executionInfo.Memo},
 			SearchAttributes: &commonproto.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
-			CloseStatus:      executionInfo.CloseStatus,
+			CloseStatus:      executionInfo.Status,
 		},
 	}
 
@@ -1244,7 +1244,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	}
 	if executionInfo.State == persistence.WorkflowStateCompleted {
 		// for closed workflow
-		result.WorkflowExecutionInfo.CloseStatus = executionInfo.CloseStatus
+		result.WorkflowExecutionInfo.CloseStatus = executionInfo.Status
 		completionEvent, err := mutableState.GetCompletionEvent()
 		if err != nil {
 			return nil, err
@@ -2750,7 +2750,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 	prevStartRequestID := prevExecutionInfo.CreateRequestID
 	prevRunID := prevExecutionInfo.RunID
 	prevState := prevExecutionInfo.State
-	prevCloseState := prevExecutionInfo.CloseStatus
+	prevCloseState := prevExecutionInfo.Status
 
 	return e.applyWorkflowIDReusePolicyHelper(
 		prevStartRequestID,

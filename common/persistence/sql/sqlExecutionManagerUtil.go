@@ -1156,7 +1156,7 @@ func (m *sqlExecutionManager) createExecution(
 	// validate workflow state & close status
 	if err := p.ValidateCreateWorkflowStateCloseStatus(
 		executionInfo.State,
-		executionInfo.CloseStatus); err != nil {
+		executionInfo.Status); err != nil {
 		return err
 	}
 
@@ -1184,7 +1184,7 @@ func (m *sqlExecutionManager) createExecution(
 				StartRequestID:   executionInfo.CreateRequestID,
 				RunID:            executionInfo.RunID,
 				State:            executionInfo.State,
-				CloseStatus:      executionInfo.CloseStatus,
+				Status:           executionInfo.Status,
 				LastWriteVersion: row.LastWriteVersion,
 			}
 		}
@@ -1215,7 +1215,7 @@ func updateExecution(
 	// validate workflow state & close status
 	if err := p.ValidateUpdateWorkflowStateCloseStatus(
 		executionInfo.State,
-		executionInfo.CloseStatus); err != nil {
+		executionInfo.Status); err != nil {
 		return err
 	}
 

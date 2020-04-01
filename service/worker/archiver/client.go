@@ -251,7 +251,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		StartTimestamp:     request.ArchiveRequest.StartTimestamp,
 		ExecutionTimestamp: request.ArchiveRequest.ExecutionTimestamp,
 		CloseTimestamp:     request.ArchiveRequest.CloseTimestamp,
-		CloseStatus:        request.ArchiveRequest.CloseStatus,
+		Status:             request.ArchiveRequest.CloseStatus,
 		HistoryLength:      request.ArchiveRequest.HistoryLength,
 		Memo:               request.ArchiveRequest.Memo,
 		SearchAttributes:   convertSearchAttributesToString(request.ArchiveRequest.SearchAttributes),

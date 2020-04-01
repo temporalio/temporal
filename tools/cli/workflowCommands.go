@@ -871,7 +871,7 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 		Type:              info.Type,
 		CloseTime:         convertTime(info.GetCloseTime().GetValue(), false),
 		StartTime:         convertTime(info.GetStartTime().GetValue(), false),
-		CloseStatus:       info.CloseStatus,
+		Status:            info.CloseStatus,
 		HistoryLength:     info.HistoryLength,
 		ParentNamespaceId: info.ParentNamespaceId,
 		ParentExecution:   info.ParentExecution,

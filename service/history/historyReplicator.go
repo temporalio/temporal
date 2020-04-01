@@ -829,7 +829,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 	}
 	currentRunID := resp.RunID
 	currentState := resp.State
-	currentCloseStatus := resp.CloseStatus
+	currentCloseStatus := resp.Status
 	currentLastWriteVetsion := resp.LastWriteVersion
 
 	// this handle the edge case where

@@ -731,7 +731,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
-	if currentWorkflowMutation.ExecutionInfo.CloseStatus != persistence.WorkflowCloseStatusContinuedAsNew {
+	if currentWorkflowMutation.ExecutionInfo.Status != persistence.WorkflowCloseStatusContinuedAsNew {
 		return nil
 	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
 		// update current workflow as zombie & continue as new without new zombie workflow

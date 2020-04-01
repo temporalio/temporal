@@ -5201,7 +5201,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		DecisionStartToCloseTimeout:        sourceInfo.DecisionStartToCloseTimeout,
 		ExecutionContext:                   sourceInfo.ExecutionContext,
 		State:                              sourceInfo.State,
-		CloseStatus:                        sourceInfo.CloseStatus,
+		Status:                             sourceInfo.Status,
 		LastFirstEventID:                   sourceInfo.LastFirstEventID,
 		LastEventTaskID:                    sourceInfo.LastEventTaskID,
 		NextEventID:                        sourceInfo.NextEventID,

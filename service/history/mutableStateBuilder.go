@@ -221,7 +221,7 @@ func newMutableStateBuilder(
 
 		NextEventID:        common.FirstEventID,
 		State:              persistence.WorkflowStateCreated,
-		CloseStatus:        persistence.WorkflowCloseStatusRunning,
+		Status:             persistence.WorkflowCloseStatusRunning,
 		LastProcessedEvent: common.EmptyEventID,
 	}
 	s.hBuilder = newHistoryBuilder(s, logger)
@@ -3834,7 +3834,7 @@ func (e *mutableStateBuilder) GetUpdateCondition() int64 {
 func (e *mutableStateBuilder) GetWorkflowStateCloseStatus() (int, int) {
 
 	executionInfo := e.executionInfo
-	return executionInfo.State, int(executionInfo.CloseStatus)
+	return executionInfo.State, int(executionInfo.Status)
 }
 
 func (e *mutableStateBuilder) UpdateWorkflowStateCloseStatus(

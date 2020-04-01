@@ -235,7 +235,7 @@ type (
 		StartRequestID   string
 		RunID            string
 		State            int
-		CloseStatus      enums.WorkflowExecutionCloseStatus
+		Status           enums.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
 
@@ -291,7 +291,7 @@ type (
 		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
-		CloseStatus                        enums.WorkflowExecutionCloseStatus
+		Status                             enums.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
 		NextEventID                        int64
@@ -690,7 +690,7 @@ type (
 		StartRequestID   string
 		RunID            string
 		State            int
-		CloseStatus      int
+		Status           enums.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
 

@@ -432,7 +432,7 @@ func createExecution(
 	// validate workflow state & close status
 	if err := p.ValidateCreateWorkflowStateCloseStatus(
 		executionInfo.State,
-		executionInfo.CloseStatus); err != nil {
+		executionInfo.Status); err != nil {
 		return err
 	}
 
@@ -549,7 +549,7 @@ func updateExecution(
 	// validate workflow state & close status
 	if err := p.ValidateUpdateWorkflowStateCloseStatus(
 		executionInfo.State,
-		executionInfo.CloseStatus); err != nil {
+		executionInfo.Status); err != nil {
 		return err
 	}
 
@@ -976,7 +976,7 @@ func createOrUpdateCurrentExecution(
 	workflowID string,
 	runID string,
 	state int,
-	closeStatus enums.WorkflowExecutionCloseStatus,
+	status enums.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -988,7 +988,7 @@ func createOrUpdateCurrentExecution(
 		RunId:           primitives.MustParseUUID(runID),
 		CreateRequestId: createRequestID,
 		State:           int32(state),
-		CloseStatus:     int32(closeStatus),
+		Status:          status,
 	})
 
 	if err != nil {
