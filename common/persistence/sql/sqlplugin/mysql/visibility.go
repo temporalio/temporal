@@ -34,7 +34,7 @@ const (
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateWorkflowExecutionClosed = `REPLACE INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, close_status, history_length, memo, encoding) ` +
+		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	// RunID condition is needed for correct pagination
@@ -46,10 +46,10 @@ const (
          LIMIT ?`
 
 	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding`
-	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE close_status IS NULL `
+	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status IS NULL `
 
-	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, close_status, history_length
-		 FROM executions_visibility WHERE close_status IS NOT NULL `
+	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, status, history_length
+		 FROM executions_visibility WHERE status IS NOT NULL `
 
 	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions
 
@@ -63,17 +63,17 @@ const (
 
 	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = ?` + templateConditions
 
-	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND close_status = ?` + templateConditions
+	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = ?` + templateConditions
 
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, close_status, history_length 
+	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length 
 		 FROM executions_visibility
-		 WHERE namespace_id = ? AND close_status IS NOT NULL
+		 WHERE namespace_id = ? AND status IS NOT NULL
 		 AND run_id = ?`
 
 	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id=? AND run_id=?"
 )
 
-var errCloseParams = errors.New("missing one of {closeStatus, closeTime, historyLength} params")
+var errCloseParams = errors.New("missing one of {status, closeTime, historyLength} params")
 
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made
@@ -93,7 +93,7 @@ func (mdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, e
 // ReplaceIntoVisibility replaces an existing row if it exist or creates a new row in visibility table
 func (mdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
 	switch {
-	case row.CloseStatus != nil && row.CloseTime != nil && row.HistoryLength != nil:
+	case row.Status != nil && row.CloseTime != nil && row.HistoryLength != nil:
 		row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
 		closeTime := mdb.converter.ToMySQLDateTime(*row.CloseTime)
 		return mdb.conn.Exec(templateCreateWorkflowExecutionClosed,
@@ -104,7 +104,7 @@ func (mdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, 
 			row.ExecutionTime,
 			row.WorkflowTypeName,
 			closeTime,
-			*row.CloseStatus,
+			*row.Status,
 			*row.HistoryLength,
 			row.Memo,
 			row.Encoding)
@@ -163,10 +163,10 @@ func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlpl
 			*filter.RunID,
 			*filter.MaxStartTime,
 			*filter.PageSize)
-	case filter.MinStartTime != nil && filter.CloseStatus != nil:
+	case filter.MinStartTime != nil && filter.Status != nil:
 		err = mdb.conn.Select(&rows,
 			templateGetClosedWorkflowExecutionsByStatus,
-			*filter.CloseStatus,
+			*filter.Status,
 			filter.NamespaceID,
 			mdb.converter.ToMySQLDateTime(*filter.MinStartTime),
 			mdb.converter.ToMySQLDateTime(*filter.MaxStartTime),

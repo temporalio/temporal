@@ -372,7 +372,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	var completedEvent *commonproto.HistoryEvent
 	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
-		s.Logger.Info("Processing decision task for WorkflowID:", tag.WorkflowID(execution.GetWorkflowId()))
+		s.Logger.Info("Processing decision task for WorkflowId:", tag.WorkflowID(execution.GetWorkflowId()))
 
 		// Child Decider Logic
 		if execution.GetWorkflowId() == childID {

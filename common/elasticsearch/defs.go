@@ -26,17 +26,17 @@ import (
 
 // All legal fields allowed in elastic search index
 const (
-	NamespaceID   = "NamespaceID"
-	WorkflowID    = "WorkflowID"
-	RunID         = "RunID"
-	WorkflowType  = "WorkflowType"
-	StartTime     = "StartTime"
-	ExecutionTime = "ExecutionTime"
-	CloseTime     = "CloseTime"
-	CloseStatus   = "CloseStatus"
-	HistoryLength = "HistoryLength"
-	Memo          = "Memo"
-	Encoding      = "Encoding"
+	NamespaceID     = "NamespaceId"
+	WorkflowID      = "WorkflowId"
+	RunID           = "RunId"
+	WorkflowType    = "WorkflowType"
+	StartTime       = "StartTime"
+	ExecutionTime   = "ExecutionTime"
+	CloseTime       = "CloseTime"
+	ExecutionStatus = "ExecutionStatus"
+	HistoryLength   = "HistoryLength"
+	Memo            = "Memo"
+	Encoding        = "Encoding"
 
 	KafkaKey = "KafkaKey"
 )

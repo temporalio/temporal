@@ -538,7 +538,7 @@ func createOrUpdateCurrentExecution(
 	workflowID string,
 	runID primitives.UUID,
 	state int,
-	closeStatus enums.WorkflowExecutionCloseStatus,
+	status enums.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -551,7 +551,7 @@ func createOrUpdateCurrentExecution(
 		RunID:            runID,
 		CreateRequestID:  createRequestID,
 		State:            state,
-		CloseStatus:      closeStatus,
+		Status:           status,
 		StartVersion:     startVersion,
 		LastWriteVersion: lastWriteVersion,
 	}
@@ -565,7 +565,7 @@ func createOrUpdateCurrentExecution(
 			runID,
 			createRequestID,
 			state,
-			closeStatus,
+			status,
 			row.StartVersion,
 			row.LastWriteVersion); err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("createOrUpdateCurrentExecution failed. Failed to continue as new. Error: %v", err))
@@ -578,7 +578,7 @@ func createOrUpdateCurrentExecution(
 			runID,
 			createRequestID,
 			state,
-			closeStatus,
+			status,
 			row.StartVersion,
 			row.LastWriteVersion); err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("createOrUpdateCurrentExecution failed. Failed to reuse workflow ID. Error: %v", err))
@@ -966,7 +966,7 @@ func assertRunIDAndUpdateCurrentExecution(
 	previousRunID primitives.UUID,
 	createRequestID string,
 	state int,
-	closeStatus enums.WorkflowExecutionCloseStatus,
+	status enums.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {
@@ -974,7 +974,7 @@ func assertRunIDAndUpdateCurrentExecution(
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
 			return &p.ConditionFailedError{Msg: fmt.Sprintf(
-				"assertRunIDAndUpdateCurrentExecution failed. Current run ID was %v, expected %v",
+				"assertRunIDAndUpdateCurrentExecution failed. Current RunId was %v, expected %v",
 				currentRow.RunID,
 				previousRunID,
 			)}
@@ -985,7 +985,7 @@ func assertRunIDAndUpdateCurrentExecution(
 		return err
 	}
 
-	return updateCurrentExecution(tx, shardID, namespaceID, workflowID, newRunID, createRequestID, state, closeStatus, startVersion, lastWriteVersion)
+	return updateCurrentExecution(tx, shardID, namespaceID, workflowID, newRunID, createRequestID, state, status, startVersion, lastWriteVersion)
 }
 
 func assertAndUpdateCurrentExecution(
@@ -999,7 +999,7 @@ func assertAndUpdateCurrentExecution(
 	previousState int,
 	createRequestID string,
 	state int,
-	closeStatus enums.WorkflowExecutionCloseStatus,
+	status enums.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {
@@ -1032,7 +1032,7 @@ func assertAndUpdateCurrentExecution(
 		return err
 	}
 
-	return updateCurrentExecution(tx, shardID, namespaceID, workflowID, newRunID, createRequestID, state, closeStatus, startVersion, lastWriteVersion)
+	return updateCurrentExecution(tx, shardID, namespaceID, workflowID, newRunID, createRequestID, state, status, startVersion, lastWriteVersion)
 }
 
 func assertCurrentExecution(
@@ -1058,7 +1058,7 @@ func assertRunIDMismatch(runID primitives.UUID, currentRunID primitives.UUID) er
 	// zombie workflow creation with existence of current record, this is a noop
 	if bytes.Equal(currentRunID, runID) {
 		return &p.ConditionFailedError{Msg: fmt.Sprintf(
-			"assertRunIDMismatch failed. Current run ID was %v, input %v",
+			"assertRunIDMismatch failed. Current RunId was %v, input %v",
 			currentRunID,
 			runID,
 		)}
@@ -1074,7 +1074,7 @@ func updateCurrentExecution(
 	runID primitives.UUID,
 	createRequestID string,
 	state int,
-	closeStatus enums.WorkflowExecutionCloseStatus,
+	status enums.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {
@@ -1086,7 +1086,7 @@ func updateCurrentExecution(
 		RunID:            runID,
 		CreateRequestID:  createRequestID,
 		State:            state,
-		CloseStatus:      closeStatus,
+		Status:           status,
 		StartVersion:     startVersion,
 		LastWriteVersion: lastWriteVersion,
 	})
@@ -1154,9 +1154,9 @@ func (m *sqlExecutionManager) createExecution(
 ) error {
 
 	// validate workflow state & close status
-	if err := p.ValidateCreateWorkflowStateCloseStatus(
+	if err := p.ValidateCreateWorkflowStateStatus(
 		executionInfo.State,
-		executionInfo.CloseStatus); err != nil {
+		executionInfo.Status); err != nil {
 		return err
 	}
 
@@ -1184,7 +1184,7 @@ func (m *sqlExecutionManager) createExecution(
 				StartRequestID:   executionInfo.CreateRequestID,
 				RunID:            executionInfo.RunID,
 				State:            executionInfo.State,
-				CloseStatus:      executionInfo.CloseStatus,
+				Status:           executionInfo.Status,
 				LastWriteVersion: row.LastWriteVersion,
 			}
 		}
@@ -1213,9 +1213,9 @@ func updateExecution(
 ) error {
 
 	// validate workflow state & close status
-	if err := p.ValidateUpdateWorkflowStateCloseStatus(
+	if err := p.ValidateUpdateWorkflowStateStatus(
 		executionInfo.State,
-		executionInfo.CloseStatus); err != nil {
+		executionInfo.Status); err != nil {
 		return err
 	}
 

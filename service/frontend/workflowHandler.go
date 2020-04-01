@@ -312,7 +312,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 
 	wh.GetLogger().Debug(
-		"Received StartWorkflowExecution. WorkflowID",
+		"Received StartWorkflowExecution",
 		tag.WorkflowID(request.GetWorkflowId()))
 
 	if request.WorkflowType == nil || request.WorkflowType.GetName() == "" {
@@ -458,7 +458,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		if err != nil {
 			return nil, "", 0, 0, false, err
 		}
-		isWorkflowRunning := response.GetWorkflowCloseState() == persistence.WorkflowCloseStatusRunning
+		isWorkflowRunning := response.GetWorkflowStatus() == enums.WorkflowExecutionStatusRunning
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
@@ -2238,7 +2238,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		} else {
 			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&persistence.ListClosedWorkflowExecutionsByStatusRequest{
 				ListWorkflowExecutionsRequest: baseReq,
-				Status:                        request.GetStatusFilter().GetCloseStatus(),
+				Status:                        request.GetStatusFilter().GetStatus(),
 			})
 		}
 		wh.GetLogger().Info("List closed workflow with filter",
@@ -2883,7 +2883,7 @@ func (wh *WorkflowHandler) PollForWorkflowExecutionRawHistory(ctx context.Contex
 		if err != nil {
 			return nil, "", 0, 0, false, err
 		}
-		isWorkflowRunning := response.GetWorkflowCloseState() == persistence.WorkflowCloseStatusRunning
+		isWorkflowRunning := response.GetWorkflowStatus() == enums.WorkflowExecutionStatusRunning
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),

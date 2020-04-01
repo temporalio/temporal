@@ -66,9 +66,9 @@ func DescribeBatchJob(c *cli.Context) {
 	}
 
 	output := map[string]interface{}{}
-	if wf.WorkflowExecutionInfo.GetCloseStatus() != enums.WorkflowExecutionCloseStatusRunning {
-		if wf.WorkflowExecutionInfo.GetCloseStatus() != enums.WorkflowExecutionCloseStatusCompleted {
-			output["msg"] = "batch job stopped status: " + wf.WorkflowExecutionInfo.GetCloseStatus().String()
+	if wf.WorkflowExecutionInfo.GetStatus() != enums.WorkflowExecutionStatusRunning {
+		if wf.WorkflowExecutionInfo.GetStatus() != enums.WorkflowExecutionStatusCompleted {
+			output["msg"] = "batch job stopped status: " + wf.WorkflowExecutionInfo.GetStatus().String()
 		} else {
 			output["msg"] = "batch job is finished successfully"
 		}
@@ -111,8 +111,8 @@ func ListBatchJobs(c *cli.Context) {
 			"operator":  string(wf.SearchAttributes.IndexedFields["Operator"]),
 		}
 
-		if wf.CloseStatus != enums.WorkflowExecutionCloseStatusRunning {
-			job["status"] = wf.CloseStatus.String()
+		if wf.GetStatus() != enums.WorkflowExecutionStatusRunning {
+			job["status"] = wf.GetStatus().String()
 			job["closeTime"] = convertTime(wf.GetCloseTime().GetValue(), false)
 		} else {
 			job["status"] = "RUNNING"

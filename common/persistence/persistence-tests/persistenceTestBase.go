@@ -29,6 +29,7 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
@@ -296,7 +297,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				DecisionStartToCloseTimeout: decisionTimeout,
 				ExecutionContext:            executionContext,
 				State:                       p.WorkflowStateRunning,
-				CloseStatus:                 p.WorkflowCloseStatusRunning,
+				Status:                      enums.WorkflowExecutionStatusRunning,
 				LastFirstEventID:            common.FirstEventID,
 				NextEventID:                 nextEventID,
 				LastProcessedEvent:          lastProcessedEventID,
@@ -367,7 +368,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, wo
 				WorkflowTimeout:             wTimeout,
 				DecisionStartToCloseTimeout: decisionTimeout,
 				State:                       p.WorkflowStateRunning,
-				CloseStatus:                 p.WorkflowCloseStatusRunning,
+				Status:                      enums.WorkflowExecutionStatusRunning,
 				LastFirstEventID:            common.FirstEventID,
 				NextEventID:                 nextEventID,
 				LastProcessedEvent:          lastProcessedEventID,
@@ -423,7 +424,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 				TaskList:           taskList,
 				ExecutionContext:   executionContext,
 				State:              p.WorkflowStateRunning,
-				CloseStatus:        p.WorkflowCloseStatusRunning,
+				Status:             enums.WorkflowExecutionStatusRunning,
 				LastFirstEventID:   common.FirstEventID,
 				NextEventID:        nextEventID,
 				LastProcessedEvent: lastProcessedEventID,
@@ -463,7 +464,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				DecisionStartToCloseTimeout: decisionTimeout,
 				ExecutionContext:            executionContext,
 				State:                       p.WorkflowStateCreated,
-				CloseStatus:                 p.WorkflowCloseStatusRunning,
+				Status:                      enums.WorkflowExecutionStatusRunning,
 				LastFirstEventID:            common.FirstEventID,
 				NextEventID:                 nextEventID,
 				LastProcessedEvent:          lastProcessedEventID,
@@ -574,7 +575,7 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 				DecisionStartToCloseTimeout: updatedInfo.DecisionStartToCloseTimeout,
 				ExecutionContext:            nil,
 				State:                       updatedInfo.State,
-				CloseStatus:                 updatedInfo.CloseStatus,
+				Status:                      updatedInfo.Status,
 				LastFirstEventID:            common.FirstEventID,
 				NextEventID:                 nextEventID,
 				LastProcessedEvent:          common.EmptyEventID,
@@ -592,7 +593,7 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 		Encoding: pickRandomEncoding(),
 	}
 	req.UpdateWorkflowMutation.ExecutionInfo.State = p.WorkflowStateCompleted
-	req.UpdateWorkflowMutation.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusContinuedAsNew
+	req.UpdateWorkflowMutation.ExecutionInfo.Status = enums.WorkflowExecutionStatusContinuedAsNew
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(req)
 	return err
 }

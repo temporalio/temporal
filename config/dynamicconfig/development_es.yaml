@@ -6,14 +6,14 @@ system.enableReadVisibilityFromES:
   - value: true
 frontend.validSearchAttributes:
   - value:
-      NamespaceID: 1
-      WorkflowID: 1
-      RunID: 1
+      NamespaceId: 1
+      WorkflowId: 1
+      RunId: 1
       WorkflowType: 1
       StartTime: 2
       ExecutionTime: 2
       CloseTime: 2
-      CloseStatus: 2
+      Status: 2
       HistoryLength: 2
       CustomStringField: 0
       CustomKeywordField: 1

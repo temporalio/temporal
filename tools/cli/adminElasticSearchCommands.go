@@ -373,11 +373,11 @@ func GenerateReport(c *cli.Context) {
 	// record the column position in the table of each returned item
 	ids := make(map[string]int)
 	// We want these 3 columns shows at leftmost of the table in temporal report usage. It can be changed in future.
-	primaryCols := []string{"group_NamespaceId", "group_WorkflowType", "group_CloseStatus"}
+	primaryCols := []string{"group_NamespaceId", "group_WorkflowType", "group_Status"}
 	primaryColsMap := map[string]int{
 		"group_NamespaceId":  1,
 		"group_WorkflowType": 1,
-		"group_CloseStatus":  1,
+		"group_Status":       1,
 	}
 	buckKeys := 0 // number of bucket keys, used for table collapsing in html report
 	if v, exist := bucket["key"]; exist {

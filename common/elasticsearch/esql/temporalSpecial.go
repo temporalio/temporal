@@ -35,7 +35,7 @@ func (e *ESql) addTemporalSort(orderBySlice []string, sortFields []string) ([]st
 		sortFields = append(sortFields, StartTime)
 	case 1: // user should not use tieBreaker to sort
 		if sortFields[0] == TieBreaker {
-			err := fmt.Errorf("esql: Temporal does not allow user sort by RunID")
+			err := fmt.Errorf("esql: Temporal does not allow user sort by RunId")
 			return nil, nil, err
 		}
 	default:

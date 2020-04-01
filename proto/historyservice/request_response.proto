@@ -78,9 +78,9 @@ message GetMutableStateResponse {
     map<string, replication.ReplicationInfo> replicationInfo = 15;
     // TODO: when migrating to gRPC, make this a enum
     // TODO: when migrating to gRPC, unify internal & external representation
-    // NOTE: workflowState & workflowCloseState are the same as persistence representation
+    // NOTE: workflowState & workflowStatus are the same as persistence representation (???)
     int32 workflowState = 16;
-    int32 workflowCloseState = 17;
+    enums.WorkflowExecutionStatus workflowStatus = 17;
     common.VersionHistories versionHistories = 18;
     bool isStickyTaskListEnabled = 19;
 }
@@ -109,9 +109,9 @@ message PollMutableStateResponse {
     common.VersionHistories versionHistories = 14;
     // TODO: when migrating to gRPC, make this a enum
     // TODO: when migrating to gRPC, unify internal & external representation
-    // NOTE: workflowState & workflowCloseState are the same as persistence representation
+    // NOTE: workflowState & workflowStatus are the same as persistence representation (???)
     int32 workflowState = 15;
-    int32 workflowCloseState = 16;
+    enums.WorkflowExecutionStatus workflowStatus = 16;
 }
 
 message ResetStickyTaskListRequest {

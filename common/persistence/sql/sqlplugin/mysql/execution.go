@@ -49,17 +49,17 @@ const (
 	readLockExecutionQuery  = lockExecutionQueryBase + ` LOCK IN SHARE MODE`
 
 	createCurrentExecutionQuery = `INSERT INTO current_executions
-(shard_id, namespace_id, workflow_id, run_id, create_request_id, state, close_status, start_version, last_write_version) VALUES
-(:shard_id, :namespace_id, :workflow_id, :run_id, :create_request_id, :state, :close_status, :start_version, :last_write_version)`
+(shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_version, last_write_version) VALUES
+(:shard_id, :namespace_id, :workflow_id, :run_id, :create_request_id, :state, :status, :start_version, :last_write_version)`
 
 	deleteCurrentExecutionQuery = "DELETE FROM current_executions WHERE shard_id=? AND namespace_id=? AND workflow_id=? AND run_id=?"
 
 	getCurrentExecutionQuery = `SELECT
-shard_id, namespace_id, workflow_id, run_id, create_request_id, state, close_status, start_version, last_write_version
+shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_version, last_write_version
 FROM current_executions WHERE shard_id = ? AND namespace_id = ? AND workflow_id = ?`
 
 	lockCurrentExecutionJoinExecutionsQuery = `SELECT
-ce.shard_id, ce.namespace_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.close_status, ce.start_version, e.last_write_version
+ce.shard_id, ce.namespace_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.status, ce.start_version, e.last_write_version
 FROM current_executions ce
 INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.namespace_id = ce.namespace_id AND e.workflow_id = ce.workflow_id AND e.run_id = ce.run_id
 WHERE ce.shard_id = ? AND ce.namespace_id = ? AND ce.workflow_id = ? FOR UPDATE`
@@ -70,7 +70,7 @@ WHERE ce.shard_id = ? AND ce.namespace_id = ? AND ce.workflow_id = ? FOR UPDATE`
 run_id = :run_id,
 create_request_id = :create_request_id,
 state = :state,
-close_status = :close_status,
+status = :status,
 start_version = :start_version,
 last_write_version = :last_write_version
 WHERE

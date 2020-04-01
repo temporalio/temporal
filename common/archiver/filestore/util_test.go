@@ -471,6 +471,6 @@ func (s *UtilSuite) assertCorrectFileMode(path string) {
 	s.Equal(mode, info.Mode())
 }
 
-func toWorkflowExecutionCloseStatusPtr(in enums.WorkflowExecutionCloseStatus) *enums.WorkflowExecutionCloseStatus {
+func toWorkflowExecutionStatusPtr(in enums.WorkflowExecutionStatus) *enums.WorkflowExecutionStatus {
 	return &in
 }

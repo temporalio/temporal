@@ -240,7 +240,7 @@ func (c *historyCache) validateWorkflowExecutionInfo(
 
 		execution.RunId = response.RunID
 	} else if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
-		return serviceerror.NewInvalidArgument("RunID is not valid UUID.")
+		return serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	}
 	return nil
 }

@@ -494,10 +494,10 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 			Name: "reserved key",
 			Request: &adminservice.AddSearchAttributeRequest{
 				SearchAttribute: map[string]enums.IndexedValueType{
-					"WorkflowID": 1,
+					"WorkflowId": 1,
 				},
 			},
-			Expected: &serviceerror.InvalidArgument{Message: "Key [WorkflowID] is reserved by system."},
+			Expected: &serviceerror.InvalidArgument{Message: "Key [WorkflowId] is reserved by system."},
 		},
 		{
 			Name: "key already whitelisted",

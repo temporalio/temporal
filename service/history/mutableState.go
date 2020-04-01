@@ -150,7 +150,7 @@ type (
 		GetUserTimerInfoByEventID(int64) (*persistenceblobs.TimerInfo, bool)
 		GetUserTimerInfo(string) (*persistenceblobs.TimerInfo, bool)
 		GetWorkflowType() *commonproto.WorkflowType
-		GetWorkflowStateCloseStatus() (int, int)
+		GetWorkflowStateStatus() (int, enums.WorkflowExecutionStatus)
 		GetQueryRegistry() queryRegistry
 		HasBufferedEvents() bool
 		HasInFlightDecision() bool
@@ -217,7 +217,7 @@ type (
 		UpdateReplicationStateLastEventID(int64, int64)
 		UpdateUserTimer(*persistenceblobs.TimerInfo) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
-		UpdateWorkflowStateCloseStatus(state int, closeStatus int) error
+		UpdateWorkflowStateStatus(state int, status enums.WorkflowExecutionStatus) error
 
 		AddTransferTasks(transferTasks ...persistence.Task)
 		AddTimerTasks(timerTasks ...persistence.Task)

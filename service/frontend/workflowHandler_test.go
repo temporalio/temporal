@@ -189,8 +189,8 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	s.Equal(errNoPermission, err)
 
 	// test list close by workflow status
-	failedStatus := enums.WorkflowExecutionCloseStatusFailed
-	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &commonproto.StatusFilter{CloseStatus: failedStatus}}
+	failedStatus := enums.WorkflowExecutionStatusFailed
+	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &commonproto.StatusFilter{Status: failedStatus}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
 	s.Equal(errNoPermission, err)
@@ -1104,7 +1104,7 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	}
 	ctx := context.Background()
 
-	query := "WorkflowID = 'wid'"
+	query := "WorkflowId = 'wid'"
 	listRequest.Query = query
 	_, err := wh.ListWorkflowExecutions(ctx, listRequest)
 	s.NoError(err)
@@ -1137,7 +1137,7 @@ func (s *workflowHandlerSuite) TestScantWorkflowExecutions() {
 	}
 	ctx := context.Background()
 
-	query := "WorkflowID = 'wid'"
+	query := "WorkflowId = 'wid'"
 	listRequest.Query = query
 	_, err := wh.ScanWorkflowExecutions(ctx, scanRequest)
 	s.NoError(err)
@@ -1164,7 +1164,7 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 	}
 	ctx := context.Background()
 
-	query := "WorkflowID = 'wid'"
+	query := "WorkflowId = 'wid'"
 	countRequest.Query = query
 	_, err := wh.CountWorkflowExecutions(ctx, countRequest)
 	s.NoError(err)

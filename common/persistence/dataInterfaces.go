@@ -125,18 +125,6 @@ const (
 	WorkflowStateCorrupted
 )
 
-// Workflow execution close status
-const (
-	_ = iota
-	WorkflowCloseStatusRunning
-	WorkflowCloseStatusCompleted
-	WorkflowCloseStatusFailed
-	WorkflowCloseStatusCanceled
-	WorkflowCloseStatusTerminated
-	WorkflowCloseStatusContinuedAsNew
-	WorkflowCloseStatusTimedOut
-)
-
 // Types of task lists
 const (
 	TaskListTypeDecision int32 = iota
@@ -197,7 +185,7 @@ const (
 	TransferTaskTransferTargetWorkflowID = "20000000-0000-f000-f000-000000000001"
 
 	// indicate invalid workflow state transition
-	invalidStateTransitionMsg = "unable to change workflow state from %v to %v, close status %v"
+	invalidStateTransitionMsg = "unable to change workflow state from %v to %v, status %v"
 )
 
 const numItemsInGarbageInfo = 3
@@ -235,7 +223,7 @@ type (
 		StartRequestID   string
 		RunID            string
 		State            int
-		CloseStatus      enums.WorkflowExecutionCloseStatus
+		Status           enums.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
 
@@ -291,7 +279,7 @@ type (
 		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
-		CloseStatus                        enums.WorkflowExecutionCloseStatus
+		Status                             enums.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
 		NextEventID                        int64
@@ -690,7 +678,7 @@ type (
 		StartRequestID   string
 		RunID            string
 		State            int
-		CloseStatus      int
+		Status           enums.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
 

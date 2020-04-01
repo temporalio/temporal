@@ -217,7 +217,7 @@ type (
 		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
-		CloseStatus                        enums.WorkflowExecutionCloseStatus
+		Status                             enums.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
 		NextEventID                        int64
@@ -556,7 +556,7 @@ type (
 		StartTime        time.Time
 		ExecutionTime    time.Time
 		CloseTime        time.Time
-		Status           *enums.WorkflowExecutionCloseStatus
+		Status           *enums.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *serialization.DataBlob
 		SearchAttributes map[string]interface{}
@@ -601,7 +601,7 @@ type (
 		Memo               *serialization.DataBlob
 		SearchAttributes   map[string][]byte
 		CloseTimestamp     int64
-		Status             enums.WorkflowExecutionCloseStatus
+		Status             enums.WorkflowExecutionStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
 	}
@@ -745,7 +745,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 	state := &persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: executionInfo.CreateRequestID,
 		State:           int32(executionInfo.State),
-		CloseStatus:     int32(executionInfo.CloseStatus),
+		Status:          executionInfo.Status,
 		RunId:           primitives.MustParseUUID(executionInfo.RunID),
 	}
 
@@ -846,7 +846,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		WorkflowTimeout:                    info.GetWorkflowTimeoutSeconds(),
 		DecisionStartToCloseTimeout:        info.GetDecisionTaskTimeoutSeconds(),
 		State:                              int(state.GetState()),
-		CloseStatus:                        enums.WorkflowExecutionCloseStatus(state.GetCloseStatus()),
+		Status:                             state.GetStatus(),
 		LastFirstEventID:                   info.GetLastFirstEventId(),
 		LastProcessedEvent:                 info.GetLastProcessedEvent(),
 		StartTimestamp:                     time.Unix(0, info.GetStartTimeNanos()),

@@ -465,7 +465,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		return err
 	}
 
-	workflowState, workflowCloseState := resetMutableState.GetWorkflowStateCloseStatus()
+	workflowState, workflowStatus := resetMutableState.GetWorkflowStateStatus()
 	// Current branch changed and notify the watchers
 	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
 		c.namespaceID,
@@ -475,7 +475,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		resetMutableState.GetPreviousStartedEventID(),
 		currentBranchToken,
 		workflowState,
-		workflowCloseState,
+		workflowStatus,
 	))
 
 	c.notifyTasks(
@@ -663,7 +663,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	if err != nil {
 		return err
 	}
-	workflowState, workflowCloseState := c.mutableState.GetWorkflowStateCloseStatus()
+	workflowState, workflowStatus := c.mutableState.GetWorkflowStateStatus()
 	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
 		c.namespaceID,
 		&c.workflowExecution,
@@ -672,7 +672,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		c.mutableState.GetPreviousStartedEventID(),
 		currentBranchToken,
 		workflowState,
-		workflowCloseState,
+		workflowStatus,
 	))
 
 	// notify current workflow tasks
@@ -731,7 +731,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
-	if currentWorkflowMutation.ExecutionInfo.CloseStatus != persistence.WorkflowCloseStatusContinuedAsNew {
+	if currentWorkflowMutation.ExecutionInfo.Status != enums.WorkflowExecutionStatusContinuedAsNew {
 		return nil
 	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
 		// update current workflow as zombie & continue as new without new zombie workflow

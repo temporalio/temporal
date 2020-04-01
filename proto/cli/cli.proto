@@ -40,7 +40,7 @@ message WorkflowExecutionInfo {
     common.WorkflowType type = 2;
     string startTime = 3;
     string closeTime = 4;
-    enums.WorkflowExecutionCloseStatus closeStatus = 5;
+    enums.WorkflowExecutionStatus status = 5;
     int64 historyLength = 6;
     string parentNamespaceId = 7;
     common.WorkflowExecution parentExecution = 8;

@@ -60,7 +60,7 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		Status             enums.WorkflowExecutionCloseStatus
+		Status             enums.WorkflowExecutionStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
 		TaskID             int64 // not persisted, used as condition update version for ES
@@ -144,7 +144,7 @@ type (
 	// have specific close status
 	ListClosedWorkflowExecutionsByStatusRequest struct {
 		ListWorkflowExecutionsRequest
-		Status enums.WorkflowExecutionCloseStatus
+		Status enums.WorkflowExecutionStatus
 	}
 
 	// GetClosedWorkflowExecutionRequest is used retrieve the record for a specific execution
