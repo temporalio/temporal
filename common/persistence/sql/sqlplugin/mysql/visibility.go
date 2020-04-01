@@ -34,7 +34,7 @@ const (
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateWorkflowExecutionClosed = `REPLACE INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, close_status, history_length, memo, encoding) ` +
+		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	// RunID condition is needed for correct pagination
@@ -46,10 +46,10 @@ const (
          LIMIT ?`
 
 	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding`
-	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE close_status IS NULL `
+	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status IS NULL `
 
-	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, close_status, history_length
-		 FROM executions_visibility WHERE close_status IS NOT NULL `
+	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, status, history_length
+		 FROM executions_visibility WHERE status IS NOT NULL `
 
 	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions
 
@@ -63,11 +63,11 @@ const (
 
 	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = ?` + templateConditions
 
-	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND close_status = ?` + templateConditions
+	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = ?` + templateConditions
 
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, close_status, history_length 
+	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length 
 		 FROM executions_visibility
-		 WHERE namespace_id = ? AND close_status IS NOT NULL
+		 WHERE namespace_id = ? AND status IS NOT NULL
 		 AND run_id = ?`
 
 	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id=? AND run_id=?"

@@ -122,7 +122,7 @@ const (
 		`decision_task_timeout: ?, ` +
 		`execution_context: ?, ` +
 		`state: ?, ` +
-		`close_status: ?, ` +
+		`status: ?, ` +
 		`last_first_event_id: ?, ` +
 		`last_event_task_id: ?, ` +
 		`next_event_id: ?, ` +

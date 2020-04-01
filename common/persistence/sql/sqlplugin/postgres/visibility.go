@@ -36,7 +36,7 @@ const (
          ON CONFLICT (namespace_id, run_id) DO NOTHING`
 
 	templateCreateWorkflowExecutionClosed = `INSERT INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, close_status, history_length, memo, encoding) ` +
+		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding) ` +
 		`VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (namespace_id, run_id) DO UPDATE 
 		  SET workflow_id = excluded.workflow_id,
@@ -44,7 +44,7 @@ const (
 		      execution_time = excluded.execution_time,
               workflow_type_name = excluded.workflow_type_name,
 			  close_time = excluded.close_time,
-			  close_status = excluded.close_status,
+			  status = excluded.status,
 			  history_length = excluded.history_length,
 			  memo = excluded.memo,
 			  encoding = excluded.encoding`
@@ -65,10 +65,10 @@ const (
          LIMIT $7`
 
 	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding`
-	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE close_status IS NULL `
+	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status IS NULL `
 
-	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, close_status, history_length
-		 FROM executions_visibility WHERE close_status IS NOT NULL `
+	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, status, history_length
+		 FROM executions_visibility WHERE status IS NOT NULL `
 
 	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions1
 
@@ -82,11 +82,11 @@ const (
 
 	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = $1` + templateConditions2
 
-	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND close_status = $1` + templateConditions2
+	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = $1` + templateConditions2
 
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, close_status, history_length 
+	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length 
 		 FROM executions_visibility
-		 WHERE namespace_id = $1 AND close_status IS NOT NULL
+		 WHERE namespace_id = $1 AND status IS NOT NULL
 		 AND run_id = $2`
 
 	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id=$1 AND run_id=$2"
