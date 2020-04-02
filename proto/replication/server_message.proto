@@ -27,6 +27,7 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/replication";
 import "replication/server_enum.proto";
 import "common/message.proto";
 import "namespace/message.proto";
+import "replication/message.proto";
 import "event/message.proto";
 import "event/server_message.proto";
 
@@ -89,7 +90,7 @@ message NamespaceTaskAttributes {
     string id = 2;
     namespace.NamespaceInfo info = 3;
     namespace.NamespaceConfiguration config = 4;
-    namespace.NamespaceReplicationConfiguration replicationConfig = 5;
+    replication.NamespaceReplicationConfiguration replicationConfig = 5;
     int64 configVersion = 6;
     int64 failoverVersion = 7;
 }

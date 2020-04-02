@@ -241,6 +241,8 @@ go.temporal.io/temporal-proto v0.20.4/go.mod h1:Lv8L8YBpbp0Z7V5nbvw5UD0j7x0isebh
 go.temporal.io/temporal-proto v0.20.9 h1:mQYTA3BMlBpkvcSGl18x6I1RLfBqbCN1w1ECEkru2Tk=
 go.temporal.io/temporal-proto v0.20.9/go.mod h1:Lv8L8YBpbp0Z7V5nbvw5UD0j7x0isebhCOIDLkBqn6s=
 go.temporal.io/temporal-proto v0.20.10/go.mod h1:Lv8L8YBpbp0Z7V5nbvw5UD0j7x0isebhCOIDLkBqn6s=
+go.temporal.io/temporal-proto v0.20.11 h1:IvMUp7qsKZNMLfJwtGLVXiOEhiC8v6cHmKdvKyqq+s4=
+go.temporal.io/temporal-proto v0.20.11/go.mod h1:Lv8L8YBpbp0Z7V5nbvw5UD0j7x0isebhCOIDLkBqn6s=
 go.uber.org/atomic v1.5.0 h1:OI5t8sDa1Or+q8AeE+yKeB/SDYioSHAgcVljj9JIETY=
 go.uber.org/atomic v1.5.0/go.mod h1:sABNBOSYdrvTF6hTgEIbc7YasKWGhgEQZyfxyTvoXHQ=
 go.uber.org/atomic v1.6.0 h1:Ezj3JGmsOnG1MoRWQkPBsKLe9DwWD9QeXzTRzzldNVk=
