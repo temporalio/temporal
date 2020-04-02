@@ -22,7 +22,6 @@ package filestore
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"os"
@@ -40,6 +39,7 @@ import (
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/service/config"
 )
@@ -195,7 +195,8 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	s.NoError(err)
 
 	archivedRecord := &archiverproto.ArchiveVisibilityRequest{}
-	err = json.Unmarshal(data, archivedRecord)
+	encoder := codec.NewJSONPBEncoder()
+	err = encoder.Decode(data, archivedRecord)
 	s.NoError(err)
 	s.Equal(request, archivedRecord)
 }

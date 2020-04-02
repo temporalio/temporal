@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	commonproto "go.temporal.io/temporal-proto/common"
 
@@ -39,8 +40,9 @@ import (
 	"github.com/temporalio/temporal/common/codec"
 )
 
-func encode(v interface{}) ([]byte, error) {
-	return json.Marshal(v)
+func encode(message proto.Message) ([]byte, error) {
+	encoder := codec.NewJSONPBEncoder()
+	return encoder.Encode(message)
 }
 
 func constructHistoryFilename(namespaceID, workflowID, runID string, version int64) string {

@@ -117,7 +117,7 @@ message TimerTaskInfo {
     int64 scheduleAttempt = 7;
     int64 eventId = 8;
     int64 taskId = 9;
-    google.protobuf.Timestamp VisibilityTimestamp = 10;
+    google.protobuf.Timestamp visibilityTimestamp = 10;
 }
 
 message TransferTaskInfo {
@@ -284,11 +284,7 @@ message WorkflowExecutionInfo {
 
 message Checksum {
     int32 version = 1;
-    enum ChecksumFlavor {
-        FlavorUnknown = 0;
-        FlavorIEEECRC32OverProto3Binary = 1;
-    }
-    ChecksumFlavor flavor = 2;
+    enums.ChecksumFlavor flavor = 2;
     bytes value = 3;
 }
 

@@ -37,7 +37,7 @@ message ReplicationInfo {
 message ReplicationTask {
     enums.ReplicationTaskType taskType = 1;
     int64 sourceTaskId = 2;
-    oneof Attributes {
+    oneof attributes {
         NamespaceTaskAttributes namespaceTaskAttributes = 3;
         // TODO: deprecate once NDC migration is done.
         HistoryTaskAttributes historyTaskAttributes = 4;

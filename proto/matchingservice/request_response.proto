@@ -50,7 +50,7 @@ message PollForDecisionTaskResponse {
     bool stickyExecutionEnabled = 9;
     common.WorkflowQuery query = 10;
     common.TransientDecisionInfo decisionInfo = 11;
-    common.TaskList WorkflowExecutionTaskList = 12;
+    common.TaskList workflowExecutionTaskList = 12;
     int32 eventStoreVersion = 13;
     bytes branchToken = 14;
     int64 scheduledTimestamp = 15;

@@ -580,7 +580,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 }
 
 func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*commonproto.History, version int64) {
-	data, err := encode(historyBatches)
+	data, err := encodeHistories(historyBatches)
 	s.Require().NoError(err)
 	filename := constructHistoryFilename(testNamespaceID, testWorkflowID, testRunID, version)
 	err = writeFile(path.Join(s.testGetDirectory, filename), data, testFileMode)
