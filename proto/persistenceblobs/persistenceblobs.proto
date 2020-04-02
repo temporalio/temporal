@@ -286,9 +286,9 @@ message Checksum {
     int32 version = 1;
     enum ChecksumFlavor {
         FlavorUnknown = 0;
-        FlavorIEEECRC32OverThriftBinary = 1;
+        FlavorIEEECRC32OverProto3Binary = 1;
     }
-    ChecksumFlavor Flavor = 2;
+    ChecksumFlavor flavor = 2;
     bytes value = 3;
 }
 

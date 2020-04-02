@@ -87,7 +87,7 @@ func (s *ExecutionManagerSuiteForEventsV2) SetupTest() {
 
 func (s *ExecutionManagerSuiteForEventsV2) newRandomChecksum() checksum.Checksum {
 	return checksum.Checksum{
-		Flavor:  checksum.FlavorIEEECRC32OverThriftBinary,
+		Flavor:  checksum.FlavorIEEECRC32OverProto3Binary,
 		Version: 22,
 		Value:   []byte(uuid.NewRandom()),
 	}

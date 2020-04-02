@@ -406,7 +406,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			csum, err := tc.closeTxFunc(s.msBuilder)
 			s.Nil(err)
 			s.NotNil(csum.Value)
-			s.Equal(checksum.FlavorIEEECRC32OverThriftBinary, csum.Flavor)
+			s.Equal(checksum.FlavorIEEECRC32OverProto3Binary, csum.Flavor)
 			s.Equal(mutableStateChecksumPayloadV1, csum.Version)
 			s.EqualValues(csum, s.msBuilder.checksum)
 

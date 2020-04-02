@@ -48,7 +48,7 @@ func GenerateCRC32(
 	return Checksum{
 		Value:   checksum,
 		Version: payloadVersion,
-		Flavor:  FlavorIEEECRC32OverThriftBinary,
+		Flavor:  FlavorIEEECRC32OverProto3Binary,
 	}, nil
 }
 
@@ -60,7 +60,7 @@ func Verify(
 	checksum Checksum,
 ) error {
 
-	if !checksum.Flavor.IsValid() || checksum.Flavor != FlavorIEEECRC32OverThriftBinary {
+	if !checksum.Flavor.IsValid() || checksum.Flavor != FlavorIEEECRC32OverProto3Binary {
 		return fmt.Errorf("unknown checksum flavor %v", checksum.Flavor)
 	}
 

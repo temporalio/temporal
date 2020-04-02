@@ -29,41 +29,41 @@ import "common/decision.proto";
 import "replication/replication.proto";
 
 message HistoryContinuation {
-    string RunId = 1;
-    int64 FirstEventId = 2;
-    int64 NextEventId = 3;
-    bool IsWorkflowRunning = 5;
-    bytes PersistenceToken = 6;
-    common.TransientDecisionInfo TransientDecision = 7;
-    bytes BranchToken = 8;
-    map<string,replication.ReplicationInfo> ReplicationInfo = 9;
+    string runId = 1;
+    int64 firstEventId = 2;
+    int64 nextEventId = 3;
+    bool isWorkflowRunning = 5;
+    bytes persistenceToken = 6;
+    common.TransientDecisionInfo transientDecision = 7;
+    bytes branchToken = 8;
+    map<string,replication.ReplicationInfo> replicationInfo = 9;
 }
 
 message RawHistoryContinuation{
-    string Namespace = 1;
-    string WorkflowId = 2;
-    string RunId = 3;
-    int64 StartEventId = 4;
-    int64 StartEventVersion = 5;
-    int64 EndEventId = 6;
-    int64 EndEventVersion = 7;
-    bytes PersistenceToken = 8;
-    common.VersionHistories VersionHistories = 9;
+    string namespace = 1;
+    string workflowId = 2;
+    string runId = 3;
+    int64 startEventId = 4;
+    int64 startEventVersion = 5;
+    int64 endEventId = 6;
+    int64 endEventVersion = 7;
+    bytes persistenceToken = 8;
+    common.VersionHistories versionHistories = 9;
 }
 
 message Task {
-    bytes NamespaceId = 1;
-    string WorkflowId  = 2;
-    bytes RunId = 3;
-    int64 ScheduleId = 4;
-    int64 ScheduleAttempt = 5;
-    string ActivityId = 6;
-    string WorkflowType = 7;
-    string ActivityType = 8;
+    bytes namespaceId = 1;
+    string workflowId  = 2;
+    bytes runId = 3;
+    int64 scheduleId = 4;
+    int64 scheduleAttempt = 5;
+    string activityId = 6;
+    string workflowType = 7;
+    string activityType = 8;
 }
 
 message QueryTask {
-    string NamespaceId = 1;
-    string TaskList = 2;
-    string TaskId = 3;
+    string namespaceId = 1;
+    string taskList = 2;
+    string taskId = 3;
 }
