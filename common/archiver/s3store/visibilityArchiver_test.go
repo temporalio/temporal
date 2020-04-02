@@ -22,7 +22,6 @@ package s3store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -43,6 +42,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
@@ -220,7 +220,8 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	s.NoError(err, expectedKey)
 
 	archivedRecord := &archiverproto.ArchiveVisibilityRequest{}
-	err = json.Unmarshal(data, archivedRecord)
+	encoder := codec.NewJSONPBEncoder()
+	err = encoder.Decode(data, archivedRecord)
 	s.NoError(err)
 	s.Equal(request, archivedRecord)
 }
