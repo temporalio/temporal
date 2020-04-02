@@ -1020,7 +1020,7 @@ type (
 		NextPageToken []byte
 	}
 
-	// NamespaceInfo describes the namespace entity
+	// NamespaceDetail describes the namespace entity
 	NamespaceInfo struct {
 		ID          string
 		Name        string

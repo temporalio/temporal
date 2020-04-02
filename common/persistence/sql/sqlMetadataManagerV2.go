@@ -94,27 +94,36 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 		badBinaries = request.Config.BadBinaries.Data
 		badBinariesEncoding = string(request.Config.BadBinaries.GetEncoding())
 	}
-	namespaceInfo := &persistenceblobs.NamespaceInfo{
-		Status:                      int32(request.Info.Status),
-		Description:                 request.Info.Description,
-		Owner:                       request.Info.OwnerEmail,
-		Data:                        request.Info.Data,
-		RetentionDays:               request.Config.Retention,
-		EmitMetric:                  request.Config.EmitMetric,
-		ArchivalBucket:              request.Config.ArchivalBucket,
-		ArchivalStatus:              int32(request.Config.ArchivalStatus),
-		HistoryArchivalStatus:       int32(request.Config.HistoryArchivalStatus),
-		HistoryArchivalURI:          request.Config.HistoryArchivalURI,
-		VisibilityArchivalStatus:    int32(request.Config.VisibilityArchivalStatus),
-		VisibilityArchivalURI:       request.Config.VisibilityArchivalURI,
-		ActiveClusterName:           request.ReplicationConfig.ActiveClusterName,
-		Clusters:                    clusters,
+	namespaceInfo := &persistenceblobs.NamespaceDetail{
+		Info: &persistenceblobs.NamespaceInfo{
+			Id:          			     request.Info.ID,
+			Name:        				 request.Info.Name,
+			Status:                      int32(request.Info.Status),
+			Description:                 request.Info.Description,
+			Owner:                       request.Info.OwnerEmail,
+			Data:                        request.Info.Data,
+		},
+		Config: &persistenceblobs.NamespaceConfig{
+			RetentionDays:               request.Config.Retention,
+			EmitMetric:                  request.Config.EmitMetric,
+			ArchivalBucket:              request.Config.ArchivalBucket,
+			ArchivalStatus:              int32(request.Config.ArchivalStatus),
+			HistoryArchivalStatus:       int32(request.Config.HistoryArchivalStatus),
+			HistoryArchivalURI:          request.Config.HistoryArchivalURI,
+			VisibilityArchivalStatus:    int32(request.Config.VisibilityArchivalStatus),
+			VisibilityArchivalURI:       request.Config.VisibilityArchivalURI,
+			BadBinaries:                 badBinaries,
+			BadBinariesEncoding:         badBinariesEncoding,
+		},
+		ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+			ActiveClusterName: request.ReplicationConfig.ActiveClusterName,
+			Clusters:          clusters,
+		},
+
 		ConfigVersion:               request.ConfigVersion,
 		FailoverVersion:             request.FailoverVersion,
 		NotificationVersion:         metadata.NotificationVersion,
 		FailoverNotificationVersion: persistence.InitialFailoverNotificationVersion,
-		BadBinaries:                 badBinaries,
-		BadBinariesEncoding:         badBinariesEncoding,
 	}
 
 	blob, err := serialization.NamespaceInfoToBlob(namespaceInfo)
@@ -191,38 +200,38 @@ func (m *sqlMetadataManagerV2) namespaceRowToGetNamespaceResponse(row *sqlplugin
 		return nil, err
 	}
 
-	clusters := make([]*persistence.ClusterReplicationConfig, len(namespaceInfo.Clusters))
-	for i := range namespaceInfo.Clusters {
-		clusters[i] = &persistence.ClusterReplicationConfig{ClusterName: namespaceInfo.Clusters[i]}
+	clusters := make([]*persistence.ClusterReplicationConfig, len(namespaceInfo.ReplicationConfig.Clusters))
+	for i := range namespaceInfo.ReplicationConfig.Clusters {
+		clusters[i] = &persistence.ClusterReplicationConfig{ClusterName: namespaceInfo.ReplicationConfig.Clusters[i]}
 	}
 
 	var badBinaries *serialization.DataBlob
-	if namespaceInfo.BadBinaries != nil {
-		badBinaries = persistence.NewDataBlob(namespaceInfo.BadBinaries, common.EncodingType(namespaceInfo.BadBinariesEncoding))
+	if namespaceInfo.Config.BadBinaries != nil {
+		badBinaries = persistence.NewDataBlob(namespaceInfo.Config.BadBinaries, common.EncodingType(namespaceInfo.Config.BadBinariesEncoding))
 	}
 
 	return &persistence.InternalGetNamespaceResponse{
 		Info: &persistence.NamespaceInfo{
 			ID:          row.ID.String(),
 			Name:        row.Name,
-			Status:      int(namespaceInfo.GetStatus()),
-			Description: namespaceInfo.GetDescription(),
-			OwnerEmail:  namespaceInfo.GetOwner(),
-			Data:        namespaceInfo.GetData(),
+			Status:      int(namespaceInfo.Info.GetStatus()),
+			Description: namespaceInfo.Info.GetDescription(),
+			OwnerEmail:  namespaceInfo.Info.GetOwner(),
+			Data:        namespaceInfo.Info.GetData(),
 		},
 		Config: &persistence.InternalNamespaceConfig{
-			Retention:                namespaceInfo.GetRetentionDays(),
-			EmitMetric:               namespaceInfo.GetEmitMetric(),
-			ArchivalBucket:           namespaceInfo.GetArchivalBucket(),
-			ArchivalStatus:           enums.ArchivalStatus(namespaceInfo.GetArchivalStatus()),
-			HistoryArchivalStatus:    enums.ArchivalStatus(namespaceInfo.GetHistoryArchivalStatus()),
-			HistoryArchivalURI:       namespaceInfo.GetHistoryArchivalURI(),
-			VisibilityArchivalStatus: enums.ArchivalStatus(namespaceInfo.GetVisibilityArchivalStatus()),
-			VisibilityArchivalURI:    namespaceInfo.GetVisibilityArchivalURI(),
+			Retention:                namespaceInfo.Config.GetRetentionDays(),
+			EmitMetric:               namespaceInfo.Config.GetEmitMetric(),
+			ArchivalBucket:           namespaceInfo.Config.GetArchivalBucket(),
+			ArchivalStatus:           enums.ArchivalStatus(namespaceInfo.Config.GetArchivalStatus()),
+			HistoryArchivalStatus:    enums.ArchivalStatus(namespaceInfo.Config.GetHistoryArchivalStatus()),
+			HistoryArchivalURI:       namespaceInfo.Config.GetHistoryArchivalURI(),
+			VisibilityArchivalStatus: enums.ArchivalStatus(namespaceInfo.Config.GetVisibilityArchivalStatus()),
+			VisibilityArchivalURI:    namespaceInfo.Config.GetVisibilityArchivalURI(),
 			BadBinaries:              badBinaries,
 		},
 		ReplicationConfig: &persistence.NamespaceReplicationConfig{
-			ActiveClusterName: persistence.GetOrUseDefaultActiveCluster(m.activeClusterName, namespaceInfo.GetActiveClusterName()),
+			ActiveClusterName: persistence.GetOrUseDefaultActiveCluster(m.activeClusterName, namespaceInfo.ReplicationConfig.GetActiveClusterName()),
 			Clusters:          persistence.GetOrUseDefaultClusters(m.activeClusterName, clusters),
 		},
 		IsGlobalNamespace:           row.IsGlobal,
@@ -245,27 +254,37 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 		badBinaries = request.Config.BadBinaries.Data
 		badBinariesEncoding = string(request.Config.BadBinaries.GetEncoding())
 	}
-	namespaceInfo := &persistenceblobs.NamespaceInfo{
-		Status:                      int32(request.Info.Status),
-		Description:                 request.Info.Description,
-		Owner:                       request.Info.OwnerEmail,
-		Data:                        request.Info.Data,
-		RetentionDays:               request.Config.Retention,
-		EmitMetric:                  request.Config.EmitMetric,
-		ArchivalBucket:              request.Config.ArchivalBucket,
-		ArchivalStatus:              int32(request.Config.ArchivalStatus),
-		HistoryArchivalStatus:       int32(request.Config.HistoryArchivalStatus),
-		HistoryArchivalURI:          request.Config.HistoryArchivalURI,
-		VisibilityArchivalStatus:    int32(request.Config.VisibilityArchivalStatus),
-		VisibilityArchivalURI:       request.Config.VisibilityArchivalURI,
-		ActiveClusterName:           request.ReplicationConfig.ActiveClusterName,
-		Clusters:                    clusters,
+
+	namespaceInfo := &persistenceblobs.NamespaceDetail{
+		Info: &persistenceblobs.NamespaceInfo{
+			Id:          			     request.Info.ID,
+			Name:        				 request.Info.Name,
+			Status:                      int32(request.Info.Status),
+			Description:                 request.Info.Description,
+			Owner:                       request.Info.OwnerEmail,
+			Data:                        request.Info.Data,
+		},
+		Config: &persistenceblobs.NamespaceConfig{
+			RetentionDays:               request.Config.Retention,
+			EmitMetric:                  request.Config.EmitMetric,
+			ArchivalBucket:              request.Config.ArchivalBucket,
+			ArchivalStatus:              int32(request.Config.ArchivalStatus),
+			HistoryArchivalStatus:       int32(request.Config.HistoryArchivalStatus),
+			HistoryArchivalURI:          request.Config.HistoryArchivalURI,
+			VisibilityArchivalStatus:    int32(request.Config.VisibilityArchivalStatus),
+			VisibilityArchivalURI:       request.Config.VisibilityArchivalURI,
+			BadBinaries:                 badBinaries,
+			BadBinariesEncoding:         badBinariesEncoding,
+		},
+		ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+			ActiveClusterName: request.ReplicationConfig.ActiveClusterName,
+			Clusters:          clusters,
+		},
+
 		ConfigVersion:               request.ConfigVersion,
 		FailoverVersion:             request.FailoverVersion,
 		NotificationVersion:         request.NotificationVersion,
 		FailoverNotificationVersion: request.FailoverNotificationVersion,
-		BadBinaries:                 badBinaries,
-		BadBinariesEncoding:         badBinariesEncoding,
 	}
 
 	blob, err := serialization.NamespaceInfoToBlob(namespaceInfo)

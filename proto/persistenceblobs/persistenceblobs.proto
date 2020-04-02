@@ -309,22 +309,36 @@ message ChildExecutionInfo {
     int64 initiatedId = 14;
 }
 
-message NamespaceInfo {
-    string name = 1;
-    string description = 2;
-    string owner = 3;
-    int32 status = 4;
-    int32 retentionDays = 5;
-    bool emitMetric = 6;
-    string archivalBucket = 7;
-    int32 archivalStatus = 8;
+message NamespaceDetail {
+    NamespaceInfo info = 1;
+    NamespaceConfig config = 2;
+    NamespaceReplicationConfig replicationConfig = 3;
+
     int64 configVersion = 9;
     int64 notificationVersion = 10;
     int64 failoverNotificationVersion = 11;
     int64 failoverVersion = 12;
-    string activeClusterName = 13;
-    repeated string clusters = 14;
-    map<string, string> data = 15;
+}
+
+message NamespaceInfo {
+    string id = 1;
+    int32 status = 2;
+    string name = 3;
+    string description = 4;
+    string owner = 5;
+    map<string, string> data = 6;
+}
+
+message NamespaceReplicationConfig {
+    string activeClusterName = 1;
+    repeated string clusters = 2;
+}
+
+message NamespaceConfig {
+    int32 retentionDays = 1;
+    bool emitMetric = 2;
+    string archivalBucket = 3;
+    int32 archivalStatus = 4;
     bytes badBinaries = 16;
     string badBinariesEncoding = 17;
     int32 historyArchivalStatus = 18;

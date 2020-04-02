@@ -66,10 +66,10 @@ const (
 		`}`
 
 	templateCreateNamespaceQuery = `INSERT INTO namespaces (` +
-		`id, namespace) ` +
-		`VALUES(?, {name: ?}) IF NOT EXISTS`
+		`id, name) ` +
+		`VALUES(?, ?) IF NOT EXISTS`
 
-	templateGetNamespaceQuery = `SELECT namespace.name ` +
+	templateGetNamespaceQuery = `SELECT name ` +
 		`FROM namespaces ` +
 		`WHERE id = ?`
 

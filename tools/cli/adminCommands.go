@@ -320,8 +320,7 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("readOneRow", err)
 		}
-		namespace := res["namespace"].(map[string]interface{})
-		namespaceName := namespace["name"].(string)
+		namespaceName := res["name"].(string)
 		fmt.Printf("namespace for namespaceId %v is %v \n", namespaceID, namespaceName)
 	} else {
 		tmpl := "select namespace from namespaces_by_name where name = ?"

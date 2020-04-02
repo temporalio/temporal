@@ -126,8 +126,7 @@ CREATE TABLE tasks (
 -- this table is only used for storage of mapping of namespace uuid to namespace name
 CREATE TABLE namespaces (
   id     uuid,
-  namespace frozen<namespace>,
-  config frozen<namespace_config>,
+  name   text,
   PRIMARY KEY (id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
@@ -179,12 +178,10 @@ CREATE TABLE cluster_metadata (
 -- Create metadata for system namespace
 INSERT INTO namespaces (
    id,
-   namespace
+   name
 ) VALUES (
    32049b68-7872-4094-8e63-d0dd59896a83,
-   {
-       name: 'temporal-system'
-   }
+   'temporal-system'
 ) IF NOT EXISTS;
 
 INSERT INTO namespaces_by_name_v2 (
