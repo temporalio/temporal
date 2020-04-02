@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	commonproto "go.temporal.io/temporal-proto/common"
 
@@ -39,8 +40,9 @@ import (
 	"github.com/temporalio/temporal/common/codec"
 )
 
-func encode(v interface{}) ([]byte, error) {
-	return json.Marshal(v)
+func encode(message proto.Message) ([]byte, error) {
+	encoder := codec.NewJSONPBEncoder()
+	return encoder.Encode(message)
 }
 
 func constructHistoryFilename(namespaceID, workflowID, runID string, version int64) string {
@@ -161,7 +163,7 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *com
 		StartTime:     &types.Int64Value{Value: record.StartTimestamp},
 		ExecutionTime: record.ExecutionTimestamp,
 		CloseTime:     &types.Int64Value{Value: record.CloseTimestamp},
-		CloseStatus:   record.CloseStatus,
+		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,
 		SearchAttributes: &commonproto.SearchAttributes{

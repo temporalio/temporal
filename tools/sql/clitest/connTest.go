@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/environment"
@@ -64,7 +65,8 @@ func (s *SQLConnTestSuite) SetupTest() {
 func (s *SQLConnTestSuite) SetupSuite() {
 	conn, err := newTestConn("", s.pluginName)
 	if err != nil {
-		s.Log.Fatal("error creating sql conn, ", tag.Error(err))
+		log, _ := loggerimpl.NewDevelopment()
+		log.Fatal("error creating sql conn, ", tag.Error(err))
 	}
 	s.SetupSuiteBase(conn)
 }

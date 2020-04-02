@@ -221,8 +221,9 @@ func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *ma
 	taskListName := addRequest.TaskList.GetName()
 	taskListKind := addRequest.TaskList.GetKind()
 
+	// TODO: use tags
 	e.logger.Debug(
-		fmt.Sprintf("Received AddDecisionTask for taskList=%v, WorkflowID=%v, RunID=%v, ScheduleToStartTimeout=%v",
+		fmt.Sprintf("Received AddDecisionTask for taskList=%v, WorkflowId=%v, RunId=%v, ScheduleToStartTimeout=%v",
 			addRequest.TaskList.GetName(),
 			addRequest.Execution.GetWorkflowId(),
 			addRequest.Execution.GetRunId(),
@@ -268,7 +269,7 @@ func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *ma
 	taskListKind := addRequest.TaskList.GetKind()
 
 	e.logger.Debug(
-		fmt.Sprintf("Received AddActivityTask for taskList=%v WorkflowID=%v, RunID=%v",
+		fmt.Sprintf("Received AddActivityTask for taskList=%v WorkflowId=%v, RunId=%v",
 			taskListName,
 			addRequest.Execution.WorkflowId,
 			addRequest.Execution.RunId))

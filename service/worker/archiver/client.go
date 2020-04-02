@@ -73,7 +73,7 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		CloseStatus        enums.WorkflowExecutionCloseStatus
+		Status             enums.WorkflowExecutionStatus
 		HistoryLength      int64
 		Memo               *commonproto.Memo
 		SearchAttributes   map[string][]byte
@@ -251,7 +251,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		StartTimestamp:     request.ArchiveRequest.StartTimestamp,
 		ExecutionTimestamp: request.ArchiveRequest.ExecutionTimestamp,
 		CloseTimestamp:     request.ArchiveRequest.CloseTimestamp,
-		CloseStatus:        request.ArchiveRequest.CloseStatus,
+		Status:             request.ArchiveRequest.Status,
 		HistoryLength:      request.ArchiveRequest.HistoryLength,
 		Memo:               request.ArchiveRequest.Memo,
 		SearchAttributes:   convertSearchAttributesToString(request.ArchiveRequest.SearchAttributes),

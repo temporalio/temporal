@@ -34,14 +34,14 @@ import (
 )
 
 var (
-	data = []byte(`{"CloseStatus": 1,
+	data = []byte(`{"ExecutionStatus": 1,
          "CloseTime": 1547596872817380000,
-         "NamespaceID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+         "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
          "HistoryLength": 29,
          "KafkaKey": "7-619",
-         "RunID": "e481009e-14b3-45ae-91af-dce6e2a88365",
+         "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
          "StartTime": 1547596872371000000,
-         "WorkflowID": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
+         "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
          "WorkflowType": "TestWorkflowExecute",
  		 "Encoding" : "proto3",
  	     "Memo" : "deadbeef====="}`)
@@ -67,7 +67,7 @@ func BenchmarkJSONDecodeToType(b *testing.B) {
 			Memo:          p.NewDataBlob(source.Memo, common.EncodingType(source.Encoding)),
 		}
 		record.CloseTime = time.Unix(0, source.CloseTime)
-		record.Status = &source.CloseStatus
+		record.Status = &source.ExecutionStatus
 		record.HistoryLength = source.HistoryLength
 	}
 }
@@ -83,7 +83,7 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 		startTime, _ := source[definition.StartTime].(json.Number).Int64()
 		executionTime, _ := source[definition.StartTime].(json.Number).Int64()
 		closeTime, _ := source[definition.CloseTime].(json.Number).Int64()
-		closeStatus, _ := source[definition.CloseStatus].(json.Number).Int64()
+		status, _ := source[definition.ExecutionStatus].(json.Number).Int64()
 		historyLen, _ := source[definition.HistoryLength].(json.Number).Int64()
 
 		record := &p.VisibilityWorkflowExecutionInfo{
@@ -95,8 +95,8 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 			Memo:          p.NewDataBlob([]byte(source[definition.Memo].(string)), common.EncodingType(source[definition.Encoding].(string))),
 		}
 		record.CloseTime = time.Unix(0, closeTime)
-		status := enums.WorkflowExecutionCloseStatus(closeStatus)
-		record.Status = &status
+		statusEnum := enums.WorkflowExecutionStatus(status)
+		record.Status = &statusEnum
 		record.HistoryLength = historyLen
 	}
 }

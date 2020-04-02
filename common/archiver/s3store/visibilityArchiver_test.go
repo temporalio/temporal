@@ -22,7 +22,6 @@ package s3store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -43,6 +42,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
@@ -160,7 +160,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
-		CloseStatus:        enums.WorkflowExecutionCloseStatusFailed,
+		Status:             enums.WorkflowExecutionStatusFailed,
 		HistoryLength:      int64(101),
 	}
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
@@ -199,7 +199,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     closeTimestamp.UnixNano(),
-		CloseStatus:        enums.WorkflowExecutionCloseStatusFailed,
+		Status:             enums.WorkflowExecutionStatusFailed,
 		HistoryLength:      int64(101),
 		Memo: &commonproto.Memo{
 			Fields: map[string][]byte{
@@ -220,7 +220,8 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	s.NoError(err, expectedKey)
 
 	archivedRecord := &archiverproto.ArchiveVisibilityRequest{}
-	err = json.Unmarshal(data, archivedRecord)
+	encoder := codec.NewJSONPBEncoder()
+	err = encoder.Decode(data, archivedRecord)
 	s.NoError(err)
 	s.Equal(request, archivedRecord)
 }
@@ -430,7 +431,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   testData.day*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
 			CloseTimestamp:   (testData.day+30)*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
-			CloseStatus:      enums.WorkflowExecutionCloseStatusFailed,
+			Status:           enums.WorkflowExecutionStatusFailed,
 			HistoryLength:    101,
 		}
 		err := visibilityArchiver.Archive(context.Background(), URI, &record)
@@ -567,7 +568,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(1 * time.Hour),
-			CloseStatus:      enums.WorkflowExecutionCloseStatusFailed,
+			Status:           enums.WorkflowExecutionStatusFailed,
 			HistoryLength:    101,
 		},
 		{
@@ -578,7 +579,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(1*time.Hour + 30*time.Minute),
-			CloseStatus:      enums.WorkflowExecutionCloseStatusFailed,
+			Status:           enums.WorkflowExecutionStatusFailed,
 			HistoryLength:    101,
 		},
 		{
@@ -589,7 +590,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(3 * time.Hour),
-			CloseStatus:      enums.WorkflowExecutionCloseStatusFailed,
+			Status:           enums.WorkflowExecutionStatusFailed,
 			HistoryLength:    101,
 		},
 	}

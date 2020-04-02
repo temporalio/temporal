@@ -28,7 +28,6 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -106,127 +105,6 @@ const (
 )
 
 const (
-	templateWorkflowExecutionType = `{` +
-		`namespace_id: ?, ` +
-		`workflow_id: ?, ` +
-		`run_id: ?, ` +
-		`parent_namespace_id: ?, ` +
-		`parent_workflow_id: ?, ` +
-		`parent_run_id: ?, ` +
-		`initiated_id: ?, ` +
-		`completion_event_batch_id: ?, ` +
-		`completion_event: ?, ` +
-		`completion_event_data_encoding: ?, ` +
-		`task_list: ?, ` +
-		`workflow_type_name: ?, ` +
-		`workflow_timeout: ?, ` +
-		`decision_task_timeout: ?, ` +
-		`execution_context: ?, ` +
-		`state: ?, ` +
-		`close_status: ?, ` +
-		`last_first_event_id: ?, ` +
-		`last_event_task_id: ?, ` +
-		`next_event_id: ?, ` +
-		`last_processed_event: ?, ` +
-		`start_time: ?, ` +
-		`last_updated_time: ?, ` +
-		`create_request_id: ?, ` +
-		`signal_count: ?, ` +
-		`history_size: ?, ` +
-		`decision_version: ?, ` +
-		`decision_schedule_id: ?, ` +
-		`decision_started_id: ?, ` +
-		`decision_request_id: ?, ` +
-		`decision_timeout: ?, ` +
-		`decision_attempt: ?, ` +
-		`decision_timestamp: ?, ` +
-		`decision_scheduled_timestamp: ?, ` +
-		`decision_original_scheduled_timestamp: ?, ` +
-		`cancel_requested: ?, ` +
-		`cancel_request_id: ?, ` +
-		`sticky_task_list: ?, ` +
-		`sticky_schedule_to_start_timeout: ?,` +
-		`client_library_version: ?, ` +
-		`client_feature_version: ?, ` +
-		`client_impl: ?, ` +
-		`auto_reset_points: ?, ` +
-		`auto_reset_points_encoding: ?, ` +
-		`attempt: ?, ` +
-		`has_retry_policy: ?, ` +
-		`init_interval: ?, ` +
-		`backoff_coefficient: ?, ` +
-		`max_interval: ?, ` +
-		`expiration_time: ?, ` +
-		`max_attempts: ?, ` +
-		`non_retriable_errors: ?, ` +
-		`event_store_version: ?, ` +
-		`branch_token: ?, ` +
-		`cron_schedule: ?, ` +
-		`expiration_seconds: ?, ` +
-		`search_attributes: ?, ` +
-		`memo: ? ` +
-		`}`
-
-	templateReplicationStateType = `{` +
-		`current_version: ?, ` +
-		`start_version: ?, ` +
-		`last_write_version: ?, ` +
-		`last_write_event_id: ?, ` +
-		`last_replication_info: ?` +
-		`}`
-
-	templateActivityInfoType = `{` +
-		`version: ?,` +
-		`schedule_id: ?, ` +
-		`scheduled_event_batch_id: ?, ` +
-		`scheduled_event: ?, ` +
-		`scheduled_time: ?, ` +
-		`started_id: ?, ` +
-		`started_event: ?, ` +
-		`started_time: ?, ` +
-		`activity_id: ?, ` +
-		`request_id: ?, ` +
-		`details: ?, ` +
-		`schedule_to_start_timeout: ?, ` +
-		`schedule_to_close_timeout: ?, ` +
-		`start_to_close_timeout: ?, ` +
-		`heart_beat_timeout: ?, ` +
-		`cancel_requested: ?, ` +
-		`cancel_request_id: ?, ` +
-		`last_hb_updated_time: ?, ` +
-		`timer_task_status: ?, ` +
-		`attempt: ?, ` +
-		`task_list: ?, ` +
-		`started_identity: ?, ` +
-		`has_retry_policy: ?, ` +
-		`init_interval: ?, ` +
-		`backoff_coefficient: ?, ` +
-		`max_interval: ?, ` +
-		`expiration_time: ?, ` +
-		`max_attempts: ?, ` +
-		`non_retriable_errors: ?, ` +
-		`last_failure_reason: ?, ` +
-		`last_worker_identity: ?, ` +
-		`last_failure_details: ?, ` +
-		`event_data_encoding: ?` +
-		`}`
-
-	templateChildExecutionInfoType = `{` +
-		`version: ?,` +
-		`initiated_id: ?, ` +
-		`initiated_event_batch_id: ?, ` +
-		`initiated_event: ?, ` +
-		`started_id: ?, ` +
-		`started_workflow_id: ?, ` +
-		`started_run_id: ?, ` +
-		`started_event: ?, ` +
-		`create_request_id: ?, ` +
-		`event_data_encoding: ?, ` +
-		`namespace: ?, ` +
-		`workflow_type_name: ?, ` +
-		`parent_close_policy: ?` +
-		`}`
-
 	templateCreateShardQuery = `INSERT INTO executions (` +
 		`shard_id, type, namespace_id, workflow_id, run_id, visibility_ts, task_id, shard, shard_encoding, range_id)` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
@@ -255,7 +133,7 @@ const (
 	templateUpdateCurrentWorkflowExecutionQuery = `UPDATE executions USING TTL 0 ` +
 		`SET current_run_id = ?,
 execution_state = ?, execution_state_encoding = ?,
-replication_state = {start_version: ?, last_write_version: ?},
+replication_metadata = ?, replication_metadata_encoding = ?,
 workflow_last_write_version = ?,
 workflow_state = ? ` +
 		`WHERE shard_id = ? ` +
@@ -272,8 +150,10 @@ workflow_state = ? ` +
 		`and workflow_state = ? `
 
 	templateCreateCurrentWorkflowExecutionQuery = `INSERT INTO executions (` +
-		`shard_id, type, namespace_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution_state, execution_state_encoding, replication_state, workflow_last_write_version, workflow_state) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, {start_version: ?, last_write_version: ?}, ?, ?) IF NOT EXISTS USING TTL 0 `
+		`shard_id, type, namespace_id, workflow_id, run_id, ` +
+		`visibility_ts, task_id, current_run_id, execution_state, execution_state_encoding, ` +
+		`replication_metadata, replication_metadata_encoding, workflow_last_write_version, workflow_state) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS USING TTL 0 `
 
 	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
 		`shard_id, namespace_id, workflow_id, run_id, type, ` +
@@ -283,9 +163,9 @@ workflow_state = ? ` +
 
 	templateCreateWorkflowExecutionWithReplicationQuery = `INSERT INTO executions (` +
 		`shard_id, namespace_id, workflow_id, run_id, type, ` +
-		`execution, execution_encoding, execution_state, execution_state_encoding, replication_state, ` +
+		`execution, execution_encoding, execution_state, execution_state_encoding, replication_metadata, replication_metadata_encoding, ` +
 		`next_event_id, visibility_ts, task_id, checksum, checksum_encoding) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ` + templateReplicationStateType +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?` +
 		`, ?, ?, ?, ?, ?) IF NOT EXISTS `
 
 	templateCreateWorkflowExecutionWithVersionHistoriesQuery = `INSERT INTO executions (` +
@@ -317,7 +197,7 @@ workflow_state = ? ` +
 		`and task_id = ? ` +
 		`IF range_id = ?`
 
-	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, replication_state, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
+	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, replication_metadata, replication_metadata_encoding, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
 		`child_executions_map, child_executions_map_encoding, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
 		`version_histories, version_histories_encoding, checksum, checksum_encoding ` +
 		`FROM executions ` +
@@ -329,7 +209,7 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ?`
 
-	templateGetCurrentExecutionQuery = `SELECT current_run_id, execution, execution_encoding, execution_state, execution_state_encoding, replication_state ` +
+	templateGetCurrentExecutionQuery = `SELECT current_run_id, execution, execution_encoding, execution_state, execution_state_encoding, replication_metadata, replication_metadata_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -372,7 +252,8 @@ workflow_state = ? ` +
 		`, execution_encoding = ? ` +
 		`, execution_state = ? ` +
 		`, execution_state_encoding = ? ` +
-		`, replication_state = ` + templateReplicationStateType +
+		`, replication_metadata = ? ` +
+		`, replication_metadata_encoding = ? ` +
 		`, next_event_id = ? ` +
 		`, checksum = ? ` +
 		`, checksum_encoding = ? ` +
@@ -1004,7 +885,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 			workflowID,
 			runID,
 			executionInfo.State,
-			executionInfo.CloseStatus,
+			executionInfo.Status,
 			executionInfo.CreateRequestID,
 			startVersion,
 			lastWriteVersion,
@@ -1094,8 +975,11 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 						return nil, err
 					}
 
-					replicationState := createReplicationState(previous["replication_state"].(map[string]interface{}))
-					lastWriteVersion := replicationState.LastWriteVersion
+					protoReplVersions, err := ProtoReplicationVersionsFromResultMap(previous)
+					if err != nil {
+						return nil, err
+					}
+					lastWriteVersion := protoReplVersions.LastWriteVersion.GetValue()
 
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
 						executionInfo.WorkflowID, primitives.UUIDString(protoState.RunId), request.RangeID, strings.Join(columns, ","))
@@ -1106,7 +990,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 							StartRequestID:   protoState.CreateRequestId,
 							RunID:            primitives.UUIDString(protoState.RunId),
 							State:            int(protoState.State),
-							CloseStatus:      enums.WorkflowExecutionCloseStatus(protoState.CloseStatus),
+							Status:           protoState.Status,
 							LastWriteVersion: lastWriteVersion,
 						}
 					}
@@ -1115,28 +999,31 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 
 				if prevRunID := previous["current_run_id"].(gocql.UUID).String(); prevRunID != request.PreviousRunID {
 					// currentRunID on previous run has been changed, return to caller to handle
-					msg := fmt.Sprintf("Workflow execution creation condition failed by mismatch runID. WorkflowId: %v, Expected Current RunID: %v, Actual Current RunID: %v",
+					msg := fmt.Sprintf("Workflow execution creation condition failed by mismatch runID. WorkflowId: %v, Expected Current RunId: %v, Actual Current RunId: %v",
 						executionInfo.WorkflowID, request.PreviousRunID, prevRunID)
 					return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
 				}
 
-				msg := fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, CurrentRunID: %v, columns: (%v)",
+				msg := fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, CurrentRunId: %v, columns: (%v)",
 					executionInfo.WorkflowID, executionInfo.RunID, strings.Join(columns, ","))
 				return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
 			} else if rowType == rowTypeExecution && runID == executionInfo.RunID {
-				msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v",
+				msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeId: %v",
 					executionInfo.WorkflowID, executionInfo.RunID, request.RangeID)
-				replicationState := createReplicationState(previous["replication_state"].(map[string]interface{}))
 				lastWriteVersion = common.EmptyVersion
-				if replicationState != nil {
-					lastWriteVersion = replicationState.LastWriteVersion
+				protoReplVersions, err := ProtoReplicationVersionsFromResultMap(previous)
+				if err != nil {
+					return nil, err
+				}
+				if protoReplVersions != nil {
+					lastWriteVersion = protoReplVersions.LastWriteVersion.GetValue()
 				}
 				return nil, &p.WorkflowExecutionAlreadyStartedError{
 					Msg:              msg,
 					StartRequestID:   executionInfo.CreateRequestID,
 					RunID:            executionInfo.RunID,
 					State:            executionInfo.State,
-					CloseStatus:      executionInfo.CloseStatus,
+					Status:           executionInfo.Status,
 					LastWriteVersion: lastWriteVersion,
 				}
 			}
@@ -1183,14 +1070,14 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		return nil, convertCommonErrors("GetWorkflowExecution", err)
 	}
 
-	info, err := workflowExecutionFromRow(result)
+	info, replicationState, err := workflowExecutionFromRow(result)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 	}
 
 	state := &p.InternalWorkflowMutableState{
 		ExecutionInfo:    info,
-		ReplicationState: createReplicationState(result["replication_state"].(map[string]interface{})),
+		ReplicationState: replicationState,
 		VersionHistories: p.NewDataBlob(result["version_histories"].([]byte), common.EncodingType(result["version_histories_encoding"].(string))),
 	}
 
@@ -1301,54 +1188,6 @@ func protoExecutionStateFromRow(result map[string]interface{}) (*persistenceblob
 	return protoState, nil
 }
 
-func protoActivityInfoFromRow(result map[string]interface{}) (*persistenceblobs.WorkflowExecutionState, error) {
-	state, ok := result["execution_state"].([]byte)
-	if !ok {
-		return nil, newPersistedTypeMismatchError("execution_state", "", state, result)
-	}
-
-	stateEncoding, ok := result["execution_state_encoding"].(string)
-	if !ok {
-		return nil, newPersistedTypeMismatchError("execution_state_encoding", "", stateEncoding, result)
-	}
-
-	protoState, err := serialization.WorkflowExecutionStateFromBlob(state, stateEncoding)
-	if err != nil {
-		return nil, err
-	}
-	return protoState, nil
-}
-
-func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflowExecutionInfo, error) {
-	eiBytes, ok := result["execution"].([]byte)
-	if !ok {
-		return nil, newPersistedTypeMismatchError("execution", "", eiBytes, result)
-	}
-
-	eiEncoding, ok := result["execution_encoding"].(string)
-	if !ok {
-		return nil, newPersistedTypeMismatchError("execution_encoding", "", eiEncoding, result)
-	}
-
-	protoInfo, err := serialization.WorkflowExecutionInfoFromBlob(eiBytes, eiEncoding)
-	if err != nil {
-		return nil, err
-	}
-
-	nextEventID, ok := result["next_event_id"].(int64)
-	if !ok {
-		return nil, newPersistedTypeMismatchError("next_event_id", "", nextEventID, result)
-	}
-
-	protoState, err := protoExecutionStateFromRow(result)
-	if err != nil {
-		return nil, err
-	}
-
-	info := p.ProtoWorkflowExecutionToPartialInternalExecution(protoInfo, protoState, nextEventID)
-	return info, nil
-}
-
 func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdateWorkflowExecutionRequest) error {
 
 	batch := d.session.NewBatch(gocql.LoggedBatch)
@@ -1399,7 +1238,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				newWorkflowID,
 				newRunID,
 				newExecutionInfo.State,
-				newExecutionInfo.CloseStatus,
+				newExecutionInfo.Status,
 				newExecutionInfo.CreateRequestID,
 				newStartVersion,
 				newLastWriteVersion,
@@ -1417,8 +1256,18 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				RunId:           primitives.MustParseUUID(runID),
 				CreateRequestId: executionInfo.CreateRequestID,
 				State:           int32(executionInfo.State),
-				CloseStatus:     int32(executionInfo.CloseStatus),
+				Status:          executionInfo.Status,
 			})
+
+			if err != nil {
+				return err
+			}
+
+			replicationVersions, err := serialization.ReplicationVersionsToBlob(
+				&persistenceblobs.ReplicationVersions{
+					StartVersion:     &types.Int64Value{Value: startVersion},
+					LastWriteVersion: &types.Int64Value{Value: lastWriteVersion},
+				})
 
 			if err != nil {
 				return err
@@ -1428,8 +1277,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				runID,
 				executionStateDatablob.Data,
 				executionStateDatablob.Encoding.String(),
-				startVersion,
-				lastWriteVersion,
+				replicationVersions.Data,
+				replicationVersions.Encoding.String(),
 				lastWriteVersion,
 				executionInfo.State,
 				d.shardID,
@@ -1522,9 +1371,18 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 	stateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: newExecutionInfo.CreateRequestID,
 		State:           int32(newExecutionInfo.State),
-		CloseStatus:     int32(newExecutionInfo.CloseStatus),
+		Status:          newExecutionInfo.Status,
 		RunId:           primitives.MustParseUUID(newRunID),
 	})
+	if err != nil {
+		return err
+	}
+
+	replicationVersions, err := serialization.ReplicationVersionsToBlob(
+		&persistenceblobs.ReplicationVersions{
+			StartVersion:     &types.Int64Value{Value: startVersion},
+			LastWriteVersion: &types.Int64Value{Value: lastWriteVersion},
+		})
 	if err != nil {
 		return err
 	}
@@ -1533,8 +1391,8 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 		newRunID,
 		stateDatablob.Data,
 		stateDatablob.Encoding,
-		startVersion,
-		lastWriteVersion,
+		replicationVersions.Data,
+		replicationVersions.Encoding.String(),
 		lastWriteVersion,
 		newExecutionInfo.State,
 		d.shardID,
@@ -1670,14 +1528,23 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		runID := executionInfo.RunID
 		createRequestID := executionInfo.CreateRequestID
 		state := executionInfo.State
-		closeStatus := executionInfo.CloseStatus
+		status := executionInfo.Status
 
 		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
 			RunId:           primitives.MustParseUUID(runID),
 			CreateRequestId: createRequestID,
 			State:           int32(state),
-			CloseStatus:     int32(closeStatus),
+			Status:          status,
 		})
+
+		replicationVersions, err := serialization.ReplicationVersionsToBlob(
+			&persistenceblobs.ReplicationVersions{
+				StartVersion:     &types.Int64Value{Value: startVersion},
+				LastWriteVersion: &types.Int64Value{Value: lastWriteVersion},
+			})
+		if err != nil {
+			return err
+		}
 
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
@@ -1691,9 +1558,9 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 			batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
 				runID,
 				executionStateDatablob.Data,
-				executionStateDatablob.Encoding,
-				startVersion,
-				lastWriteVersion,
+				executionStateDatablob.Encoding.String(),
+				replicationVersions.Data,
+				replicationVersions.Encoding.String(),
 				lastWriteVersion,
 				state,
 				shardID,
@@ -1713,9 +1580,9 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				runID,
 				executionStateDatablob.Data,
-				executionStateDatablob.Encoding,
-				startVersion,
-				lastWriteVersion,
+				executionStateDatablob.Encoding.String(),
+				replicationVersions.Data,
+				replicationVersions.Encoding.String(),
 				lastWriteVersion,
 				state,
 				shardID,
@@ -1734,9 +1601,9 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				runID,
 				executionStateDatablob.Data,
-				executionStateDatablob.Encoding,
-				startVersion,
-				lastWriteVersion,
+				executionStateDatablob.Encoding.String(),
+				replicationVersions.Data,
+				replicationVersions.Encoding.String(),
 				lastWriteVersion,
 				state,
 				shardID,
@@ -1867,14 +1734,14 @@ GetFailureReasonLoop:
 
 	if runIDUnmatch {
 		return &p.CurrentWorkflowConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update mutable state.  Request Condition: %v, Actual Value: %v, Request Current RunID: %v, Actual Value: %v",
+			Msg: fmt.Sprintf("Failed to update mutable state.  Request Condition: %v, Actual Value: %v, Request Current RunId: %v, Actual Value: %v",
 				requestCondition, actualNextEventID, requestConditionalRunID, actualCurrRunID),
 		}
 	}
 
 	if nextEventIDUnmatch {
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update mutable state.  Request Condition: %v, Actual Value: %v, Request Current RunID: %v, Actual Value: %v",
+			Msg: fmt.Sprintf("Failed to update mutable state.  Request Condition: %v, Actual Value: %v, Request Current RunId: %v, Actual Value: %v",
 				requestCondition, actualNextEventID, requestConditionalRunID, actualCurrRunID),
 		}
 	}
@@ -1889,7 +1756,7 @@ GetFailureReasonLoop:
 		columnID++
 	}
 	return &p.ConditionFailedError{
-		Msg: fmt.Sprintf("Failed to reset mutable state. ShardID: %v, RangeID: %v, Condition: %v, Request Current RunID: %v, columns: (%v)",
+		Msg: fmt.Sprintf("Failed to reset mutable state. ShardId: %v, RangeId: %v, Condition: %v, Request Current RunId: %v, columns: (%v)",
 			d.shardID, requestRangeID, requestCondition, requestConditionalRunID, strings.Join(columns, ",")),
 	}
 }
@@ -2031,13 +1898,16 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
 	}
-	replicationState := createReplicationState(result["replication_state"].(map[string]interface{}))
+	replicationVersions, err := ProtoReplicationVersionsFromResultMap(result)
+	if err != nil {
+		return nil, err
+	}
 	return &p.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
 		StartRequestID:   executionInfo.CreateRequestId,
 		State:            int(executionInfo.State),
-		CloseStatus:      int(executionInfo.CloseStatus),
-		LastWriteVersion: replicationState.LastWriteVersion,
+		Status:           executionInfo.Status,
+		LastWriteVersion: replicationVersions.LastWriteVersion.GetValue(),
 	}, nil
 }
 
@@ -2823,4 +2693,67 @@ func (d *cassandraPersistence) RangeDeleteReplicationTaskFromDLQ(
 		return serviceerror.NewInternal(fmt.Sprintf("RangeDeleteReplicationTaskFromDLQ operation failed. Error: %v", err))
 	}
 	return nil
+}
+
+func workflowExecutionFromRow(result map[string]interface{}) (*p.InternalWorkflowExecutionInfo, *p.ReplicationState, error) {
+	eiBytes, ok := result["execution"].([]byte)
+	if !ok {
+		return nil, nil, newPersistedTypeMismatchError("execution", "", eiBytes, result)
+	}
+
+	eiEncoding, ok := result["execution_encoding"].(string)
+	if !ok {
+		return nil, nil, newPersistedTypeMismatchError("execution_encoding", "", eiEncoding, result)
+	}
+
+	protoInfo, err := serialization.WorkflowExecutionInfoFromBlob(eiBytes, eiEncoding)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	nextEventID, ok := result["next_event_id"].(int64)
+	if !ok {
+		return nil, nil, newPersistedTypeMismatchError("next_event_id", "", nextEventID, result)
+	}
+
+	protoState, err := protoExecutionStateFromRow(result)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	info := p.ProtoWorkflowExecutionToPartialInternalExecution(protoInfo, protoState, nextEventID)
+
+	var state *p.ReplicationState
+	if protoInfo.ReplicationData != nil {
+		protoReplVersions, err := ProtoReplicationVersionsFromResultMap(result)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		state = ReplicationStateFromProtos(protoInfo, protoReplVersions)
+	}
+
+	return info, state, nil
+}
+
+func ProtoReplicationVersionsFromResultMap(result map[string]interface{}) (*persistenceblobs.ReplicationVersions, error) {
+	if replMeta, replMetaIsPresent := result["replication_metadata"].([]byte); !replMetaIsPresent || len(replMeta) == 0 {
+		return nil, nil
+	}
+
+	rmBytes, ok := result["replication_metadata"].([]byte)
+	if !ok {
+		return nil, newPersistedTypeMismatchError("replication_metadata", "", rmBytes, result)
+	}
+
+	rmEncoding, ok := result["replication_metadata_encoding"].(string)
+	if !ok {
+		return nil, newPersistedTypeMismatchError("replication_metadata_encoding", "", rmEncoding, result)
+	}
+
+	protoReplVersions, err := serialization.ReplicationVersionsFromBlob(rmBytes, rmEncoding)
+	if err != nil {
+		return nil, err
+	}
+	return protoReplVersions, nil
 }

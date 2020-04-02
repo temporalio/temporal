@@ -274,7 +274,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTimeout:             200,
 		DecisionStartToCloseTimeout: 100,
 		State:                       persistence.WorkflowStateRunning,
-		CloseStatus:                 persistence.WorkflowCloseStatusRunning,
+		Status:                      enums.WorkflowExecutionStatusRunning,
 		NextEventID:                 int64(8),
 		LastProcessedEvent:          int64(3),
 		LastUpdatedTimestamp:        time.Now(),
@@ -406,7 +406,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			csum, err := tc.closeTxFunc(s.msBuilder)
 			s.Nil(err)
 			s.NotNil(csum.Value)
-			s.Equal(checksum.FlavorIEEECRC32OverThriftBinary, csum.Flavor)
+			s.Equal(checksum.FlavorIEEECRC32OverProto3Binary, csum.Flavor)
 			s.Equal(mutableStateChecksumPayloadV1, csum.Version)
 			s.EqualValues(csum, s.msBuilder.checksum)
 
@@ -730,7 +730,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowTimeout:             200,
 		DecisionStartToCloseTimeout: 100,
 		State:                       persistence.WorkflowStateRunning,
-		CloseStatus:                 persistence.WorkflowCloseStatusRunning,
+		Status:                      enums.WorkflowExecutionStatusRunning,
 		NextEventID:                 int64(101),
 		LastProcessedEvent:          int64(99),
 		LastUpdatedTimestamp:        time.Now(),

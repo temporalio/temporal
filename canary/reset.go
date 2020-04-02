@@ -237,7 +237,7 @@ func verifyResetActivity(ctx context.Context, namespace string, newWE workflow.E
 	if err != nil {
 		return err
 	}
-	if resp.WorkflowExecutionInfo.CloseStatus == enums.WorkflowExecutionCloseStatusRunning || resp.WorkflowExecutionInfo.GetCloseStatus() != enums.WorkflowExecutionCloseStatusCompleted {
+	if resp.WorkflowExecutionInfo.GetStatus() == enums.WorkflowExecutionStatusRunning || resp.WorkflowExecutionInfo.GetStatus() != enums.WorkflowExecutionStatusCompleted {
 		return fmt.Errorf("new execution triggered by reset is not completed")
 	}
 	return nil

@@ -24,10 +24,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 
@@ -219,7 +217,7 @@ type (
 		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
-		CloseStatus                        enums.WorkflowExecutionCloseStatus
+		Status                             enums.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
 		NextEventID                        int64
@@ -558,7 +556,7 @@ type (
 		StartTime        time.Time
 		ExecutionTime    time.Time
 		CloseTime        time.Time
-		Status           *enums.WorkflowExecutionCloseStatus
+		Status           *enums.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *serialization.DataBlob
 		SearchAttributes map[string]interface{}
@@ -603,7 +601,7 @@ type (
 		Memo               *serialization.DataBlob
 		SearchAttributes   map[string][]byte
 		CloseTimestamp     int64
-		Status             enums.WorkflowExecutionCloseStatus
+		Status             enums.WorkflowExecutionStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
 	}
@@ -747,7 +745,7 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 	state := &persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: executionInfo.CreateRequestID,
 		State:           int32(executionInfo.State),
-		CloseStatus:     int32(executionInfo.CloseStatus),
+		Status:          executionInfo.Status,
 		RunId:           primitives.MustParseUUID(executionInfo.RunID),
 	}
 
@@ -811,13 +809,10 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 	info.StartVersion = startVersion
 	info.CurrentVersion = currentVersion
 	if replicationState == nil && versionHistories == nil {
+		// both unspecified
 		// this is allowed
 	} else if replicationState != nil && versionHistories == nil {
-		info.LastWriteEventId = &types.Int64Value{Value: replicationState.LastWriteEventID}
-		info.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(replicationState.LastReplicationInfo))
-		for k, v := range replicationState.LastReplicationInfo {
-			info.LastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
-		}
+		info.ReplicationData = &persistenceblobs.ReplicationData{LastReplicationInfo: replicationState.LastReplicationInfo, LastWriteEventId: replicationState.LastWriteEventID}
 	} else if versionHistories != nil && replicationState == nil {
 		info.VersionHistories = versionHistories.Data
 		info.VersionHistoriesEncoding = string(versionHistories.GetEncoding())
@@ -851,7 +846,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		WorkflowTimeout:                    info.GetWorkflowTimeoutSeconds(),
 		DecisionStartToCloseTimeout:        info.GetDecisionTaskTimeoutSeconds(),
 		State:                              int(state.GetState()),
-		CloseStatus:                        enums.WorkflowExecutionCloseStatus(state.GetCloseStatus()),
+		Status:                             state.GetStatus(),
 		LastFirstEventID:                   info.GetLastFirstEventId(),
 		LastProcessedEvent:                 info.GetLastProcessedEvent(),
 		StartTimestamp:                     time.Unix(0, info.GetStartTimeNanos()),

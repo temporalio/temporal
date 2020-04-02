@@ -123,7 +123,7 @@ func (r *nDCWorkflowImpl) happensAfter(
 
 func (r *nDCWorkflowImpl) revive() error {
 
-	state, _ := r.mutableState.GetWorkflowStateCloseStatus()
+	state, _ := r.mutableState.GetWorkflowStateStatus()
 	if state != persistence.WorkflowStateZombie {
 		return nil
 	} else if state == persistence.WorkflowStateCompleted {
@@ -136,9 +136,9 @@ func (r *nDCWorkflowImpl) revive() error {
 	if r.mutableState.HasProcessedOrPendingDecision() {
 		state = persistence.WorkflowStateRunning
 	}
-	return r.mutableState.UpdateWorkflowStateCloseStatus(
+	return r.mutableState.UpdateWorkflowStateStatus(
 		state,
-		persistence.WorkflowCloseStatusRunning,
+		enums.WorkflowExecutionStatusRunning,
 	)
 }
 
@@ -268,9 +268,9 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 
 func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
 
-	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateCloseStatus(
+	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateStatus(
 		persistence.WorkflowStateZombie,
-		persistence.WorkflowCloseStatusRunning,
+		enums.WorkflowExecutionStatusRunning,
 	)
 }
 

@@ -23,6 +23,8 @@ package checksum
 import (
 	"errors"
 
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 )
 
@@ -45,8 +47,8 @@ type (
 const (
 	// FlavorUnknown represents an unknown/uninitialized checksum flavor
 	FlavorUnknown Flavor = iota
-	// FlavorIEEECRC32OverThriftBinary represents crc32 checksum generated over thriftRW serialized payload
-	FlavorIEEECRC32OverThriftBinary
+	// FlavorIEEECRC32OverProto3Binary represents crc32 checksum generated over proto3 serialized payload
+	FlavorIEEECRC32OverProto3Binary
 	maxFlavors
 )
 
@@ -72,7 +74,7 @@ func FromProto(c *persistenceblobs.Checksum) *Checksum {
 func (c *Checksum) ToProto() *persistenceblobs.Checksum {
 	return &persistenceblobs.Checksum{
 		Version: int32(c.Version),
-		Flavor:  persistenceblobs.Checksum_ChecksumFlavor(c.Flavor),
+		Flavor:  enums.ChecksumFlavor(c.Flavor),
 		Value:   c.Value,
 	}
 }

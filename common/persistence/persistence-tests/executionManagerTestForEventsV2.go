@@ -28,6 +28,7 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
@@ -86,7 +87,7 @@ func (s *ExecutionManagerSuiteForEventsV2) SetupTest() {
 
 func (s *ExecutionManagerSuiteForEventsV2) newRandomChecksum() checksum.Checksum {
 	return checksum.Checksum{
-		Flavor:  checksum.FlavorIEEECRC32OverThriftBinary,
+		Flavor:  checksum.FlavorIEEECRC32OverProto3Binary,
 		Version: 22,
 		Value:   []byte(uuid.NewRandom()),
 	}
@@ -125,7 +126,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				DecisionStartToCloseTimeout: 13,
 				ExecutionContext:            nil,
 				State:                       p.WorkflowStateRunning,
-				CloseStatus:                 p.WorkflowCloseStatusRunning,
+				Status:                      enums.WorkflowExecutionStatusRunning,
 				NextEventID:                 3,
 				LastProcessedEvent:          0,
 				DecisionScheduleID:          2,
@@ -229,7 +230,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				DecisionStartToCloseTimeout: 13,
 				ExecutionContext:            nil,
 				State:                       p.WorkflowStateRunning,
-				CloseStatus:                 p.WorkflowCloseStatusRunning,
+				Status:                      enums.WorkflowExecutionStatusRunning,
 				NextEventID:                 common.EmptyEventID,
 				LastProcessedEvent:          0,
 				DecisionScheduleID:          2,
@@ -312,7 +313,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.State = p.WorkflowStateCompleted
-	updatedInfo.CloseStatus = p.WorkflowCloseStatusCompleted
+	updatedInfo.Status = enums.WorkflowExecutionStatusCompleted
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 
@@ -352,7 +353,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 				DecisionStartToCloseTimeout: updatedInfo.DecisionStartToCloseTimeout,
 				ExecutionContext:            nil,
 				State:                       p.WorkflowStateRunning,
-				CloseStatus:                 p.WorkflowCloseStatusRunning,
+				Status:                      enums.WorkflowExecutionStatusRunning,
 				NextEventID:                 info0.NextEventID,
 				LastProcessedEvent:          common.EmptyEventID,
 				DecisionScheduleID:          int64(2),
@@ -381,7 +382,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	s.NoError(err4)
 	newExecutionInfo := newExecutionState.ExecutionInfo
 	s.Equal(p.WorkflowStateRunning, newExecutionInfo.State)
-	s.EqualValues(p.WorkflowCloseStatusRunning, newExecutionInfo.CloseStatus)
+	s.EqualValues(enums.WorkflowExecutionStatusRunning, newExecutionInfo.Status)
 	s.Equal(int64(3), newExecutionInfo.NextEventID)
 	s.Equal(common.EmptyEventID, newExecutionInfo.LastProcessedEvent)
 	s.Equal(int64(2), newExecutionInfo.DecisionScheduleID)
@@ -646,7 +647,7 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 				WorkflowTimeout:             wTimeout,
 				DecisionStartToCloseTimeout: decisionTimeout,
 				State:                       p.WorkflowStateRunning,
-				CloseStatus:                 p.WorkflowCloseStatusRunning,
+				Status:                      enums.WorkflowExecutionStatusRunning,
 				NextEventID:                 nextEventID,
 				LastProcessedEvent:          lastProcessedEventID,
 				DecisionScheduleID:          decisionScheduleID,
@@ -1217,7 +1218,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(int64(0), info0.LastProcessedEvent)
 	s.Equal(int64(2), info0.DecisionScheduleID)
 	s.Equal(p.WorkflowStateRunning, info0.State)
-	s.EqualValues(p.WorkflowCloseStatusRunning, info0.CloseStatus)
+	s.EqualValues(enums.WorkflowExecutionStatusRunning, info0.Status)
 	s.Equal(int64(9), replicationState0.CurrentVersion)
 	s.Equal(int64(8), replicationState0.StartVersion)
 	s.Equal(int64(7), replicationState0.LastWriteVersion)
@@ -1238,7 +1239,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	}
 
 	info0.State = p.WorkflowStateCompleted
-	info0.CloseStatus = p.WorkflowCloseStatusCompleted
+	info0.Status = enums.WorkflowExecutionStatusCompleted
 	err = s.UpdateWorklowStateAndReplication(info0, stats0, replicationState0, nil, info0.NextEventID, nil)
 	s.Nil(err)
 
@@ -1254,7 +1255,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	insertInfo := copyWorkflowExecutionInfo(info0)
 	insterStats := copyExecutionStats(state0.ExecutionStats)
 	insertInfo.State = p.WorkflowStateRunning
-	insertInfo.CloseStatus = p.WorkflowCloseStatusRunning
+	insertInfo.Status = enums.WorkflowExecutionStatusRunning
 	insertInfo.RunID = newRunID
 	insertInfo.NextEventID = int64(50)
 	insertInfo.LastProcessedEvent = int64(20)

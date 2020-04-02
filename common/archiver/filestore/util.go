@@ -31,6 +31,7 @@ import (
 	"strings"
 
 	"github.com/dgryski/go-farm"
+	"github.com/gogo/protobuf/proto"
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
@@ -141,8 +142,14 @@ func listFilesByPrefix(dirPath string, prefix string) ([]string, error) {
 
 // encoding & decoding util
 
-func encode(v interface{}) ([]byte, error) {
-	return json.Marshal(v)
+func encode(message proto.Message) ([]byte, error) {
+	encoder := codec.NewJSONPBEncoder()
+	return encoder.Encode(message)
+}
+
+func encodeHistories(histories []*commonproto.History) ([]byte, error) {
+	encoder := codec.NewJSONPBEncoder()
+	return encoder.EncodeHistories(histories)
 }
 
 func decodeVisibilityRecord(data []byte) (*archiverproto.ArchiveVisibilityRequest, error) {

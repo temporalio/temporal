@@ -73,9 +73,9 @@ var (
 	errWorkflowExecutionNotSet = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
 	errTaskListNotSet          = serviceerror.NewInvalidArgument("Task list not set.")
 	errWorkflowIDNotSet        = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
-	errRunIDNotValid           = serviceerror.NewInvalidArgument("RunID is not valid UUID.")
+	errRunIDNotValid           = serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
-	errShardIDNotSet           = serviceerror.NewInvalidArgument("Shard ID not set on request.")
+	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
 	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
 	errDeserializeTaskToken    = serviceerror.NewInvalidArgument("Error to deserialize task token. Error: %v.")
 

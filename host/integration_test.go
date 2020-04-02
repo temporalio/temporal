@@ -1490,7 +1490,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.NoError(err)
-	s.EqualValues(enums.WorkflowExecutionCloseStatusRunning, dweResponse.WorkflowExecutionInfo.CloseStatus)
+	s.Equal(enums.WorkflowExecutionStatusRunning, dweResponse.WorkflowExecutionInfo.GetStatus())
 	s.Equal(int64(5), dweResponse.WorkflowExecutionInfo.HistoryLength) // DecisionStarted, DecisionCompleted, ActivityScheduled
 	s.Equal(1, len(dweResponse.PendingActivities))
 	s.Equal("test-activity-type", dweResponse.PendingActivities[0].ActivityType.GetName())
@@ -1501,7 +1501,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.NoError(err)
-	s.EqualValues(enums.WorkflowExecutionCloseStatusRunning, dweResponse.WorkflowExecutionInfo.CloseStatus)
+	s.Equal(enums.WorkflowExecutionStatusRunning, dweResponse.WorkflowExecutionInfo.GetStatus())
 	s.Equal(int64(8), dweResponse.WorkflowExecutionInfo.HistoryLength) // ActivityTaskStarted, ActivityTaskCompleted, DecisionTaskScheduled
 	s.Equal(0, len(dweResponse.PendingActivities))
 
@@ -1512,7 +1512,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.NoError(err)
-	s.EqualValues(enums.WorkflowExecutionCloseStatusCompleted, dweResponse.WorkflowExecutionInfo.CloseStatus)
+	s.Equal(enums.WorkflowExecutionStatusCompleted, dweResponse.WorkflowExecutionInfo.GetStatus())
 	s.Equal(int64(11), dweResponse.WorkflowExecutionInfo.HistoryLength) // DecisionStarted, DecisionCompleted, WorkflowCompleted
 }
 

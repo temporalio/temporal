@@ -1400,19 +1400,19 @@ func (mr *MockmutableStateMockRecorder) GetWorkflowType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowType", reflect.TypeOf((*MockmutableState)(nil).GetWorkflowType))
 }
 
-// GetWorkflowStateCloseStatus mocks base method.
-func (m *MockmutableState) GetWorkflowStateCloseStatus() (int, int) {
+// GetWorkflowStateStatus mocks base method.
+func (m *MockmutableState) GetWorkflowStateStatus() (int, enums.WorkflowExecutionStatus) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWorkflowStateCloseStatus")
+	ret := m.ctrl.Call(m, "GetWorkflowStateStatus")
 	ret0, _ := ret[0].(int)
-	ret1, _ := ret[1].(int)
+	ret1, _ := ret[1].(enums.WorkflowExecutionStatus)
 	return ret0, ret1
 }
 
-// GetWorkflowStateCloseStatus indicates an expected call of GetWorkflowStateCloseStatus.
-func (mr *MockmutableStateMockRecorder) GetWorkflowStateCloseStatus() *gomock.Call {
+// GetWorkflowStateStatus indicates an expected call of GetWorkflowStateStatus.
+func (mr *MockmutableStateMockRecorder) GetWorkflowStateStatus() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowStateCloseStatus", reflect.TypeOf((*MockmutableState)(nil).GetWorkflowStateCloseStatus))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowStateStatus", reflect.TypeOf((*MockmutableState)(nil).GetWorkflowStateStatus))
 }
 
 // GetQueryRegistry mocks base method.
@@ -2332,18 +2332,18 @@ func (mr *MockmutableStateMockRecorder) UpdateCurrentVersion(version, forceUpdat
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCurrentVersion", reflect.TypeOf((*MockmutableState)(nil).UpdateCurrentVersion), version, forceUpdate)
 }
 
-// UpdateWorkflowStateCloseStatus mocks base method.
-func (m *MockmutableState) UpdateWorkflowStateCloseStatus(state, closeStatus int) error {
+// UpdateWorkflowStateStatus mocks base method.
+func (m *MockmutableState) UpdateWorkflowStateStatus(state int, status enums.WorkflowExecutionStatus) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowStateCloseStatus", state, closeStatus)
+	ret := m.ctrl.Call(m, "UpdateWorkflowStateStatus", state, status)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// UpdateWorkflowStateCloseStatus indicates an expected call of UpdateWorkflowStateCloseStatus.
-func (mr *MockmutableStateMockRecorder) UpdateWorkflowStateCloseStatus(state, closeStatus interface{}) *gomock.Call {
+// UpdateWorkflowStateStatus indicates an expected call of UpdateWorkflowStateStatus.
+func (mr *MockmutableStateMockRecorder) UpdateWorkflowStateStatus(state, status interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowStateCloseStatus", reflect.TypeOf((*MockmutableState)(nil).UpdateWorkflowStateCloseStatus), state, closeStatus)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowStateStatus", reflect.TypeOf((*MockmutableState)(nil).UpdateWorkflowStateStatus), state, status)
 }
 
 // AddTransferTasks mocks base method.

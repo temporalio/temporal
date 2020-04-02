@@ -647,7 +647,7 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowE
 	var startTime time.Time
 	var executionTime time.Time
 	var closeTime time.Time
-	var status enums.WorkflowExecutionCloseStatus
+	var status enums.WorkflowExecutionStatus
 	var historyLength int64
 	var memo []byte
 	var encoding string

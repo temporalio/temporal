@@ -934,7 +934,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		StartRequestID:   requestID,
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		CloseStatus:      p.WorkflowCloseStatusRunning,
+		Status:           enums.WorkflowExecutionStatusRunning,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
 
@@ -970,7 +970,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		StartRequestID:   "oldRequestID",
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		CloseStatus:      p.WorkflowCloseStatusRunning,
+		Status:           enums.WorkflowExecutionStatusRunning,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
 
@@ -1021,7 +1021,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		StartRequestID:   "oldRequestID",
 		RunID:            runID,
 		State:            p.WorkflowStateCompleted,
-		CloseStatus:      p.WorkflowCloseStatusCompleted,
+		Status:           enums.WorkflowExecutionStatusCompleted,
 		LastWriteVersion: lastWriteVersion,
 	}).Times(len(expecedErrs))
 
@@ -1080,15 +1080,15 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 
 	expecedErrs := []bool{false, false, true}
 
-	closeStates := []int{
-		p.WorkflowCloseStatusFailed,
-		p.WorkflowCloseStatusCanceled,
-		p.WorkflowCloseStatusTerminated,
-		p.WorkflowCloseStatusTimedOut,
+	statuses := []enums.WorkflowExecutionStatus{
+		enums.WorkflowExecutionStatusFailed,
+		enums.WorkflowExecutionStatusCanceled,
+		enums.WorkflowExecutionStatusTerminated,
+		enums.WorkflowExecutionStatusTimedOut,
 	}
 	runIDs := []string{"1", "2", "3", "4"}
 
-	for i, closeState := range closeStates {
+	for i, status := range statuses {
 
 		s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(len(expecedErrs))
 		s.mockExecutionMgr.On(
@@ -1101,7 +1101,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 			StartRequestID:   "oldRequestID",
 			RunID:            runIDs[i],
 			State:            p.WorkflowStateCompleted,
-			CloseStatus:      enums.WorkflowExecutionCloseStatus(closeState),
+			Status:           status,
 			LastWriteVersion: lastWriteVersion,
 		}).Times(len(expecedErrs))
 
@@ -1369,7 +1369,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 		StartRequestID:   requestID, // use same requestID
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		CloseStatus:      p.WorkflowCloseStatusRunning,
+		Status:           enums.WorkflowExecutionStatusRunning,
 		LastWriteVersion: common.EmptyVersion,
 	}
 
@@ -1429,7 +1429,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 		StartRequestID:   "new request ID",
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		CloseStatus:      p.WorkflowCloseStatusRunning,
+		Status:           enums.WorkflowExecutionStatusRunning,
 		LastWriteVersion: common.EmptyVersion,
 	}
 

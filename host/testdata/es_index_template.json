@@ -13,13 +13,13 @@
     "_doc": {
       "dynamic": "false",
       "properties": {
-        "NamespaceID": {
+        "NamespaceId": {
           "type": "keyword"
         },
-        "WorkflowID": {
+        "WorkflowId": {
           "type": "keyword"
         },
-        "RunID": {
+        "RunId": {
           "type": "keyword"
         },
         "WorkflowType": {
@@ -34,7 +34,7 @@
         "CloseTime": {
           "type": "long"
         },
-        "CloseStatus": {
+        "ExecutionStatus": {
           "type": "integer"
         },
         "HistoryLength": {

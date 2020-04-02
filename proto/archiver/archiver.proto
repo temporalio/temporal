@@ -30,37 +30,36 @@ import "common/history.proto";
 
 
 message HistoryBlobHeader {
-    string Namespace = 1;
-    string NamespaceId = 2;
-    string WorkflowId = 3;
-    string RunId = 4;
-    bool IsLast = 5;
-    int64 FirstFailoverVersion = 6;
-    int64 LastFailoverVersion = 7;
-    int64 FirstEventId = 8;
-    int64 LastEventId = 9;
-    int64 EventCount = 10;
-
+    string namespace = 1;
+    string namespaceId = 2;
+    string workflowId = 3;
+    string runId = 4;
+    bool isLast = 5;
+    int64 firstFailoverVersion = 6;
+    int64 lastFailoverVersion = 7;
+    int64 firstEventId = 8;
+    int64 lastEventId = 9;
+    int64 eventCount = 10;
 }
 
 message HistoryBlob  {
-    HistoryBlobHeader Header = 1;
-    repeated common.History Body = 2;
+    HistoryBlobHeader header = 1;
+    repeated common.History body = 2;
 }
 
 // ArchiveVisibilityRequest is request to Archive single workflow visibility record
 message ArchiveVisibilityRequest {
-    string NamespaceId = 1;
-    string Namespace = 2;
-    string WorkflowId = 3;
-    string RunId = 4;
-    string WorkflowTypeName = 5;
-    int64 StartTimestamp = 6;
-    int64 ExecutionTimestamp = 7;
-    int64 CloseTimestamp = 8;
-    enums.WorkflowExecutionCloseStatus CloseStatus = 9;
-    int64 HistoryLength = 10;
-    common.Memo Memo = 11;
-    map<string, string> SearchAttributes = 12;
-    string HistoryArchivalURI = 13;
+    string namespaceId = 1;
+    string namespace = 2;
+    string workflowId = 3;
+    string runId = 4;
+    string workflowTypeName = 5;
+    int64 startTimestamp = 6;
+    int64 executionTimestamp = 7;
+    int64 closeTimestamp = 8;
+    enums.WorkflowExecutionStatus status = 9;
+    int64 historyLength = 10;
+    common.Memo memo = 11;
+    map<string, string> searchAttributes = 12;
+    string historyArchivalURI = 13;
 }

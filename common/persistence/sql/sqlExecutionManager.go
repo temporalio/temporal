@@ -142,7 +142,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 				StartRequestID:   row.CreateRequestID,
 				RunID:            row.RunID.String(),
 				State:            row.State,
-				CloseStatus:      row.CloseStatus,
+				Status:           row.Status,
 				LastWriteVersion: row.LastWriteVersion,
 			}
 
@@ -165,7 +165,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 			if runIDStr != request.PreviousRunID {
 				return nil, &p.CurrentWorkflowConditionFailedError{
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
-						"RunID: %v, PreviousRunID: %v",
+						"RunId: %v, PreviousRunId: %v",
 						workflowID, runIDStr, request.PreviousRunID),
 				}
 			}
@@ -188,7 +188,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 		workflowID,
 		runID,
 		executionInfo.State,
-		executionInfo.CloseStatus,
+		executionInfo.Status,
 		executionInfo.CreateRequestID,
 		startVersion,
 		lastWriteVersion); err != nil {
@@ -209,42 +209,44 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.Execution.RunId)
 	wfID := request.Execution.WorkflowId
-	execution, err := m.db.SelectFromExecutions(&sqlplugin.ExecutionsFilter{
+	executionsRow, err := m.db.SelectFromExecutions(&sqlplugin.ExecutionsFilter{
 		ShardID: m.shardID, NamespaceID: namespaceID, WorkflowID: wfID, RunID: runID})
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow executionsRow not found.  WorkflowId: %v, RunId: %v",
 				request.Execution.GetWorkflowId(),
 				request.Execution.GetRunId()))
 		}
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed. Error: %v", err))
 	}
 
-	info, err := serialization.WorkflowExecutionInfoFromBlob(execution.Data, execution.DataEncoding)
+	info, err := serialization.WorkflowExecutionInfoFromBlob(executionsRow.Data, executionsRow.DataEncoding)
 	if err != nil {
 		return nil, err
 	}
 
-	executionState, err := serialization.WorkflowExecutionStateFromBlob(execution.State, execution.StateEncoding)
+	executionState, err := serialization.WorkflowExecutionStateFromBlob(executionsRow.State, executionsRow.StateEncoding)
 	if err != nil {
 		return nil, err
 	}
 
 	// Build partial from proto
-	executionInfo := p.ProtoWorkflowExecutionToPartialInternalExecution(info, executionState, execution.NextEventID)
+	executionInfo := p.ProtoWorkflowExecutionToPartialInternalExecution(info, executionState, executionsRow.NextEventID)
 
 	state := &p.InternalWorkflowMutableState{ExecutionInfo: executionInfo}
 
-	if info.LastWriteEventId != nil {
+	if info.ReplicationData != nil {
 		state.ReplicationState = &p.ReplicationState{}
-		state.ReplicationState.StartVersion = info.GetStartVersion()
-		state.ReplicationState.CurrentVersion = info.GetCurrentVersion()
-		state.ReplicationState.LastWriteVersion = execution.LastWriteVersion
-		state.ReplicationState.LastWriteEventID = info.GetLastWriteEventId().Value
-		state.ReplicationState.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(info.LastReplicationInfo))
-		for k, v := range info.LastReplicationInfo {
-			state.ReplicationState.LastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.LastEventId}
+
+		state.ReplicationState.StartVersion = info.StartVersion
+		state.ReplicationState.CurrentVersion = info.CurrentVersion
+		state.ReplicationState.LastWriteVersion = executionsRow.LastWriteVersion
+		state.ReplicationState.LastWriteEventID = info.ReplicationData.LastWriteEventId
+		state.ReplicationState.LastReplicationInfo = info.ReplicationData.LastReplicationInfo
+
+		if state.ReplicationState.LastReplicationInfo == nil {
+			state.ReplicationState.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, 0)
 		}
 	}
 
@@ -288,7 +290,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			wfID,
 			runID)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get child execution info. Error: %v", err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get child executionsRow info. Error: %v", err))
 		}
 	}
 
@@ -404,7 +406,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				runID,
 				newWorkflow.ExecutionInfo.CreateRequestID,
 				newWorkflow.ExecutionInfo.State,
-				newWorkflow.ExecutionInfo.CloseStatus,
+				newWorkflow.ExecutionInfo.Status,
 				startVersion,
 				lastWriteVersion); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: failed to continue as new current execution. Error: %v", err))
@@ -421,7 +423,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				runID,
 				executionInfo.CreateRequestID,
 				executionInfo.State,
-				executionInfo.CloseStatus,
+				executionInfo.Status,
 				startVersion,
 				lastWriteVersion); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: failed to update current execution. Error: %v", err))
@@ -481,7 +483,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 		newWorkflowRunID,
 		newExecutionInfo.CreateRequestID,
 		newExecutionInfo.State,
-		newExecutionInfo.CloseStatus,
+		newExecutionInfo.Status,
 		startVersion,
 		lastWriteVersion,
 	); err != nil {
@@ -578,7 +580,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 		runID := primitives.MustParseUUID(executionInfo.RunID)
 		createRequestID := executionInfo.CreateRequestID
 		state := executionInfo.State
-		closeStatus := executionInfo.CloseStatus
+		status := executionInfo.Status
 
 		if request.CurrentWorkflowCAS != nil {
 			prevRunID := primitives.MustParseUUID(request.CurrentWorkflowCAS.PrevRunID)
@@ -595,7 +597,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				prevState,
 				createRequestID,
 				state,
-				closeStatus,
+				status,
 				startVersion,
 				lastWriteVersion); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
@@ -611,7 +613,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				prevRunID,
 				createRequestID,
 				state,
-				closeStatus,
+				status,
 				startVersion,
 				lastWriteVersion); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
@@ -628,7 +630,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				prevRunID,
 				createRequestID,
 				state,
-				closeStatus,
+				status,
 				startVersion,
 				lastWriteVersion); err != nil {
 				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
@@ -713,8 +715,8 @@ func (m *sqlExecutionManager) GetCurrentExecution(
 	return &p.GetCurrentExecutionResponse{
 		StartRequestID:   row.CreateRequestID,
 		RunID:            row.RunID.String(),
-		State:            int(row.State),
-		CloseStatus:      int(row.CloseStatus),
+		State:            row.State,
+		Status:           row.Status,
 		LastWriteVersion: row.LastWriteVersion,
 	}, nil
 }

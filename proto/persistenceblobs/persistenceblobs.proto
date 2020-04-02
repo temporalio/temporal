@@ -24,8 +24,9 @@ package persistenceblobs;
 option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs";
 
 import "google/protobuf/timestamp.proto";
-import "replication/replication.proto";
 import "google/protobuf/wrappers.proto";
+import "replication/replication.proto";
+import "enums/enums.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -116,7 +117,7 @@ message TimerTaskInfo {
     int64 scheduleAttempt = 7;
     int64 eventId = 8;
     int64 taskId = 9;
-    google.protobuf.Timestamp VisibilityTimestamp = 10;
+    google.protobuf.Timestamp visibilityTimestamp = 10;
 }
 
 message TransferTaskInfo {
@@ -217,7 +218,7 @@ message WorkflowExecutionState {
     string createRequestId = 1;
     bytes runId = 2;
     int32 state = 3;
-    int32 closeStatus = 4;
+    enums.WorkflowExecutionStatus status = 4;
 }
 
 message WorkflowExecutionInfo {
@@ -237,8 +238,7 @@ message WorkflowExecutionInfo {
     bytes executionContext = 12;
     int64 startVersion = 15;
     int64 currentVersion = 16;
-    google.protobuf.Int64Value lastWriteEventId = 17;
-    map<string, replication.ReplicationInfo> lastReplicationInfo = 18;
+    ReplicationData replicationData = 17;
     int64 lastEventTaskId = 19;
     int64 lastFirstEventId = 20;
     int64 lastProcessedEvent = 21;
@@ -284,11 +284,7 @@ message WorkflowExecutionInfo {
 
 message Checksum {
     int32 version = 1;
-    enum ChecksumFlavor {
-        FlavorUnknown = 0;
-        FlavorIEEECRC32OverThriftBinary = 1;
-    }
-    ChecksumFlavor Flavor = 2;
+    enums.ChecksumFlavor flavor = 2;
     bytes value = 3;
 }
 
@@ -331,4 +327,17 @@ message NamespaceInfo {
     string historyArchivalURI = 19;
     int32 visibilityArchivalStatus = 20;
     string visibilityArchivalURI = 21;
+}
+
+// ReplicationData represents mutable state information for global domains.
+// This information is used by replication protocol when applying events from remote clusters
+// only used in cassandra
+message ReplicationData {
+    int64 lastWriteEventId = 1;
+    map<string, replication.ReplicationInfo> lastReplicationInfo = 2;
+}
+
+message ReplicationVersions {
+    google.protobuf.Int64Value startVersion = 15;
+    google.protobuf.Int64Value lastWriteVersion = 16;
 }

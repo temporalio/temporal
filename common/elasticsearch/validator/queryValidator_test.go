@@ -47,7 +47,7 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
 	s.Equal("", listRequest.GetQuery())
 
-	query := "WorkflowID = 'wid'"
+	query := "WorkflowId = 'wid'"
 	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
 	s.Equal(query, listRequest.GetQuery())
@@ -57,10 +57,10 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
 	s.Equal("`Attr.CustomStringField` = 'custom'", listRequest.GetQuery())
 
-	query = "WorkflowID = 'wid' and ((CustomStringField = 'custom') or CustomIntField between 1 and 10)"
+	query = "WorkflowId = 'wid' and ((CustomStringField = 'custom') or CustomIntField between 1 and 10)"
 	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
-	s.Equal("WorkflowID = 'wid' and ((`Attr.CustomStringField` = 'custom') or `Attr.CustomIntField` between 1 and 10)", listRequest.GetQuery())
+	s.Equal("WorkflowId = 'wid' and ((`Attr.CustomStringField` = 'custom') or `Attr.CustomIntField` between 1 and 10)", listRequest.GetQuery())
 
 	query = "Invalid SQL"
 	listRequest.Query = query
@@ -71,12 +71,12 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	s.Equal("invalid where clause", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// Invalid comparison
-	query = "WorkflowID = 'wid' and 1 < 2"
+	query = "WorkflowId = 'wid' and 1 < 2"
 	listRequest.Query = query
 	s.Equal("invalid comparison expression", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// Invalid range
-	query = "1 between 1 and 2 or WorkflowID = 'wid'"
+	query = "1 between 1 and 2 or WorkflowId = 'wid'"
 	listRequest.Query = query
 	s.Equal("invalid range expression", qv.ValidateListRequestForQuery(listRequest).Error())
 
@@ -86,7 +86,7 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	s.Equal("invalid search attribute", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// Invalid search attribute in range
-	query = "Invalid between 1 and 2 or WorkflowID = 'wid'"
+	query = "Invalid between 1 and 2 or WorkflowId = 'wid'"
 	listRequest.Query = query
 	s.Equal("invalid search attribute", qv.ValidateListRequestForQuery(listRequest).Error())
 
@@ -103,7 +103,7 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	s.Equal(" order by `Attr.CustomIntField` desc", listRequest.GetQuery())
 
 	// condition + order by
-	query = "WorkflowID = 'wid' order by CloseTime desc"
+	query = "WorkflowId = 'wid' order by CloseTime desc"
 	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
 	s.Equal(query, listRequest.GetQuery())
@@ -119,15 +119,15 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	s.Equal("invalid order by expression", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// security SQL injection
-	query = "WorkflowID = 'wid'; SELECT * FROM important_table;"
+	query = "WorkflowId = 'wid'; SELECT * FROM important_table;"
 	listRequest.Query = query
 	s.Equal("Invalid query.", qv.ValidateListRequestForQuery(listRequest).Error())
 
-	query = "WorkflowID = 'wid' and (RunID = 'rid' or 1 = 1)"
+	query = "WorkflowId = 'wid' and (RunId = 'rid' or 1 = 1)"
 	listRequest.Query = query
 	s.NotNil(qv.ValidateListRequestForQuery(listRequest))
 
-	query = "WorkflowID = 'wid' union select * from dummy"
+	query = "WorkflowId = 'wid' union select * from dummy"
 	listRequest.Query = query
 	s.NotNil(qv.ValidateListRequestForQuery(listRequest))
 }

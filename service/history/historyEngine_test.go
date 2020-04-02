@@ -432,7 +432,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			int64(1),
 			[]byte{1},
 			persistence.WorkflowStateCreated,
-			persistence.WorkflowCloseStatusRunning))
+			enums.WorkflowExecutionStatusRunning))
 	}
 
 	// return immediately, since the expected next event ID appears
@@ -537,7 +537,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.EqualValues(enums.WorkflowExecutionCloseStatusCompleted, resp.GetResponse().GetQueryRejected().CloseStatus)
+	s.Equal(enums.WorkflowExecutionStatusCompleted, resp.GetResponse().GetQueryRejected().GetStatus())
 }
 
 func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
@@ -571,7 +571,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.EqualValues(enums.WorkflowExecutionCloseStatusFailed, resp.GetResponse().GetQueryRejected().CloseStatus)
+	s.Equal(enums.WorkflowExecutionStatusFailed, resp.GetResponse().GetQueryRejected().GetStatus())
 
 	request = &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
@@ -585,7 +585,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.EqualValues(enums.WorkflowExecutionCloseStatusFailed, resp.GetResponse().GetQueryRejected().CloseStatus)
+	s.Equal(enums.WorkflowExecutionStatusFailed, resp.GetResponse().GetQueryRejected().GetStatus())
 }
 
 func (s *engineSuite) TestQueryWorkflow_FirstDecisionNotCompleted() {
@@ -5201,7 +5201,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		DecisionStartToCloseTimeout:        sourceInfo.DecisionStartToCloseTimeout,
 		ExecutionContext:                   sourceInfo.ExecutionContext,
 		State:                              sourceInfo.State,
-		CloseStatus:                        sourceInfo.CloseStatus,
+		Status:                             sourceInfo.Status,
 		LastFirstEventID:                   sourceInfo.LastFirstEventID,
 		LastEventTaskID:                    sourceInfo.LastEventTaskID,
 		NextEventID:                        sourceInfo.NextEventID,

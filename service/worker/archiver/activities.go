@@ -156,7 +156,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		StartTimestamp:     request.StartTimestamp,
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		CloseTimestamp:     request.CloseTimestamp,
-		CloseStatus:        request.CloseStatus,
+		Status:             request.Status,
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,
 		SearchAttributes:   convertSearchAttributesToString(request.SearchAttributes),

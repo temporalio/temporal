@@ -28,7 +28,7 @@ CREATE TABLE closed_executions (
   start_time           timestamp,
   execution_time       timestamp,
   close_time           timestamp,
-  status               int,  -- enum WorkflowExecutionCloseStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
+  status               int,  -- enum WorkflowExecutionStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
   workflow_type_name   text,
   history_length       bigint,
   memo                 blob,
@@ -54,7 +54,7 @@ CREATE TABLE closed_executions_v2 (
   start_time           timestamp,
   execution_time       timestamp,
   close_time           timestamp,
-  status               int,  -- enum WorkflowExecutionCloseStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
+  status               int,  -- enum WorkflowExecutionStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
   workflow_type_name   text,
   history_length       bigint,
   memo                 blob,

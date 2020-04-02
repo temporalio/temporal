@@ -1,6 +1,6 @@
 frontend.validSearchAttributes:
 - value:
-    NamespaceID: 1
+    NamespaceId: 1
   constraints: {}
 testGetBoolPropertyKey:
 - value: false

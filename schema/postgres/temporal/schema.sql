@@ -56,7 +56,7 @@ CREATE TABLE current_executions(
   run_id BYTEA NOT NULL,
   create_request_id VARCHAR(64) NOT NULL,
   state INTEGER NOT NULL,
-  close_status INTEGER NOT NULL,
+  status INTEGER NOT NULL,
   start_version BIGINT NOT NULL,
   last_write_version BIGINT NOT NULL,
   PRIMARY KEY (shard_id, namespace_id, workflow_id)
