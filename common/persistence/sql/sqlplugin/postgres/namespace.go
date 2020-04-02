@@ -29,14 +29,14 @@ import (
 
 const (
 	createNamespaceQuery = `INSERT INTO 
- namespaces (id, name, is_global, data, data_encoding)
- VALUES($1, $2, $3, $4, $5)`
+ namespaces (id, name, is_global, data, data_encoding, notification_version)
+ VALUES($1, $2, $3, $4, $5, $6)`
 
 	updateNamespaceQuery = `UPDATE namespaces 
- SET name = $1, data = $2, data_encoding = $3
- WHERE shard_id=54321 AND id = $4`
+ SET name = $1, data = $2, data_encoding = $3, notification_version = $4
+ WHERE shard_id=54321 AND id = $5`
 
-	getNamespacePart = `SELECT id, name, is_global, data, data_encoding FROM namespaces`
+	getNamespacePart = `SELECT id, name, is_global, data, data_encoding, notification_version FROM namespaces`
 
 	getNamespaceByIDQuery   = getNamespacePart + ` WHERE shard_id=$1 AND id = $2`
 	getNamespaceByNameQuery = getNamespacePart + ` WHERE shard_id=$1 AND name = $2`
@@ -60,12 +60,12 @@ var errMissingArgs = errors.New("missing one or more args for API")
 
 // InsertIntoNamespace inserts a single row into namespaces table
 func (pdb *db) InsertIntoNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
-	return pdb.conn.Exec(createNamespaceQuery, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding)
+	return pdb.conn.Exec(createNamespaceQuery, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
 }
 
 // UpdateNamespace updates a single row in namespaces table
 func (pdb *db) UpdateNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
-	return pdb.conn.Exec(updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.ID)
+	return pdb.conn.Exec(updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.NotificationVersion, row.ID)
 }
 
 // SelectFromNamespace reads one or more rows from namespaces table

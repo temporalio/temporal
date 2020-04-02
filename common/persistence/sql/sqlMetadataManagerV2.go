@@ -119,10 +119,8 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 			ActiveClusterName: request.ReplicationConfig.ActiveClusterName,
 			Clusters:          clusters,
 		},
-
 		ConfigVersion:               request.ConfigVersion,
 		FailoverVersion:             request.FailoverVersion,
-		NotificationVersion:         metadata.NotificationVersion,
 		FailoverNotificationVersion: persistence.InitialFailoverNotificationVersion,
 	}
 
@@ -134,11 +132,12 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 	var resp *persistence.CreateNamespaceResponse
 	err = m.txExecute("CreateNamespace", func(tx sqlplugin.Tx) error {
 		if _, err1 := tx.InsertIntoNamespace(&sqlplugin.NamespaceRow{
-			Name:         request.Info.Name,
-			ID:           primitives.MustParseUUID(request.Info.ID),
-			Data:         blob.Data,
-			DataEncoding: string(blob.Encoding),
-			IsGlobal:     request.IsGlobalNamespace,
+			Name:                request.Info.Name,
+			ID:                  primitives.MustParseUUID(request.Info.ID),
+			Data:                blob.Data,
+			DataEncoding:        string(blob.Encoding),
+			IsGlobal:            request.IsGlobalNamespace,
+			NotificationVersion: metadata.NotificationVersion,
 		}); err1 != nil {
 			if m.db.IsDupEntryError(err1) {
 				return serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("name: %v", request.Info.Name))
@@ -237,7 +236,7 @@ func (m *sqlMetadataManagerV2) namespaceRowToGetNamespaceResponse(row *sqlplugin
 		IsGlobalNamespace:           row.IsGlobal,
 		FailoverVersion:             namespaceInfo.GetFailoverVersion(),
 		ConfigVersion:               namespaceInfo.GetConfigVersion(),
-		NotificationVersion:         namespaceInfo.GetNotificationVersion(),
+		NotificationVersion:         row.NotificationVersion,
 		FailoverNotificationVersion: namespaceInfo.GetFailoverNotificationVersion(),
 	}, nil
 }
@@ -283,7 +282,6 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 
 		ConfigVersion:               request.ConfigVersion,
 		FailoverVersion:             request.FailoverVersion,
-		NotificationVersion:         request.NotificationVersion,
 		FailoverNotificationVersion: request.FailoverNotificationVersion,
 	}
 
@@ -298,6 +296,7 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 			ID:           primitives.MustParseUUID(request.Info.ID),
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
+			NotificationVersion: request.NotificationVersion,
 		})
 		if err != nil {
 			return err

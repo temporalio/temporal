@@ -315,7 +315,6 @@ message NamespaceDetail {
     NamespaceReplicationConfig replicationConfig = 3;
 
     int64 configVersion = 9;
-    int64 notificationVersion = 10;
     int64 failoverNotificationVersion = 11;
     int64 failoverVersion = 12;
 }
