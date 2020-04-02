@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Temporal Technologies, Inc.
+// Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,24 +20,20 @@
 
 syntax = "proto3";
 
-package indexer;
-option go_package = "github.com/temporalio/temporal/.gen/proto/indexer";
+package replication;
 
-import "enums/enums.proto";
+option go_package = "github.com/temporalio/temporal/.gen/proto/replication";
 
-message Field {
-    enums.FieldType type = 1;
-    string stringData = 2;
-    int64 intData = 3;
-    bool boolData = 4;
-    bytes binaryData = 5;
+enum ReplicationTaskType {
+    ReplicationTaskTypeNamespace = 0;
+    ReplicationTaskTypeHistory = 1;
+    ReplicationTaskTypeSyncShardStatus = 2;
+    ReplicationTaskTypeSyncActivity = 3;
+    ReplicationTaskTypeHistoryMetadata = 4;
+    ReplicationTaskTypeHistoryV2 = 5;
 }
 
-message Message {
-    enums.MessageType messageType = 1;
-    string namespaceId = 2;
-    string workflowId = 3;
-    string runId = 4;
-    int64 version = 5;
-    map<string, Field> fields = 6;
+enum NamespaceOperation {
+    NamespaceOperationCreate = 0;
+    NamespaceOperationUpdate = 1;
 }
