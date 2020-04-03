@@ -1,0 +1,31 @@
+version: 2
+cli:
+  server: https://app.fossa.com
+  fetcher: custom
+  project: git@github.com:uber/cadence.git
+analyze:
+  modules:
+  - name: github.com/uber/cadence/cmd/canary
+    type: go
+    target: github.com/uber/cadence/cmd/canary
+    path: cmd/canary
+  - name: github.com/uber/cadence/cmd/server
+    type: go
+    target: github.com/uber/cadence/cmd/server
+    path: cmd/server
+  - name: github.com/uber/cadence/cmd/tools/cassandra
+    type: go
+    target: github.com/uber/cadence/cmd/tools/cassandra
+    path: cmd/tools/cassandra
+  - name: github.com/uber/cadence/cmd/tools/cli
+    type: go
+    target: github.com/uber/cadence/cmd/tools/cli
+    path: cmd/tools/cli
+  - name: github.com/uber/cadence/cmd/tools/copyright
+    type: go
+    target: github.com/uber/cadence/cmd/tools/copyright
+    path: cmd/tools/copyright
+  - name: github.com/uber/cadence/cmd/tools/sql
+    type: go
+    target: github.com/uber/cadence/cmd/tools/sql
+    path: cmd/tools/sql
