@@ -36,6 +36,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	filterpb "go.temporal.io/temporal-proto/filter"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
+	replicationpb "go.temporal.io/temporal-proto/replication"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -153,7 +154,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 			EarliestTime: 0,
 			LatestTime:   time.Now().UnixNano(),
 		},
-		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{
+		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: "wid",
 		}},
 	}
@@ -162,7 +163,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	s.Equal(errNoPermission, err)
 
 	// test list open by workflow type
-	listRequest.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonpb.WorkflowTypeFilter{
+	listRequest.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{
 		Name: "workflow-type",
 	}}
 	_, err = wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
@@ -176,7 +177,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 			EarliestTime: 0,
 			LatestTime:   time.Now().UnixNano(),
 		},
-		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{
+		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: "wid",
 		}},
 	}
@@ -185,7 +186,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	s.Equal(errNoPermission, err)
 
 	// test list close by workflow type
-	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonpb.WorkflowTypeFilter{
+	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{
 		Name: "workflow-type",
 	}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)

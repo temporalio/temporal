@@ -34,9 +34,11 @@ import (
 	versionpb "go.temporal.io/temporal-proto/version"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	clustergenpb "github.com/temporalio/temporal/.gen/proto/cluster"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/.gen/proto/token"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/definition"

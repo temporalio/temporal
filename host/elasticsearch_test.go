@@ -123,7 +123,7 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 			Namespace:       s.namespace,
 			MaximumPageSize: defaultTestValueOfESIndexMaxResultWindow,
 			StartTimeFilter: startFilter,
-			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{
+			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
 			}},
 		})

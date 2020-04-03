@@ -901,7 +901,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		Namespace:       s.namespace,
 		MaximumPageSize: 100,
 		StartTimeFilter: startFilter,
-		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{
+		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: id,
 		}},
 	})
@@ -971,7 +971,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
-			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
 			}},
 		})
@@ -1965,7 +1965,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
-			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{
+			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: childID,
 			}},
 		})
@@ -3679,7 +3679,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 				EarliestTime: 0,
 				LatestTime:   time.Now().UnixNano(),
 			},
-			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{
+			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
 			}},
 		})
@@ -3734,7 +3734,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 				EarliestTime: 0,
 				LatestTime:   time.Now().UnixNano(),
 			},
-			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
 			}},
 		})

@@ -28,7 +28,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/definition"

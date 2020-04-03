@@ -1148,11 +1148,11 @@ func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTi
 		},
 	}
 	if len(workflowID) > 0 {
-		request.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{WorkflowId: workflowID}}
+		request.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{WorkflowId: workflowID}}
 
 	}
 	if len(workflowType) > 0 {
-		request.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonpb.WorkflowTypeFilter{Name: workflowType}}
+		request.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{Name: workflowType}}
 	}
 
 	ctx, cancel := newContextForLongPoll(c)
@@ -1176,10 +1176,10 @@ func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latest
 		},
 	}
 	if len(workflowID) > 0 {
-		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{WorkflowId: workflowID}}
+		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{WorkflowId: workflowID}}
 	}
 	if len(workflowType) > 0 {
-		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonpb.WorkflowTypeFilter{Name: workflowType}}
+		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{Name: workflowType}}
 	}
 	if workflowStatus != workflowStatusNotSet {
 		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &filterpb.StatusFilter{Status: workflowStatus}}

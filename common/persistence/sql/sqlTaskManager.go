@@ -248,7 +248,7 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 			ShardID:                pageToken.ShardID,
 			NamespaceIDGreaterThan: &namespaceID,
 			NameGreaterThan:        &pageToken.Name,
-			TaskTypeGreaterThan:    &pagetokengenpb.TaskType,
+			TaskTypeGreaterThan:    &pageToken.TaskType,
 			PageSize:               &request.PageSize,
 		})
 		if err != nil {

@@ -28,7 +28,8 @@ import (
 	"github.com/urfave/cli"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/collection"

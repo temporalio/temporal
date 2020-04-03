@@ -92,7 +92,7 @@ func listMyWorkflow(client cadenceClient, wfID string, scope tally.Scope) error 
 	endTime := time.Now().UnixNano() + int64(timeSkewToleranceDuration)
 	request := &workflowservice.ListOpenWorkflowExecutionsRequest{
 		MaximumPageSize: pageSz,
-		Filters:         &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{WorkflowId: wfID}},
+		Filters:         &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{WorkflowId: wfID}},
 		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: startTime,
 			LatestTime:   endTime,

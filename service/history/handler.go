@@ -33,8 +33,9 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/.gen/proto/token"
+	namespacegenpb "github.com/temporalio/temporal/.gen/proto/namespace"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"

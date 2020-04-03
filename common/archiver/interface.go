@@ -26,7 +26,7 @@ import (
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
-	"github.com/temporalio/temporal/.gen/proto/archiver"
+	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"

@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal-proto/workflowservicemock"
 
-	"github.com/temporalio/temporal/.gen/proto/token"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/primitives"

@@ -29,7 +29,7 @@ package persistence
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	replication "github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	reflect "reflect"
 )
 

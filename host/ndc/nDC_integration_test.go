@@ -30,7 +30,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationpb "go.temporal.io/temporal-proto/replication"
+
+	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/golang/mock/gomock"

@@ -35,7 +35,8 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/olivere/elastic"
 	"github.com/urfave/cli"
-	"github.com/temporalio/temporal/.gen/proto/indexer"
+
+	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/codec"
 	es "github.com/temporalio/temporal/common/elasticsearch"

@@ -44,9 +44,9 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	yaml "gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/.gen/proto/indexer"
+	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"

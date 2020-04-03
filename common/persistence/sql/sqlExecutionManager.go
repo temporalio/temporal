@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
@@ -966,7 +966,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 	rows, err := m.db.SelectFromTimerTasks(&sqlplugin.TimerTasksFilter{
 		ShardID:                m.shardID,
 		MinVisibilityTimestamp: &pageToken.Timestamp,
-		TaskID:                 pagetokengenpb.TaskID,
+		TaskID:                 pageToken.TaskID,
 		MaxVisibilityTimestamp: &request.MaxTimestamp,
 		PageSize:               common.IntPtr(request.BatchSize + 1),
 	})

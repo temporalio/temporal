@@ -38,6 +38,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	replicationpb "go.temporal.io/temporal-proto/replication"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 

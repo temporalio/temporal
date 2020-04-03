@@ -33,6 +33,7 @@ import (
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.uber.org/atomic"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"

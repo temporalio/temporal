@@ -1349,7 +1349,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 			EarliestTime: 0,
 			LatestTime:   time.Now().UnixNano(),
 		},
-		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{
+		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: id,
 		}},
 	}
@@ -1386,7 +1386,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 			EarliestTime: 0,
 			LatestTime:   time.Now().UnixNano(),
 		},
-		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &executionpb.WorkflowExecutionFilter{
+		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: id,
 		}},
 	}
