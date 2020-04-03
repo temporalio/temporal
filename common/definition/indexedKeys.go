@@ -21,7 +21,8 @@
 package definition
 
 import (
-	)
+	commonpb "go.temporal.io/temporal-proto/common"
+)
 
 // valid indexed fields on ES
 const (

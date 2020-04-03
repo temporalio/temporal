@@ -476,10 +476,10 @@ func (mr *MockEngineMockRecorder) SyncActivity(ctx, request interface{}) *gomock
 }
 
 // GetReplicationMessages mocks base method.
-func (m *MockEngine) GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*replication.ReplicationMessages, error) {
+func (m *MockEngine) GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*replicationgenpb.ReplicationMessages, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, pollingCluster, lastReadMessageID)
-	ret0, _ := ret[0].(*replication.ReplicationMessages)
+	ret0, _ := ret[0].(*replicationgenpb.ReplicationMessages)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -491,10 +491,10 @@ func (mr *MockEngineMockRecorder) GetReplicationMessages(ctx, pollingCluster, la
 }
 
 // GetDLQReplicationMessages mocks base method.
-func (m *MockEngine) GetDLQReplicationMessages(ctx context.Context, taskInfos []*replication.ReplicationTaskInfo) ([]*replication.ReplicationTask, error) {
+func (m *MockEngine) GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationgenpb.ReplicationTaskInfo) ([]*replicationgenpb.ReplicationTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDLQReplicationMessages", ctx, taskInfos)
-	ret0, _ := ret[0].([]*replication.ReplicationTask)
+	ret0, _ := ret[0].([]*replicationgenpb.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

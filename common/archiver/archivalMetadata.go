@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"strings"
 
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"

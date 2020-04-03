@@ -624,7 +624,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
-			ParentExecutionInfo: &commonproto.ParentExecutionInfo{
+			ParentExecutionInfo: &executiongenpb.ParentExecutionInfo{
 				NamespaceId: parentNamespaceID,
 				Namespace:   parentNamespace,
 				Execution:   parentExecution,
@@ -2016,7 +2016,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			RequestId:             ci.CreateRequestID,
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
 		},
-		ParentExecutionInfo: &commonproto.ParentExecutionInfo{
+		ParentExecutionInfo: &executiongenpb.ParentExecutionInfo{
 			NamespaceId: primitives.UUID(task.GetNamespaceId()).String(),
 			Namespace:   testNamespace,
 			Execution:   &execution,

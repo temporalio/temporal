@@ -1477,7 +1477,7 @@ func isMessageIDConflictError(err error) bool {
 func (s *TestBase) GetReplicationMessages(
 	lastMessageID int,
 	maxCount int,
-) ([]*replication.ReplicationTask, int, error) {
+) ([]*replicationgenpb.ReplicationTask, int, error) {
 
 	return s.NamespaceReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
 }
@@ -1521,7 +1521,7 @@ func (s *TestBase) GetMessagesFromNamespaceDLQ(
 	lastMessageID int,
 	pageSize int,
 	pageToken []byte,
-) ([]*replication.ReplicationTask, []byte, error) {
+) ([]*replicationgenpb.ReplicationTask, []byte, error) {
 
 	return s.NamespaceReplicationQueue.GetMessagesFromDLQ(
 		firstMessageID,

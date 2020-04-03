@@ -130,7 +130,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	request.TaskID = int64(111)
 	memoBytes := []byte(`test bytes`)
 	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeProto3)
-	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
 		fields := input.Fields
 		s.Equal(request.NamespaceID, input.GetNamespaceId())
 		s.Equal(request.WorkflowID, input.GetWorkflowId())
@@ -152,8 +152,8 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 	request := &p.InternalRecordWorkflowExecutionStartedRequest{
 		Memo: &serialization.DataBlob{},
 	}
-	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
-		s.Equal(enums.MessageTypeIndex, input.GetMessageType())
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
+		s.Equal(indexergenpb.MessageTypeIndex, input.GetMessageType())
 		_, ok := input.Fields[es.Memo]
 		s.False(ok)
 		_, ok = input.Fields[es.Encoding]
@@ -179,7 +179,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	request.CloseTimestamp = int64(999)
 	request.Status = executionpb.WorkflowExecutionStatusTerminated
 	request.HistoryLength = int64(20)
-	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
 		fields := input.Fields
 		s.Equal(request.NamespaceID, input.GetNamespaceId())
 		s.Equal(request.WorkflowID, input.GetWorkflowId())
@@ -204,8 +204,8 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 	request := &p.InternalRecordWorkflowExecutionClosedRequest{
 		Memo: &serialization.DataBlob{},
 	}
-	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
-		s.Equal(enums.MessageTypeIndex, input.GetMessageType())
+	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
+		s.Equal(indexergenpb.MessageTypeIndex, input.GetMessageType())
 		_, ok := input.Fields[es.Memo]
 		s.False(ok)
 		_, ok = input.Fields[es.Encoding]

@@ -125,7 +125,7 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 		EventId:   newDecisionStartedEvent.GetEventId() + 1,
 		Timestamp: time.Now().UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskCompleted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 			ScheduledEventId: newDecisionScheduleEvent.GetEventId(),
 			StartedEventId:   newDecisionStartedEvent.GetEventId(),
 			Identity:         "some random identity",
@@ -329,7 +329,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		CurrentVersion:      int64(1),
 		LastWriteVersion:    common.EmptyVersion,
 		LastWriteEventID:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*replication.ReplicationInfo),
+		LastReplicationInfo: make(map[string]*replicationgenpb.ReplicationInfo),
 	}
 
 	dbState := &persistence.WorkflowMutableState{
@@ -583,7 +583,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskScheduled,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
 			Attempt:                    decisionAttempt,
@@ -596,7 +596,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskStarted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			RequestId:        uuid.New(),
 		}},
@@ -608,7 +608,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskFailed,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &decisionpb.DecisionTaskFailedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &eventpb.DecisionTaskFailedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			StartedEventId:   decisionStartedEvent.GetEventId(),
 		}},
@@ -659,7 +659,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskScheduled,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
 			Attempt:                    decisionAttempt,
@@ -672,7 +672,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskStarted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			RequestId:        uuid.New(),
 		}},
@@ -814,7 +814,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		CurrentVersion:      failoverVersion,
 		LastWriteVersion:    common.EmptyVersion,
 		LastWriteEventID:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*replication.ReplicationInfo),
+		LastReplicationInfo: make(map[string]*replicationgenpb.ReplicationInfo),
 	}
 
 	versionHistories := &persistence.VersionHistories{

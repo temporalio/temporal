@@ -28,7 +28,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -369,17 +368,17 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	baseEvent1 := &eventpb.HistoryEvent{
 		EventId:    124,
 		EventType:  eventpb.EventTypeDecisionTaskScheduled,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
 	}
 	baseEvent2 := &eventpb.HistoryEvent{
 		EventId:    125,
 		EventType:  eventpb.EventTypeDecisionTaskStarted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{}},
 	}
 	baseEvent3 := &eventpb.HistoryEvent{
 		EventId:    126,
 		EventType:  eventpb.EventTypeDecisionTaskCompleted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{}},
 	}
 	baseEvent4 := &eventpb.HistoryEvent{
 		EventId:   127,
@@ -397,17 +396,17 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	newEvent2 := &eventpb.HistoryEvent{
 		EventId:    2,
 		EventType:  eventpb.EventTypeDecisionTaskScheduled,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
 	}
 	newEvent3 := &eventpb.HistoryEvent{
 		EventId:    3,
 		EventType:  eventpb.EventTypeDecisionTaskStarted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{}},
 	}
 	newEvent4 := &eventpb.HistoryEvent{
 		EventId:    4,
 		EventType:  eventpb.EventTypeDecisionTaskCompleted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{}},
 	}
 	newEvent5 := &eventpb.HistoryEvent{
 		EventId:    5,
@@ -481,17 +480,17 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	event2 := &eventpb.HistoryEvent{
 		EventId:    2,
 		EventType:  eventpb.EventTypeDecisionTaskScheduled,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
 	}
 	event3 := &eventpb.HistoryEvent{
 		EventId:    3,
 		EventType:  eventpb.EventTypeDecisionTaskStarted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{}},
 	}
 	event4 := &eventpb.HistoryEvent{
 		EventId:    4,
 		EventType:  eventpb.EventTypeDecisionTaskCompleted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{}},
 	}
 	event5 := &eventpb.HistoryEvent{
 		EventId:   5,
@@ -540,7 +539,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 	event2 := &eventpb.HistoryEvent{
 		EventId:    102,
 		EventType:  eventpb.EventTypeDecisionTaskScheduled,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
 	}
 	event3 := &eventpb.HistoryEvent{
 		EventId:   103,
@@ -583,17 +582,17 @@ func (s *workflowResetterSuite) TestPagination() {
 	event2 := &eventpb.HistoryEvent{
 		EventId:    2,
 		EventType:  eventpb.EventTypeDecisionTaskScheduled,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
 	}
 	event3 := &eventpb.HistoryEvent{
 		EventId:    3,
 		EventType:  eventpb.EventTypeDecisionTaskStarted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{}},
 	}
 	event4 := &eventpb.HistoryEvent{
 		EventId:    4,
 		EventType:  eventpb.EventTypeDecisionTaskCompleted,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{}},
 	}
 	event5 := &eventpb.HistoryEvent{
 		EventId:    5,

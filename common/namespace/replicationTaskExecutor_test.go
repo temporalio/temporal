@@ -73,7 +73,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_NameUUIDCollision() {
-	operation := enums.NamespaceOperationCreate
+	operation := replicationgenpb.NamespaceOperationCreate
 	id := uuid.New()
 	name := "some random namespace test name"
 	status := namespacepb.NamespaceStatusRegistered
@@ -99,7 +99,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 	}
 
-	task := &replication.NamespaceTaskAttributes{
+	task := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: operation,
 		Id:                 id,
 		Info: &namespacepb.NamespaceInfo{
@@ -142,7 +142,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask() {
-	operation := enums.NamespaceOperationCreate
+	operation := replicationgenpb.NamespaceOperationCreate
 	id := uuid.New()
 	name := "some random namespace test name"
 	status := namespacepb.NamespaceStatusRegistered
@@ -168,7 +168,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 	}
 
-	task := &replication.NamespaceTaskAttributes{
+	task := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: operation,
 		Id:                 id,
 		Info: &namespacepb.NamespaceInfo{
@@ -228,7 +228,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NamespaceNotExist() {
-	operation := enums.NamespaceOperationUpdate
+	operation := replicationgenpb.NamespaceOperationUpdate
 	id := uuid.New()
 	name := "some random namespace test name"
 	status := namespacepb.NamespaceStatusRegistered
@@ -254,7 +254,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 	}
 
-	updateTask := &replication.NamespaceTaskAttributes{
+	updateTask := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: operation,
 		Id:                 id,
 		Info: &namespacepb.NamespaceInfo{
@@ -310,7 +310,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_UpdateActiveCluster() {
-	operation := enums.NamespaceOperationCreate
+	operation := replicationgenpb.NamespaceOperationCreate
 	id := uuid.New()
 	name := "some random namespace test name"
 	status := namespacepb.NamespaceStatusRegistered
@@ -336,7 +336,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 	}
 
-	createTask := &replication.NamespaceTaskAttributes{
+	createTask := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: operation,
 		Id:                 id,
 		Info: &namespacepb.NamespaceInfo{
@@ -366,7 +366,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 
 	// success update case
-	updateOperation := enums.NamespaceOperationUpdate
+	updateOperation := replicationgenpb.NamespaceOperationUpdate
 	updateStatus := namespacepb.NamespaceStatusDeprecated
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
@@ -389,7 +389,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &replication.NamespaceTaskAttributes{
+	updateTask := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: updateOperation,
 		Id:                 id,
 		Info: &namespacepb.NamespaceInfo{
@@ -443,7 +443,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_NoUpdateActiveCluster() {
-	operation := enums.NamespaceOperationCreate
+	operation := replicationgenpb.NamespaceOperationCreate
 	id := uuid.New()
 	name := "some random namespace test name"
 	status := namespacepb.NamespaceStatusRegistered
@@ -469,7 +469,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 	}
 
-	createTask := &replication.NamespaceTaskAttributes{
+	createTask := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: operation,
 		Id:                 id,
 		Info: &namespacepb.NamespaceInfo{
@@ -499,7 +499,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 
 	// success update case
-	updateOperation := enums.NamespaceOperationUpdate
+	updateOperation := replicationgenpb.NamespaceOperationUpdate
 	updateStatus := namespacepb.NamespaceStatusDeprecated
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
@@ -522,7 +522,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &replication.NamespaceTaskAttributes{
+	updateTask := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: updateOperation,
 		Id:                 id,
 		Info: &namespacepb.NamespaceInfo{
@@ -576,7 +576,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NoUpdateConfig_UpdateActiveCluster() {
-	operation := enums.NamespaceOperationCreate
+	operation := replicationgenpb.NamespaceOperationCreate
 	id := uuid.New()
 	name := "some random namespace test name"
 	status := namespacepb.NamespaceStatusRegistered
@@ -602,7 +602,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 	}
 
-	createTask := &replication.NamespaceTaskAttributes{
+	createTask := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: operation,
 		Id:                 id,
 		Info: &namespacepb.NamespaceInfo{
@@ -632,7 +632,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 
 	// success update case
-	updateOperation := enums.NamespaceOperationUpdate
+	updateOperation := replicationgenpb.NamespaceOperationUpdate
 	updateStatus := namespacepb.NamespaceStatusDeprecated
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
@@ -651,7 +651,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &replication.NamespaceTaskAttributes{
+	updateTask := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: updateOperation,
 		Id:                 id,
 		Info: &namespacepb.NamespaceInfo{
@@ -705,7 +705,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NoUpdateConfig_NoUpdateActiveCluster() {
-	operation := enums.NamespaceOperationCreate
+	operation := replicationgenpb.NamespaceOperationCreate
 	id := uuid.New()
 	name := "some random namespace test name"
 	status := namespacepb.NamespaceStatusRegistered
@@ -731,7 +731,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 	}
 
-	createTask := &replication.NamespaceTaskAttributes{
+	createTask := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: operation,
 		Id:                 id,
 		Info: &namespacepb.NamespaceInfo{
@@ -763,7 +763,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 
 	// success update case
-	updateOperation := enums.NamespaceOperationUpdate
+	updateOperation := replicationgenpb.NamespaceOperationUpdate
 	updateStatus := namespacepb.NamespaceStatusDeprecated
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
@@ -782,7 +782,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &replication.NamespaceTaskAttributes{
+	updateTask := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: updateOperation,
 		Id:                 id,
 		Info: &namespacepb.NamespaceInfo{

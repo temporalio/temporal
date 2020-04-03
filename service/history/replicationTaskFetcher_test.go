@@ -85,7 +85,7 @@ func (s *replicationTaskFetcherSuite) TearDownTest() {
 
 func (s *replicationTaskFetcherSuite) TestGetMessages() {
 	requestByShard := make(map[int32]*request)
-	token := &replication.ReplicationToken{
+	token := &replicationgenpb.ReplicationToken{
 		ShardId:                0,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
@@ -94,13 +94,13 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 		token: token,
 	}
 	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
-		Tokens: []*replication.ReplicationToken{
+		Tokens: []*replicationgenpb.ReplicationToken{
 			token,
 		},
 		ClusterName: "active",
 	}
-	messageByShared := make(map[int32]*replication.ReplicationMessages)
-	messageByShared[0] = &replication.ReplicationMessages{}
+	messageByShared := make(map[int32]*replicationgenpb.ReplicationMessages)
+	messageByShared[0] = &replicationgenpb.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
 		MessagesByShard: messageByShared,
 	}
@@ -112,24 +112,24 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 
 func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
 	requestByShard := make(map[int32]*request)
-	token := &replication.ReplicationToken{
+	token := &replicationgenpb.ReplicationToken{
 		ShardId:                0,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
 	}
-	respChan := make(chan *replication.ReplicationMessages, 1)
+	respChan := make(chan *replicationgenpb.ReplicationMessages, 1)
 	requestByShard[0] = &request{
 		token:    token,
 		respChan: respChan,
 	}
 	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
-		Tokens: []*replication.ReplicationToken{
+		Tokens: []*replicationgenpb.ReplicationToken{
 			token,
 		},
 		ClusterName: "active",
 	}
-	messageByShared := make(map[int32]*replication.ReplicationMessages)
-	messageByShared[0] = &replication.ReplicationMessages{}
+	messageByShared := make(map[int32]*replicationgenpb.ReplicationMessages)
+	messageByShared[0] = &replicationgenpb.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
 		MessagesByShard: messageByShared,
 	}

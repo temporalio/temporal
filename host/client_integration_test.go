@@ -35,6 +35,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	eventpb "go.temporal.io/temporal-proto/event"
 	sdkclient "go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/encoded"
 	"go.temporal.io/temporal/worker"

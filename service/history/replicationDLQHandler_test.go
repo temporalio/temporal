@@ -203,17 +203,17 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 	}).Return(resp, nil).Times(1)
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(sourceCluster).Return(s.adminClient).AnyTimes()
-	replicationTask := &replication.ReplicationTask{
-		TaskType:     enums.ReplicationTaskTypeHistory,
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:     replicationgenpb.ReplicationTaskTypeHistory,
 		SourceTaskId: lastMessageID,
-		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replication.HistoryTaskAttributes{},
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{},
 		},
 	}
 	s.adminClient.EXPECT().
 		GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
-			ReplicationTasks: []*replication.ReplicationTask{
+			ReplicationTasks: []*replicationgenpb.ReplicationTask{
 				replicationTask,
 			},
 		}, nil)

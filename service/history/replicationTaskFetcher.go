@@ -260,8 +260,8 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 
 func (f *ReplicationTaskFetcherImpl) getMessages(
 	requestByShard map[int32]*request,
-) (map[int32]*replication.ReplicationMessages, error) {
-	var tokens []*replication.ReplicationToken
+) (map[int32]*replicationgenpb.ReplicationMessages, error) {
+	var tokens []*replicationgenpb.ReplicationToken
 	for _, request := range requestByShard {
 		tokens = append(tokens, request.token)
 	}

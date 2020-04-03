@@ -57,10 +57,10 @@ func (m *MockDLQMessageHandler) EXPECT() *MockDLQMessageHandlerMockRecorder {
 }
 
 // Read mocks base method.
-func (m *MockDLQMessageHandler) Read(lastMessageID, pageSize int, pageToken []byte) ([]*replication.ReplicationTask, []byte, error) {
+func (m *MockDLQMessageHandler) Read(lastMessageID, pageSize int, pageToken []byte) ([]*replicationgenpb.ReplicationTask, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", lastMessageID, pageSize, pageToken)
-	ret0, _ := ret[0].([]*replication.ReplicationTask)
+	ret0, _ := ret[0].([]*replicationgenpb.ReplicationTask)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

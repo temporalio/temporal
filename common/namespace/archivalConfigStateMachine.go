@@ -21,6 +21,7 @@
 package namespace
 
 import (
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 

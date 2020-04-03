@@ -51,11 +51,11 @@ type (
 			ctx context.Context,
 			pollingCluster string,
 			lastReadTaskID int64,
-		) (*replication.ReplicationMessages, error)
+		) (*replicationgenpb.ReplicationMessages, error)
 		getTask(
 			ctx context.Context,
-			taskInfo *replication.ReplicationTaskInfo,
-		) (*replication.ReplicationTask, error)
+			taskInfo *replicationgenpb.ReplicationTaskInfo,
+		) (*replicationgenpb.ReplicationTask, error)
 	}
 
 	queueAckMgr interface {

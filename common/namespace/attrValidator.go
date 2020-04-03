@@ -23,6 +23,7 @@ package namespace
 import (
 	"fmt"
 
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/cluster"

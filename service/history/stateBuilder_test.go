@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
@@ -463,7 +462,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		EventId:   3,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskScheduled,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
 			Attempt:                    newRunDecisionAttempt,
@@ -690,7 +689,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 		EventId:   130,
 		Timestamp: now.UnixNano(),
 		EventType: evenType,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 			StartToCloseTimeoutSeconds: timeoutSecond,
 			Attempt:                    decisionAttempt,
@@ -742,7 +741,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskStarted() {
 		EventId:   130,
 		Timestamp: now.UnixNano(),
 		EventType: evenType,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: scheduleID,
 			RequestId:        decisionRequestID,
 		}},
@@ -789,7 +788,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskTimedOut() {
 		EventId:   130,
 		Timestamp: now.UnixNano(),
 		EventType: evenType,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &decisionpb.DecisionTaskTimedOutEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &eventpb.DecisionTaskTimedOutEventAttributes{
 			ScheduledEventId: scheduleID,
 			StartedEventId:   startedID,
 			TimeoutType:      eventpb.TimeoutTypeStartToClose,
@@ -836,7 +835,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskFailed() {
 		EventId:   130,
 		Timestamp: now.UnixNano(),
 		EventType: evenType,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &decisionpb.DecisionTaskFailedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &eventpb.DecisionTaskFailedEventAttributes{
 			ScheduledEventId: scheduleID,
 			StartedEventId:   startedID,
 		}},
@@ -882,7 +881,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskCompleted() {
 		EventId:   130,
 		Timestamp: now.UnixNano(),
 		EventType: evenType,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 			ScheduledEventId: scheduleID,
 			StartedEventId:   startedID,
 		}},

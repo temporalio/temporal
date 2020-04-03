@@ -31,6 +31,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -73,7 +75,7 @@ func (t *ForwarderTestSuite) TearDownTest() {
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskError() {
-	task := newInternalTask(&persistenceblobs.AllocatedTaskInfo{}, nil, enums.TaskSourceHistory, "", false)
+	task := newInternalTask(&persistenceblobs.AllocatedTaskInfo{}, nil, commongenpb.TaskSourceHistory, "", false)
 	t.Equal(errNoParent, t.fwdr.ForwardTask(context.Background(), task))
 
 	t.usingTasklistPartition(persistence.TaskListTypeActivity)
@@ -92,7 +94,7 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 	).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTask(taskInfo, nil, enums.TaskSourceHistory, "", false)
+	task := newInternalTask(taskInfo, nil, commongenpb.TaskSourceHistory, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
@@ -119,7 +121,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTask(taskInfo, nil, enums.TaskSourceHistory, "", false)
+	task := newInternalTask(taskInfo, nil, commongenpb.TaskSourceHistory, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
@@ -139,7 +141,7 @@ func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
 	rps := 2
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(rps)
 	taskInfo := randomTaskInfo()
-	task := newInternalTask(taskInfo, nil, enums.TaskSourceHistory, "", false)
+	task := newInternalTask(taskInfo, nil, commongenpb.TaskSourceHistory, "", false)
 	for i := 0; i < rps; i++ {
 		t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	}

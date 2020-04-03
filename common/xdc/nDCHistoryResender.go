@@ -30,6 +30,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common/cache"
@@ -73,7 +74,7 @@ type (
 	}
 
 	historyBatch struct {
-		versionHistory *commonproto.VersionHistory
+		versionHistory *eventgenpb.VersionHistory
 		rawEventBatch  *commonpb.DataBlob
 	}
 )
@@ -193,7 +194,7 @@ func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
 	workflowID string,
 	runID string,
 	historyBlob *commonpb.DataBlob,
-	versionHistoryItems []*commonproto.VersionHistoryItem,
+	versionHistoryItems []*eventgenpb.VersionHistoryItem,
 ) *historyservice.ReplicateEventsV2Request {
 
 	request := &historyservice.ReplicateEventsV2Request{

@@ -153,7 +153,7 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
 		Timestamp:     now.UnixNano(),
 	}).Return(nil).Times(1)
 
-	err := s.replicationTaskProcessor.handleSyncShardStatus(&replication.SyncShardStatus{
+	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationgenpb.SyncShardStatus{
 		Timestamp: now.UnixNano(),
 	})
 	s.NoError(err)
@@ -163,9 +163,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 	namespaceID := uuid.NewRandom()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom()
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskTypeSyncActivity,
+		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
 			RunId:       runID.String(),
@@ -189,9 +189,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 	namespaceID := uuid.NewRandom()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom()
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeHistory,
-		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &replication.HistoryTaskAttributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskTypeHistory,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
 			RunId:       runID.String(),
@@ -224,9 +224,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	serializer := s.mockResource.GetPayloadSerializer()
 	data, err := serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
 	s.NoError(err)
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeHistoryV2,
-		Attributes: &replication.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replication.HistoryTaskV2Attributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskTypeHistoryV2,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
 			RunId:       runID.String(),

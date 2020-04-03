@@ -56,10 +56,10 @@ func (m *MockHistoryIterator) EXPECT() *MockHistoryIteratorMockRecorder {
 }
 
 // Next mocks base method
-func (m *MockHistoryIterator) Next() (*archiver.HistoryBlob, error) {
+func (m *MockHistoryIterator) Next() (*archivergenpb.HistoryBlob, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Next")
-	ret0, _ := ret[0].(*archiver.HistoryBlob)
+	ret0, _ := ret[0].(*archivergenpb.HistoryBlob)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -110,7 +110,7 @@ func newNDCReplicationTask(
 
 	namespaceID := request.GetNamespaceId()
 	execution := request.WorkflowExecution
-	versionHistory := &commonproto.VersionHistory{
+	versionHistory := &eventgenpb.VersionHistory{
 		BranchToken: nil,
 		Items:       request.VersionHistoryItems,
 	}
@@ -252,9 +252,9 @@ func (t *nDCReplicationTaskImpl) splitTask(
 		}
 	}
 
-	newVersionHistory := persistence.NewVersionHistoryFromProto(&commonproto.VersionHistory{
+	newVersionHistory := persistence.NewVersionHistoryFromProto(&eventgenpb.VersionHistory{
 		BranchToken: nil,
-		Items: []*commonproto.VersionHistoryItem{{
+		Items: []*eventgenpb.VersionHistoryItem{{
 			EventId: newLastEvent.GetEventId(),
 			Version: newLastEvent.GetVersion(),
 		}},

@@ -24,6 +24,8 @@ import (
 	"database/sql"
 	"time"
 
+	executionpb "go.temporal.io/temporal-proto/execution"
+
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"

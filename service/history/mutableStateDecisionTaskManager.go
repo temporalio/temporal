@@ -29,7 +29,6 @@ import (
 	"math"
 	"time"
 
-	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -501,7 +500,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 	forkEventVersion int64,
 ) (*eventpb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionDecisionTaskFailed
-	attr := &decisionpb.DecisionTaskFailedEventAttributes{
+	attr := &eventpb.DecisionTaskFailedEventAttributes{
 		ScheduledEventId: scheduleEventID,
 		StartedEventId:   startedEventID,
 		Cause:            cause,

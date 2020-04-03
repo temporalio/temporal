@@ -25,7 +25,6 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
@@ -135,7 +134,7 @@ func InitializeHistoryEventGenerator(
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventTypeDecisionTaskScheduled
-		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{
+		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 			TaskList: &tasklistpb.TaskList{
 				Name: taskList,
 				Kind: tasklistpb.TaskListKindNormal,
@@ -154,7 +153,7 @@ func InitializeHistoryEventGenerator(
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventTypeDecisionTaskStarted
-		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
+		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: lastEvent.EventId,
 			Identity:         identity,
 			RequestId:        uuid.New(),
@@ -169,7 +168,7 @@ func InitializeHistoryEventGenerator(
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventTypeDecisionTaskFailed
-		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &decisionpb.DecisionTaskFailedEventAttributes{
+		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &eventpb.DecisionTaskFailedEventAttributes{
 			ScheduledEventId: lastEvent.GetDecisionTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
 			Cause:            eventpb.DecisionTaskFailedCauseUnhandledDecision,
@@ -186,7 +185,7 @@ func InitializeHistoryEventGenerator(
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventTypeDecisionTaskTimedOut
-		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &decisionpb.DecisionTaskTimedOutEventAttributes{
+		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &eventpb.DecisionTaskTimedOutEventAttributes{
 			ScheduledEventId: lastEvent.GetDecisionTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
 			TimeoutType:      eventpb.TimeoutTypeScheduleToStart,
@@ -201,7 +200,7 @@ func InitializeHistoryEventGenerator(
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventTypeDecisionTaskCompleted
-		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{
+		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 			ScheduledEventId: lastEvent.GetDecisionTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
 			Identity:         identity,

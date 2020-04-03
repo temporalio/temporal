@@ -30,6 +30,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
 
+	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
@@ -62,8 +63,8 @@ type (
 		DeserializeBadBinaries(data *serialization.DataBlob) (*namespacepb.BadBinaries, error)
 
 		// serialize/deserialize version histories
-		SerializeVersionHistories(histories *commonproto.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeVersionHistories(data *serialization.DataBlob) (*commonproto.VersionHistories, error)
+		SerializeVersionHistories(histories *eventgenpb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeVersionHistories(data *serialization.DataBlob) (*eventgenpb.VersionHistories, error)
 
 		// serialize/deserialize immutable cluster metadata
 		SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error)
@@ -265,22 +266,22 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob)
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeVersionHistories(histories *commonproto.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeVersionHistories(histories *eventgenpb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if histories == nil {
 		return nil, nil
 	}
 	return t.serialize(histories, encodingType)
 }
 
-func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlob) (*commonproto.VersionHistories, error) {
+func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlob) (*eventgenpb.VersionHistories, error) {
 	if data == nil {
-		return &commonproto.VersionHistories{}, nil
+		return &eventgenpb.VersionHistories{}, nil
 	}
 	if len(data.Data) == 0 {
-		return &commonproto.VersionHistories{}, nil
+		return &eventgenpb.VersionHistories{}, nil
 	}
 
-	memo := &commonproto.VersionHistories{}
+	memo := &eventgenpb.VersionHistories{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:

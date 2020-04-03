@@ -30,6 +30,8 @@ import (
 	"time"
 
 	"github.com/xwb1989/sqlparser"
+	executionpb "go.temporal.io/temporal-proto/execution"
+
 	"github.com/temporalio/temporal/common"
 )
 

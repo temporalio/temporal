@@ -239,7 +239,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 		NextEventId:        11,
 		CurrentBranchToken: branchToken,
 		VersionHistories:   versionHistories,
-		ReplicationInfo:    make(map[string]*replication.ReplicationInfo),
+		ReplicationInfo:    make(map[string]*replicationgenpb.ReplicationInfo),
 	}
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
 
@@ -278,7 +278,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAnd
 		NextEventId:        11,
 		CurrentBranchToken: branchToken,
 		VersionHistories:   versionHistories,
-		ReplicationInfo:    make(map[string]*replication.ReplicationInfo),
+		ReplicationInfo:    make(map[string]*replicationgenpb.ReplicationInfo),
 	}
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
 

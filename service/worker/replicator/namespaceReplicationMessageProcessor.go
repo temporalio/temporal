@@ -179,7 +179,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 }
 
 func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
-	task *replication.ReplicationTask,
+	task *replicationgenpb.ReplicationTask,
 ) error {
 
 	namespaceAttribute := task.GetNamespaceTaskAttributes()
@@ -196,7 +196,7 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 }
 
 func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
-	task *replication.ReplicationTask,
+	task *replicationgenpb.ReplicationTask,
 ) error {
 	p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorLatency)

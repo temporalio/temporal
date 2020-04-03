@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"
 

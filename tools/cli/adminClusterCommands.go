@@ -28,6 +28,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/urfave/cli"
+	commonpb "go.temporal.io/temporal-proto/common"
+
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 )
 

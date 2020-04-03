@@ -478,7 +478,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	isLongPoll := request.GetWaitForNewEvent()
 	isCloseEventOnly := request.GetHistoryEventFilterType() == filterpb.HistoryEventFilterTypeCloseEvent
 	execution := request.Execution
-	var continuationToken *token.HistoryContinuation
+	var continuationToken *tokengenpb.HistoryContinuation
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
@@ -513,7 +513,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			continuationToken.IsWorkflowRunning = isWorkflowRunning
 		}
 	} else {
-		continuationToken = &token.HistoryContinuation{}
+		continuationToken = &tokengenpb.HistoryContinuation{}
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
@@ -762,7 +762,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 
 	completedResp := &workflowservice.RespondDecisionTaskCompletedResponse{}
 	if request.GetReturnNewDecisionTask() && histResp != nil && histResp.StartedResponse != nil {
-		taskToken := &token.Task{
+		taskToken := &tokengenpb.Task{
 			NamespaceId:     taskToken.GetNamespaceId(),
 			WorkflowId:      taskToken.GetWorkflowId(),
 			RunId:           taskToken.GetRunId(),
@@ -1091,7 +1091,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		return nil, wh.error(errActivityIDNotSet, scope)
 	}
 
-	taskToken := &token.Task{
+	taskToken := &tokengenpb.Task{
 		NamespaceId: primitives.MustParseUUID(namespaceID),
 		RunId:       primitives.MustParseUUID(runID),
 		WorkflowId:  workflowID,
@@ -1287,7 +1287,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &token.Task{
+	taskToken := &tokengenpb.Task{
 		NamespaceId: primitives.MustParseUUID(namespaceID),
 		RunId:       primitives.MustParseUUID(runID),
 		WorkflowId:  workflowID,
@@ -1471,7 +1471,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &token.Task{
+	taskToken := &tokengenpb.Task{
 		NamespaceId: primitives.MustParseUUID(namespaceID),
 		RunId:       primitives.MustParseUUID(runID),
 		WorkflowId:  workflowID,
@@ -1658,7 +1658,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &token.Task{
+	taskToken := &tokengenpb.Task{
 		NamespaceId: primitives.MustParseUUID(namespaceID),
 		RunId:       primitives.MustParseUUID(runID),
 		WorkflowId:  workflowID,
@@ -2902,7 +2902,7 @@ func (wh *WorkflowHandler) PollForWorkflowExecutionRawHistory(ctx context.Contex
 
 	isCloseEventOnly := request.GetHistoryEventFilterType() == filterpb.HistoryEventFilterTypeCloseEvent
 	execution := request.Execution
-	token := &token.HistoryContinuation{}
+	token := &tokengenpb.HistoryContinuation{}
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
@@ -3093,7 +3093,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 	}
 
 	execution := request.Execution
-	var continuationToken *token.HistoryContinuation
+	var continuationToken *tokengenpb.HistoryContinuation
 
 	var runID string
 	var nextEventID int64
@@ -3111,7 +3111,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 		execution.RunId = continuationToken.GetRunId()
 
 	} else {
-		continuationToken = &token.HistoryContinuation{}
+		continuationToken = &tokengenpb.HistoryContinuation{}
 		continuationToken.BranchToken, runID, nextEventID, err =
 			queryHistory(namespaceID, execution, nil)
 		if err != nil {
@@ -3525,7 +3525,7 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		}
 
 		if len(persistenceToken) != 0 {
-			continuation, err = serializeHistoryToken(&token.HistoryContinuation{
+			continuation, err = serializeHistoryToken(&tokengenpb.HistoryContinuation{
 				RunId:             matchingResp.WorkflowExecution.GetRunId(),
 				FirstEventId:      firstEventID,
 				NextEventId:       nextEventID,

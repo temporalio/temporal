@@ -678,14 +678,14 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 	if task.isQuery() {
 		// for a query task
 		queryRequest := task.query.request
-		taskToken := &token.QueryTask{
+		taskToken := &tokengenpb.QueryTask{
 			NamespaceId: queryRequest.GetNamespaceId(),
 			TaskList:    queryRequest.TaskList.Name,
 			TaskId:      task.query.taskID,
 		}
 		serializedToken, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
 	} else {
-		taskToken := &token.Task{
+		taskToken := &tokengenpb.Task{
 			NamespaceId:     task.event.Data.GetNamespaceId(),
 			WorkflowId:      task.event.Data.GetWorkflowId(),
 			RunId:           task.event.Data.GetRunId(),
@@ -731,7 +731,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 		scope.Tagged(metrics.NamespaceTag(task.namespace)).RecordTimer(metrics.AsyncMatchLatency, time.Since(ct))
 	}
 
-	taskToken := &token.Task{
+	taskToken := &tokengenpb.Task{
 		NamespaceId:     task.event.Data.GetNamespaceId(),
 		WorkflowId:      task.event.Data.GetWorkflowId(),
 		RunId:           task.event.Data.GetRunId(),

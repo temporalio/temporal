@@ -123,7 +123,7 @@ func (b *historyBuilder) AddDecisionTaskTimedOutEvent(scheduleEventID int64,
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddDecisionTaskFailedEvent(attr *decisionpb.DecisionTaskFailedEventAttributes) *eventpb.HistoryEvent {
+func (b *historyBuilder) AddDecisionTaskFailedEvent(attr *eventpb.DecisionTaskFailedEventAttributes) *eventpb.HistoryEvent {
 	event := b.newDecisionTaskFailedEvent(attr)
 	return b.addEventToHistory(event)
 }
@@ -548,7 +548,7 @@ func (b *historyBuilder) newTransientDecisionTaskStartedEvent(scheduledEventID i
 func (b *historyBuilder) newDecisionTaskCompletedEvent(scheduleEventID, startedEventID int64,
 	request *workflowservice.RespondDecisionTaskCompletedRequest) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventTypeDecisionTaskCompleted)
-	attributes := &decisionpb.DecisionTaskCompletedEventAttributes{}
+	attributes := &eventpb.DecisionTaskCompletedEventAttributes{}
 	attributes.ExecutionContext = request.ExecutionContext
 	attributes.ScheduledEventId = scheduleEventID
 	attributes.StartedEventId = startedEventID
@@ -561,7 +561,7 @@ func (b *historyBuilder) newDecisionTaskCompletedEvent(scheduleEventID, startedE
 
 func (b *historyBuilder) newDecisionTaskTimedOutEvent(scheduleEventID int64, startedEventID int64, timeoutType eventpb.TimeoutType) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventTypeDecisionTaskTimedOut)
-	attributes := &decisionpb.DecisionTaskTimedOutEventAttributes{}
+	attributes := &eventpb.DecisionTaskTimedOutEventAttributes{}
 	attributes.ScheduledEventId = scheduleEventID
 	attributes.StartedEventId = startedEventID
 	attributes.TimeoutType = timeoutType
@@ -570,7 +570,7 @@ func (b *historyBuilder) newDecisionTaskTimedOutEvent(scheduleEventID int64, sta
 	return historyEvent
 }
 
-func (b *historyBuilder) newDecisionTaskFailedEvent(attr *decisionpb.DecisionTaskFailedEventAttributes) *eventpb.HistoryEvent {
+func (b *historyBuilder) newDecisionTaskFailedEvent(attr *eventpb.DecisionTaskFailedEventAttributes) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventTypeDecisionTaskFailed)
 	historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: attr}
 	return historyEvent
@@ -1053,7 +1053,7 @@ func createNewHistoryEvent(eventID int64, eventType eventpb.EventType, timestamp
 
 func setDecisionTaskScheduledEventInfo(historyEvent *eventpb.HistoryEvent, taskList string,
 	startToCloseTimeoutSeconds int32, attempt int64) *eventpb.HistoryEvent {
-	attributes := &decisionpb.DecisionTaskScheduledEventAttributes{}
+	attributes := &eventpb.DecisionTaskScheduledEventAttributes{}
 	attributes.TaskList = &tasklistpb.TaskList{}
 	attributes.TaskList.Name = taskList
 	attributes.StartToCloseTimeoutSeconds = startToCloseTimeoutSeconds
@@ -1065,7 +1065,7 @@ func setDecisionTaskScheduledEventInfo(historyEvent *eventpb.HistoryEvent, taskL
 
 func setDecisionTaskStartedEventInfo(historyEvent *eventpb.HistoryEvent, scheduledEventID int64, requestID string,
 	identity string) *eventpb.HistoryEvent {
-	attributes := &decisionpb.DecisionTaskStartedEventAttributes{}
+	attributes := &eventpb.DecisionTaskStartedEventAttributes{}
 	attributes.ScheduledEventId = scheduledEventID
 	attributes.Identity = identity
 	attributes.RequestId = requestID

@@ -32,6 +32,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -58,7 +59,7 @@ type (
 	addTaskParams struct {
 		execution     *executionpb.WorkflowExecution
 		taskInfo      *persistenceblobs.TaskInfo
-		source        enums.TaskSource
+		source        commongenpb.TaskSource
 		forwardedFrom string
 	}
 

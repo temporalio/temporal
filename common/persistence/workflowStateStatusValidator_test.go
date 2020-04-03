@@ -24,7 +24,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	)
+	executionpb "go.temporal.io/temporal-proto/execution"
+)
 
 type (
 	workflowStateStatusSuite struct {

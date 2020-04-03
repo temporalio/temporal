@@ -32,6 +32,7 @@ import (
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -605,7 +606,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 		// This decision is retried from mutable state
 		// Also return schedule and started which are not written to history yet
 		scheduledEvent, startedEvent := msBuilder.CreateTransientDecisionEvents(decision, identity)
-		response.DecisionInfo = &commonproto.TransientDecisionInfo{}
+		response.DecisionInfo = &eventgenpb.TransientDecisionInfo{}
 		response.DecisionInfo.ScheduledEvent = scheduledEvent
 		response.DecisionInfo.StartedEvent = startedEvent
 	}

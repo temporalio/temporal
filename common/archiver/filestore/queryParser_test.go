@@ -25,6 +25,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	executionpb "go.temporal.io/temporal-proto/execution"
+
 	"github.com/temporalio/temporal/common"
 )
 

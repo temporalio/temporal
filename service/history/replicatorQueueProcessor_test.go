@@ -341,10 +341,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		nil,
 	), nil).AnyTimes()
 
-	s.mockProducer.On("Publish", &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
+	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskTypeSyncActivity,
+		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
 				WorkflowId:         workflowID,
 				RunId:              runID,
@@ -453,10 +453,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		version,
 		nil,
 	), nil).AnyTimes()
-	s.mockProducer.On("Publish", &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
+	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskTypeSyncActivity,
+		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
 				WorkflowId:         workflowID,
 				RunId:              runID,

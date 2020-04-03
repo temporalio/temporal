@@ -34,7 +34,7 @@ import (
 type (
 	// DLQMessageHandler is the interface handles namespace DLQ messages
 	DLQMessageHandler interface {
-		Read(lastMessageID int, pageSize int, pageToken []byte) ([]*replication.ReplicationTask, []byte, error)
+		Read(lastMessageID int, pageSize int, pageToken []byte) ([]*replicationgenpb.ReplicationTask, []byte, error)
 		Purge(lastMessageID int) error
 		Merge(lastMessageID int, pageSize int, pageToken []byte) ([]byte, error)
 	}
@@ -64,7 +64,7 @@ func (d *dlqMessageHandlerImpl) Read(
 	lastMessageID int,
 	pageSize int,
 	pageToken []byte,
-) ([]*replication.ReplicationTask, []byte, error) {
+) ([]*replicationgenpb.ReplicationTask, []byte, error) {
 
 	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
 	if err != nil {

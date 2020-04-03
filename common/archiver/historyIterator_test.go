@@ -351,7 +351,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &archiver.HistoryBlobHeader{
+	expectedHeader := &archivergenpb.HistoryBlobHeader{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
 		WorkflowId:           testWorkflowID,
@@ -413,7 +413,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &archiver.HistoryBlobHeader{
+	expectedHeader := &archivergenpb.HistoryBlobHeader{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
 		WorkflowId:           testWorkflowID,
@@ -464,7 +464,7 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		blob, err := itr.Next()
 		s.NoError(err)
 		s.NotNil(blob)
-		expectedHeader := &archiver.HistoryBlobHeader{
+		expectedHeader := &archivergenpb.HistoryBlobHeader{
 			Namespace:            testNamespace,
 			NamespaceId:          testNamespaceID,
 			WorkflowId:           testWorkflowID,

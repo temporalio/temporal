@@ -211,7 +211,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 	scheduleID int64,
 	activityVersion int64,
 	mutableState mutableState,
-	incomingRawVersionHistory *commonproto.VersionHistory,
+	incomingRawVersionHistory *eventgenpb.VersionHistory,
 ) (bool, error) {
 
 	if mutableState.GetVersionHistories() != nil {

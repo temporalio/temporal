@@ -22,7 +22,7 @@ syntax = "proto3";
 
 package event;
 
-option go_package = "github.com/temporalio/temporal/.gen/proto/cli";
+option go_package = "github.com/temporalio/temporal/.gen/proto/event";
 
 import "event/message.proto";
 

@@ -579,7 +579,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.Equal(true, validateTimeRange(time.Unix(0, result.StartedTimestamp), time.Minute))
 		s.Equal(int32(50), result.StartToCloseTimeoutSeconds)
 		s.Equal(int32(10), result.HeartbeatTimeoutSeconds)
-		taskToken := &token.Task{
+		taskToken := &tokengenpb.Task{
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
@@ -728,7 +728,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(activityType, result.ActivityType)
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
-		taskToken := &token.Task{
+		taskToken := &tokengenpb.Task{
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
@@ -911,7 +911,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(activityHeader, result.Header)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &token.Task{
+				taskToken := &tokengenpb.Task{
 					NamespaceId:  namespaceID,
 					WorkflowId:   workflowID,
 					RunId:        runID,
@@ -1032,7 +1032,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 				s.EqualValues(workflowType, result.WorkflowType)
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &token.Task{
+				taskToken := &tokengenpb.Task{
 					NamespaceId: namespaceID,
 					WorkflowId:  workflowID,
 					RunId:       runID,
@@ -1207,7 +1207,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				s.EqualValues(activityType, result.ActivityType)
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &token.Task{
+				taskToken := &tokengenpb.Task{
 					NamespaceId:  namespaceID,
 					WorkflowId:   workflowID,
 					RunId:        runID,
@@ -1344,7 +1344,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 				s.EqualValues(workflowType, result.WorkflowType)
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &token.Task{
+				taskToken := &tokengenpb.Task{
 					NamespaceId: namespaceID,
 					WorkflowId:  workflowID,
 					RunId:       runID,

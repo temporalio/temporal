@@ -82,7 +82,7 @@ func AdminGetDLQMessages(c *cli.Context) {
 			ErrorAndExit(fmt.Sprintf("fail to read dlq message. Last read message id: %v", lastReadMessageID), err)
 		}
 
-		task := item.(*replication.ReplicationTask)
+		task := item.(*replicationgenpb.ReplicationTask)
 		encoder := codec.NewJSONPBIndentEncoder(" ")
 		taskStr, err := encoder.Encode(task)
 		if err != nil {
@@ -157,16 +157,16 @@ func AdminMergeDLQMessages(c *cli.Context) {
 	fmt.Println("Successfully merged all messages.")
 }
 
-func toQueueType(dlqType string) enums.DLQType {
+func toQueueType(dlqType string) commongenpb.DLQType {
 	switch dlqType {
 	case "namespace":
-		return enums.DLQTypeNamespace
+		return commongenpb.DLQTypeNamespace
 	case "history":
-		return enums.DLQTypeReplication
+		return commongenpb.DLQTypeReplication
 	default:
 		ErrorAndExit("The queue type is not supported.", fmt.Errorf("the queue type is not supported. Type: %v", dlqType))
 	}
-	return enums.DLQTypeNamespace
+	return commongenpb.DLQTypeNamespace
 }
 
 func confirmOrExit(message string) {

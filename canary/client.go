@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/opentracing/opentracing-go"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"

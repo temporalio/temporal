@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"

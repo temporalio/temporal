@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	executionpb "go.temporal.io/temporal-proto/execution"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	p "github.com/temporalio/temporal/common/persistence"

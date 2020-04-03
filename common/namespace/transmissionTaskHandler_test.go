@@ -67,7 +67,7 @@ func (s *transmissionTaskSuite) TearDownTest() {
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask_IsGlobalNamespace() {
-	taskType := enums.ReplicationTaskTypeNamespace
+	taskType := replicationgenpb.ReplicationTaskTypeNamespace
 	id := uuid.New()
 	name := "some random namespace test name"
 	status := namespacepb.NamespaceStatusRegistered
@@ -93,7 +93,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		},
 	}
 
-	namespaceOperation := enums.NamespaceOperationCreate
+	namespaceOperation := replicationgenpb.NamespaceOperationCreate
 	info := &p.NamespaceInfo{
 		ID:          id,
 		Name:        name,
@@ -117,10 +117,10 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	}
 	isGlobalNamespace := true
 
-	s.kafkaProducer.On("Publish", &replication.ReplicationTask{
+	s.kafkaProducer.On("Publish", &replicationgenpb.ReplicationTask{
 		TaskType: taskType,
-		Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
-			NamespaceTaskAttributes: &replication.NamespaceTaskAttributes{
+		Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+			NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
 				NamespaceOperation: namespaceOperation,
 				Id:                 id,
 				Info: &namespacepb.NamespaceInfo{
@@ -178,7 +178,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		},
 	}
 
-	namespaceOperation := enums.NamespaceOperationCreate
+	namespaceOperation := replicationgenpb.NamespaceOperationCreate
 	info := &p.NamespaceInfo{
 		ID:          id,
 		Name:        name,
@@ -207,7 +207,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_IsGlobalNamespace() {
-	taskType := enums.ReplicationTaskTypeNamespace
+	taskType := replicationgenpb.ReplicationTaskTypeNamespace
 	id := uuid.New()
 	name := "some random namespace test name"
 	status, _ := s.namespaceReplicator.convertNamespaceStatusToProto(int(namespacepb.NamespaceStatusDeprecated))
@@ -233,7 +233,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		},
 	}
 
-	namespaceOperation := enums.NamespaceOperationUpdate
+	namespaceOperation := replicationgenpb.NamespaceOperationUpdate
 	info := &p.NamespaceInfo{
 		ID:          id,
 		Name:        name,
@@ -257,10 +257,10 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	}
 	isGlobalNamespace := true
 
-	s.kafkaProducer.On("Publish", &replication.ReplicationTask{
+	s.kafkaProducer.On("Publish", &replicationgenpb.ReplicationTask{
 		TaskType: taskType,
-		Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
-			NamespaceTaskAttributes: &replication.NamespaceTaskAttributes{
+		Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+			NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
 				NamespaceOperation: namespaceOperation,
 				Id:                 id,
 				Info: &namespacepb.NamespaceInfo{
@@ -317,7 +317,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		},
 	}
 
-	namespaceOperation := enums.NamespaceOperationUpdate
+	namespaceOperation := replicationgenpb.NamespaceOperationUpdate
 	info := &p.NamespaceInfo{
 		ID:          id,
 		Name:        name,

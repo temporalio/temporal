@@ -26,25 +26,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
 
-	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
-	"github.com/gogo/protobuf/types"
-
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
-	"github.com/temporalio/temporal/common/checksum"
-
-	"github.com/pborman/uuid"
-
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/checksum"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 // Namespace status
@@ -336,7 +330,7 @@ type (
 		StartVersion        int64
 		LastWriteVersion    int64
 		LastWriteEventID    int64
-		LastReplicationInfo map[string]*replication.ReplicationInfo
+		LastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.
@@ -519,7 +513,7 @@ type (
 
 		// TODO when 2DC is deprecated remove these 2 attributes
 		ResetWorkflow       bool
-		LastReplicationInfo map[string]*replication.ReplicationInfo
+		LastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
 	}
 
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters

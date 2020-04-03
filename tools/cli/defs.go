@@ -26,7 +26,9 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
-	)
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
+)
 
 const (
 	localHostPort = "127.0.0.1:7233"

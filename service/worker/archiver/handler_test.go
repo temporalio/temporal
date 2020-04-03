@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal/activity"
 
 	"go.temporal.io/temporal"

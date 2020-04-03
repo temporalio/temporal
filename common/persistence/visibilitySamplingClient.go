@@ -23,6 +23,8 @@ package persistence
 import (
 	"sync"
 
+	executionpb "go.temporal.io/temporal-proto/execution"
+
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"

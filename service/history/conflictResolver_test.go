@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/temporal-proto/common"
-	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
@@ -169,7 +168,7 @@ func (s *conflictResolverSuite) TestReset() {
 	}
 	event2 := &eventpb.HistoryEvent{
 		EventId:    2,
-		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}}}
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}}}
 
 	historySize := int64(1234567)
 	shardId := s.mockShard.GetShardID()
@@ -247,7 +246,7 @@ func (s *conflictResolverSuite) TestReset() {
 					StartVersion:     event1.GetVersion(),
 					LastWriteVersion: event1.GetVersion(),
 					LastWriteEventID: event1.GetEventId(),
-					LastReplicationInfo: map[string]*replication.ReplicationInfo{
+					LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 						sourceCluster: {
 							Version:     event1.GetVersion(),
 							LastEventId: event1.GetEventId(),

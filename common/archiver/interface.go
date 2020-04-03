@@ -103,7 +103,7 @@ type (
 
 	// VisibilityArchiver is used to archive visibility and read archived visibility
 	VisibilityArchiver interface {
-		Archive(context.Context, URI, *archiver.ArchiveVisibilityRequest, ...ArchiveOption) error
+		Archive(context.Context, URI, *archivergenpb.ArchiveVisibilityRequest, ...ArchiveOption) error
 		Query(context.Context, URI, *QueryVisibilityRequest) (*QueryVisibilityResponse, error)
 		ValidateURI(URI) error
 	}

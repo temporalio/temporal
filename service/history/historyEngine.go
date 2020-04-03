@@ -104,8 +104,8 @@ type (
 		ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
-		GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*replication.ReplicationMessages, error)
-		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replication.ReplicationTaskInfo) ([]*replication.ReplicationTask, error)
+		GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*replicationgenpb.ReplicationMessages, error)
+		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationgenpb.ReplicationTaskInfo) ([]*replicationgenpb.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx context.Context, namespaceUUID string, workflowID string, runID string, events []*eventpb.HistoryEvent) error
 		ReadDLQMessages(ctx context.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error)
@@ -511,7 +511,7 @@ func (e *historyEngineImpl) createMutableState(
 
 func (e *historyEngineImpl) generateFirstDecisionTask(
 	mutableState mutableState,
-	parentInfo *commonproto.ParentExecutionInfo,
+	parentInfo *executiongenpb.ParentExecutionInfo,
 	startEvent *eventpb.HistoryEvent,
 ) error {
 
@@ -1080,9 +1080,9 @@ func (e *historyEngineImpl) getMutableState(
 	}
 	replicationState := mutableState.GetReplicationState()
 	if replicationState != nil {
-		retResp.ReplicationInfo = map[string]*replication.ReplicationInfo{}
+		retResp.ReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{}
 		for k, v := range replicationState.LastReplicationInfo {
-			retResp.ReplicationInfo[k] = &replication.ReplicationInfo{
+			retResp.ReplicationInfo[k] = &replicationgenpb.ReplicationInfo{
 				Version:     v.Version,
 				LastEventId: v.LastEventId,
 			}
@@ -2821,7 +2821,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	ctx context.Context,
 	pollingCluster string,
 	lastReadMessageID int64,
-) (*replication.ReplicationMessages, error) {
+) (*replicationgenpb.ReplicationMessages, error) {
 
 	scope := metrics.HistoryGetReplicationMessagesScope
 	sw := e.metricsClient.StartTimer(scope, metrics.GetReplicationMessagesForShardLatency)
@@ -2838,7 +2838,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	}
 
 	// Set cluster status for sync shard info
-	replicationMessages.SyncShardStatus = &replication.SyncShardStatus{
+	replicationMessages.SyncShardStatus = &replicationgenpb.SyncShardStatus{
 		Timestamp: e.timeSource.Now().UnixNano(),
 	}
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
@@ -2847,14 +2847,14 @@ func (e *historyEngineImpl) GetReplicationMessages(
 
 func (e *historyEngineImpl) GetDLQReplicationMessages(
 	ctx context.Context,
-	taskInfos []*replication.ReplicationTaskInfo,
-) ([]*replication.ReplicationTask, error) {
+	taskInfos []*replicationgenpb.ReplicationTaskInfo,
+) ([]*replicationgenpb.ReplicationTask, error) {
 
 	scope := metrics.HistoryGetDLQReplicationMessagesScope
 	sw := e.metricsClient.StartTimer(scope, metrics.GetDLQReplicationMessagesLatency)
 	defer sw.Stop()
 
-	tasks := make([]*replication.ReplicationTask, len(taskInfos))
+	tasks := make([]*replicationgenpb.ReplicationTask, len(taskInfos))
 	for _, taskInfo := range taskInfos {
 		task, err := e.replicatorProcessor.getTask(ctx, taskInfo)
 		if err != nil {

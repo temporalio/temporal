@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.uber.org/zap"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"

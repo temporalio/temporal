@@ -117,11 +117,11 @@ func (s *temporalSerializerSuite) TestSerializer() {
 		},
 	}
 
-	histories := &commonproto.VersionHistories{
-		Histories: []*commonproto.VersionHistory{
+	histories := &eventgenpb.VersionHistories{
+		Histories: []*eventgenpb.VersionHistory{
 			{
 				BranchToken: []byte{1},
-				Items: []*commonproto.VersionHistoryItem{
+				Items: []*eventgenpb.VersionHistoryItem{
 					{
 						EventId: 1,
 						Version: 0,
@@ -134,7 +134,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			},
 			{
 				BranchToken: []byte{2},
-				Items: []*commonproto.VersionHistoryItem{
+				Items: []*eventgenpb.VersionHistoryItem{
 					{
 						EventId: 2,
 						Version: 0,
@@ -392,11 +392,11 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			dNilHistories, err := serializer.DeserializeVersionHistories(nil)
 			s.Nil(err)
-			s.Equal(&commonproto.VersionHistories{}, dNilHistories)
+			s.Equal(&eventgenpb.VersionHistories{}, dNilHistories)
 
 			dNilHistories2, err := serializer.DeserializeVersionHistories(nilHistories)
 			s.Nil(err)
-			s.Equal(&commonproto.VersionHistories{}, dNilHistories2)
+			s.Equal(&eventgenpb.VersionHistories{}, dNilHistories2)
 
 			dHistoriesJSON, err := serializer.DeserializeVersionHistories(historiesJSON)
 			s.Nil(err)

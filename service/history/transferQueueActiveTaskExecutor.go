@@ -1204,7 +1204,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			Memo:                  attributes.Memo,
 			SearchAttributes:      attributes.SearchAttributes,
 		},
-		ParentExecutionInfo: &commonproto.ParentExecutionInfo{
+		ParentExecutionInfo: &executiongenpb.ParentExecutionInfo{
 			NamespaceId: primitives.UUID(task.GetNamespaceId()).String(),
 			Namespace:   namespace,
 			Execution: &executionpb.WorkflowExecution{

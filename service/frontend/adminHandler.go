@@ -316,7 +316,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		return nil, errInvalidPageSize
 	}
 
-	var continuationToken *token.HistoryContinuation
+	var continuationToken *tokengenpb.HistoryContinuation
 	// initialize or validate the token
 	// token will be used as a source of truth
 	if request.NextPageToken != nil {
@@ -362,7 +362,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		if nextEventID > response.GetNextEventId() {
 			nextEventID = response.GetNextEventId()
 		}
-		continuationToken = &token.HistoryContinuation{
+		continuationToken = &tokengenpb.HistoryContinuation{
 			RunId:            execution.GetRunId(),
 			BranchToken:      response.CurrentBranchToken,
 			FirstEventId:     firstEventID,
@@ -458,7 +458,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	scope = scope.Tagged(metrics.NamespaceTag(request.GetNamespace()))
 
 	execution := request.Execution
-	var pageToken *token.RawHistoryContinuation
+	var pageToken *tokengenpb.RawHistoryContinuation
 	var targetVersionHistory *persistence.VersionHistory
 	if request.NextPageToken == nil {
 		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
@@ -578,14 +578,14 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
 	defer sw.Stop()
 
-	membershipInfo := &commonproto.MembershipInfo{}
+	membershipInfo := &clustergenpb.MembershipInfo{}
 	if monitor := adh.GetMembershipMonitor(); monitor != nil {
 		currentHost, err := monitor.WhoAmI()
 		if err != nil {
 			return nil, adh.error(err, scope)
 		}
 
-		membershipInfo.CurrentHost = &commonproto.HostInfo{
+		membershipInfo.CurrentHost = &clustergenpb.HostInfo{
 			Identity: currentHost.Identity(),
 		}
 
@@ -596,21 +596,21 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 
 		membershipInfo.ReachableMembers = members
 
-		var rings []*commonproto.RingInfo
+		var rings []*clustergenpb.RingInfo
 		for _, role := range []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName, common.WorkerServiceName} {
 			resolver, err := monitor.GetResolver(role)
 			if err != nil {
 				return nil, adh.error(err, scope)
 			}
 
-			var servers []*commonproto.HostInfo
+			var servers []*clustergenpb.HostInfo
 			for _, server := range resolver.Members() {
-				servers = append(servers, &commonproto.HostInfo{
+				servers = append(servers, &clustergenpb.HostInfo{
 					Identity: server.Identity(),
 				})
 			}
 
-			rings = append(rings, &commonproto.RingInfo{
+			rings = append(rings, &clustergenpb.RingInfo{
 				Role:        role,
 				MemberCount: int32(resolver.MemberCount()),
 				Members:     servers,
@@ -693,7 +693,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 	}
 
 	return &adminservice.GetNamespaceReplicationMessagesResponse{
-		Messages: &replication.ReplicationMessages{
+		Messages: &replicationgenpb.ReplicationMessages{
 			ReplicationTasks:       replicationTasks,
 			LastRetrievedMessageId: int64(lastMessageID),
 		},
@@ -779,11 +779,11 @@ func (adh *AdminHandler) ReadDLQMessages(
 		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
-	var tasks []*replication.ReplicationTask
+	var tasks []*replicationgenpb.ReplicationTask
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case enums.DLQTypeReplication:
+	case commongenpb.DLQTypeReplication:
 		resp, err := adh.GetHistoryClient().ReadDLQMessages(ctx, &historyservice.ReadDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -802,7 +802,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 			ReplicationTasks: resp.GetReplicationTasks(),
 			NextPageToken:    resp.GetNextPageToken(),
 		}, err
-	case enums.DLQTypeNamespace:
+	case commongenpb.DLQTypeNamespace:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -850,7 +850,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 
 	var op func() error
 	switch request.GetType() {
-	case enums.DLQTypeReplication:
+	case commongenpb.DLQTypeReplication:
 		resp, err := adh.GetHistoryClient().PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -863,7 +863,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		}
 
 		return &adminservice.PurgeDLQMessagesResponse{}, err
-	case enums.DLQTypeNamespace:
+	case commongenpb.DLQTypeNamespace:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -904,7 +904,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case enums.DLQTypeReplication:
+	case commongenpb.DLQTypeReplication:
 		resp, err := adh.GetHistoryClient().MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -920,7 +920,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 		return &adminservice.MergeDLQMessagesResponse{
 			NextPageToken: request.GetNextPageToken(),
 		}, nil
-	case enums.DLQTypeNamespace:
+	case commongenpb.DLQTypeNamespace:
 
 		op = func() error {
 			select {

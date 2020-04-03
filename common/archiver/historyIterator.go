@@ -39,7 +39,7 @@ const (
 type (
 	// HistoryIterator is used to get history batches
 	HistoryIterator interface {
-		Next() (*archiver.HistoryBlob, error)
+		Next() (*archivergenpb.HistoryBlob, error)
 		HasNext() bool
 		GetState() ([]byte, error)
 	}
@@ -108,7 +108,7 @@ func newHistoryIterator(
 	}
 }
 
-func (i *historyIterator) Next() (*archiver.HistoryBlob, error) {
+func (i *historyIterator) Next() (*archivergenpb.HistoryBlob, error) {
 	if !i.HasNext() {
 		return nil, errIteratorDepleted
 	}
@@ -126,7 +126,7 @@ func (i *historyIterator) Next() (*archiver.HistoryBlob, error) {
 	for _, batch := range historyBatches {
 		eventCount += int64(len(batch.Events))
 	}
-	header := &archiver.HistoryBlobHeader{
+	header := &archivergenpb.HistoryBlobHeader{
 		Namespace:            i.request.Namespace,
 		NamespaceId:          i.request.NamespaceID,
 		WorkflowId:           i.request.WorkflowID,
@@ -139,7 +139,7 @@ func (i *historyIterator) Next() (*archiver.HistoryBlob, error) {
 		EventCount:           eventCount,
 	}
 
-	return &archiver.HistoryBlob{
+	return &archivergenpb.HistoryBlob{
 		Header: header,
 		Body:   historyBatches,
 	}, nil

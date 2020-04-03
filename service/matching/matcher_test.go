@@ -105,7 +105,7 @@ func (t *MatcherTestSuite) TestLocalSyncMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalTask(randomTaskInfo(), nil, enums.TaskSourceHistory, "", true)
+	task := newInternalTask(randomTaskInfo(), nil, commongenpb.TaskSourceHistory, "", true)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	syncMatch, err := t.matcher.Offer(ctx, task)
 	cancel()
@@ -114,20 +114,20 @@ func (t *MatcherTestSuite) TestLocalSyncMatch() {
 }
 
 func (t *MatcherTestSuite) TestRemoteSyncMatch() {
-	t.testRemoteSyncMatch(enums.TaskSourceHistory)
+	t.testRemoteSyncMatch(commongenpb.TaskSourceHistory)
 }
 
 func (t *MatcherTestSuite) TestRemoteSyncMatchBlocking() {
-	t.testRemoteSyncMatch(enums.TaskSourceDbBacklog)
+	t.testRemoteSyncMatch(commongenpb.TaskSourceDbBacklog)
 }
 
-func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enums.TaskSource) {
+func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource commongenpb.TaskSource) {
 	pollSigC := make(chan struct{})
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		<-pollSigC
-		if taskSource == enums.TaskSourceDbBacklog {
+		if taskSource == commongenpb.TaskSourceDbBacklog {
 			// when task is from dbBacklog, sync match SHOULD block
 			// so lets delay polling by a bit to verify that
 			time.Sleep(time.Millisecond * 10)
@@ -166,7 +166,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enums.TaskSource) {
 			req = arg1
 			task.forwardedFrom = req.GetForwardedFrom()
 			close(pollSigC)
-			if taskSource != enums.TaskSourceDbBacklog {
+			if taskSource != commongenpb.TaskSourceDbBacklog {
 				// when task is not from backlog, wait a bit for poller
 				// to arrive first - when task is from backlog, offer
 				// blocks - so we don't need to do this
@@ -187,7 +187,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enums.TaskSource) {
 }
 
 func (t *MatcherTestSuite) TestSyncMatchFailure() {
-	task := newInternalTask(randomTaskInfo(), nil, enums.TaskSourceHistory, "", true)
+	task := newInternalTask(randomTaskInfo(), nil, commongenpb.TaskSourceHistory, "", true)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.AddDecisionTaskRequest
@@ -344,7 +344,7 @@ func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalTask(randomTaskInfo(), nil, enums.TaskSourceHistory, "", false)
+	task := newInternalTask(randomTaskInfo(), nil, commongenpb.TaskSourceHistory, "", false)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	err := t.matcher.MustOffer(ctx, task)
 	cancel()
@@ -383,7 +383,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 		taskCompleted = true
 	}
 
-	task := newInternalTask(randomTaskInfo(), completionFunc, enums.TaskSourceDbBacklog, "", false)
+	task := newInternalTask(randomTaskInfo(), completionFunc, commongenpb.TaskSourceDbBacklog, "", false)
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 
 	var err error
@@ -393,7 +393,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	t.client.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddDecisionTaskRequest) {
 			req = arg1
-			task := newInternalTask(task.event.AllocatedTaskInfo, nil, enums.TaskSourceDbBacklog, req.GetForwardedFrom(), true)
+			task := newInternalTask(task.event.AllocatedTaskInfo, nil, commongenpb.TaskSourceDbBacklog, req.GetForwardedFrom(), true)
 			close(pollSigC)
 			remoteSyncMatch, err = t.rootMatcher.Offer(ctx, task)
 		},

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"

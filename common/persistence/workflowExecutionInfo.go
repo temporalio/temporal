@@ -23,6 +23,7 @@ package persistence
 import (
 	"fmt"
 
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 

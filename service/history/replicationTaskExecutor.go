@@ -39,7 +39,7 @@ import (
 
 type (
 	replicationTaskExecutor interface {
-		execute(sourceCluster string, replicationTask *replication.ReplicationTask, forceApply bool) (int, error)
+		execute(sourceCluster string, replicationTask *replicationgenpb.ReplicationTask, forceApply bool) (int, error)
 	}
 
 	replicationTaskExecutorImpl struct {
@@ -78,26 +78,26 @@ func newReplicationTaskExecutor(
 
 func (e *replicationTaskExecutorImpl) execute(
 	sourceCluster string,
-	replicationTask *replication.ReplicationTask,
+	replicationTask *replicationgenpb.ReplicationTask,
 	forceApply bool,
 ) (int, error) {
 
 	var err error
 	var scope int
 	switch replicationTask.GetTaskType() {
-	case enums.ReplicationTaskTypeSyncShardStatus:
+	case replicationgenpb.ReplicationTaskTypeSyncShardStatus:
 		// Shard status will be sent as part of the Replication message without kafka
 		scope = metrics.SyncShardTaskScope
-	case enums.ReplicationTaskTypeSyncActivity:
+	case replicationgenpb.ReplicationTaskTypeSyncActivity:
 		scope = metrics.SyncActivityTaskScope
 		err = e.handleActivityTask(replicationTask, forceApply)
-	case enums.ReplicationTaskTypeHistory:
+	case replicationgenpb.ReplicationTaskTypeHistory:
 		scope = metrics.HistoryReplicationTaskScope
 		err = e.handleHistoryReplicationTask(sourceCluster, replicationTask, forceApply)
-	case enums.ReplicationTaskTypeHistoryMetadata:
+	case replicationgenpb.ReplicationTaskTypeHistoryMetadata:
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
 		scope = metrics.HistoryMetadataReplicationTaskScope
-	case enums.ReplicationTaskTypeHistoryV2:
+	case replicationgenpb.ReplicationTaskTypeHistoryV2:
 		scope = metrics.HistoryReplicationV2TaskScope
 		err = e.handleHistoryReplicationTaskV2(replicationTask, forceApply)
 	default:
@@ -110,7 +110,7 @@ func (e *replicationTaskExecutorImpl) execute(
 }
 
 func (e *replicationTaskExecutorImpl) handleActivityTask(
-	task *replication.ReplicationTask,
+	task *replicationgenpb.ReplicationTask,
 	forceApply bool,
 ) error {
 
@@ -193,7 +193,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 //TODO: remove this part after 2DC deprecation
 func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	sourceCluster string,
-	task *replication.ReplicationTask,
+	task *replicationgenpb.ReplicationTask,
 	forceApply bool,
 ) error {
 
@@ -251,7 +251,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 }
 
 func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
-	task *replication.ReplicationTask,
+	task *replicationgenpb.ReplicationTask,
 	forceApply bool,
 ) error {
 

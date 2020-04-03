@@ -776,8 +776,8 @@ func (s *historyMetadataReplicationTaskSuite) TestNack() {
 	task.Nack()
 }
 
-func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication.ReplicationTask {
-	replicationAttr := &replication.SyncActivityTaskAttributes{
+func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replicationgenpb.ReplicationTask {
+	replicationAttr := &replicationgenpb.SyncActivityTaskAttributes{
 		NamespaceId:        "some random namespace ID",
 		WorkflowId:         "some random workflow ID",
 		RunId:              "some random run ID",
@@ -793,15 +793,15 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication
 		LastWorkerIdentity: "some random worker identity",
 		LastFailureDetails: []byte("some random failure details"),
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskTypeSyncActivity,
+		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }
 
-func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replication.ReplicationTask {
-	replicationAttr := &replication.HistoryTaskAttributes{
+func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replicationgenpb.ReplicationTask {
+	replicationAttr := &replicationgenpb.HistoryTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
 		NamespaceId:    "some random namespace ID",
 		WorkflowId:     "some random workflow ID",
@@ -809,7 +809,7 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replication.R
 		Version:        1394,
 		FirstEventId:   728,
 		NextEventId:    1015,
-		ReplicationInfo: map[string]*replication.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			cluster.TestCurrentClusterName: {
 				Version:     0644,
 				LastEventId: 0755,
@@ -827,15 +827,15 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replication.R
 		},
 		ResetWorkflow: true,
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeHistory,
-		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskTypeHistory,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }
 
-func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask() *replication.ReplicationTask {
-	replicationAttr := &replication.HistoryMetadataTaskAttributes{
+func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask() *replicationgenpb.ReplicationTask {
+	replicationAttr := &replicationgenpb.HistoryMetadataTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
 		NamespaceId:    "some random namespace ID",
 		WorkflowId:     "some random workflow ID",
@@ -843,9 +843,9 @@ func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask(
 		FirstEventId:   728,
 		NextEventId:    1015,
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeHistoryMetadata,
-		Attributes: &replication.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskTypeHistoryMetadata,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }

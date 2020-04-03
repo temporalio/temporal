@@ -30,9 +30,11 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
+	replicationpb "go.temporal.io/temporal-proto/replication"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -253,7 +255,7 @@ func (d *HandlerImpl) RegisterNamespace(
 
 	if namespaceRequest.IsGlobalNamespace {
 		err = d.namespaceReplicator.HandleTransmissionTask(
-			enums.NamespaceOperationCreate,
+			replicationgenpb.NamespaceOperationCreate,
 			namespaceRequest.Info,
 			namespaceRequest.Config,
 			namespaceRequest.ReplicationConfig,
@@ -545,7 +547,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	}
 
 	if isGlobalNamespace {
-		err = d.namespaceReplicator.HandleTransmissionTask(enums.NamespaceOperationUpdate,
+		err = d.namespaceReplicator.HandleTransmissionTask(replicationgenpb.NamespaceOperationUpdate,
 			info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 		if err != nil {
 			return nil, err

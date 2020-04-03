@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
@@ -748,7 +747,7 @@ func validateLastBatchOfReset(lastBatch []*eventpb.HistoryEvent, decisionFinishE
 	return nil
 }
 
-func validateResetReplicationTask(request *historyservice.ReplicateEventsRequest) (*decisionpb.DecisionTaskFailedEventAttributes, error) {
+func validateResetReplicationTask(request *historyservice.ReplicateEventsRequest) (*eventpb.DecisionTaskFailedEventAttributes, error) {
 	historyAfterReset := request.History.Events
 	if len(historyAfterReset) == 0 || historyAfterReset[0].GetEventType() != eventpb.EventTypeDecisionTaskFailed {
 		return nil, errUnknownReplicationTask

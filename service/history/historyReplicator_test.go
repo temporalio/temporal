@@ -1364,7 +1364,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version:         incomingVersion,
-		ReplicationInfo: map[string]*replication.ReplicationInfo{},
+		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{},
 		History: &eventpb.History{Events: []*eventpb.HistoryEvent{
 			{Timestamp: time.Now().UnixNano()},
 		}},
@@ -1373,7 +1373,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
 		LastWriteEventID: currentLastEventID,
-		LastReplicationInfo: map[string]*replication.ReplicationInfo{
+		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			incomingActiveCluster: {
 				Version:     currentReplicationInfoLastWriteVersion,
 				LastEventId: currentReplicationInfoLastEventID,
@@ -1430,7 +1430,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replication.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1444,7 +1444,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
 		LastWriteEventID: currentLastEventID,
-		LastReplicationInfo: map[string]*replication.ReplicationInfo{
+		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			incomingActiveCluster: {
 				Version:     currentReplicationInfoLastWriteVersion,
 				LastEventId: currentReplicationInfoLastEventID,
@@ -1494,7 +1494,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replication.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1532,7 +1532,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replication.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1591,7 +1591,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replication.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1629,7 +1629,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replication.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1676,7 +1676,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*replication.ReplicationInfo{
+		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,

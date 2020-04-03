@@ -988,8 +988,8 @@ func (r *historyReplicator) terminateWorkflow(
 }
 
 func (r *historyReplicator) getLatestCheckpoint(
-	replicationInfoRemote map[string]*replication.ReplicationInfo,
-	replicationInfoLocal map[string]*replication.ReplicationInfo,
+	replicationInfoRemote map[string]*replicationgenpb.ReplicationInfo,
+	replicationInfoLocal map[string]*replicationgenpb.ReplicationInfo,
 ) (int64, int64) {
 
 	// this only applies to 2 data center case

@@ -246,7 +246,7 @@ func newMutableStateBuilderWithReplicationState(
 		CurrentVersion:      s.currentVersion,
 		LastWriteVersion:    common.EmptyVersion,
 		LastWriteEventID:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*replication.ReplicationInfo),
+		LastReplicationInfo: make(map[string]*replicationgenpb.ReplicationInfo),
 	}
 	return s
 }
@@ -607,8 +607,8 @@ func (e *mutableStateBuilder) UpdateReplicationStateLastEventID(
 	if lastEventSourceCluster != currentCluster {
 		info, ok := e.replicationState.LastReplicationInfo[lastEventSourceCluster]
 		if !ok {
-			// replication.ReplicationInfo doesn't exist for this cluster, create one
-			info = &replication.ReplicationInfo{}
+			// replicationgenpb.ReplicationInfo doesn't exist for this cluster, create one
+			info = &replicationgenpb.ReplicationInfo{}
 			e.replicationState.LastReplicationInfo[lastEventSourceCluster] = info
 		}
 
@@ -1610,7 +1610,7 @@ func (e *mutableStateBuilder) DeleteSignalRequested(
 }
 
 func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
-	parentExecutionInfo *commonproto.ParentExecutionInfo,
+	parentExecutionInfo *executiongenpb.ParentExecutionInfo,
 	execution executionpb.WorkflowExecution,
 	previousExecutionState mutableState,
 	attributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
@@ -3280,9 +3280,9 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	}
 
 	// Extract ParentExecutionInfo from current run so it can be passed down to the next
-	var parentInfo *commonproto.ParentExecutionInfo
+	var parentInfo *executiongenpb.ParentExecutionInfo
 	if e.HasParentExecution() {
-		parentInfo = &commonproto.ParentExecutionInfo{
+		parentInfo = &executiongenpb.ParentExecutionInfo{
 			NamespaceId: e.executionInfo.ParentNamespaceID,
 			Namespace:   parentNamespace,
 			Execution: &executionpb.WorkflowExecution{

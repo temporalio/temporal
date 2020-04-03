@@ -206,10 +206,10 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskTypeSyncActivity,
+		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -240,10 +240,10 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeHistory,
-		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replication.HistoryTaskAttributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskTypeHistory,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
 				NamespaceId:  namespaceID,
 				WorkflowId:   workflowID,
 				RunId:        runID,
@@ -277,10 +277,10 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeHistoryV2,
-		Attributes: &replication.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replication.HistoryTaskV2Attributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskTypeHistoryV2,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
