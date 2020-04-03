@@ -89,7 +89,8 @@ var keys = map[Key]string{
 	FrontendESIndexMaxResultWindow:        "frontend.esIndexMaxResultWindow",
 	FrontendHistoryMaxPageSize:            "frontend.historyMaxPageSize",
 	FrontendRPS:                           "frontend.rps",
-	FrontendDomainRPS:                     "frontend.domainrps",
+	FrontendMaxDomainRPSPerInstance:       "frontend.domainrps",
+	FrontendGlobalDomainRPS:               "frontend.globalDomainrps",
 	FrontendHistoryMgrNumConns:            "frontend.historyMgrNumConns",
 	FrontendShutdownDrainDuration:         "frontend.shutdownDrainDuration",
 	DisableListVisibilityByFilter:         "frontend.disableListVisibilityByFilter",
@@ -352,8 +353,10 @@ const (
 	FrontendHistoryMaxPageSize
 	// FrontendRPS is workflow rate limit per second
 	FrontendRPS
-	// FrontendDomainRPS is workflow domain rate limit per second
-	FrontendDomainRPS
+	// FrontendMaxDomainRPSPerInstance is workflow domain rate limit per second
+	FrontendMaxDomainRPSPerInstance
+	// FrontendGlobalDomainRPS is workflow domain rate limit per second for the whole Cadence cluster
+	FrontendGlobalDomainRPS
 	// FrontendHistoryMgrNumConns is for persistence cluster.NumConns
 	FrontendHistoryMgrNumConns
 	// FrontendThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger

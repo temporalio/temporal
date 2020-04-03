@@ -115,6 +115,10 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockHistoryArchiver = &archiver.HistoryArchiverMock{}
 	s.mockVisibilityArchiver = &archiver.VisibilityArchiverMock{}
+
+	mockMonitor := s.mockResource.MembershipMonitor
+	mockMonitor.EXPECT().GetMemberCount(common.FrontendServiceName).Return(5, nil).AnyTimes()
+
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {

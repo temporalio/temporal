@@ -154,3 +154,11 @@ func (rpo *ringpopMonitor) RemoveListener(service string, name string) error {
 func (rpo *ringpopMonitor) GetReachableMembers() ([]string, error) {
 	return rpo.rp.GetReachableMembers()
 }
+
+func (rpo *ringpopMonitor) GetMemberCount(service string) (int, error) {
+	ring, err := rpo.GetResolver(service)
+	if err != nil {
+		return 0, err
+	}
+	return ring.MemberCount(), nil
+}
