@@ -21,7 +21,15 @@
 package persistence
 
 import (
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -147,7 +155,7 @@ func (m *metadataManagerImpl) serializeNamespaceConfig(c *NamespaceConfig) (Inte
 		return InternalNamespaceConfig{}, nil
 	}
 	if c.BadBinaries.Binaries == nil {
-		c.BadBinaries.Binaries = map[string]*commonproto.BadBinaryInfo{}
+		c.BadBinaries.Binaries = map[string]*namespacepb.BadBinaryInfo{}
 	}
 	badBinaries, err := m.serializer.SerializeBadBinaries(&c.BadBinaries, common.EncodingTypeProto3)
 	if err != nil {
@@ -173,7 +181,7 @@ func (m *metadataManagerImpl) deserializeNamespaceConfig(ic *InternalNamespaceCo
 		return NamespaceConfig{}, err
 	}
 	if badBinaries.Binaries == nil {
-		badBinaries.Binaries = map[string]*commonproto.BadBinaryInfo{}
+		badBinaries.Binaries = map[string]*namespacepb.BadBinaryInfo{}
 	}
 	return NamespaceConfig{
 		Retention:                ic.Retention,

@@ -26,7 +26,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 )
 
 type (
@@ -63,7 +71,7 @@ func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 
 		fmt.Println("########################")
 		for _, e := range events {
-			event := e.GetData().(*commonproto.HistoryEvent)
+			event := e.GetData().(*historypb.HistoryEvent)
 			if maxEventID != event.GetEventId()-1 {
 				s.Fail("event id sequence is incorrect")
 			}
@@ -87,7 +95,7 @@ func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 		events := branchGenerator1.GetNextVertices()
 		fmt.Println("########################")
 		for _, e := range events {
-			event := e.GetData().(*commonproto.HistoryEvent)
+			event := e.GetData().(*historypb.HistoryEvent)
 			if maxEventID != event.GetEventId()-1 {
 				s.Fail("event id sequence is incorrect")
 			}
@@ -106,12 +114,12 @@ func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 	}
 	fmt.Println("==========================")
 	history := s.generator.ListGeneratedVertices()
-	maxEventID = history[len(history)-1].GetData().(*commonproto.HistoryEvent).GetEventId()
+	maxEventID = history[len(history)-1].GetData().(*historypb.HistoryEvent).GetEventId()
 	for i := 0; i < 10 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
 		fmt.Println("########################")
 		for _, e := range events {
-			event := e.GetData().(*commonproto.HistoryEvent)
+			event := e.GetData().(*historypb.HistoryEvent)
 			if maxEventID != event.GetEventId()-1 {
 				s.Fail("event id sequence is incorrect")
 			}

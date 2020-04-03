@@ -23,13 +23,20 @@ package cli
 import (
 	"os"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	"go.temporal.io/temporal-proto/enums"
-)
+	)
 
 // DescribeTaskList show pollers info of a given tasklist
 func DescribeTaskList(c *cli.Context) {
@@ -52,7 +59,7 @@ func DescribeTaskList(c *cli.Context) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	if taskListType == enums.TaskListTypeActivity {
+	if taskListType == tasklistpb.TaskListTypeActivity {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
 		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})
@@ -75,7 +82,7 @@ func ListTaskListPartitions(c *cli.Context) {
 	defer cancel()
 	request := &workflowservice.ListTaskListPartitionsRequest{
 		Namespace: namespace,
-		TaskList:  &commonproto.TaskList{Name: taskList},
+		TaskList:  &tasklistpb.TaskList{Name: taskList},
 	}
 
 	response, err := frontendClient.ListTaskListPartitions(ctx, request)
@@ -90,7 +97,7 @@ func ListTaskListPartitions(c *cli.Context) {
 	}
 }
 
-func printTaskListPartitions(taskListType string, partitions []*commonproto.TaskListPartitionMetadata) {
+func printTaskListPartitions(taskListType string, partitions []*tasklistpb.TaskListPartitionMetadata) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")

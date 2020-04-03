@@ -25,7 +25,6 @@ package history
 import (
 	"time"
 
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -200,7 +199,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowClose(
 
 	executionInfo := mutableState.GetExecutionInfo()
 
-	if executionInfo.Status != enums.WorkflowExecutionStatusRunning {
+	if executionInfo.Status != executionpb.WorkflowExecutionStatusRunning {
 		return taskGenerator.generateWorkflowCloseTasks(
 			now,
 		)
@@ -222,7 +221,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 
 	executionInfo := mutableState.GetExecutionInfo()
 
-	if executionInfo.Status == enums.WorkflowExecutionStatusRunning {
+	if executionInfo.Status == executionpb.WorkflowExecutionStatusRunning {
 		return taskGenerator.generateRecordWorkflowStartedTasks(
 			now,
 			startEvent,

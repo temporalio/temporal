@@ -28,9 +28,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-)
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
+	)
 
 type QuerySuite struct {
 	*require.Assertions
@@ -63,7 +70,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult:          &commonproto.WorkflowQueryResult{},
+				queryResult:          &querypb.WorkflowQueryResult{},
 				failure:              errors.New("err"),
 			},
 			expectErr: true,
@@ -71,8 +78,8 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult: &commonproto.WorkflowQueryResult{
-					ResultType: enums.QueryResultTypeAnswered,
+				queryResult: &querypb.WorkflowQueryResult{
+					ResultType: querypb.QueryResultTypeAnswered,
 				},
 			},
 			expectErr: true,
@@ -80,8 +87,8 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult: &commonproto.WorkflowQueryResult{
-					ResultType:   enums.QueryResultTypeAnswered,
+				queryResult: &querypb.WorkflowQueryResult{
+					ResultType:   querypb.QueryResultTypeAnswered,
 					Answer:       []byte{1, 2, 3},
 					ErrorMessage: "err",
 				},
@@ -91,8 +98,8 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult: &commonproto.WorkflowQueryResult{
-					ResultType: enums.QueryResultTypeFailed,
+				queryResult: &querypb.WorkflowQueryResult{
+					ResultType: querypb.QueryResultTypeFailed,
 					Answer:     []byte{1, 2, 3},
 				},
 			},
@@ -101,8 +108,8 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult: &commonproto.WorkflowQueryResult{
-					ResultType:   enums.QueryResultTypeFailed,
+				queryResult: &querypb.WorkflowQueryResult{
+					ResultType:   querypb.QueryResultTypeFailed,
 					ErrorMessage: "err",
 				},
 			},
@@ -111,8 +118,8 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult: &commonproto.WorkflowQueryResult{
-					ResultType: enums.QueryResultTypeAnswered,
+				queryResult: &querypb.WorkflowQueryResult{
+					ResultType: querypb.QueryResultTypeAnswered,
 					Answer:     []byte{1, 2, 3},
 				},
 			},
@@ -121,7 +128,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeUnblocked,
-				queryResult:          &commonproto.WorkflowQueryResult{},
+				queryResult:          &querypb.WorkflowQueryResult{},
 			},
 			expectErr: true,
 		},
@@ -147,7 +154,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeFailed,
-				queryResult:          &commonproto.WorkflowQueryResult{},
+				queryResult:          &querypb.WorkflowQueryResult{},
 			},
 			expectErr: true,
 		},
@@ -181,8 +188,8 @@ func (s *QuerySuite) TestTerminationState_Failed() {
 func (s *QuerySuite) TestTerminationState_Completed() {
 	answeredTerminationState := &queryTerminationState{
 		queryTerminationType: queryTerminationTypeCompleted,
-		queryResult: &commonproto.WorkflowQueryResult{
-			ResultType: enums.QueryResultTypeAnswered,
+		queryResult: &querypb.WorkflowQueryResult{
+			ResultType: querypb.QueryResultTypeAnswered,
 			Answer:     []byte{1, 2, 3},
 		},
 	}

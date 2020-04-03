@@ -27,9 +27,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
@@ -110,11 +116,11 @@ func (s *DecisionHandlerSuite) TestHandleBufferedQueries_QueryTooLarge() {
 	s.assertQueryCounts(s.queryRegistry, 0, 5, 0, 5)
 }
 
-func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize int) map[string]*commonproto.WorkflowQueryResult {
-	results := make(map[string]*commonproto.WorkflowQueryResult)
+func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize int) map[string]*querypb.WorkflowQueryResult {
+	results := make(map[string]*querypb.WorkflowQueryResult)
 	for _, id := range ids {
-		results[id] = &commonproto.WorkflowQueryResult{
-			ResultType: enums.QueryResultTypeAnswered,
+		results[id] = &querypb.WorkflowQueryResult{
+			ResultType: querypb.QueryResultTypeAnswered,
 			Answer:     make([]byte, resultSize, resultSize),
 		}
 	}
@@ -124,7 +130,7 @@ func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize in
 func (s *DecisionHandlerSuite) constructQueryRegistry(numQueries int) queryRegistry {
 	queryRegistry := newQueryRegistry()
 	for i := 0; i < numQueries; i++ {
-		queryRegistry.bufferQuery(&commonproto.WorkflowQuery{})
+		queryRegistry.bufferQuery(&querypb.WorkflowQuery{})
 	}
 	return queryRegistry
 }

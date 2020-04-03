@@ -29,9 +29,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/codec"
@@ -183,9 +189,9 @@ func (s *UtilSuite) TestListFilesByPrefix() {
 }
 
 func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
-	historyBatches := []*commonproto.History{
+	historyBatches := []*historypb.History{
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*historypb.HistoryEvent{
 				{
 					EventId: common.FirstEventID,
 					Version: 1,
@@ -193,7 +199,7 @@ func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
 			},
 		},
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -202,7 +208,7 @@ func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
 				{
 					EventId: common.FirstEventID + 2,
 					Version: 2,
-					Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
 						Identity: "some random identity",
 					}},
 				},
@@ -326,15 +332,15 @@ func (s *UtilSuite) TestExtractCloseFailoverVersion() {
 
 func (s *UtilSuite) TestHistoryMutated() {
 	testCases := []struct {
-		historyBatches []*commonproto.History
+		historyBatches []*historypb.History
 		request        *archiver.ArchiveHistoryRequest
 		isLast         bool
 		isMutated      bool
 	}{
 		{
-			historyBatches: []*commonproto.History{
+			historyBatches: []*historypb.History{
 				{
-					Events: []*commonproto.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							Version: 15,
 						},
@@ -347,9 +353,9 @@ func (s *UtilSuite) TestHistoryMutated() {
 			isMutated: true,
 		},
 		{
-			historyBatches: []*commonproto.History{
+			historyBatches: []*historypb.History{
 				{
-					Events: []*commonproto.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							EventId: 33,
 							Version: 10,
@@ -357,7 +363,7 @@ func (s *UtilSuite) TestHistoryMutated() {
 					},
 				},
 				{
-					Events: []*commonproto.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							EventId: 49,
 							Version: 10,
@@ -377,9 +383,9 @@ func (s *UtilSuite) TestHistoryMutated() {
 			isMutated: true,
 		},
 		{
-			historyBatches: []*commonproto.History{
+			historyBatches: []*historypb.History{
 				{
-					Events: []*commonproto.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							Version: 9,
 						},
@@ -393,9 +399,9 @@ func (s *UtilSuite) TestHistoryMutated() {
 			isMutated: true,
 		},
 		{
-			historyBatches: []*commonproto.History{
+			historyBatches: []*historypb.History{
 				{
-					Events: []*commonproto.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							EventId: 20,
 							Version: 10,
@@ -403,7 +409,7 @@ func (s *UtilSuite) TestHistoryMutated() {
 					},
 				},
 				{
-					Events: []*commonproto.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							EventId: 33,
 							Version: 10,
@@ -471,6 +477,6 @@ func (s *UtilSuite) assertCorrectFileMode(path string) {
 	s.Equal(mode, info.Mode())
 }
 
-func toWorkflowExecutionStatusPtr(in enums.WorkflowExecutionStatus) *enums.WorkflowExecutionStatus {
+func toWorkflowExecutionStatusPtr(in executionpb.WorkflowExecutionStatus) *executionpb.WorkflowExecutionStatus {
 	return &in
 }

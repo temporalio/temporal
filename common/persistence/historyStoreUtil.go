@@ -23,7 +23,15 @@ package persistence
 import (
 	"fmt"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 )
@@ -31,8 +39,8 @@ import (
 // ReadFullPageV2Events reads a full page of history events from HistoryManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history events, the size
 // of data read, the next page token, and an error if present.
-func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*commonproto.HistoryEvent, int, []byte, error) {
-	var historyEvents []*commonproto.HistoryEvent
+func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*historypb.HistoryEvent, int, []byte, error) {
+	var historyEvents []*historypb.HistoryEvent
 	size := int(0)
 	for {
 		response, err := historyV2Mgr.ReadHistoryBranch(req)
@@ -51,8 +59,8 @@ func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchReq
 // ReadFullPageV2EventsByBatch reads a full page of history events by batch from HistoryManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history batches, the size
 // of data read, the next page token, and an error if present.
-func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*commonproto.History, int, []byte, error) {
-	historyBatches := []*commonproto.History{}
+func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*historypb.History, int, []byte, error) {
+	historyBatches := []*historypb.History{}
 	eventsRead := 0
 	size := 0
 	for {

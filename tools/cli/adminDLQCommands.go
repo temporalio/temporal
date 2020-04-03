@@ -27,8 +27,6 @@ import (
 
 	"github.com/urfave/cli"
 
-	"go.temporal.io/temporal-proto/enums"
-
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"

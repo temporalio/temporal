@@ -25,7 +25,15 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -89,7 +97,7 @@ func (c *historyCache) getOrCreateCurrentWorkflowExecution(
 
 	// using empty run ID as current workflow run ID
 	runID := ""
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -107,7 +115,7 @@ func (c *historyCache) getOrCreateCurrentWorkflowExecution(
 func (c *historyCache) getAndCreateWorkflowExecution(
 	ctx context.Context,
 	namespaceID string,
-	execution commonproto.WorkflowExecution,
+	execution executionpb.WorkflowExecution,
 ) (workflowExecutionContext, workflowExecutionContext, releaseWorkflowExecutionFunc, bool, error) {
 
 	scope := metrics.HistoryCacheGetAndCreateScope
@@ -146,7 +154,7 @@ func (c *historyCache) getAndCreateWorkflowExecution(
 
 func (c *historyCache) getOrCreateWorkflowExecutionForBackground(
 	namespaceID string,
-	execution commonproto.WorkflowExecution,
+	execution executionpb.WorkflowExecution,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 
 	return c.getOrCreateWorkflowExecution(context.Background(), namespaceID, execution)
@@ -155,7 +163,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionForBackground(
 func (c *historyCache) getOrCreateWorkflowExecution(
 	ctx context.Context,
 	namespaceID string,
-	execution commonproto.WorkflowExecution,
+	execution executionpb.WorkflowExecution,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 
 	scope := metrics.HistoryCacheGetOrCreateScope
@@ -180,7 +188,7 @@ func (c *historyCache) getOrCreateWorkflowExecution(
 func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	namespaceID string,
-	execution commonproto.WorkflowExecution,
+	execution executionpb.WorkflowExecution,
 	scope int,
 	forceClearContext bool,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
@@ -220,7 +228,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 
 func (c *historyCache) validateWorkflowExecutionInfo(
 	namespaceID string,
-	execution *commonproto.WorkflowExecution,
+	execution *executionpb.WorkflowExecution,
 ) error {
 
 	if execution.GetWorkflowId() == "" {

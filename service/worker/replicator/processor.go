@@ -26,7 +26,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"

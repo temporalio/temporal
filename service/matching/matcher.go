@@ -25,7 +25,6 @@ import (
 	"errors"
 	"time"
 
-	"go.temporal.io/temporal-proto/enums"
 	"golang.org/x/time/rate"
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"

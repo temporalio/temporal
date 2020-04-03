@@ -28,7 +28,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/.gen/proto/replication"

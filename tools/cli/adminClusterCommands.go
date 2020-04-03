@@ -28,8 +28,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/urfave/cli"
-	"go.temporal.io/temporal-proto/enums"
-
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 )
 
@@ -55,8 +53,8 @@ func AdminAddSearchAttribute(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &adminservice.AddSearchAttributeRequest{
-		SearchAttribute: map[string]enums.IndexedValueType{
-			key: enums.IndexedValueType(valType),
+		SearchAttribute: map[string]commonpb.IndexedValueType{
+			key: commonpb.IndexedValueType(valType),
 		},
 		SecurityToken: c.String(FlagSecurityToken),
 	}

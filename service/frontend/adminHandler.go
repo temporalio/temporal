@@ -28,8 +28,15 @@ import (
 
 	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -373,14 +380,14 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 
 	if continuationToken.GetFirstEventId() >= continuationToken.GetNextEventId() {
 		return &adminservice.GetWorkflowExecutionRawHistoryResponse{
-			HistoryBatches:  []*commonproto.DataBlob{},
+			HistoryBatches:  []*commonpb.DataBlob{},
 			ReplicationInfo: continuationToken.ReplicationInfo,
 			NextPageToken:   nil, // no further pagination
 		}, nil
 	}
 
 	// TODO need to deal with transient decision if to be used by client getting history
-	var historyBatches []*commonproto.History
+	var historyBatches []*historypb.History
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
 	_, historyBatches, continuationToken.PersistenceToken, size, err = history.PaginateHistory(
 		adh.GetHistoryManager(),
@@ -397,7 +404,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &adminservice.GetWorkflowExecutionRawHistoryResponse{
-				HistoryBatches:  []*commonproto.DataBlob{},
+				HistoryBatches:  []*commonpb.DataBlob{},
 				ReplicationInfo: continuationToken.ReplicationInfo,
 				NextPageToken:   nil, // no further pagination
 			}, nil
@@ -410,14 +417,14 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 	adh.GetMetricsClient().RecordTimer(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.HistorySize, time.Duration(size))
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
-	var blobs []*commonproto.DataBlob
+	var blobs []*commonpb.DataBlob
 	for _, historyBatch := range historyBatches {
 		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(historyBatch.Events, common.EncodingTypeProto3)
 		if err != nil {
 			return nil, err
 		}
-		blobs = append(blobs, &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeProto3,
+		blobs = append(blobs, &commonpb.DataBlob{
+			EncodingType: commonpb.EncodingTypeProto3,
 			Data:         blob.Data,
 		})
 	}
@@ -508,7 +515,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	if pageToken.GetStartEventId()+1 == pageToken.GetEndEventId() {
 		// API is exclusive-exclusive. Return empty response here.
 		return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
-			HistoryBatches: []*commonproto.DataBlob{},
+			HistoryBatches: []*commonpb.DataBlob{},
 			NextPageToken:  nil, // no further pagination
 			VersionHistory: targetVersionHistory.ToProto(),
 		}, nil
@@ -533,7 +540,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
-				HistoryBatches: []*commonproto.DataBlob{},
+				HistoryBatches: []*commonpb.DataBlob{},
 				NextPageToken:  nil, // no further pagination
 				VersionHistory: targetVersionHistory.ToProto(),
 			}, nil
@@ -549,7 +556,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
 	rawBlobs := rawHistoryResponse.HistoryEventBlobs
-	var blobs []*commonproto.DataBlob
+	var blobs []*commonpb.DataBlob
 	for _, blob := range rawBlobs {
 		blobs = append(blobs, blob.ToProto())
 	}
@@ -619,7 +626,7 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 	}
 
 	return &adminservice.DescribeClusterResponse{
-		SupportedClientVersions: &commonproto.SupportedClientVersions{
+		SupportedClientVersions: &versionpb.SupportedClientVersions{
 			GoSdk:   headers.SupportedGoSDKVersion,
 			JavaSdk: headers.SupportedJavaSDKVersion,
 		},
@@ -1134,19 +1141,19 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	return err
 }
 
-func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType enums.IndexedValueType) string {
+func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType commonpb.IndexedValueType) string {
 	switch valueType {
-	case enums.IndexedValueTypeString:
+	case commonpb.IndexedValueTypeString:
 		return "text"
-	case enums.IndexedValueTypeKeyword:
+	case commonpb.IndexedValueTypeKeyword:
 		return "keyword"
-	case enums.IndexedValueTypeInt:
+	case commonpb.IndexedValueTypeInt:
 		return "long"
-	case enums.IndexedValueTypeDouble:
+	case commonpb.IndexedValueTypeDouble:
 		return "double"
-	case enums.IndexedValueTypeBool:
+	case commonpb.IndexedValueTypeBool:
 		return "boolean"
-	case enums.IndexedValueTypeDatetime:
+	case commonpb.IndexedValueTypeDatetime:
 		return "date"
 	default:
 		return ""

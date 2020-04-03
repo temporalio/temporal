@@ -25,9 +25,15 @@ import (
 	"math/rand"
 	"strings"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -44,7 +50,7 @@ type (
 		// performed
 		PickWritePartition(
 			namespaceID string,
-			taskList commonproto.TaskList,
+			taskList tasklistpb.TaskList,
 			taskListType int32,
 			forwardedFrom string,
 		) string
@@ -54,7 +60,7 @@ type (
 		// forwardedFrom is non-empty, no load balancing should be done.
 		PickReadPartition(
 			namespaceID string,
-			taskList commonproto.TaskList,
+			taskList tasklistpb.TaskList,
 			taskListType int32,
 			forwardedFrom string,
 		) string
@@ -86,7 +92,7 @@ func NewLoadBalancer(
 
 func (lb *defaultLoadBalancer) PickWritePartition(
 	namespaceID string,
-	taskList commonproto.TaskList,
+	taskList tasklistpb.TaskList,
 	taskListType int32,
 	forwardedFrom string,
 ) string {
@@ -95,7 +101,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 
 func (lb *defaultLoadBalancer) PickReadPartition(
 	namespaceID string,
-	taskList commonproto.TaskList,
+	taskList tasklistpb.TaskList,
 	taskListType int32,
 	forwardedFrom string,
 ) string {
@@ -104,13 +110,13 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 
 func (lb *defaultLoadBalancer) pickPartition(
 	namespaceID string,
-	taskList commonproto.TaskList,
+	taskList tasklistpb.TaskList,
 	taskListType int32,
 	forwardedFrom string,
 	nPartitions dynamicconfig.IntPropertyFnWithTaskListInfoFilters,
 ) string {
 
-	if forwardedFrom != "" || taskList.GetKind() == enums.TaskListKindSticky {
+	if forwardedFrom != "" || taskList.GetKind() == tasklistpb.TaskListKindSticky {
 		return taskList.GetName()
 	}
 

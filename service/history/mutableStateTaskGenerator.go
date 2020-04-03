@@ -26,8 +26,15 @@ import (
 	"fmt"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/cache"
@@ -40,18 +47,18 @@ type (
 	mutableStateTaskGenerator interface {
 		generateWorkflowStartTasks(
 			now time.Time,
-			startEvent *commonproto.HistoryEvent,
+			startEvent *historypb.HistoryEvent,
 		) error
 		generateWorkflowCloseTasks(
 			now time.Time,
 		) error
 		generateRecordWorkflowStartedTasks(
 			now time.Time,
-			startEvent *commonproto.HistoryEvent,
+			startEvent *historypb.HistoryEvent,
 		) error
 		generateDelayedDecisionTasks(
 			now time.Time,
-			startEvent *commonproto.HistoryEvent,
+			startEvent *historypb.HistoryEvent,
 		) error
 		generateDecisionScheduleTasks(
 			now time.Time,
@@ -63,22 +70,22 @@ type (
 		) error
 		generateActivityTransferTasks(
 			now time.Time,
-			event *commonproto.HistoryEvent,
+			event *historypb.HistoryEvent,
 		) error
 		generateActivityRetryTasks(
 			activityScheduleID int64,
 		) error
 		generateChildWorkflowTasks(
 			now time.Time,
-			event *commonproto.HistoryEvent,
+			event *historypb.HistoryEvent,
 		) error
 		generateRequestCancelExternalTasks(
 			now time.Time,
-			event *commonproto.HistoryEvent,
+			event *historypb.HistoryEvent,
 		) error
 		generateSignalExternalTasks(
 			now time.Time,
-			event *commonproto.HistoryEvent,
+			event *historypb.HistoryEvent,
 		) error
 		generateWorkflowSearchAttrTasks(
 			now time.Time,
@@ -124,7 +131,7 @@ func newMutableStateTaskGenerator(
 
 func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 	now time.Time,
-	startEvent *commonproto.HistoryEvent,
+	startEvent *historypb.HistoryEvent,
 ) error {
 
 	attr := startEvent.GetWorkflowExecutionStartedEventAttributes()
@@ -184,7 +191,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 	now time.Time,
-	startEvent *commonproto.HistoryEvent,
+	startEvent *historypb.HistoryEvent,
 ) error {
 
 	startVersion := startEvent.GetVersion()
@@ -195,10 +202,10 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 
 	var firstDecisionDelayType int
 	switch startAttr.GetInitiator() {
-	case enums.ContinueAsNewInitiatorRetryPolicy:
+	case commonpb.ContinueAsNewInitiatorRetryPolicy:
 		firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeRetry
-	case enums.ContinueAsNewInitiatorCronSchedule,
-		enums.ContinueAsNewInitiatorDecider:
+	case commonpb.ContinueAsNewInitiatorCronSchedule,
+		commonpb.ContinueAsNewInitiatorDecider:
 		firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeCron
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown iterator retry policy: %v", startAttr.GetInitiator()))
@@ -217,7 +224,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 	now time.Time,
-	startEvent *commonproto.HistoryEvent,
+	startEvent *historypb.HistoryEvent,
 ) error {
 
 	startVersion := startEvent.GetVersion()
@@ -303,7 +310,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionStartTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
 	now time.Time,
-	event *commonproto.HistoryEvent,
+	event *historypb.HistoryEvent,
 ) error {
 
 	attr := event.GetActivityTaskScheduledEventAttributes()
@@ -362,7 +369,7 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityRetryTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
 	now time.Time,
-	event *commonproto.HistoryEvent,
+	event *historypb.HistoryEvent,
 ) error {
 
 	attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
@@ -393,7 +400,7 @@ func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 	now time.Time,
-	event *commonproto.HistoryEvent,
+	event *historypb.HistoryEvent,
 ) error {
 
 	attr := event.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
@@ -430,7 +437,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateSignalExternalTasks(
 	now time.Time,
-	event *commonproto.HistoryEvent,
+	event *historypb.HistoryEvent,
 ) error {
 
 	attr := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()

@@ -26,8 +26,15 @@ import (
 	"time"
 
 	"go.temporal.io/temporal"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
@@ -193,10 +200,10 @@ func triggerResetActivity(ctx context.Context, namespace string, baseWE workflow
 		return workflow.Execution{}, err
 	}
 	for _, event := range events {
-		if event.GetEventType() == enums.EventTypeDecisionTaskCompleted {
+		if event.GetEventType() == eventpb.EventTypeDecisionTaskCompleted {
 			resetEventID = event.GetEventId()
 		}
-		if event.GetEventType() == enums.EventTypeSignalExternalWorkflowExecutionInitiated {
+		if event.GetEventType() == eventpb.EventTypeSignalExternalWorkflowExecutionInitiated {
 			seenTrigger = true
 			break
 		}
@@ -208,7 +215,7 @@ func triggerResetActivity(ctx context.Context, namespace string, baseWE workflow
 
 	req := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: baseWE.ID,
 			RunId:      baseWE.RunID,
 		},
@@ -229,7 +236,7 @@ func verifyResetActivity(ctx context.Context, namespace string, newWE workflow.E
 
 	resp, err := svClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: newWE.ID,
 			RunId:      newWE.RunID,
 		},
@@ -237,7 +244,7 @@ func verifyResetActivity(ctx context.Context, namespace string, newWE workflow.E
 	if err != nil {
 		return err
 	}
-	if resp.WorkflowExecutionInfo.GetStatus() == enums.WorkflowExecutionStatusRunning || resp.WorkflowExecutionInfo.GetStatus() != enums.WorkflowExecutionStatusCompleted {
+	if resp.WorkflowExecutionInfo.GetStatus() == executionpb.WorkflowExecutionStatusRunning || resp.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatusCompleted {
 		return fmt.Errorf("new execution triggered by reset is not completed")
 	}
 	return nil

@@ -25,8 +25,15 @@ import (
 	"errors"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -227,7 +234,7 @@ func GenerateReplicationTask(
 	task *persistenceblobs.ReplicationTaskInfo,
 	historyV2Mgr persistence.HistoryManager,
 	metricsClient metrics.Client,
-	history *commonproto.History,
+	history *historypb.History,
 	shardID *int,
 ) (*replication.ReplicationTask, string, error) {
 	var err error
@@ -245,11 +252,11 @@ func GenerateReplicationTask(
 	}
 
 	var newRunID string
-	var newRunHistory *commonproto.History
+	var newRunHistory *historypb.History
 	events := history.Events
 	if len(events) > 0 {
 		lastEvent := events[len(events)-1]
-		if lastEvent.GetEventType() == enums.EventTypeWorkflowExecutionContinuedAsNew {
+		if lastEvent.GetEventType() == eventpb.EventTypeWorkflowExecutionContinuedAsNew {
 			// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
 			newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 			newRunHistory, _, err = GetAllHistory(
@@ -325,17 +332,17 @@ func GetAllHistory(
 	nextEventID int64,
 	branchToken []byte,
 	shardID *int,
-) (*commonproto.History, []*commonproto.History, error) {
+) (*historypb.History, []*historypb.History, error) {
 
 	// overall result
-	var historyEvents []*commonproto.HistoryEvent
-	var historyBatches []*commonproto.History
+	var historyEvents []*historypb.HistoryEvent
+	var historyBatches []*historypb.History
 	historySize := 0
 	var err error
 
 	// variable used for each page
-	var pageHistoryEvents []*commonproto.HistoryEvent
-	var pageHistoryBatches []*commonproto.History
+	var pageHistoryEvents []*historypb.HistoryEvent
+	var pageHistoryBatches []*historypb.History
 	var pageToken []byte
 	var pageHistorySize int
 
@@ -359,7 +366,7 @@ func GetAllHistory(
 		metricsClient.RecordTimer(metrics.ReplicatorQueueProcessorScope, metrics.HistorySize, time.Duration(historySize))
 	}
 
-	history := &commonproto.History{
+	history := &historypb.History{
 		Events: historyEvents,
 	}
 	return history, historyBatches, nil
@@ -375,10 +382,10 @@ func PaginateHistory(
 	tokenIn []byte,
 	pageSize int,
 	shardID *int,
-) ([]*commonproto.HistoryEvent, []*commonproto.History, []byte, int, error) {
+) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, error) {
 
-	var historyEvents []*commonproto.HistoryEvent
-	var historyBatches []*commonproto.History
+	var historyEvents []*historypb.HistoryEvent
+	var historyBatches []*historypb.History
 	var tokenOut []byte
 	var historySize int
 
@@ -707,7 +714,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 				return nil, err
 			}
 
-			var newRunEventsBlob *commonproto.DataBlob
+			var newRunEventsBlob *commonpb.DataBlob
 			if len(task.NewRunBranchToken) != 0 {
 				// only get the first batch
 				newRunEventsBlob, err = p.getEventsBlob(
@@ -743,7 +750,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	branchToken []byte,
 	firstEventID int64,
 	nextEventID int64,
-) (*commonproto.DataBlob, error) {
+) (*commonpb.DataBlob, error) {
 
 	var eventBatchBlobs []*serialization.DataBlob
 	var pageToken []byte
@@ -814,7 +821,7 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 	action func(mutableState) (*replication.ReplicationTask, error),
 ) (retReplicationTask *replication.ReplicationTask, retError error) {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -850,7 +857,7 @@ func (p *replicatorQueueProcessorImpl) isNewRunNDCEnabled(
 	context, release, err := p.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

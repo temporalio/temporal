@@ -31,8 +31,15 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -238,7 +245,7 @@ func WorkflowIDToHistoryShard(workflowID string, numberOfShards int) int {
 }
 
 // PrettyPrintHistory prints history in human readable format
-func PrettyPrintHistory(history *commonproto.History, logger log.Logger) {
+func PrettyPrintHistory(history *eventpb.History, logger log.Logger) {
 	fmt.Println("******************************************")
 	fmt.Println("History", proto.MarshalTextString(history))
 	fmt.Println("******************************************")
@@ -276,7 +283,7 @@ func GenerateRandomString(n int) string {
 }
 
 // CreateMatchingPollForDecisionTaskResponse create response for matching's PollForDecisionTask
-func CreateMatchingPollForDecisionTaskResponse(historyResponse *historyservice.RecordDecisionTaskStartedResponse, workflowExecution *commonproto.WorkflowExecution, token []byte) *matchingservice.PollForDecisionTaskResponse {
+func CreateMatchingPollForDecisionTaskResponse(historyResponse *historyservice.RecordDecisionTaskStartedResponse, workflowExecution *executionpb.WorkflowExecution, token []byte) *matchingservice.PollForDecisionTaskResponse {
 	matchingResp := &matchingservice.PollForDecisionTaskResponse{
 		TaskToken:                 token,
 		WorkflowExecution:         workflowExecution,
@@ -347,7 +354,7 @@ func SortInt64Slice(slice []int64) {
 }
 
 // ValidateRetryPolicy validates a retry policy
-func ValidateRetryPolicy(policy *commonproto.RetryPolicy) error {
+func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 	if policy == nil {
 		// nil policy is valid which means no retry
 		return nil
@@ -479,18 +486,18 @@ func IsJustOrderByClause(clause string) bool {
 
 // ConvertIndexedValueTypeToProtoType takes fieldType as interface{} and convert to IndexedValueType.
 // Because different implementation of dynamic config client may lead to different types
-func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger) enums.IndexedValueType {
+func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger) commonpb.IndexedValueType {
 	switch t := fieldType.(type) {
 	case float64:
-		return enums.IndexedValueType(fieldType.(float64))
+		return commonpb.IndexedValueType(fieldType.(float64))
 	case int:
-		return enums.IndexedValueType(fieldType.(int))
-	case enums.IndexedValueType:
-		return fieldType.(enums.IndexedValueType)
+		return commonpb.IndexedValueType(fieldType.(int))
+	case commonpb.IndexedValueType:
+		return fieldType.(commonpb.IndexedValueType)
 	default:
 		// Unknown fieldType, please make sure dynamic config return correct value type
 		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))
-		return fieldType.(enums.IndexedValueType) // it will panic and been captured by logger
+		return fieldType.(commonpb.IndexedValueType) // it will panic and been captured by logger
 	}
 }
 

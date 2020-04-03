@@ -29,9 +29,15 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -120,16 +126,16 @@ func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
 func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 
 	requestID := uuid.New()
-	events := []*commonproto.HistoryEvent{
+	events := []*historypb.HistoryEvent{
 		{
 			EventId:    1,
-			EventType:  enums.EventTypeWorkflowExecutionStarted,
-			Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{}},
+			EventType:  eventpb.EventTypeWorkflowExecutionStarted,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
 		},
 		{
 			EventId:    2,
-			EventType:  enums.EventTypeWorkflowExecutionSignaled,
-			Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{}},
+			EventType:  eventpb.EventTypeWorkflowExecutionSignaled,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{}},
 		},
 	}
 
@@ -139,12 +145,12 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 	mockStateBuilder.EXPECT().applyEvents(
 		s.namespaceID,
 		requestID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
 		events,
-		[]*commonproto.HistoryEvent(nil),
+		[]*historypb.HistoryEvent(nil),
 		true,
 	).Return(nil, nil).Times(1)
 
@@ -158,33 +164,33 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	branchToken := []byte("some random branch token")
 	workflowIdentifier := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, s.runID)
 
-	event1 := &commonproto.HistoryEvent{
+	event1 := &historypb.HistoryEvent{
 		EventId:    1,
-		EventType:  enums.EventTypeWorkflowExecutionStarted,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{}},
+		EventType:  eventpb.EventTypeWorkflowExecutionStarted,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
 	}
-	event2 := &commonproto.HistoryEvent{
+	event2 := &historypb.HistoryEvent{
 		EventId:    2,
-		EventType:  enums.EventTypeDecisionTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventTypeDecisionTaskScheduled,
+		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}},
 	}
-	event3 := &commonproto.HistoryEvent{
+	event3 := &historypb.HistoryEvent{
 		EventId:    3,
-		EventType:  enums.EventTypeDecisionTaskStarted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{}},
+		EventType:  eventpb.EventTypeDecisionTaskStarted,
+		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{}},
 	}
-	event4 := &commonproto.HistoryEvent{
+	event4 := &historypb.HistoryEvent{
 		EventId:    4,
-		EventType:  enums.EventTypeDecisionTaskCompleted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{}},
+		EventType:  eventpb.EventTypeDecisionTaskCompleted,
+		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{}},
 	}
-	event5 := &commonproto.HistoryEvent{
+	event5 := &historypb.HistoryEvent{
 		EventId:    5,
-		EventType:  enums.EventTypeActivityTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventTypeActivityTaskScheduled,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
-	history1 := []*commonproto.History{{[]*commonproto.HistoryEvent{event1, event2, event3}}}
-	history2 := []*commonproto.History{{[]*commonproto.HistoryEvent{event4, event5}}}
+	history1 := []*historypb.History{{[]*historypb.HistoryEvent{event1, event2, event3}}}
+	history2 := []*historypb.History{{[]*historypb.HistoryEvent{event4, event5}}}
 	history := append(history1, history2...)
 	pageToken := []byte("some random token")
 
@@ -217,11 +223,11 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	paginationFn := s.nDCStateRebuilder.getPaginationFn(workflowIdentifier, firstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)
 
-	var result []*commonproto.History
+	var result []*historypb.History
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		result = append(result, item.(*commonproto.History))
+		result = append(result, item.(*historypb.History))
 	}
 
 	s.Equal(history, result)
@@ -242,31 +248,31 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 
 	firstEventID := common.FirstEventID
 	nextEventID := lastEventID + 1
-	events1 := []*commonproto.HistoryEvent{{
+	events1 := []*historypb.HistoryEvent{{
 		EventId:   1,
 		Version:   version,
-		EventType: enums.EventTypeWorkflowExecutionStarted,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonproto.WorkflowType{Name: "some random workflow type"},
-			TaskList:                            &commonproto.TaskList{Name: "some random workflow type"},
+		EventType: eventpb.EventTypeWorkflowExecutionStarted,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:                        &commonpb.WorkflowType{Name: "some random workflow type"},
+			TaskList:                            &tasklistpb.TaskList{Name: "some random workflow type"},
 			Input:                               []byte("some random input"),
 			ExecutionStartToCloseTimeoutSeconds: 123,
 			TaskStartToCloseTimeoutSeconds:      233,
 			Identity:                            "some random identity",
 		}},
 	}}
-	events2 := []*commonproto.HistoryEvent{{
+	events2 := []*historypb.HistoryEvent{{
 		EventId:   2,
 		Version:   version,
-		EventType: enums.EventTypeWorkflowExecutionSignaled,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+		EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
 			Input:      []byte("some random signal input"),
 			Identity:   "some random identity",
 		}},
 	}}
-	history1 := []*commonproto.History{{events1}}
-	history2 := []*commonproto.History{{events2}}
+	history1 := []*historypb.History{{events1}}
+	history2 := []*historypb.History{{events2}}
 	pageToken := []byte("some random pagination token")
 
 	historySize1 := 12345

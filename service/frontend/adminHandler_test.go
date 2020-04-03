@@ -34,8 +34,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -110,35 +117,35 @@ func (s *adminHandlerSuite) TearDownTest() {
 
 func (s *adminHandlerSuite) Test_ConvertIndexedValueTypeToESDataType() {
 	tests := []struct {
-		input    enums.IndexedValueType
+		input    commonpb.IndexedValueType
 		expected string
 	}{
 		{
-			input:    enums.IndexedValueTypeString,
+			input:    commonpb.IndexedValueTypeString,
 			expected: "text",
 		},
 		{
-			input:    enums.IndexedValueTypeKeyword,
+			input:    commonpb.IndexedValueTypeKeyword,
 			expected: "keyword",
 		},
 		{
-			input:    enums.IndexedValueTypeInt,
+			input:    commonpb.IndexedValueTypeInt,
 			expected: "long",
 		},
 		{
-			input:    enums.IndexedValueTypeDouble,
+			input:    commonpb.IndexedValueTypeDouble,
 			expected: "double",
 		},
 		{
-			input:    enums.IndexedValueTypeBool,
+			input:    commonpb.IndexedValueTypeBool,
 			expected: "boolean",
 		},
 		{
-			input:    enums.IndexedValueTypeDatetime,
+			input:    commonpb.IndexedValueTypeDatetime,
 			expected: "date",
 		},
 		{
-			input:    enums.IndexedValueType(-1),
+			input:    commonpb.IndexedValueType(-1),
 			expected: "",
 		},
 	}
@@ -154,7 +161,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "",
 				RunId:      uuid.New(),
 			},
@@ -173,7 +180,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      "runID",
 			},
@@ -192,7 +199,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
 			},
@@ -212,7 +219,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamesp
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
 			},
@@ -251,7 +258,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
 			},
@@ -285,7 +292,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAnd
 	resp, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
 			},
@@ -311,7 +318,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistories := persistence.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
 		},
@@ -344,7 +351,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistories := persistence.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
 		},
@@ -377,7 +384,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistories := persistence.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
 		},
@@ -415,7 +422,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	s.NoError(err)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
 		},
@@ -462,7 +469,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name: "no advanced config",
 			Request: &adminservice.AddSearchAttributeRequest{
-				SearchAttribute: map[string]enums.IndexedValueType{
+				SearchAttribute: map[string]commonpb.IndexedValueType{
 					"CustomKeywordField": 1,
 				},
 			},
@@ -484,7 +491,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	handler.params.ESClient = esClient
 
 	mockValidAttr := map[string]interface{}{
-		"testkey": enums.IndexedValueTypeKeyword,
+		"testkey": commonpb.IndexedValueTypeKeyword,
 	}
 	dynamicConfig.EXPECT().GetMapValue(dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys()).
 		Return(mockValidAttr, nil).AnyTimes()
@@ -493,7 +500,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name: "reserved key",
 			Request: &adminservice.AddSearchAttributeRequest{
-				SearchAttribute: map[string]enums.IndexedValueType{
+				SearchAttribute: map[string]commonpb.IndexedValueType{
 					"WorkflowId": 1,
 				},
 			},
@@ -502,7 +509,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name: "key already whitelisted",
 			Request: &adminservice.AddSearchAttributeRequest{
-				SearchAttribute: map[string]enums.IndexedValueType{
+				SearchAttribute: map[string]commonpb.IndexedValueType{
 					"testkey": 1,
 				},
 			},
@@ -518,14 +525,14 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	dcUpdateTest := test{
 		Name: "dynamic config update failed",
 		Request: &adminservice.AddSearchAttributeRequest{
-			SearchAttribute: map[string]enums.IndexedValueType{
+			SearchAttribute: map[string]commonpb.IndexedValueType{
 				"testkey2": 1,
 			},
 		},
 		Expected: &serviceerror.Internal{Message: "Failed to update dynamic config, err: error."},
 	}
 	dynamicConfig.EXPECT().UpdateValue(dynamicconfig.ValidSearchAttributes, map[string]interface{}{
-		"testkey":  enums.IndexedValueTypeKeyword,
+		"testkey":  commonpb.IndexedValueTypeKeyword,
 		"testkey2": 1,
 	}).Return(errors.New("error"))
 
@@ -539,7 +546,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	convertFailedTest := test{
 		Name: "unknown value type",
 		Request: &adminservice.AddSearchAttributeRequest{
-			SearchAttribute: map[string]enums.IndexedValueType{
+			SearchAttribute: map[string]commonpb.IndexedValueType{
 				"testkey3": -1,
 			},
 		},
@@ -554,7 +561,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	esErrorTest := test{
 		Name: "es error",
 		Request: &adminservice.AddSearchAttributeRequest{
-			SearchAttribute: map[string]enums.IndexedValueType{
+			SearchAttribute: map[string]commonpb.IndexedValueType{
 				"testkey4": 1,
 			},
 		},

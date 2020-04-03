@@ -24,8 +24,15 @@ import (
 	"context"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -280,13 +287,13 @@ func (c *historyRereplicationContext) eventIDRange(currentRunID string,
 
 func (c *historyRereplicationContext) createReplicationRawRequest(
 	namespaceID string, workflowID string, runID string,
-	historyBlob *commonproto.DataBlob,
+	historyBlob *commonpb.DataBlob,
 	replicationInfo map[string]*replication.ReplicationInfo,
 ) *historyservice.ReplicateRawEventsRequest {
 
 	request := &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: namespaceID,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -404,7 +411,7 @@ func (c *historyRereplicationContext) getHistory(
 	defer cancel()
 	response, err := c.rereplicator.adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -451,7 +458,7 @@ func (c *historyRereplicationContext) getPrevRunID(namespaceID string, workflowI
 	return attr.GetContinuedExecutionRunId(), nil
 }
 
-func (c *historyRereplicationContext) getNextRunID(blob *commonproto.DataBlob) (string, error) {
+func (c *historyRereplicationContext) getNextRunID(blob *commonpb.DataBlob) (string, error) {
 
 	historyEvents, err := c.deserializeBlob(blob)
 	if err != nil {
@@ -467,11 +474,11 @@ func (c *historyRereplicationContext) getNextRunID(blob *commonproto.DataBlob) (
 	return attr.GetNewExecutionRunId(), nil
 }
 
-func (c *historyRereplicationContext) deserializeBlob(blob *commonproto.DataBlob) ([]*commonproto.HistoryEvent, error) {
-	var historyEvents []*commonproto.HistoryEvent
+func (c *historyRereplicationContext) deserializeBlob(blob *commonpb.DataBlob) ([]*historypb.HistoryEvent, error) {
+	var historyEvents []*historypb.HistoryEvent
 
 	switch blob.GetEncodingType() {
-	case enums.EncodingTypeProto3:
+	case commonpb.EncodingTypeProto3:
 		he, err := c.rereplicator.serializer.DeserializeBatchEvents(&serialization.DataBlob{
 			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,

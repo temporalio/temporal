@@ -24,7 +24,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -214,10 +213,10 @@ func (m *sqlMetadataManagerV2) namespaceRowToGetNamespaceResponse(row *sqlplugin
 			Retention:                namespaceInfo.GetRetentionDays(),
 			EmitMetric:               namespaceInfo.GetEmitMetric(),
 			ArchivalBucket:           namespaceInfo.GetArchivalBucket(),
-			ArchivalStatus:           enums.ArchivalStatus(namespaceInfo.GetArchivalStatus()),
-			HistoryArchivalStatus:    enums.ArchivalStatus(namespaceInfo.GetHistoryArchivalStatus()),
+			ArchivalStatus:           namespacepb.ArchivalStatus(namespaceInfo.GetArchivalStatus()),
+			HistoryArchivalStatus:    namespacepb.ArchivalStatus(namespaceInfo.GetHistoryArchivalStatus()),
 			HistoryArchivalURI:       namespaceInfo.GetHistoryArchivalURI(),
-			VisibilityArchivalStatus: enums.ArchivalStatus(namespaceInfo.GetVisibilityArchivalStatus()),
+			VisibilityArchivalStatus: namespacepb.ArchivalStatus(namespaceInfo.GetVisibilityArchivalStatus()),
 			VisibilityArchivalURI:    namespaceInfo.GetVisibilityArchivalURI(),
 			BadBinaries:              badBinaries,
 		},

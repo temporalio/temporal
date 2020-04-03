@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -40,10 +39,10 @@ import (
 type timerType int32
 
 const (
-	timerTypeStartToClose    = timerType(enums.TimeoutTypeStartToClose)
-	timerTypeScheduleToStart = timerType(enums.TimeoutTypeScheduleToStart)
-	timerTypeScheduleToClose = timerType(enums.TimeoutTypeScheduleToClose)
-	timerTypeHeartbeat       = timerType(enums.TimeoutTypeHeartbeat)
+	timerTypeStartToClose    = timerType(eventpb.TimeoutTypeStartToClose)
+	timerTypeScheduleToStart = timerType(eventpb.TimeoutTypeScheduleToStart)
+	timerTypeScheduleToClose = timerType(eventpb.TimeoutTypeScheduleToClose)
+	timerTypeHeartbeat       = timerType(eventpb.TimeoutTypeHeartbeat)
 )
 
 const (
@@ -384,34 +383,34 @@ func timerTypeToTimerMask(
 
 func timerTypeToProto(
 	timerType timerType,
-) enums.TimeoutType {
+) eventpb.TimeoutType {
 
 	switch timerType {
 	case timerTypeStartToClose:
-		return enums.TimeoutTypeStartToClose
+		return eventpb.TimeoutTypeStartToClose
 	case timerTypeScheduleToStart:
-		return enums.TimeoutTypeScheduleToStart
+		return eventpb.TimeoutTypeScheduleToStart
 	case timerTypeScheduleToClose:
-		return enums.TimeoutTypeScheduleToClose
+		return eventpb.TimeoutTypeScheduleToClose
 	case timerTypeHeartbeat:
-		return enums.TimeoutTypeHeartbeat
+		return eventpb.TimeoutTypeHeartbeat
 	default:
 		panic(fmt.Sprintf("invalid timer type: %v", timerType))
 	}
 }
 
 func timerTypeFromProto(
-	timerType enums.TimeoutType,
+	timerType eventpb.TimeoutType,
 ) timerType {
 
 	switch timerType {
-	case enums.TimeoutTypeStartToClose:
+	case eventpb.TimeoutTypeStartToClose:
 		return timerTypeStartToClose
-	case enums.TimeoutTypeScheduleToStart:
+	case eventpb.TimeoutTypeScheduleToStart:
 		return timerTypeScheduleToStart
-	case enums.TimeoutTypeScheduleToClose:
+	case eventpb.TimeoutTypeScheduleToClose:
 		return timerTypeScheduleToClose
-	case enums.TimeoutTypeHeartbeat:
+	case eventpb.TimeoutTypeHeartbeat:
 		return timerTypeHeartbeat
 	default:
 		panic(fmt.Sprintf("invalid timeout type: %v", timerType))

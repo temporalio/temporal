@@ -27,8 +27,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"go.temporal.io/temporal-proto/enums"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -64,7 +62,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1580896574804475000,
 			CloseTimestamp:   1580896575946478000,
-			Status:           enums.WorkflowExecutionStatusCompleted,
+			Status:           executionpb.WorkflowExecutionStatusCompleted,
 			HistoryLength:    36,
 		},
 	}
@@ -187,7 +185,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             enums.WorkflowExecutionStatusFailed,
+		Status:             executionpb.WorkflowExecutionStatusFailed,
 		HistoryLength:      int64(101),
 	}
 

@@ -21,8 +21,15 @@
 package persistence
 
 import (
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/definition"
@@ -40,13 +47,13 @@ type (
 	RecordWorkflowExecutionStartedRequest struct {
 		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
-		Execution          commonproto.WorkflowExecution
+		Execution          executionpb.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
-		Memo               *commonproto.Memo
+		Memo               *commonpb.Memo
 		SearchAttributes   map[string][]byte
 	}
 
@@ -55,16 +62,16 @@ type (
 	RecordWorkflowExecutionClosedRequest struct {
 		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
-		Execution          commonproto.WorkflowExecution
+		Execution          executionpb.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		Status             enums.WorkflowExecutionStatus
+		Status             executionpb.WorkflowExecutionStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
 		TaskID             int64 // not persisted, used as condition update version for ES
-		Memo               *commonproto.Memo
+		Memo               *commonpb.Memo
 		SearchAttributes   map[string][]byte
 	}
 
@@ -72,13 +79,13 @@ type (
 	UpsertWorkflowExecutionRequest struct {
 		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
-		Execution          commonproto.WorkflowExecution
+		Execution          executionpb.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
-		Memo               *commonproto.Memo
+		Memo               *commonpb.Memo
 		SearchAttributes   map[string][]byte
 	}
 
@@ -108,7 +115,7 @@ type (
 
 	// ListWorkflowExecutionsResponse is the response to ListWorkflowExecutionsRequest
 	ListWorkflowExecutionsResponse struct {
-		Executions []*commonproto.WorkflowExecutionInfo
+		Executions []*executionpb.WorkflowExecutionInfo
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte
@@ -144,19 +151,19 @@ type (
 	// have specific close status
 	ListClosedWorkflowExecutionsByStatusRequest struct {
 		ListWorkflowExecutionsRequest
-		Status enums.WorkflowExecutionStatus
+		Status executionpb.WorkflowExecutionStatus
 	}
 
 	// GetClosedWorkflowExecutionRequest is used retrieve the record for a specific execution
 	GetClosedWorkflowExecutionRequest struct {
 		NamespaceID string
 		Namespace   string // namespace name is not persisted, but used as config filter key
-		Execution   commonproto.WorkflowExecution
+		Execution   executionpb.WorkflowExecution
 	}
 
 	// GetClosedWorkflowExecutionResponse is the response to GetClosedWorkflowExecutionRequest
 	GetClosedWorkflowExecutionResponse struct {
-		Execution *commonproto.WorkflowExecutionInfo
+		Execution *executionpb.WorkflowExecutionInfo
 	}
 
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call

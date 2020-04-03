@@ -24,7 +24,15 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -404,7 +412,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 func (m *historyV2ManagerImpl) readHistoryBranch(
 	byBatch bool,
 	request *ReadHistoryBranchRequest,
-) ([]*commonproto.HistoryEvent, []*commonproto.History, []byte, int, int64, error) {
+) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, int64, error) {
 
 	dataBlobs, token, dataSize, logger, err := m.readRawHistoryBranch(request)
 	if err != nil {
@@ -412,8 +420,8 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	}
 	defaultLastEventID := request.MinEventID - 1
 
-	historyEvents := make([]*commonproto.HistoryEvent, 0, request.PageSize)
-	historyEventBatches := make([]*commonproto.History, 0, request.PageSize)
+	historyEvents := make([]*historypb.HistoryEvent, 0, request.PageSize)
+	historyEventBatches := make([]*historypb.History, 0, request.PageSize)
 	// first_event_id of the last batch
 	lastFirstEventID := common.EmptyEventID
 
@@ -468,7 +476,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 		token.LastEventVersion = firstEvent.GetVersion()
 		token.LastEventID = lastEvent.GetEventId()
 		if byBatch {
-			historyEventBatches = append(historyEventBatches, &commonproto.History{Events: events})
+			historyEventBatches = append(historyEventBatches, &historypb.History{Events: events})
 		} else {
 			historyEvents = append(historyEvents, events...)
 		}

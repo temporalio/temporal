@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/olivere/elastic"
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/indexer"

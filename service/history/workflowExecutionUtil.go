@@ -21,8 +21,15 @@
 package history
 
 import (
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -104,7 +111,7 @@ func newWorkflowContext(
 func failDecision(
 	mutableState mutableState,
 	decision *decisionInfo,
-	decisionFailureCause enums.DecisionTaskFailedCause,
+	decisionFailureCause eventpb.DecisionTaskFailedCause,
 ) error {
 
 	if _, err := mutableState.AddDecisionTaskFailedEvent(
@@ -144,14 +151,14 @@ func retryWorkflow(
 	mutableState mutableState,
 	eventBatchFirstEventID int64,
 	parentNamespace string,
-	continueAsNewAttributes *commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes,
+	continueAsNewAttributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
 ) (mutableState, error) {
 
 	if decision, ok := mutableState.GetInFlightDecision(); ok {
 		if err := failDecision(
 			mutableState,
 			decision,
-			enums.DecisionTaskFailedCauseForceCloseDecision,
+			eventpb.DecisionTaskFailedCauseForceCloseDecision,
 		); err != nil {
 			return nil, err
 		}
@@ -178,7 +185,7 @@ func timeoutWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			enums.DecisionTaskFailedCauseForceCloseDecision,
+			eventpb.DecisionTaskFailedCauseForceCloseDecision,
 		); err != nil {
 			return err
 		}
@@ -202,7 +209,7 @@ func terminateWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			enums.DecisionTaskFailedCauseForceCloseDecision,
+			eventpb.DecisionTaskFailedCauseForceCloseDecision,
 		); err != nil {
 			return err
 		}

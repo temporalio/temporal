@@ -24,8 +24,6 @@ import (
 	"fmt"
 	"strings"
 
-	"go.temporal.io/temporal-proto/enums"
-
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -44,7 +42,7 @@ type (
 		ClusterConfiguredForArchival() bool
 		GetClusterStatus() ArchivalStatus
 		ReadEnabled() bool
-		GetNamespaceDefaultStatus() enums.ArchivalStatus
+		GetNamespaceDefaultStatus() namespacepb.ArchivalStatus
 		GetNamespaceDefaultURI() string
 	}
 
@@ -57,7 +55,7 @@ type (
 		staticClusterStatus    ArchivalStatus
 		dynamicClusterStatus   dynamicconfig.StringPropertyFn
 		enableRead             dynamicconfig.BoolPropertyFn
-		namespaceDefaultStatus enums.ArchivalStatus
+		namespaceDefaultStatus namespacepb.ArchivalStatus
 		namespaceDefaultURI    string
 	}
 
@@ -146,7 +144,7 @@ func NewDisabledArchvialConfig() ArchivalConfig {
 		staticClusterStatus:    ArchivalDisabled,
 		dynamicClusterStatus:   nil,
 		enableRead:             nil,
-		namespaceDefaultStatus: enums.ArchivalStatusDisabled,
+		namespaceDefaultStatus: namespacepb.ArchivalStatusDisabled,
 		namespaceDefaultURI:    "",
 	}
 }
@@ -181,7 +179,7 @@ func (a *archivalConfig) ReadEnabled() bool {
 	return a.enableRead()
 }
 
-func (a *archivalConfig) GetNamespaceDefaultStatus() enums.ArchivalStatus {
+func (a *archivalConfig) GetNamespaceDefaultStatus() namespacepb.ArchivalStatus {
 	return a.namespaceDefaultStatus
 }
 
@@ -202,13 +200,13 @@ func getClusterArchivalStatus(str string) (ArchivalStatus, error) {
 	return ArchivalDisabled, fmt.Errorf("invalid archival status of %v for cluster, valid status are: {\"\", \"disabled\", \"paused\", \"enabled\"}", str)
 }
 
-func getNamespaceArchivalStatus(str string) (enums.ArchivalStatus, error) {
+func getNamespaceArchivalStatus(str string) (namespacepb.ArchivalStatus, error) {
 	str = strings.TrimSpace(strings.ToLower(str))
 	switch str {
 	case "", common.ArchivalDisabled:
-		return enums.ArchivalStatusDisabled, nil
+		return namespacepb.ArchivalStatusDisabled, nil
 	case common.ArchivalEnabled:
-		return enums.ArchivalStatusEnabled, nil
+		return namespacepb.ArchivalStatusEnabled, nil
 	}
-	return enums.ArchivalStatusDisabled, fmt.Errorf("invalid archival status of %v for namespace, valid status are: {\"\", \"disabled\", \"enabled\"}", str)
+	return namespacepb.ArchivalStatusDisabled, fmt.Errorf("invalid archival status of %v for namespace, valid status are: {\"\", \"disabled\", \"enabled\"}", str)
 }

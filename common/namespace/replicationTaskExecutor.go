@@ -23,8 +23,15 @@
 package namespace
 
 import (
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/replication"
@@ -276,7 +283,7 @@ func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(
 }
 
 func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFromProto(
-	input []*commonproto.ClusterReplicationConfiguration) []*persistence.ClusterReplicationConfig {
+	input []*replicationpb.ClusterReplicationConfiguration) []*persistence.ClusterReplicationConfig {
 	output := []*persistence.ClusterReplicationConfig{}
 	for _, cluster := range input {
 		clusterName := cluster.GetClusterName()
@@ -285,11 +292,11 @@ func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFr
 	return output
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) convertNamespaceStatusFromProto(input enums.NamespaceStatus) (int, error) {
+func (h *namespaceReplicationTaskExecutorImpl) convertNamespaceStatusFromProto(input namespacepb.NamespaceStatus) (int, error) {
 	switch input {
-	case enums.NamespaceStatusRegistered:
+	case namespacepb.NamespaceStatusRegistered:
 		return persistence.NamespaceStatusRegistered, nil
-	case enums.NamespaceStatusDeprecated:
+	case namespacepb.NamespaceStatusDeprecated:
 		return persistence.NamespaceStatusDeprecated, nil
 	default:
 		return 0, ErrInvalidNamespaceStatus

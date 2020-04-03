@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -538,7 +537,7 @@ func createOrUpdateCurrentExecution(
 	workflowID string,
 	runID primitives.UUID,
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -966,7 +965,7 @@ func assertRunIDAndUpdateCurrentExecution(
 	previousRunID primitives.UUID,
 	createRequestID string,
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {
@@ -999,7 +998,7 @@ func assertAndUpdateCurrentExecution(
 	previousState int,
 	createRequestID string,
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {
@@ -1074,7 +1073,7 @@ func updateCurrentExecution(
 	runID primitives.UUID,
 	createRequestID string,
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {

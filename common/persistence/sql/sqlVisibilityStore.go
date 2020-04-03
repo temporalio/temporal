@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -274,7 +273,7 @@ func (s *sqlVisibilityStore) rowToInfo(row *sqlplugin.VisibilityRow) *p.Visibili
 		Memo:          p.NewDataBlob(row.Memo, common.EncodingType(row.Encoding)),
 	}
 	if row.Status != nil {
-		status := enums.WorkflowExecutionStatus(*row.Status)
+		status := executionpb.WorkflowExecutionStatus(*row.Status)
 		info.Status = &status
 		info.CloseTime = *row.CloseTime
 		info.HistoryLength = *row.HistoryLength

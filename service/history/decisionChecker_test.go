@@ -26,8 +26,15 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/cache"
@@ -106,16 +113,16 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).AnyTimes()
 
-	var attributes *commonproto.SignalExternalWorkflowExecutionDecisionAttributes
+	var attributes *decisionpb.SignalExternalWorkflowExecutionDecisionAttributes
 
 	err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.")
 
-	attributes = &commonproto.SignalExternalWorkflowExecutionDecisionAttributes{}
+	attributes = &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{}
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "Execution is nil on decision.")
 
-	attributes.Execution = &commonproto.WorkflowExecution{}
+	attributes.Execution = &executionpb.WorkflowExecution{}
 	attributes.Execution.WorkflowId = "workflow-id"
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "SignalName is not set on decision.")
@@ -136,16 +143,16 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 
 func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
 	namespace := "testNamespace"
-	var attributes *commonproto.UpsertWorkflowSearchAttributesDecisionAttributes
+	var attributes *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes
 
 	err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.")
 
-	attributes = &commonproto.UpsertWorkflowSearchAttributesDecisionAttributes{}
+	attributes = &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "SearchAttributes is not set on decision.")
 
-	attributes.SearchAttributes = &commonproto.SearchAttributes{}
+	attributes.SearchAttributes = &commonpb.SearchAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "IndexedFields is empty on decision.")
 
@@ -500,22 +507,22 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlob
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateTaskListName() {
-	taskList := func(name string) *commonproto.TaskList {
-		return &commonproto.TaskList{Name: name, Kind: enums.TaskListKindNormal}
+	taskList := func(name string) *tasklistpb.TaskList {
+		return &tasklistpb.TaskList{Name: name, Kind: tasklistpb.TaskListKindNormal}
 	}
 
 	testCases := []struct {
 		defaultVal  string
-		input       *commonproto.TaskList
-		output      *commonproto.TaskList
+		input       *tasklistpb.TaskList
+		output      *tasklistpb.TaskList
 		isOutputErr bool
 	}{
-		{"tl-1", nil, &commonproto.TaskList{Name: "tl-1"}, false},
+		{"tl-1", nil, &tasklistpb.TaskList{Name: "tl-1"}, false},
 		{"", taskList("tl-1"), taskList("tl-1"), false},
 		{"tl-1", taskList("tl-1"), taskList("tl-1"), false},
 		{"", taskList("/tl-1"), taskList("/tl-1"), false},
 		{"", taskList("/__temporal_sys"), taskList("/__temporal_sys"), false},
-		{"", nil, &commonproto.TaskList{}, true},
+		{"", nil, &tasklistpb.TaskList{}, true},
 		{"", taskList(""), taskList(""), true},
 		{"", taskList(reservedTaskListPrefix), taskList(reservedTaskListPrefix), true},
 		{"tl-1", taskList(reservedTaskListPrefix), taskList(reservedTaskListPrefix), true},

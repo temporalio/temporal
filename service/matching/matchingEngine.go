@@ -31,8 +31,15 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -169,7 +176,7 @@ func (e *matchingEngineImpl) String() string {
 
 // Returns taskListManager for a task list. If not already cached gets new range from DB and
 // if successful creates one.
-func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID, taskListKind enums.TaskListKind) (taskListManager, error) {
+func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID, taskListKind tasklistpb.TaskListKind) (taskListManager, error) {
 	// The first check is an optimization so almost all requests will have a task list manager
 	// and return avoiding the write lock
 	e.taskListsLock.RLock()
@@ -498,9 +505,9 @@ func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *ma
 
 		workerResponse := result.workerResponse
 		switch workerResponse.GetCompletedRequest().GetCompletedType() {
-		case enums.QueryTaskCompletedTypeCompleted:
+		case querypb.QueryTaskCompletedTypeCompleted:
 			return &matchingservice.QueryWorkflowResponse{QueryResult: workerResponse.GetCompletedRequest().GetQueryResult()}, nil
-		case enums.QueryTaskCompletedTypeFailed:
+		case querypb.QueryTaskCompletedTypeFailed:
 			return nil, serviceerror.NewQueryFailed(workerResponse.GetCompletedRequest().GetErrorMessage())
 		default:
 			return nil, serviceerror.NewInternal("unknown query completed type")
@@ -550,7 +557,7 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request 
 func (e *matchingEngineImpl) DescribeTaskList(ctx context.Context, request *matchingservice.DescribeTaskListRequest) (*matchingservice.DescribeTaskListResponse, error) {
 	namespaceID := request.GetNamespaceId()
 	taskListType := persistence.TaskListTypeDecision
-	if request.DescRequest.GetTaskListType() == enums.TaskListTypeActivity {
+	if request.DescRequest.GetTaskListType() == tasklistpb.TaskListTypeActivity {
 		taskListType = persistence.TaskListTypeActivity
 	}
 	taskListName := request.DescRequest.TaskList.GetName()
@@ -583,7 +590,7 @@ func (e *matchingEngineImpl) ListTaskListPartitions(ctx context.Context, request
 	return &resp, nil
 }
 
-func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.ListTaskListPartitionsRequest, taskListType int32) ([]*commonproto.TaskListPartitionMetadata, error) {
+func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.ListTaskListPartitionsRequest, taskListType int32) ([]*tasklistpb.TaskListPartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
 		request.GetNamespace(),
 		*request.TaskList,
@@ -592,7 +599,7 @@ func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.Lis
 	if err != nil {
 		return nil, err
 	}
-	partitionHostInfo := make([]*commonproto.TaskListPartitionMetadata, len(partitions))
+	partitionHostInfo := make([]*tasklistpb.TaskListPartitionMetadata, len(partitions))
 
 	if err != nil {
 		return nil, err
@@ -600,7 +607,7 @@ func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.Lis
 	for _, partition := range partitions {
 		if host, err := e.getHostInfo(partition); err != nil {
 			partitionHostInfo = append(partitionHostInfo,
-				&commonproto.TaskListPartitionMetadata{
+				&tasklistpb.TaskListPartitionMetadata{
 					Key:           partition,
 					OwnerHostName: host,
 				})
@@ -619,7 +626,7 @@ func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 
 func (e *matchingEngineImpl) getAllPartitions(
 	namespace string,
-	taskList commonproto.TaskList,
+	taskList tasklistpb.TaskList,
 	taskListType int32,
 ) ([]string, error) {
 	var partitionKeys []string
@@ -647,7 +654,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 
 // Loads a task from persistence and wraps it in a task context
 func (e *matchingEngineImpl) getTask(
-	ctx context.Context, taskList *taskListID, maxDispatchPerSecond *float64, taskListKind enums.TaskListKind,
+	ctx context.Context, taskList *taskListID, maxDispatchPerSecond *float64, taskListKind tasklistpb.TaskListKind,
 ) (*internalTask, error) {
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {

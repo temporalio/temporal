@@ -25,7 +25,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 )
 
 type (
@@ -61,14 +69,14 @@ func (s *statsComputerSuite) createRequest() *InternalUpdateWorkflowExecutionReq
 func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 	ms := s.createRequest()
 	namespaceID := "A"
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "test-workflow-id",
 		RunId:      "run_id",
 	}
-	workflowType := &commonproto.WorkflowType{
+	workflowType := &commonpb.WorkflowType{
 		Name: "test-workflow-type-name",
 	}
-	taskList := &commonproto.TaskList{
+	taskList := &tasklistpb.TaskList{
 		Name: "test-tasklist",
 	}
 

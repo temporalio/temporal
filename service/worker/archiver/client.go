@@ -27,8 +27,15 @@ import (
 	"math/rand"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	sdkclient "go.temporal.io/temporal/client"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
@@ -73,9 +80,9 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		Status             enums.WorkflowExecutionStatus
+		Status             executionpb.WorkflowExecutionStatus
 		HistoryLength      int64
-		Memo               *commonproto.Memo
+		Memo               *commonpb.Memo
 		SearchAttributes   map[string][]byte
 		VisibilityURI      string
 

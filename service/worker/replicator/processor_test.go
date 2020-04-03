@@ -29,9 +29,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/replication"
@@ -329,8 +335,8 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success()
 		FirstEventId:    728,
 		NextEventId:     1015,
 		ReplicationInfo: map[string]*replication.ReplicationInfo{},
-		History: &commonproto.History{
-			Events: []*commonproto.HistoryEvent{{EventId: 1}},
+		History: &historypb.History{
+			Events: []*historypb.HistoryEvent{{EventId: 1}},
 		},
 		NewRunHistory: nil,
 		ResetWorkflow: true,
@@ -357,8 +363,8 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThe
 		FirstEventId:    728,
 		NextEventId:     1015,
 		ReplicationInfo: map[string]*replication.ReplicationInfo{},
-		History: &commonproto.History{
-			Events: []*commonproto.HistoryEvent{{EventId: 1}},
+		History: &historypb.History{
+			Events: []*historypb.HistoryEvent{{EventId: 1}},
 		},
 		NewRunHistory: nil,
 		ResetWorkflow: true,

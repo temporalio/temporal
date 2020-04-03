@@ -26,7 +26,15 @@ import (
 	"context"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -73,7 +81,7 @@ type (
 
 	historyBatch struct {
 		versionHistory *commonproto.VersionHistory
-		rawEventBatch  *commonproto.DataBlob
+		rawEventBatch  *commonpb.DataBlob
 	}
 )
 
@@ -191,13 +199,13 @@ func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
 	namespaceID string,
 	workflowID string,
 	runID string,
-	historyBlob *commonproto.DataBlob,
+	historyBlob *commonpb.DataBlob,
 	versionHistoryItems []*commonproto.VersionHistoryItem,
 ) *historyservice.ReplicateEventsV2Request {
 
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: namespaceID,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -241,7 +249,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	defer cancel()
 	response, err := n.adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

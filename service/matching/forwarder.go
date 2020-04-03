@@ -28,8 +28,15 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -47,7 +54,7 @@ type (
 	Forwarder struct {
 		cfg          *forwarderConfig
 		taskListID   *taskListID
-		taskListKind enums.TaskListKind
+		taskListKind tasklistpb.TaskListKind
 		client       matching.Client
 
 		// token channels that vend tokens necessary to make
@@ -108,7 +115,7 @@ var noopForwarderTokenC <-chan *ForwarderReqToken = make(chan *ForwarderReqToken
 func newForwarder(
 	cfg *forwarderConfig,
 	taskListID *taskListID,
-	kind enums.TaskListKind,
+	kind tasklistpb.TaskListKind,
 	client matching.Client,
 	scopeFunc func() metrics.Scope,
 ) *Forwarder {
@@ -130,7 +137,7 @@ func newForwarder(
 
 // ForwardTask forwards an activity or decision task to the parent task list partition if it exist
 func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) error {
-	if fwdr.taskListKind == enums.TaskListKindSticky {
+	if fwdr.taskListKind == tasklistpb.TaskListKindSticky {
 		return errTaskListKind
 	}
 
@@ -163,9 +170,9 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		_, err = fwdr.client.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
 			NamespaceId: primitives.UUIDString(task.event.Data.GetNamespaceId()),
 			Execution:   task.workflowExecution(),
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: name,
-				Kind: enums.TaskListKind(fwdr.taskListKind),
+				Kind: tasklistpb.TaskListKind(fwdr.taskListKind),
 			},
 			ScheduleId:                    task.event.Data.GetScheduleId(),
 			Source:                        task.source,
@@ -177,9 +184,9 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			NamespaceId:       fwdr.taskListID.namespaceID,
 			SourceNamespaceId: primitives.UUIDString(task.event.Data.GetNamespaceId()),
 			Execution:         task.workflowExecution(),
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: name,
-				Kind: enums.TaskListKind(fwdr.taskListKind),
+				Kind: tasklistpb.TaskListKind(fwdr.taskListKind),
 			},
 			ScheduleId:                    task.event.Data.GetScheduleId(),
 			Source:                        task.source,
@@ -199,7 +206,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 
-	if fwdr.taskListKind == enums.TaskListKindSticky {
+	if fwdr.taskListKind == tasklistpb.TaskListKindSticky {
 		return nil, errTaskListKind
 	}
 
@@ -210,7 +217,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 
 	resp, err := fwdr.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
 		NamespaceId: task.query.request.GetNamespaceId(),
-		TaskList: &commonproto.TaskList{
+		TaskList: &tasklistpb.TaskList{
 			Name: name,
 			Kind: fwdr.taskListKind,
 		},
@@ -223,7 +230,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 
 // ForwardPoll forwards a poll request to parent task list partition if it exist
 func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
-	if fwdr.taskListKind == enums.TaskListKindSticky {
+	if fwdr.taskListKind == tasklistpb.TaskListKindSticky {
 		return nil, errTaskListKind
 	}
 
@@ -241,9 +248,9 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 			NamespaceId: fwdr.taskListID.namespaceID,
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollForDecisionTaskRequest{
-				TaskList: &commonproto.TaskList{
+				TaskList: &tasklistpb.TaskList{
 					Name: name,
-					Kind: enums.TaskListKind(fwdr.taskListKind),
+					Kind: tasklistpb.TaskListKind(fwdr.taskListKind),
 				},
 				Identity: identity,
 			},
@@ -258,9 +265,9 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 			NamespaceId: fwdr.taskListID.namespaceID,
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
-				TaskList: &commonproto.TaskList{
+				TaskList: &tasklistpb.TaskList{
 					Name: name,
-					Kind: enums.TaskListKind(fwdr.taskListKind),
+					Kind: tasklistpb.TaskListKind(fwdr.taskListKind),
 				},
 				Identity: identity,
 			},

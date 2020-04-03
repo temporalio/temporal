@@ -23,7 +23,15 @@
 package history
 
 import (
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -91,7 +99,7 @@ func (r *conflictResolverImpl) reset(
 	var nextPageToken []byte
 	var resetMutableStateBuilder *mutableStateBuilder
 	var sBuilder stateBuilder
-	var history []*commonproto.HistoryEvent
+	var history []*historypb.HistoryEvent
 	var totalSize int64
 
 	eventsToApply := replayNextEventID - common.FirstEventID
@@ -192,8 +200,8 @@ func (r *conflictResolverImpl) reset(
 	return r.context.loadWorkflowExecution()
 }
 
-func (r *conflictResolverImpl) getHistory(namespaceID string, execution commonproto.WorkflowExecution, firstEventID,
-	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*commonproto.HistoryEvent, int, int64, []byte, error) {
+func (r *conflictResolverImpl) getHistory(namespaceID string, execution executionpb.WorkflowExecution, firstEventID,
+	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*historypb.HistoryEvent, int, int64, []byte, error) {
 
 	response, err := r.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,

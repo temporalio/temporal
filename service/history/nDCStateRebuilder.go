@@ -27,7 +27,15 @@ import (
 	"fmt"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -121,7 +129,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err != nil {
 		return nil, 0, err
 	}
-	firstEventBatch := batch.(*commonproto.History).Events
+	firstEventBatch := batch.(*historypb.History).Events
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
 	)
@@ -134,7 +142,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		if err != nil {
 			return nil, 0, err
 		}
-		events := batch.(*commonproto.History).Events
+		events := batch.(*historypb.History).Events
 		if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, events, requestID); err != nil {
 			return nil, 0, err
 		}
@@ -197,14 +205,14 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 func (r *nDCStateRebuilderImpl) applyEvents(
 	workflowIdentifier definition.WorkflowIdentifier,
 	stateBuilder stateBuilder,
-	events []*commonproto.HistoryEvent,
+	events []*historypb.HistoryEvent,
 	requestID string,
 ) error {
 
 	_, err := stateBuilder.applyEvents(
 		workflowIdentifier.NamespaceID,
 		requestID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: workflowIdentifier.WorkflowID,
 			RunId:      workflowIdentifier.RunID,
 		},

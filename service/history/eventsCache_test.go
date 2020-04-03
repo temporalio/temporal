@@ -28,9 +28,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
@@ -89,10 +95,10 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	workflowID := "events-cache-hit-success-workflow-id"
 	runID := "events-cache-hit-success-run-id"
 	eventID := int64(23)
-	event := &commonproto.HistoryEvent{
+	event := &historypb.HistoryEvent{
 		EventId:    eventID,
-		EventType:  enums.EventTypeActivityTaskStarted,
-		Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{}},
+		EventType:  eventpb.EventTypeActivityTaskStarted,
+		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
 	}
 
 	s.cache.putEvent(namespaceID, workflowID, runID, eventID, event)
@@ -105,35 +111,35 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	namespaceID := "events-cache-miss-multi-events-batch-v2-success-namespace"
 	workflowID := "events-cache-miss-multi-events-batch-v2-success-workflow-id"
 	runID := "events-cache-miss-multi-events-batch-v2-success-run-id"
-	event1 := &commonproto.HistoryEvent{
+	event1 := &historypb.HistoryEvent{
 		EventId:    11,
-		EventType:  enums.EventTypeDecisionTaskCompleted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{}},
+		EventType:  eventpb.EventTypeDecisionTaskCompleted,
+		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{}},
 	}
-	event2 := &commonproto.HistoryEvent{
+	event2 := &historypb.HistoryEvent{
 		EventId:    12,
-		EventType:  enums.EventTypeActivityTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventTypeActivityTaskScheduled,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
-	event3 := &commonproto.HistoryEvent{
+	event3 := &historypb.HistoryEvent{
 		EventId:    13,
-		EventType:  enums.EventTypeActivityTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventTypeActivityTaskScheduled,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
-	event4 := &commonproto.HistoryEvent{
+	event4 := &historypb.HistoryEvent{
 		EventId:    14,
-		EventType:  enums.EventTypeActivityTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventTypeActivityTaskScheduled,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
-	event5 := &commonproto.HistoryEvent{
+	event5 := &historypb.HistoryEvent{
 		EventId:    15,
-		EventType:  enums.EventTypeActivityTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventTypeActivityTaskScheduled,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
-	event6 := &commonproto.HistoryEvent{
+	event6 := &historypb.HistoryEvent{
 		EventId:    16,
-		EventType:  enums.EventTypeActivityTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventTypeActivityTaskScheduled,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
 
 	shardId := 10
@@ -145,7 +151,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    []*commonproto.HistoryEvent{event1, event2, event3, event4, event5, event6},
+		HistoryEvents:    []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6},
 		NextPageToken:    nil,
 		LastFirstEventID: event1.GetEventId(),
 	}, nil)
@@ -183,15 +189,15 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	namespaceID := "events-cache-disable-success-namespace"
 	workflowID := "events-cache-disable-success-workflow-id"
 	runID := "events-cache-disable-success-run-id"
-	event1 := &commonproto.HistoryEvent{
+	event1 := &historypb.HistoryEvent{
 		EventId:    23,
-		EventType:  enums.EventTypeActivityTaskStarted,
-		Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{}},
+		EventType:  eventpb.EventTypeActivityTaskStarted,
+		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
 	}
-	event2 := &commonproto.HistoryEvent{
+	event2 := &historypb.HistoryEvent{
 		EventId:    32,
-		EventType:  enums.EventTypeActivityTaskStarted,
-		Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{}},
+		EventType:  eventpb.EventTypeActivityTaskStarted,
+		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
 	}
 
 	shardId := 10
@@ -203,7 +209,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    []*commonproto.HistoryEvent{event2},
+		HistoryEvents:    []*historypb.HistoryEvent{event2},
 		NextPageToken:    nil,
 		LastFirstEventID: event2.GetEventId(),
 	}, nil)

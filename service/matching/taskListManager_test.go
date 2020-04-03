@@ -30,8 +30,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/temporal-proto/enums"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/temporalio/temporal/common/cache"
@@ -162,7 +160,7 @@ func createTestTaskListManagerWithConfig(controller *gomock.Controller, cfg *Con
 	tl := "tl"
 	dID := "deadbeef-0123-4567-890a-bcdef0123456"
 	tlID := newTestTaskListID(dID, tl, persistence.TaskListTypeActivity)
-	tlKind := enums.TaskListKindNormal
+	tlKind := tasklistpb.TaskListKindNormal
 	tlMgr, err := newTaskListManager(me, tlID, tlKind, cfg)
 	if err != nil {
 		logger.Fatal("error when createTestTaskListManager", tag.Error(err))

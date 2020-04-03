@@ -22,9 +22,15 @@ package namespace
 
 import (
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -75,14 +81,14 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 	task := &replication.NamespaceTaskAttributes{
 		NamespaceOperation: namespaceOperation,
 		Id:                 info.ID,
-		Info: &commonproto.NamespaceInfo{
+		Info: &namespacepb.NamespaceInfo{
 			Name:        info.Name,
 			Status:      status,
 			Description: info.Description,
 			OwnerEmail:  info.OwnerEmail,
 			Data:        info.Data,
 		},
-		Config: &commonproto.NamespaceConfiguration{
+		Config: &namespacepb.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: config.Retention,
 			EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 			HistoryArchivalStatus:                  config.HistoryArchivalStatus,
@@ -91,7 +97,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 			VisibilityArchivalURI:                  config.VisibilityArchivalURI,
 			BadBinaries:                            &config.BadBinaries,
 		},
-		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: replicationConfig.ActiveClusterName,
 			Clusters:          namespaceReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 		},
@@ -110,24 +116,24 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 
 func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationConfigToProto(
 	input []*persistence.ClusterReplicationConfig,
-) []*commonproto.ClusterReplicationConfiguration {
-	output := []*commonproto.ClusterReplicationConfiguration{}
+) []*replicationpb.ClusterReplicationConfiguration {
+	output := []*replicationpb.ClusterReplicationConfiguration{}
 	for _, cluster := range input {
 		clusterName := cluster.ClusterName
-		output = append(output, &commonproto.ClusterReplicationConfiguration{ClusterName: clusterName})
+		output = append(output, &replicationpb.ClusterReplicationConfiguration{ClusterName: clusterName})
 	}
 	return output
 }
 
-func (namespaceReplicator *namespaceReplicatorImpl) convertNamespaceStatusToProto(input int) (enums.NamespaceStatus, error) {
+func (namespaceReplicator *namespaceReplicatorImpl) convertNamespaceStatusToProto(input int) (namespacepb.NamespaceStatus, error) {
 	switch input {
 	case persistence.NamespaceStatusRegistered:
-		output := enums.NamespaceStatusRegistered
+		output := namespacepb.NamespaceStatusRegistered
 		return output, nil
 	case persistence.NamespaceStatusDeprecated:
-		output := enums.NamespaceStatusDeprecated
+		output := namespacepb.NamespaceStatusDeprecated
 		return output, nil
 	default:
-		return enums.NamespaceStatusRegistered, ErrInvalidNamespaceStatus
+		return namespacepb.NamespaceStatusRegistered, ErrInvalidNamespaceStatus
 	}
 }

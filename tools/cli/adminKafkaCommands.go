@@ -40,8 +40,15 @@ import (
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/temporalio/temporal/.gen/proto/indexer"
@@ -497,7 +504,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 		fmt.Printf("Start rereplicate for wid: %v, rid:%v \n", wid, rid)
 		resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 			NamespaceID: namespaceID,
-			Execution: commonproto.WorkflowExecution{
+			Execution: executionpb.WorkflowExecution{
 				WorkflowId: wid,
 				RunId:      rid,
 			},
@@ -538,12 +545,12 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 			events := batch.Events
 			firstEvent := events[0]
 			lastEvent := events[len(events)-1]
-			if lastEvent.GetEventType() == enums.EventTypeWorkflowExecutionContinuedAsNew {
+			if lastEvent.GetEventType() == eventpb.EventTypeWorkflowExecutionContinuedAsNew {
 				continueAsNew = true
 				newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 					NamespaceID: namespaceID,
-					Execution: commonproto.WorkflowExecution{
+					Execution: executionpb.WorkflowExecution{
 						WorkflowId: wid,
 						RunId:      newRunID,
 					},

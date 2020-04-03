@@ -21,8 +21,7 @@
 package elasticsearch
 
 import (
-	"go.temporal.io/temporal-proto/enums"
-)
+	)
 
 // All legal fields allowed in elastic search index
 const (

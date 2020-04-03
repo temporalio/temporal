@@ -28,9 +28,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -70,13 +76,13 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 	serializer := NewPayloadSerializer()
 
-	eventType := enums.EventTypeActivityTaskCompleted
-	event0 := &commonproto.HistoryEvent{
+	eventType := eventpb.EventTypeActivityTaskCompleted
+	event0 := &historypb.HistoryEvent{
 		EventId:   999,
 		Timestamp: time.Now().UnixNano(),
 		EventType: eventType,
-		Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{
-			ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
+			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
 				Result:           []byte("result-1-event-1"),
 				ScheduledEventId: 4,
 				StartedEventId:   5,
@@ -85,15 +91,15 @@ func (s *temporalSerializerSuite) TestSerializer() {
 		},
 	}
 
-	history0 := &commonproto.History{Events: []*commonproto.HistoryEvent{event0, event0}}
+	history0 := &historypb.History{Events: []*historypb.HistoryEvent{event0, event0}}
 
 	memoFields := map[string][]byte{
 		"TestField": []byte(`Test binary`),
 	}
-	memo0 := &commonproto.Memo{Fields: memoFields}
+	memo0 := &commonpb.Memo{Fields: memoFields}
 
-	resetPoints0 := &commonproto.ResetPoints{
-		Points: []*commonproto.ResetPointInfo{
+	resetPoints0 := &executionpb.ResetPoints{
+		Points: []*executionpb.ResetPointInfo{
 			{
 				BinaryChecksum:           "bad-binary-cs",
 				RunId:                    "test-run-id",
@@ -105,8 +111,8 @@ func (s *temporalSerializerSuite) TestSerializer() {
 		},
 	}
 
-	badBinaries0 := &commonproto.BadBinaries{
-		Binaries: map[string]*commonproto.BadBinaryInfo{
+	badBinaries0 := &namespacepb.BadBinaries{
+		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"bad-binary-cs": {
 				CreatedTimeNano: 456,
 				Operator:        "test-operattor",
@@ -265,17 +271,17 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(dNilEvents)
 
 			events, err := serializer.DeserializeBatchEvents(dsJSON)
-			history1 := &commonproto.History{Events: events}
+			history1 := &historypb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history1))
 
 			events, err = serializer.DeserializeBatchEvents(dsProto)
-			history2 := &commonproto.History{Events: events}
+			history2 := &historypb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history2))
 
 			events, err = serializer.DeserializeBatchEvents(dsEmpty)
-			history3 := &commonproto.History{Events: events}
+			history3 := &historypb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history3))
 
@@ -283,7 +289,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			dNilMemo, err := serializer.DeserializeVisibilityMemo(nilMemo)
 			s.Nil(err)
-			s.Equal(&commonproto.Memo{}, dNilMemo)
+			s.Equal(&commonpb.Memo{}, dNilMemo)
 
 			memo1, err := serializer.DeserializeVisibilityMemo(mJSON)
 			s.Nil(err)
@@ -323,11 +329,11 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			dNilResetPoints1, err := serializer.DeserializeResetPoints(nil)
 			s.Nil(err)
-			s.Equal(&commonproto.ResetPoints{}, dNilResetPoints1)
+			s.Equal(&executionpb.ResetPoints{}, dNilResetPoints1)
 
 			dNilResetPoints2, err := serializer.DeserializeResetPoints(nilResetPoints)
 			s.Nil(err)
-			s.Equal(&commonproto.ResetPoints{}, dNilResetPoints2)
+			s.Equal(&executionpb.ResetPoints{}, dNilResetPoints2)
 
 			resetPoints1, err := serializer.DeserializeResetPoints(resetPointsJSON)
 			s.Nil(err)
@@ -368,11 +374,11 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			dNilBadBinaries1, err := serializer.DeserializeBadBinaries(nil)
 			s.Nil(err)
-			s.Equal(&commonproto.BadBinaries{}, dNilBadBinaries1)
+			s.Equal(&namespacepb.BadBinaries{}, dNilBadBinaries1)
 
 			dNilBadBinaries2, err := serializer.DeserializeBadBinaries(nilBadBinaries)
 			s.Nil(err)
-			s.Equal(&commonproto.BadBinaries{}, dNilBadBinaries2)
+			s.Equal(&namespacepb.BadBinaries{}, dNilBadBinaries2)
 
 			badBinaries1, err := serializer.DeserializeBadBinaries(badBinariesJSON)
 			s.Nil(err)

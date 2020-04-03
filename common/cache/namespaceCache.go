@@ -30,7 +30,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -670,12 +678,12 @@ func (c *namespaceCache) buildEntryFromRecord(
 	return newEntry
 }
 
-func copyResetBinary(bins commonproto.BadBinaries) commonproto.BadBinaries {
-	newbins := make(map[string]*commonproto.BadBinaryInfo, len(bins.Binaries))
+func copyResetBinary(bins namespacepb.BadBinaries) namespacepb.BadBinaries {
+	newbins := make(map[string]*namespacepb.BadBinaryInfo, len(bins.Binaries))
 	for k, v := range bins.Binaries {
 		newbins[k] = v
 	}
-	return commonproto.BadBinaries{
+	return namespacepb.BadBinaries{
 		Binaries: newbins,
 	}
 }

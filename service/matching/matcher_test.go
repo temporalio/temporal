@@ -29,8 +29,15 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.uber.org/atomic"
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -73,7 +80,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	}
 	t.cfg = tlCfg
 	scope := func() metrics.Scope { return metrics.NoopScope(metrics.Matching) }
-	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskList, enums.TaskListKindNormal, t.client, scope)
+	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskList, tasklistpb.TaskListKindNormal, t.client, scope)
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
 
 	rootTaskList := newTestTaskListID(t.taskList.namespaceID, t.taskList.Parent(20), persistence.TaskListTypeDecision)
@@ -256,7 +263,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 				task.finish(nil)
 				querySet.Swap(true)
 				remotePollResp = matchingservice.PollForDecisionTaskResponse{
-					Query: &commonproto.WorkflowQuery{},
+					Query: &querypb.WorkflowQuery{},
 				}
 			}
 		},

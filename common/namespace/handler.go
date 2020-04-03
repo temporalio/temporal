@@ -29,8 +29,15 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -208,7 +215,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		HistoryArchivalURI:       nextHistoryArchivalState.URI,
 		VisibilityArchivalStatus: nextVisibilityArchivalState.Status,
 		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
-		BadBinaries:              commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
+		BadBinaries:              namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
 	replicationConfig := &persistence.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
@@ -615,9 +622,9 @@ func (d *HandlerImpl) createResponse(
 	info *persistence.NamespaceInfo,
 	config *persistence.NamespaceConfig,
 	replicationConfig *persistence.NamespaceReplicationConfig,
-) (*commonproto.NamespaceInfo, *commonproto.NamespaceConfiguration, *commonproto.NamespaceReplicationConfiguration) {
+) (*namespacepb.NamespaceInfo, *namespacepb.NamespaceConfiguration, *replicationpb.NamespaceReplicationConfiguration) {
 
-	infoResult := &commonproto.NamespaceInfo{
+	infoResult := &namespacepb.NamespaceInfo{
 		Name:        info.Name,
 		Status:      getNamespaceStatus(info),
 		Description: info.Description,
@@ -626,7 +633,7 @@ func (d *HandlerImpl) createResponse(
 		Id:          info.ID,
 	}
 
-	configResult := &commonproto.NamespaceConfiguration{
+	configResult := &namespacepb.NamespaceConfiguration{
 		EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 		WorkflowExecutionRetentionPeriodInDays: config.Retention,
 		HistoryArchivalStatus:                  config.HistoryArchivalStatus,
@@ -636,14 +643,14 @@ func (d *HandlerImpl) createResponse(
 		BadBinaries:                            &config.BadBinaries,
 	}
 
-	var clusters []*commonproto.ClusterReplicationConfiguration
+	var clusters []*replicationpb.ClusterReplicationConfiguration
 	for _, cluster := range replicationConfig.Clusters {
-		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
+		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
 			ClusterName: cluster.ClusterName,
 		})
 	}
 
-	replicationConfigResult := &commonproto.NamespaceReplicationConfiguration{
+	replicationConfigResult := &replicationpb.NamespaceReplicationConfiguration{
 		ActiveClusterName: replicationConfig.ActiveClusterName,
 		Clusters:          clusters,
 	}
@@ -652,19 +659,19 @@ func (d *HandlerImpl) createResponse(
 }
 
 func (d *HandlerImpl) mergeBadBinaries(
-	old map[string]*commonproto.BadBinaryInfo,
-	new map[string]*commonproto.BadBinaryInfo,
+	old map[string]*namespacepb.BadBinaryInfo,
+	new map[string]*namespacepb.BadBinaryInfo,
 	createTimeNano int64,
-) commonproto.BadBinaries {
+) namespacepb.BadBinaries {
 
 	if old == nil {
-		old = map[string]*commonproto.BadBinaryInfo{}
+		old = map[string]*namespacepb.BadBinaryInfo{}
 	}
 	for k, v := range new {
 		v.CreatedTimeNano = createTimeNano
 		old[k] = v
 	}
-	return commonproto.BadBinaries{
+	return namespacepb.BadBinaries{
 		Binaries: old,
 	}
 }
@@ -684,9 +691,9 @@ func (d *HandlerImpl) mergeNamespaceData(
 }
 
 func (d *HandlerImpl) toArchivalRegisterEvent(
-	status enums.ArchivalStatus,
+	status namespacepb.ArchivalStatus,
 	URI string,
-	defaultStatus enums.ArchivalStatus,
+	defaultStatus namespacepb.ArchivalStatus,
 	defaultURI string,
 ) (*ArchivalEvent, error) {
 
@@ -695,7 +702,7 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 		URI:        URI,
 		defaultURI: defaultURI,
 	}
-	if event.status == enums.ArchivalStatusDefault {
+	if event.status == namespacepb.ArchivalStatusDefault {
 		event.status = defaultStatus
 	}
 	if err := event.validate(); err != nil {
@@ -705,7 +712,7 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 }
 
 func (d *HandlerImpl) toArchivalUpdateEvent(
-	status enums.ArchivalStatus,
+	status namespacepb.ArchivalStatus,
 	URI string,
 	defaultURI string,
 ) (*ArchivalEvent, error) {
@@ -749,16 +756,16 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 	return archiver.ValidateURI(URI)
 }
 
-func getNamespaceStatus(info *persistence.NamespaceInfo) enums.NamespaceStatus {
+func getNamespaceStatus(info *persistence.NamespaceInfo) namespacepb.NamespaceStatus {
 	switch info.Status {
 	case persistence.NamespaceStatusRegistered:
-		return enums.NamespaceStatusRegistered
+		return namespacepb.NamespaceStatusRegistered
 	case persistence.NamespaceStatusDeprecated:
-		return enums.NamespaceStatusDeprecated
+		return namespacepb.NamespaceStatusDeprecated
 	case persistence.NamespaceStatusDeleted:
-		return enums.NamespaceStatusDeleted
+		return namespacepb.NamespaceStatusDeleted
 	}
 
 	// TODO: panic, log, ...?
-	return enums.NamespaceStatusRegistered
+	return namespacepb.NamespaceStatusRegistered
 }

@@ -26,7 +26,15 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 
 	"github.com/temporalio/temporal/common/persistence"
 	test "github.com/temporalio/temporal/common/testing"
@@ -39,14 +47,14 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 	workflowType := "event-generator-workflow-type"
 	tasklist := "event-generator-taskList"
 
-	var historyBatch []*commonproto.History
+	var historyBatch []*historypb.History
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
-		historyEvents := &commonproto.History{}
+		historyEvents := &historypb.History{}
 		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 		}
 		historyBatch = append(historyBatch, historyEvents)
 	}
@@ -82,13 +90,13 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	workflowType := "event-generator-workflow-type"
 	tasklist := "event-generator-taskList"
 
-	var historyBatch []*commonproto.History
+	var historyBatch []*historypb.History
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
 
 	events := s.generator.GetNextVertices()
-	historyEvents := &commonproto.History{}
+	historyEvents := &historypb.History{}
 	for _, event := range events {
-		historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
+		historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 	}
 	historyBatch = append(historyBatch, historyEvents)
 

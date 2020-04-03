@@ -41,7 +41,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
@@ -334,9 +342,9 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*commonproto.History{
+	historyBatches := []*historypb.History{
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -398,9 +406,9 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*commonproto.History{
+	historyBatches := []*historypb.History{
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -414,7 +422,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			},
 		},
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
 					Timestamp: time.Now().UnixNano(),
@@ -562,7 +570,7 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 		PageSize:             1,
 		CloseFailoverVersion: &testCloseFailoverVersion,
 	}
-	var combinedHistory []*commonproto.History
+	var combinedHistory []*historypb.History
 
 	URI, err := archiver.NewURI(testBucketURI)
 	s.NoError(err)
@@ -644,9 +652,9 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Header: &archiverproto.HistoryBlobHeader{
 				IsLast: true,
 			},
-			Body: []*commonproto.History{
+			Body: []*historypb.History{
 				{
-					Events: []*commonproto.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							EventId:   testNextEventID - 1,
 							Timestamp: time.Now().UnixNano(),
@@ -663,9 +671,9 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Header: &archiverproto.HistoryBlobHeader{
 				IsLast: false,
 			},
-			Body: []*commonproto.History{
+			Body: []*historypb.History{
 				{
-					Events: []*commonproto.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							EventId:   common.FirstEventID + 1,
 							Timestamp: time.Now().UnixNano(),
@@ -684,9 +692,9 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Header: &archiverproto.HistoryBlobHeader{
 				IsLast: true,
 			},
-			Body: []*commonproto.History{
+			Body: []*historypb.History{
 				{
-					Events: []*commonproto.HistoryEvent{
+					Events: []*historypb.HistoryEvent{
 						{
 							EventId:   testNextEventID - 1,
 							Timestamp: time.Now().UnixNano(),

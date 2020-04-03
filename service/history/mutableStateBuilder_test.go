@@ -30,9 +30,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -117,12 +123,12 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 
 	newDecisionScheduleEvent, newDecisionStartedEvent := s.prepareTransientDecisionCompletionFirstBatchReplicated(version, runID)
 
-	newDecisionCompletedEvent := &commonproto.HistoryEvent{
+	newDecisionCompletedEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   newDecisionStartedEvent.GetEventId() + 1,
 		Timestamp: time.Now().UnixNano(),
-		EventType: enums.EventTypeDecisionTaskCompleted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+		EventType: eventpb.EventTypeDecisionTaskCompleted,
+		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{
 			ScheduledEventId: newDecisionScheduleEvent.GetEventId(),
 			StartedEventId:   newDecisionStartedEvent.GetEventId(),
 			Identity:         "some random identity",
@@ -170,7 +176,7 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 	s.NotNil(s.msBuilder.AddDecisionTaskFailedEvent(
 		newDecisionScheduleEvent.GetEventId(),
 		newDecisionStartedEvent.GetEventId(),
-		enums.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
+		eventpb.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
 		[]byte("some random decision failure details"),
 		"some random decision failure identity",
 		"", "", "", "", 0,
@@ -181,57 +187,57 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 
 func (s *mutableStateSuite) TestShouldBufferEvent() {
 	// workflow status events will be assign event ID immediately
-	workflowEvents := map[enums.EventType]bool{
-		enums.EventTypeWorkflowExecutionStarted:        true,
-		enums.EventTypeWorkflowExecutionCompleted:      true,
-		enums.EventTypeWorkflowExecutionFailed:         true,
-		enums.EventTypeWorkflowExecutionTimedOut:       true,
-		enums.EventTypeWorkflowExecutionTerminated:     true,
-		enums.EventTypeWorkflowExecutionContinuedAsNew: true,
-		enums.EventTypeWorkflowExecutionCanceled:       true,
+	workflowEvents := map[eventpb.EventType]bool{
+		eventpb.EventTypeWorkflowExecutionStarted:        true,
+		eventpb.EventTypeWorkflowExecutionCompleted:      true,
+		eventpb.EventTypeWorkflowExecutionFailed:         true,
+		eventpb.EventTypeWorkflowExecutionTimedOut:       true,
+		eventpb.EventTypeWorkflowExecutionTerminated:     true,
+		eventpb.EventTypeWorkflowExecutionContinuedAsNew: true,
+		eventpb.EventTypeWorkflowExecutionCanceled:       true,
 	}
 
 	// decision events will be assign event ID immediately
-	decisionTaskEvents := map[enums.EventType]bool{
-		enums.EventTypeDecisionTaskScheduled: true,
-		enums.EventTypeDecisionTaskStarted:   true,
-		enums.EventTypeDecisionTaskCompleted: true,
-		enums.EventTypeDecisionTaskFailed:    true,
-		enums.EventTypeDecisionTaskTimedOut:  true,
+	decisionTaskEvents := map[eventpb.EventType]bool{
+		eventpb.EventTypeDecisionTaskScheduled: true,
+		eventpb.EventTypeDecisionTaskStarted:   true,
+		eventpb.EventTypeDecisionTaskCompleted: true,
+		eventpb.EventTypeDecisionTaskFailed:    true,
+		eventpb.EventTypeDecisionTaskTimedOut:  true,
 	}
 
 	// events corresponding to decisions from client will be assign event ID immediately
-	decisionEvents := map[enums.EventType]bool{
-		enums.EventTypeWorkflowExecutionCompleted:                      true,
-		enums.EventTypeWorkflowExecutionFailed:                         true,
-		enums.EventTypeWorkflowExecutionCanceled:                       true,
-		enums.EventTypeWorkflowExecutionContinuedAsNew:                 true,
-		enums.EventTypeActivityTaskScheduled:                           true,
-		enums.EventTypeActivityTaskCancelRequested:                     true,
-		enums.EventTypeTimerStarted:                                    true,
-		enums.EventTypeTimerCanceled:                                   true,
-		enums.EventTypeCancelTimerFailed:                               true,
-		enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated: true,
-		enums.EventTypeMarkerRecorded:                                  true,
-		enums.EventTypeStartChildWorkflowExecutionInitiated:            true,
-		enums.EventTypeSignalExternalWorkflowExecutionInitiated:        true,
-		enums.EventTypeUpsertWorkflowSearchAttributes:                  true,
+	decisionEvents := map[eventpb.EventType]bool{
+		eventpb.EventTypeWorkflowExecutionCompleted:                      true,
+		eventpb.EventTypeWorkflowExecutionFailed:                         true,
+		eventpb.EventTypeWorkflowExecutionCanceled:                       true,
+		eventpb.EventTypeWorkflowExecutionContinuedAsNew:                 true,
+		eventpb.EventTypeActivityTaskScheduled:                           true,
+		eventpb.EventTypeActivityTaskCancelRequested:                     true,
+		eventpb.EventTypeTimerStarted:                                    true,
+		eventpb.EventTypeTimerCanceled:                                   true,
+		eventpb.EventTypeCancelTimerFailed:                               true,
+		eventpb.EventTypeRequestCancelExternalWorkflowExecutionInitiated: true,
+		eventpb.EventTypeMarkerRecorded:                                  true,
+		eventpb.EventTypeStartChildWorkflowExecutionInitiated:            true,
+		eventpb.EventTypeSignalExternalWorkflowExecutionInitiated:        true,
+		eventpb.EventTypeUpsertWorkflowSearchAttributes:                  true,
 	}
 
 	// other events will not be assign event ID immediately
-	otherEvents := map[enums.EventType]bool{}
+	otherEvents := map[eventpb.EventType]bool{}
 OtherEventsLoop:
-	for _, eventType := range enums.EventType_value {
-		if _, ok := workflowEvents[enums.EventType(eventType)]; ok {
+	for _, eventType := range eventpb.EventType_value {
+		if _, ok := workflowEvents[eventpb.EventType(eventType)]; ok {
 			continue OtherEventsLoop
 		}
-		if _, ok := decisionTaskEvents[enums.EventType(eventType)]; ok {
+		if _, ok := decisionTaskEvents[eventpb.EventType(eventType)]; ok {
 			continue OtherEventsLoop
 		}
-		if _, ok := decisionEvents[enums.EventType(eventType)]; ok {
+		if _, ok := decisionEvents[eventpb.EventType(eventType)]; ok {
 			continue OtherEventsLoop
 		}
-		otherEvents[enums.EventType(eventType)] = true
+		otherEvents[eventpb.EventType(eventType)] = true
 	}
 
 	// test workflowEvents, decisionTaskEvents, decisionEvents will return true
@@ -251,13 +257,13 @@ OtherEventsLoop:
 
 	// +1 is because DecisionTypeCancelTimer will be mapped
 	// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
-	s.Equal(len(enums.DecisionType_value)+1, len(decisionEvents),
+	s.Equal(len(decisionpb.DecisionType_value)+1, len(decisionEvents),
 		"This assertion will be broken a new decision is added and no corresponding logic added to shouldBufferEvent()")
 }
 
 func (s *mutableStateSuite) TestReorderEvents() {
 	namespaceID := testNamespaceID
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -274,7 +280,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTimeout:             200,
 		DecisionStartToCloseTimeout: 100,
 		State:                       persistence.WorkflowStateRunning,
-		Status:                      enums.WorkflowExecutionStatusRunning,
+		Status:                      executionpb.WorkflowExecutionStatusRunning,
 		NextEventID:                 int64(8),
 		LastProcessedEvent:          int64(3),
 		LastUpdatedTimestamp:        time.Now(),
@@ -299,12 +305,12 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		},
 	}
 
-	bufferedEvents := []*commonproto.HistoryEvent{
+	bufferedEvents := []*historypb.HistoryEvent{
 		{
 			EventId:   common.BufferedEventID,
-			EventType: enums.EventTypeActivityTaskCompleted,
+			EventType: eventpb.EventTypeActivityTaskCompleted,
 			Version:   1,
-			Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+			Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
 				Result:           activityResult,
 				ScheduledEventId: 5,
 				StartedEventId:   common.BufferedEventID,
@@ -313,9 +319,9 @@ func (s *mutableStateSuite) TestReorderEvents() {
 
 		{
 			EventId:   common.BufferedEventID,
-			EventType: enums.EventTypeActivityTaskStarted,
+			EventType: eventpb.EventTypeActivityTaskStarted,
 			Version:   1,
-			Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+			Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
 				ScheduledEventId: 5,
 			}},
 		},
@@ -337,15 +343,15 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	}
 
 	s.msBuilder.Load(dbState)
-	s.Equal(enums.EventTypeActivityTaskCompleted, s.msBuilder.bufferedEvents[0].GetEventType())
-	s.Equal(enums.EventTypeActivityTaskStarted, s.msBuilder.bufferedEvents[1].GetEventType())
+	s.Equal(eventpb.EventTypeActivityTaskCompleted, s.msBuilder.bufferedEvents[0].GetEventType())
+	s.Equal(eventpb.EventTypeActivityTaskStarted, s.msBuilder.bufferedEvents[1].GetEventType())
 
 	err := s.msBuilder.FlushBufferedEvents()
 	s.Nil(err)
-	s.Equal(enums.EventTypeActivityTaskStarted, s.msBuilder.hBuilder.history[0].GetEventType())
+	s.Equal(eventpb.EventTypeActivityTaskStarted, s.msBuilder.hBuilder.history[0].GetEventType())
 	s.Equal(int64(8), s.msBuilder.hBuilder.history[0].GetEventId())
 	s.Equal(int64(5), s.msBuilder.hBuilder.history[0].GetActivityTaskStartedEventAttributes().GetScheduledEventId())
-	s.Equal(enums.EventTypeActivityTaskCompleted, s.msBuilder.hBuilder.history[1].GetEventType())
+	s.Equal(eventpb.EventTypeActivityTaskCompleted, s.msBuilder.hBuilder.history[1].GetEventType())
 	s.Equal(int64(9), s.msBuilder.hBuilder.history[1].GetEventId())
 	s.Equal(int64(8), s.msBuilder.hBuilder.history[1].GetActivityTaskCompletedEventAttributes().GetStartedEventId())
 	s.Equal(int64(5), s.msBuilder.hBuilder.history[1].GetActivityTaskCompletedEventAttributes().GetScheduledEventId())
@@ -472,48 +478,48 @@ func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 }
 
 func (s *mutableStateSuite) TestTrimEvents() {
-	var input []*commonproto.HistoryEvent
+	var input []*historypb.HistoryEvent
 	output := s.msBuilder.trimEventsAfterWorkflowClose(input)
 	s.Equal(input, output)
 
-	input = []*commonproto.HistoryEvent{}
+	input = []*historypb.HistoryEvent{}
 	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
 	s.Equal(input, output)
 
-	input = []*commonproto.HistoryEvent{
+	input = []*historypb.HistoryEvent{
 		{
-			EventType: enums.EventTypeActivityTaskCanceled,
+			EventType: eventpb.EventTypeActivityTaskCanceled,
 		},
 		{
-			EventType: enums.EventTypeWorkflowExecutionSignaled,
+			EventType: eventpb.EventTypeWorkflowExecutionSignaled,
 		},
 	}
 	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
 	s.Equal(input, output)
 
-	input = []*commonproto.HistoryEvent{
+	input = []*historypb.HistoryEvent{
 		{
-			EventType: enums.EventTypeActivityTaskCanceled,
+			EventType: eventpb.EventTypeActivityTaskCanceled,
 		},
 		{
-			EventType: enums.EventTypeWorkflowExecutionCompleted,
+			EventType: eventpb.EventTypeWorkflowExecutionCompleted,
 		},
 	}
 	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
 	s.Equal(input, output)
 
-	input = []*commonproto.HistoryEvent{
+	input = []*historypb.HistoryEvent{
 		{
-			EventType: enums.EventTypeWorkflowExecutionCompleted,
+			EventType: eventpb.EventTypeWorkflowExecutionCompleted,
 		},
 		{
-			EventType: enums.EventTypeActivityTaskCanceled,
+			EventType: eventpb.EventTypeActivityTaskCanceled,
 		},
 	}
 	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
-	s.Equal([]*commonproto.HistoryEvent{
+	s.Equal([]*historypb.HistoryEvent{
 		{
-			EventType: enums.EventTypeWorkflowExecutionCompleted,
+			EventType: eventpb.EventTypeWorkflowExecutionCompleted,
 		},
 	}, output)
 }
@@ -545,9 +551,9 @@ func (s *mutableStateSuite) TestEventReapplied() {
 	s.True(isReapplied)
 }
 
-func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicated(version int64, runID string) (*commonproto.HistoryEvent, *commonproto.HistoryEvent) {
+func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicated(version int64, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
 	namespaceID := testNamespaceID
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      runID,
 	}
@@ -560,14 +566,14 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	decisionAttempt := int64(0)
 
 	eventID := int64(1)
-	workflowStartEvent := &commonproto.HistoryEvent{
+	workflowStartEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: enums.EventTypeWorkflowExecutionStarted,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: tasklist},
+		EventType: eventpb.EventTypeWorkflowExecutionStarted,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: tasklist},
 			Input:                               nil,
 			ExecutionStartToCloseTimeoutSeconds: workflowTimeoutSecond,
 			TaskStartToCloseTimeoutSeconds:      decisionTimeoutSecond,
@@ -575,37 +581,37 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	}
 	eventID++
 
-	decisionScheduleEvent := &commonproto.HistoryEvent{
+	decisionScheduleEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: enums.EventTypeDecisionTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
-			TaskList:                   &commonproto.TaskList{Name: tasklist},
+		EventType: eventpb.EventTypeDecisionTaskScheduled,
+		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{
+			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
 			Attempt:                    decisionAttempt,
 		}},
 	}
 	eventID++
 
-	decisionStartedEvent := &commonproto.HistoryEvent{
+	decisionStartedEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: enums.EventTypeDecisionTaskStarted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+		EventType: eventpb.EventTypeDecisionTaskStarted,
+		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			RequestId:        uuid.New(),
 		}},
 	}
 	eventID++
 
-	_ = &commonproto.HistoryEvent{
+	_ = &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: enums.EventTypeDecisionTaskFailed,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &commonproto.DecisionTaskFailedEventAttributes{
+		EventType: eventpb.EventTypeDecisionTaskFailed,
+		Attributes: &historypb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &decisionpb.DecisionTaskFailedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			StartedEventId:   decisionStartedEvent.GetEventId(),
 		}},
@@ -651,25 +657,25 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	s.Nil(err)
 
 	decisionAttempt = int64(123)
-	newDecisionScheduleEvent := &commonproto.HistoryEvent{
+	newDecisionScheduleEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: enums.EventTypeDecisionTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
-			TaskList:                   &commonproto.TaskList{Name: tasklist},
+		EventType: eventpb.EventTypeDecisionTaskScheduled,
+		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{
+			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
 			Attempt:                    decisionAttempt,
 		}},
 	}
 	eventID++
 
-	newDecisionStartedEvent := &commonproto.HistoryEvent{
+	newDecisionStartedEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
-		EventType: enums.EventTypeDecisionTaskStarted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+		EventType: eventpb.EventTypeDecisionTaskStarted,
+		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			RequestId:        uuid.New(),
 		}},
@@ -714,7 +720,7 @@ func (s *mutableStateSuite) newNamespaceCacheEntry() *cache.NamespaceCacheEntry 
 
 func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMutableState {
 	namespaceID := testNamespaceID
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -730,7 +736,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowTimeout:             200,
 		DecisionStartToCloseTimeout: 100,
 		State:                       persistence.WorkflowStateRunning,
-		Status:                      enums.WorkflowExecutionStatusRunning,
+		Status:                      executionpb.WorkflowExecutionStatusRunning,
 		NextEventID:                 int64(101),
 		LastProcessedEvent:          int64(99),
 		LastUpdatedTimestamp:        time.Now(),
@@ -771,7 +777,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 			Version:               failoverVersion,
 			InitiatedID:           80,
 			InitiatedEventBatchID: 20,
-			InitiatedEvent:        &commonproto.HistoryEvent{},
+			InitiatedEvent:        &historypb.HistoryEvent{},
 			StartedID:             common.EmptyEventID,
 			CreateRequestID:       uuid.New(),
 			Namespace:             testNamespaceID,
@@ -794,12 +800,12 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		uuid.New(): {},
 	}
 
-	bufferedEvents := []*commonproto.HistoryEvent{
+	bufferedEvents := []*historypb.HistoryEvent{
 		{
 			EventId:   common.BufferedEventID,
-			EventType: enums.EventTypeWorkflowExecutionSignaled,
+			EventType: eventpb.EventTypeWorkflowExecutionSignaled,
 			Version:   failoverVersion,
-			Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 				SignalName: "test-signal-buffered",
 				Input:      []byte("test-signal-buffered-input"),
 			}},

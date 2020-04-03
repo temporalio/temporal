@@ -26,9 +26,15 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 )
@@ -265,16 +271,16 @@ type DataBlob struct {
 }
 
 // ToProto convert data blob to proto representation
-func (d *DataBlob) ToProto() *commonproto.DataBlob {
+func (d *DataBlob) ToProto() *commonpb.DataBlob {
 	switch d.Encoding {
 	case common.EncodingTypeJSON:
-		return &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeJSON,
+		return &commonpb.DataBlob{
+			EncodingType: commonpb.EncodingTypeJSON,
 			Data:         d.Data,
 		}
 	case common.EncodingTypeProto3:
-		return &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeProto3,
+		return &commonpb.DataBlob{
+			EncodingType: commonpb.EncodingTypeProto3,
 			Data:         d.Data,
 		}
 	default:

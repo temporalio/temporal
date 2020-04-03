@@ -26,8 +26,15 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -163,8 +170,8 @@ func (r *historyReplicator) ApplyRawEvents(
 ) (retError error) {
 
 	var err error
-	var events []*commonproto.HistoryEvent
-	var newRunEvents []*commonproto.HistoryEvent
+	var events []*historypb.HistoryEvent
+	var newRunEvents []*historypb.HistoryEvent
 
 	events, err = r.deserializeBlob(requestIn.History)
 	if err != nil {
@@ -184,7 +191,7 @@ func (r *historyReplicator) ApplyRawEvents(
 		NextEventId:       nextEventID,
 		Version:           version,
 		ReplicationInfo:   requestIn.ReplicationInfo,
-		History:           &commonproto.History{Events: events},
+		History:           &historypb.History{Events: events},
 		NewRunHistory:     nil,
 	}
 
@@ -193,7 +200,7 @@ func (r *historyReplicator) ApplyRawEvents(
 		if err != nil {
 			return err
 		}
-		requestOut.NewRunHistory = &commonproto.History{Events: newRunEvents}
+		requestOut.NewRunHistory = &historypb.History{Events: newRunEvents}
 	}
 
 	return r.ApplyEvents(ctx, requestOut)
@@ -258,7 +265,7 @@ func (r *historyReplicator) ApplyEvents(
 
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
-	case enums.EventTypeWorkflowExecutionStarted:
+	case eventpb.EventTypeWorkflowExecutionStarted:
 		_, err := weContext.loadWorkflowExecution()
 		if err == nil {
 			// Workflow execution already exist, looks like a duplicate start event, it is safe to ignore it
@@ -586,7 +593,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	sBuilder := r.getNewStateBuilder(msBuilder, logger)
-	var newRunHistory []*commonproto.HistoryEvent
+	var newRunHistory []*historypb.HistoryEvent
 	if request.NewRunHistory != nil {
 		newRunHistory = request.NewRunHistory.Events
 	}
@@ -601,7 +608,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
-	case enums.EventTypeWorkflowExecutionStarted:
+	case eventpb.EventTypeWorkflowExecutionStarted:
 		err = r.replicateWorkflowStarted(ctx, context, msBuilder, request.History, sBuilder, logger)
 	default:
 		now := time.Unix(0, lastEvent.GetTimestamp())
@@ -610,7 +617,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 			newExecutionInfo := newMutableState.GetExecutionInfo()
 			newContext = newWorkflowExecutionContext(
 				newExecutionInfo.NamespaceID,
-				commonproto.WorkflowExecution{
+				executionpb.WorkflowExecution{
 					WorkflowId: newExecutionInfo.WorkflowID,
 					RunId:      newExecutionInfo.RunID,
 				},
@@ -634,14 +641,14 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	history *commonproto.History,
+	history *historypb.History,
 	sBuilder stateBuilder,
 	logger log.Logger,
 ) (retError error) {
 
 	executionInfo := msBuilder.GetExecutionInfo()
 	namespaceID := executionInfo.NamespaceID
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: executionInfo.WorkflowID,
 		RunId:      executionInfo.RunID,
 	}
@@ -843,7 +850,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 		return "", 0, 0, nil
 	}
 
-	if currentStatus != enums.WorkflowExecutionStatusRunning {
+	if currentStatus != executionpb.WorkflowExecutionStatusRunning {
 		// current workflow finished
 		// note, it is impossible that a current workflow ends with continue as new as close status
 		logger.Info("Conflict resolution current workflow finished.")
@@ -877,7 +884,7 @@ func (r *historyReplicator) getCurrentWorkflowMutableState(
 	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx,
 		namespaceID,
 		// only use the workflow ID, to get the current running one
-		commonproto.WorkflowExecution{WorkflowId: workflowID},
+		executionpb.WorkflowExecution{WorkflowId: workflowID},
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -913,7 +920,7 @@ func (r *historyReplicator) terminateWorkflow(
 ) (int64, error) {
 
 	// same workflow ID, same shard
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -1063,10 +1070,10 @@ func (r *historyReplicator) resetMutableState(
 }
 
 func (r *historyReplicator) deserializeBlob(
-	blob *commonproto.DataBlob,
-) ([]*commonproto.HistoryEvent, error) {
+	blob *commonpb.DataBlob,
+) ([]*historypb.HistoryEvent, error) {
 
-	if blob.GetEncodingType() != enums.EncodingTypeProto3 {
+	if blob.GetEncodingType() != commonpb.EncodingTypeProto3 {
 		return nil, ErrUnknownEncodingType
 	}
 	historyEvents, err := r.historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
@@ -1102,7 +1109,7 @@ func (r *historyReplicator) flushEventsBuffer(
 	if _, err = msBuilder.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
-		enums.DecisionTaskFailedCauseFailoverCloseDecision,
+		eventpb.DecisionTaskFailedCauseFailoverCloseDecision,
 		nil, identityHistoryService,
 		"",
 		"",
@@ -1120,14 +1127,14 @@ func (r *historyReplicator) reapplyEvents(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	events []*commonproto.HistoryEvent,
+	events []*historypb.HistoryEvent,
 	logger log.Logger,
 ) error {
 
-	var reapplyEvents []*commonproto.HistoryEvent
+	var reapplyEvents []*historypb.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
-		case enums.EventTypeWorkflowExecutionSignaled:
+		case eventpb.EventTypeWorkflowExecutionSignaled:
 			reapplyEvents = append(reapplyEvents, event)
 		}
 	}
@@ -1147,7 +1154,7 @@ func (r *historyReplicator) reapplyEventsToCurrentRunningWorkflow(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	events []*commonproto.HistoryEvent,
+	events []*historypb.HistoryEvent,
 	logger log.Logger,
 ) error {
 
@@ -1159,7 +1166,7 @@ func (r *historyReplicator) reapplyEventsToCurrentRunningWorkflow(
 	numSignals := 0
 	for _, event := range events {
 		switch event.GetEventType() {
-		case enums.EventTypeWorkflowExecutionSignaled:
+		case eventpb.EventTypeWorkflowExecutionSignaled:
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
 			if _, err := msBuilder.AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),
@@ -1182,7 +1189,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	events []*commonproto.HistoryEvent,
+	events []*historypb.HistoryEvent,
 	logger log.Logger,
 ) (retError error) {
 
@@ -1234,7 +1241,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 		return err
 	}
 
-	resetNewExecution := commonproto.WorkflowExecution{
+	resetNewExecution := executionpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      resp.GetRunId(),
 	}

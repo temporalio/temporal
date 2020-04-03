@@ -28,8 +28,15 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
@@ -498,7 +505,7 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 			req: &historyservice.ReplicateEventsRequest{
 				SourceCluster: s.sourceCluster,
 				NamespaceId:   replicationAttr.NamespaceId,
-				WorkflowExecution: &commonproto.WorkflowExecution{
+				WorkflowExecution: &executionpb.WorkflowExecution{
 					WorkflowId: replicationAttr.WorkflowId,
 					RunId:      replicationAttr.RunId,
 				},
@@ -819,11 +826,11 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replication.R
 				LastEventId: 0644,
 			},
 		},
-		History: &commonproto.History{
-			Events: []*commonproto.HistoryEvent{{EventId: 1}},
+		History: &historypb.History{
+			Events: []*historypb.HistoryEvent{{EventId: 1}},
 		},
-		NewRunHistory: &commonproto.History{
-			Events: []*commonproto.HistoryEvent{{EventId: 2}},
+		NewRunHistory: &historypb.History{
+			Events: []*historypb.HistoryEvent{{EventId: 2}},
 		},
 		ResetWorkflow: true,
 	}

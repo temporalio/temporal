@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -647,7 +646,7 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowE
 	var startTime time.Time
 	var executionTime time.Time
 	var closeTime time.Time
-	var status enums.WorkflowExecutionStatus
+	var status executionpb.WorkflowExecutionStatus
 	var historyLength int64
 	var memo []byte
 	var encoding string

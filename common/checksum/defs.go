@@ -23,8 +23,6 @@ package checksum
 import (
 	"errors"
 
-	"go.temporal.io/temporal-proto/enums"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 )
 
