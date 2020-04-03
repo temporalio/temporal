@@ -111,7 +111,7 @@ type (
 		GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*replication.ReplicationMessages, error)
 		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replication.ReplicationTaskInfo) ([]*replication.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
-		ReapplyEvents(ctx context.Context, namespaceUUID string, workflowID string, runID string, events []*historypb.HistoryEvent) error
+		ReapplyEvents(ctx context.Context, namespaceUUID string, workflowID string, runID string, events []*eventpb.HistoryEvent) error
 		ReadDLQMessages(ctx context.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error)
 		PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error
 		MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
@@ -516,7 +516,7 @@ func (e *historyEngineImpl) createMutableState(
 func (e *historyEngineImpl) generateFirstDecisionTask(
 	mutableState mutableState,
 	parentInfo *commonproto.ParentExecutionInfo,
-	startEvent *historypb.HistoryEvent,
+	startEvent *eventpb.HistoryEvent,
 ) error {
 
 	if parentInfo == nil {
@@ -2876,7 +2876,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 	namespaceUUID string,
 	workflowID string,
 	runID string,
-	reapplyEvents []*historypb.HistoryEvent,
+	reapplyEvents []*eventpb.HistoryEvent,
 ) error {
 
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespaceUUID)
@@ -2895,7 +2895,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 		currentExecution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			// Filter out reapply event from the same cluster
-			toReapplyEvents := make([]*historypb.HistoryEvent, len(reapplyEvents))
+			toReapplyEvents := make([]*eventpb.HistoryEvent, len(reapplyEvents))
 			lastWriteVersion, err := mutableState.GetLastWriteVersion()
 			if err != nil {
 				return nil, err

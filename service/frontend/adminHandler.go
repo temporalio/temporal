@@ -387,7 +387,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 	}
 
 	// TODO need to deal with transient decision if to be used by client getting history
-	var historyBatches []*historypb.History
+	var historyBatches []*eventpb.History
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
 	_, historyBatches, continuationToken.PersistenceToken, size, err = history.PaginateHistory(
 		adh.GetHistoryManager(),

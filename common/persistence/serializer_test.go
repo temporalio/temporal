@@ -77,12 +77,12 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	serializer := NewPayloadSerializer()
 
 	eventType := eventpb.EventTypeActivityTaskCompleted
-	event0 := &historypb.HistoryEvent{
+	event0 := &eventpb.HistoryEvent{
 		EventId:   999,
 		Timestamp: time.Now().UnixNano(),
 		EventType: eventType,
-		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
-			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{
+			ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 				Result:           []byte("result-1-event-1"),
 				ScheduledEventId: 4,
 				StartedEventId:   5,
@@ -91,7 +91,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 		},
 	}
 
-	history0 := &historypb.History{Events: []*historypb.HistoryEvent{event0, event0}}
+	history0 := &eventpb.History{Events: []*eventpb.HistoryEvent{event0, event0}}
 
 	memoFields := map[string][]byte{
 		"TestField": []byte(`Test binary`),
@@ -271,17 +271,17 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(dNilEvents)
 
 			events, err := serializer.DeserializeBatchEvents(dsJSON)
-			history1 := &historypb.History{Events: events}
+			history1 := &eventpb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history1))
 
 			events, err = serializer.DeserializeBatchEvents(dsProto)
-			history2 := &historypb.History{Events: events}
+			history2 := &eventpb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history2))
 
 			events, err = serializer.DeserializeBatchEvents(dsEmpty)
-			history3 := &historypb.History{Events: events}
+			history3 := &eventpb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history3))
 

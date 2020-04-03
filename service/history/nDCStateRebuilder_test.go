@@ -126,16 +126,16 @@ func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
 func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 
 	requestID := uuid.New()
-	events := []*historypb.HistoryEvent{
+	events := []*eventpb.HistoryEvent{
 		{
 			EventId:    1,
 			EventType:  eventpb.EventTypeWorkflowExecutionStarted,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 		},
 		{
 			EventId:    2,
 			EventType:  eventpb.EventTypeWorkflowExecutionSignaled,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{}},
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{}},
 		},
 	}
 
@@ -150,7 +150,7 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 			RunId:      s.runID,
 		},
 		events,
-		[]*historypb.HistoryEvent(nil),
+		[]*eventpb.HistoryEvent(nil),
 		true,
 	).Return(nil, nil).Times(1)
 
@@ -164,33 +164,33 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	branchToken := []byte("some random branch token")
 	workflowIdentifier := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, s.runID)
 
-	event1 := &historypb.HistoryEvent{
+	event1 := &eventpb.HistoryEvent{
 		EventId:    1,
 		EventType:  eventpb.EventTypeWorkflowExecutionStarted,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 	}
-	event2 := &historypb.HistoryEvent{
+	event2 := &eventpb.HistoryEvent{
 		EventId:    2,
 		EventType:  eventpb.EventTypeDecisionTaskScheduled,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}},
 	}
-	event3 := &historypb.HistoryEvent{
+	event3 := &eventpb.HistoryEvent{
 		EventId:    3,
 		EventType:  eventpb.EventTypeDecisionTaskStarted,
-		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{}},
 	}
-	event4 := &historypb.HistoryEvent{
+	event4 := &eventpb.HistoryEvent{
 		EventId:    4,
 		EventType:  eventpb.EventTypeDecisionTaskCompleted,
-		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{}},
 	}
-	event5 := &historypb.HistoryEvent{
+	event5 := &eventpb.HistoryEvent{
 		EventId:    5,
 		EventType:  eventpb.EventTypeActivityTaskScheduled,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
-	history1 := []*historypb.History{{[]*historypb.HistoryEvent{event1, event2, event3}}}
-	history2 := []*historypb.History{{[]*historypb.HistoryEvent{event4, event5}}}
+	history1 := []*eventpb.History{{[]*eventpb.HistoryEvent{event1, event2, event3}}}
+	history2 := []*eventpb.History{{[]*eventpb.HistoryEvent{event4, event5}}}
 	history := append(history1, history2...)
 	pageToken := []byte("some random token")
 
@@ -223,11 +223,11 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	paginationFn := s.nDCStateRebuilder.getPaginationFn(workflowIdentifier, firstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)
 
-	var result []*historypb.History
+	var result []*eventpb.History
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		result = append(result, item.(*historypb.History))
+		result = append(result, item.(*eventpb.History))
 	}
 
 	s.Equal(history, result)
@@ -248,11 +248,11 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 
 	firstEventID := common.FirstEventID
 	nextEventID := lastEventID + 1
-	events1 := []*historypb.HistoryEvent{{
+	events1 := []*eventpb.HistoryEvent{{
 		EventId:   1,
 		Version:   version,
 		EventType: eventpb.EventTypeWorkflowExecutionStarted,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                        &commonpb.WorkflowType{Name: "some random workflow type"},
 			TaskList:                            &tasklistpb.TaskList{Name: "some random workflow type"},
 			Input:                               []byte("some random input"),
@@ -261,18 +261,18 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 			Identity:                            "some random identity",
 		}},
 	}}
-	events2 := []*historypb.HistoryEvent{{
+	events2 := []*eventpb.HistoryEvent{{
 		EventId:   2,
 		Version:   version,
 		EventType: eventpb.EventTypeWorkflowExecutionSignaled,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
 			Input:      []byte("some random signal input"),
 			Identity:   "some random identity",
 		}},
 	}}
-	history1 := []*historypb.History{{events1}}
-	history2 := []*historypb.History{{events2}}
+	history1 := []*eventpb.History{{events1}}
+	history2 := []*eventpb.History{{events2}}
 	pageToken := []byte("some random pagination token")
 
 	historySize1 := 12345

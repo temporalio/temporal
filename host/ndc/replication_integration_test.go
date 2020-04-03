@@ -47,14 +47,14 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 	workflowType := "event-generator-workflow-type"
 	tasklist := "event-generator-taskList"
 
-	var historyBatch []*historypb.History
+	var historyBatch []*eventpb.History
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
-		historyEvents := &historypb.History{}
+		historyEvents := &eventpb.History{}
 		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
 		}
 		historyBatch = append(historyBatch, historyEvents)
 	}
@@ -90,13 +90,13 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	workflowType := "event-generator-workflow-type"
 	tasklist := "event-generator-taskList"
 
-	var historyBatch []*historypb.History
+	var historyBatch []*eventpb.History
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
 
 	events := s.generator.GetNextVertices()
-	historyEvents := &historypb.History{}
+	historyEvents := &eventpb.History{}
 	for _, event := range events {
-		historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+		historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
 	}
 	historyBatch = append(historyBatch, historyEvents)
 

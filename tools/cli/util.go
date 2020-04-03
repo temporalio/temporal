@@ -56,10 +56,10 @@ import (
 )
 
 // GetHistory helper method to iterate over all pages and return complete list of history events
-func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID, runID string) (*historypb.History, error) {
+func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID, runID string) (*eventpb.History, error) {
 	iter := workflowClient.GetWorkflowHistory(ctx, workflowID, runID, false,
 		filterpb.HistoryEventFilterTypeAllEvent)
-	var events []*historypb.HistoryEvent
+	var events []*eventpb.HistoryEvent
 	for iter.HasNext() {
 		event, err := iter.Next()
 		if err != nil {
@@ -68,13 +68,13 @@ func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID
 		events = append(events, event)
 	}
 
-	history := &historypb.History{}
+	history := &eventpb.History{}
 	history.Events = events
 	return history, nil
 }
 
 // HistoryEventToString convert HistoryEvent to string
-func HistoryEventToString(e *historypb.HistoryEvent, printFully bool, maxFieldLength int) string {
+func HistoryEventToString(e *eventpb.HistoryEvent, printFully bool, maxFieldLength int) string {
 	data := getEventAttributes(e)
 	return anyToString(data, printFully, maxFieldLength)
 }
@@ -204,7 +204,7 @@ func breakLongWords(input string, maxWordLength int) string {
 //   Completed - green
 //   Started - blue
 //   Others - default (white/black)
-func ColorEvent(e *historypb.HistoryEvent) string {
+func ColorEvent(e *eventpb.HistoryEvent) string {
 	var data string
 	switch e.GetEventType() {
 	case eventpb.EventTypeWorkflowExecutionStarted:
@@ -336,7 +336,7 @@ func ColorEvent(e *historypb.HistoryEvent) string {
 	return data
 }
 
-func getEventAttributes(e *historypb.HistoryEvent) interface{} {
+func getEventAttributes(e *eventpb.HistoryEvent) interface{} {
 	var data interface{}
 	switch e.GetEventType() {
 	case eventpb.EventTypeWorkflowExecutionStarted:

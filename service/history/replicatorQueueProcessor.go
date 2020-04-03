@@ -234,7 +234,7 @@ func GenerateReplicationTask(
 	task *persistenceblobs.ReplicationTaskInfo,
 	historyV2Mgr persistence.HistoryManager,
 	metricsClient metrics.Client,
-	history *historypb.History,
+	history *eventpb.History,
 	shardID *int,
 ) (*replication.ReplicationTask, string, error) {
 	var err error
@@ -252,7 +252,7 @@ func GenerateReplicationTask(
 	}
 
 	var newRunID string
-	var newRunHistory *historypb.History
+	var newRunHistory *eventpb.History
 	events := history.Events
 	if len(events) > 0 {
 		lastEvent := events[len(events)-1]
@@ -332,17 +332,17 @@ func GetAllHistory(
 	nextEventID int64,
 	branchToken []byte,
 	shardID *int,
-) (*historypb.History, []*historypb.History, error) {
+) (*eventpb.History, []*eventpb.History, error) {
 
 	// overall result
-	var historyEvents []*historypb.HistoryEvent
-	var historyBatches []*historypb.History
+	var historyEvents []*eventpb.HistoryEvent
+	var historyBatches []*eventpb.History
 	historySize := 0
 	var err error
 
 	// variable used for each page
-	var pageHistoryEvents []*historypb.HistoryEvent
-	var pageHistoryBatches []*historypb.History
+	var pageHistoryEvents []*eventpb.HistoryEvent
+	var pageHistoryBatches []*eventpb.History
 	var pageToken []byte
 	var pageHistorySize int
 
@@ -366,7 +366,7 @@ func GetAllHistory(
 		metricsClient.RecordTimer(metrics.ReplicatorQueueProcessorScope, metrics.HistorySize, time.Duration(historySize))
 	}
 
-	history := &historypb.History{
+	history := &eventpb.History{
 		Events: historyEvents,
 	}
 	return history, historyBatches, nil
@@ -382,10 +382,10 @@ func PaginateHistory(
 	tokenIn []byte,
 	pageSize int,
 	shardID *int,
-) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, error) {
+) ([]*eventpb.HistoryEvent, []*eventpb.History, []byte, int, error) {
 
-	var historyEvents []*historypb.HistoryEvent
-	var historyBatches []*historypb.History
+	var historyEvents []*eventpb.HistoryEvent
+	var historyBatches []*eventpb.History
 	var tokenOut []byte
 	var historySize int
 

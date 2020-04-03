@@ -148,7 +148,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 			LastEventId: 999,
 		},
 	}
-	eventBatch := []*historypb.HistoryEvent{
+	eventBatch := []*eventpb.HistoryEvent{
 		{
 			EventId:   2,
 			Version:   123,
@@ -238,7 +238,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 		},
 	}
 
-	beginingEventBatch := []*historypb.HistoryEvent{
+	beginingEventBatch := []*eventpb.HistoryEvent{
 		{
 			EventId:   4,
 			Version:   123,
@@ -250,20 +250,20 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
 			EventType: eventpb.EventTypeWorkflowExecutionContinuedAsNew,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: midRunID1,
 			}},
 		},
 	}
 	beginingBlob := s.serializeEvents(beginingEventBatch)
 
-	midEventBatch1 := []*historypb.HistoryEvent{
+	midEventBatch1 := []*eventpb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
 			EventType: eventpb.EventTypeWorkflowExecutionStarted,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: beginingRunID,
 			}},
 		},
@@ -276,13 +276,13 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	}
 	midBlob1 := s.serializeEvents(midEventBatch1)
 
-	midEventBatch2 := []*historypb.HistoryEvent{
+	midEventBatch2 := []*eventpb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
 			EventType: eventpb.EventTypeWorkflowExecutionStarted,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: "",
 			}},
 		},
@@ -291,20 +291,20 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
 			EventType: eventpb.EventTypeWorkflowExecutionContinuedAsNew,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: endingRunID,
 			}},
 		},
 	}
 	midBlob2 := s.serializeEvents(midEventBatch2)
 
-	endingEventBatch := []*historypb.HistoryEvent{
+	endingEventBatch := []*eventpb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
 			EventType: eventpb.EventTypeWorkflowExecutionStarted,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: midRunID2,
 			}},
 		},
@@ -465,7 +465,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		},
 	}
 
-	eventBatch1 := []*historypb.HistoryEvent{
+	eventBatch1 := []*eventpb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
@@ -487,7 +487,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 	}
 	blob1 := s.serializeEvents(eventBatch1)
 
-	eventBatch2 := []*historypb.HistoryEvent{
+	eventBatch2 := []*eventpb.HistoryEvent{
 		{
 			EventId:   4,
 			Version:   123,
@@ -587,7 +587,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		},
 	}
 
-	eventBatch1 := []*historypb.HistoryEvent{
+	eventBatch1 := []*eventpb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
@@ -609,7 +609,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 	}
 	blob1 := s.serializeEvents(eventBatch1)
 
-	eventBatch2 := []*historypb.HistoryEvent{
+	eventBatch2 := []*eventpb.HistoryEvent{
 		{
 			EventId:   4,
 			Version:   123,
@@ -621,20 +621,20 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 			Version:   123,
 			Timestamp: time.Now().UnixNano(),
 			EventType: eventpb.EventTypeWorkflowExecutionContinuedAsNew,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: newRunID,
 			}},
 		},
 	}
 	blob2 := s.serializeEvents(eventBatch2)
 
-	eventBatchNew := []*historypb.HistoryEvent{
+	eventBatchNew := []*eventpb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   223,
 			Timestamp: time.Now().UnixNano(),
 			EventType: eventpb.EventTypeWorkflowExecutionStarted,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 				ContinuedExecutionRunId: runID,
 			}},
 		},
@@ -851,7 +851,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), request).Return(nil, retryErr).Times(1)
 
-	missingEventBatch := []*historypb.HistoryEvent{
+	missingEventBatch := []*eventpb.HistoryEvent{
 		{
 			EventId:   1,
 			Version:   123,
@@ -963,7 +963,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 			LastEventId: lastEventID,
 		},
 	}
-	eventBatch := []*historypb.HistoryEvent{
+	eventBatch := []*eventpb.HistoryEvent{
 		{
 			EventId:   lastEventID + 1,
 			Version:   lastVersion + 1,
@@ -1016,7 +1016,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 			LastEventId: lastEventID,
 		},
 	}
-	eventBatch := []*historypb.HistoryEvent{
+	eventBatch := []*eventpb.HistoryEvent{
 		{
 			EventId:   common.FirstEventID,
 			Version:   1,
@@ -1103,13 +1103,13 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 	currentRunID := uuid.New()
 
 	prepareFn := func(prevRunID string) {
-		eventBatch := []*historypb.HistoryEvent{
+		eventBatch := []*eventpb.HistoryEvent{
 			{
 				EventId:   1,
 				Version:   123,
 				Timestamp: time.Now().UnixNano(),
 				EventType: eventpb.EventTypeWorkflowExecutionStarted,
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 					ContinuedExecutionRunId: prevRunID,
 				}},
 			},
@@ -1180,7 +1180,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID_EmptyEvents() {
 
 func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 	nextRunID := uuid.New()
-	eventBatchIn := []*historypb.HistoryEvent{
+	eventBatchIn := []*eventpb.HistoryEvent{
 		{
 			EventId:   233,
 			Version:   123,
@@ -1192,7 +1192,7 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 			Version:   223,
 			Timestamp: time.Now().UnixNano(),
 			EventType: eventpb.EventTypeWorkflowExecutionContinuedAsNew,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
 				NewExecutionRunId: nextRunID,
 			}},
 		},
@@ -1209,7 +1209,7 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 }
 
 func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
-	eventBatchIn := []*historypb.HistoryEvent{
+	eventBatchIn := []*eventpb.HistoryEvent{
 		{
 			EventId:   233,
 			Version:   123,
@@ -1221,7 +1221,7 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
 			Version:    223,
 			Timestamp:  time.Now().UnixNano(),
 			EventType:  eventpb.EventTypeWorkflowExecutionCanceled,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{}},
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &eventpb.WorkflowExecutionCancelRequestedEventAttributes{}},
 		},
 	}
 	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeProto3)
@@ -1236,20 +1236,20 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
 }
 
 func (s *historyRereplicatorSuite) TestDeserializeBlob() {
-	eventBatchIn := []*historypb.HistoryEvent{
+	eventBatchIn := []*eventpb.HistoryEvent{
 		{
 			EventId:    1,
 			Version:    123,
 			Timestamp:  time.Now().UnixNano(),
 			EventType:  eventpb.EventTypeWorkflowExecutionStarted,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 		},
 		{
 			EventId:    2,
 			Version:    223,
 			Timestamp:  time.Now().UnixNano(),
 			EventType:  eventpb.EventTypeDecisionTaskScheduled,
-			Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}},
+			Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}},
 		},
 	}
 
@@ -1264,7 +1264,7 @@ func (s *historyRereplicatorSuite) TestDeserializeBlob() {
 	s.Equal(eventBatchIn, eventBatchOut)
 }
 
-func (s *historyRereplicatorSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
+func (s *historyRereplicatorSuite) serializeEvents(events []*eventpb.HistoryEvent) *commonpb.DataBlob {
 	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
 	s.Nil(err)
 	return &commonpb.DataBlob{

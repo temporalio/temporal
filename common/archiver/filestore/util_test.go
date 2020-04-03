@@ -189,9 +189,9 @@ func (s *UtilSuite) TestListFilesByPrefix() {
 }
 
 func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
-	historyBatches := []*historypb.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId: common.FirstEventID,
 					Version: 1,
@@ -199,7 +199,7 @@ func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
 			},
 		},
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -208,7 +208,7 @@ func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
 				{
 					EventId: common.FirstEventID + 2,
 					Version: 2,
-					Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
+					Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
 						Identity: "some random identity",
 					}},
 				},
@@ -332,15 +332,15 @@ func (s *UtilSuite) TestExtractCloseFailoverVersion() {
 
 func (s *UtilSuite) TestHistoryMutated() {
 	testCases := []struct {
-		historyBatches []*historypb.History
+		historyBatches []*eventpb.History
 		request        *archiver.ArchiveHistoryRequest
 		isLast         bool
 		isMutated      bool
 	}{
 		{
-			historyBatches: []*historypb.History{
+			historyBatches: []*eventpb.History{
 				{
-					Events: []*historypb.HistoryEvent{
+					Events: []*eventpb.HistoryEvent{
 						{
 							Version: 15,
 						},
@@ -353,9 +353,9 @@ func (s *UtilSuite) TestHistoryMutated() {
 			isMutated: true,
 		},
 		{
-			historyBatches: []*historypb.History{
+			historyBatches: []*eventpb.History{
 				{
-					Events: []*historypb.HistoryEvent{
+					Events: []*eventpb.HistoryEvent{
 						{
 							EventId: 33,
 							Version: 10,
@@ -363,7 +363,7 @@ func (s *UtilSuite) TestHistoryMutated() {
 					},
 				},
 				{
-					Events: []*historypb.HistoryEvent{
+					Events: []*eventpb.HistoryEvent{
 						{
 							EventId: 49,
 							Version: 10,
@@ -383,9 +383,9 @@ func (s *UtilSuite) TestHistoryMutated() {
 			isMutated: true,
 		},
 		{
-			historyBatches: []*historypb.History{
+			historyBatches: []*eventpb.History{
 				{
-					Events: []*historypb.HistoryEvent{
+					Events: []*eventpb.HistoryEvent{
 						{
 							Version: 9,
 						},
@@ -399,9 +399,9 @@ func (s *UtilSuite) TestHistoryMutated() {
 			isMutated: true,
 		},
 		{
-			historyBatches: []*historypb.History{
+			historyBatches: []*eventpb.History{
 				{
-					Events: []*historypb.HistoryEvent{
+					Events: []*eventpb.HistoryEvent{
 						{
 							EventId: 20,
 							Version: 10,
@@ -409,7 +409,7 @@ func (s *UtilSuite) TestHistoryMutated() {
 					},
 				},
 				{
-					Events: []*historypb.HistoryEvent{
+					Events: []*eventpb.HistoryEvent{
 						{
 							EventId: 33,
 							Version: 10,

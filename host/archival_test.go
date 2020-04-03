@@ -253,7 +253,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		wt *commonpb.WorkflowType,
 		previousStartedEventID int64,
 		startedEventID int64,
-		history *historypb.History,
+		history *eventpb.History,
 	) ([]byte, []*decisionpb.Decision, error) {
 		runIDs[runCounter-1] = execution.GetRunId()
 		if activityCounter < activityCount {

@@ -51,12 +51,12 @@ type (
 		getWorkflowID() string
 		getRunID() string
 		getEventTime() time.Time
-		getFirstEvent() *historypb.HistoryEvent
-		getLastEvent() *historypb.HistoryEvent
+		getFirstEvent() *eventpb.HistoryEvent
+		getLastEvent() *eventpb.HistoryEvent
 		getVersion() int64
 		getSourceCluster() string
-		getEvents() []*historypb.HistoryEvent
-		getNewEvents() []*historypb.HistoryEvent
+		getEvents() []*eventpb.HistoryEvent
+		getNewEvents() []*eventpb.HistoryEvent
 		getLogger() log.Logger
 		getVersionHistory() *persistence.VersionHistory
 		isWorkflowReset() bool
@@ -69,11 +69,11 @@ type (
 		namespaceID    string
 		execution      *executionpb.WorkflowExecution
 		version        int64
-		firstEvent     *historypb.HistoryEvent
-		lastEvent      *historypb.HistoryEvent
+		firstEvent     *eventpb.HistoryEvent
+		lastEvent      *eventpb.HistoryEvent
 		eventTime      time.Time
-		events         []*historypb.HistoryEvent
-		newEvents      []*historypb.HistoryEvent
+		events         []*eventpb.HistoryEvent
+		newEvents      []*eventpb.HistoryEvent
 		versionHistory *persistence.VersionHistory
 
 		startTime time.Time
@@ -185,11 +185,11 @@ func (t *nDCReplicationTaskImpl) getEventTime() time.Time {
 	return t.eventTime
 }
 
-func (t *nDCReplicationTaskImpl) getFirstEvent() *historypb.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getFirstEvent() *eventpb.HistoryEvent {
 	return t.firstEvent
 }
 
-func (t *nDCReplicationTaskImpl) getLastEvent() *historypb.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getLastEvent() *eventpb.HistoryEvent {
 	return t.lastEvent
 }
 
@@ -201,11 +201,11 @@ func (t *nDCReplicationTaskImpl) getSourceCluster() string {
 	return t.sourceCluster
 }
 
-func (t *nDCReplicationTaskImpl) getEvents() []*historypb.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getEvents() []*eventpb.HistoryEvent {
 	return t.events
 }
 
-func (t *nDCReplicationTaskImpl) getNewEvents() []*historypb.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getNewEvents() []*eventpb.HistoryEvent {
 	return t.newEvents
 }
 
@@ -287,7 +287,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 		lastEvent:      newLastEvent,
 		eventTime:      time.Unix(0, newEventTime),
 		events:         newHistoryEvents,
-		newEvents:      []*historypb.HistoryEvent{},
+		newEvents:      []*eventpb.HistoryEvent{},
 		versionHistory: newVersionHistory,
 
 		startTime: taskStartTime,
@@ -301,7 +301,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 func validateReplicateEventsRequest(
 	historySerializer persistence.PayloadSerializer,
 	request *historyservice.ReplicateEventsV2Request,
-) ([]*historypb.HistoryEvent, []*historypb.HistoryEvent, error) {
+) ([]*eventpb.HistoryEvent, []*eventpb.HistoryEvent, error) {
 
 	// TODO add validation on version history
 
@@ -354,7 +354,7 @@ func validateUUID(input string) bool {
 	return true
 }
 
-func validateEvents(events []*historypb.HistoryEvent) (int64, error) {
+func validateEvents(events []*eventpb.HistoryEvent) (int64, error) {
 
 	firstEvent := events[0]
 	firstEventID := firstEvent.GetEventId()
@@ -374,7 +374,7 @@ func validateEvents(events []*historypb.HistoryEvent) (int64, error) {
 func deserializeBlob(
 	historySerializer persistence.PayloadSerializer,
 	blob *commonpb.DataBlob,
-) ([]*historypb.HistoryEvent, error) {
+) ([]*eventpb.HistoryEvent, error) {
 
 	if blob == nil {
 		return nil, nil

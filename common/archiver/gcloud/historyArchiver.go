@@ -231,7 +231,7 @@ func (h *historyArchiver) Get(ctx context.Context, URI archiver.URI, request *ar
 	}
 
 	response := &archiver.GetHistoryResponse{}
-	response.HistoryBatches = []*historypb.History{}
+	response.HistoryBatches = []*eventpb.History{}
 	numOfEvents := 0
 	encoder := codec.NewJSONPBEncoder()
 
@@ -328,7 +328,7 @@ func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIte
 	return historyBlob, nil
 }
 
-func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*historypb.History, isLast bool) bool {
+func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*eventpb.History, isLast bool) bool {
 	lastBatch := historyBatches[len(historyBatches)-1].Events
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()

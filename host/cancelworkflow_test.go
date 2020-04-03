@@ -73,7 +73,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -221,7 +221,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -271,7 +271,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
 	foreignDtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
@@ -391,7 +391,7 @@ GetHistoryLoop:
 		executionCancelled = true
 
 		// Find cancel requested event and verify it.
-		var cancelRequestEvent *historypb.HistoryEvent
+		var cancelRequestEvent *eventpb.HistoryEvent
 		for _, x := range history.Events {
 			if x.EventType == eventpb.EventTypeWorkflowExecutionCancelRequested {
 				cancelRequestEvent = x
@@ -438,7 +438,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)

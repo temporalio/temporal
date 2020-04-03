@@ -474,8 +474,8 @@ func (c *historyRereplicationContext) getNextRunID(blob *commonpb.DataBlob) (str
 	return attr.GetNewExecutionRunId(), nil
 }
 
-func (c *historyRereplicationContext) deserializeBlob(blob *commonpb.DataBlob) ([]*historypb.HistoryEvent, error) {
-	var historyEvents []*historypb.HistoryEvent
+func (c *historyRereplicationContext) deserializeBlob(blob *commonpb.DataBlob) ([]*eventpb.HistoryEvent, error) {
+	var historyEvents []*eventpb.HistoryEvent
 
 	switch blob.GetEncodingType() {
 	case commonpb.EncodingTypeProto3:

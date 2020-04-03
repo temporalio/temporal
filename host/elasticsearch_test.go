@@ -199,7 +199,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 
 	// test upsert
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
 			DecisionType: decisionpb.DecisionTypeUpsertWorkflowSearchAttributes,
@@ -860,7 +860,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 
 	decisionCount := 0
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
 			DecisionType: decisionpb.DecisionTypeUpsertWorkflowSearchAttributes,
@@ -1058,7 +1058,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
 			DecisionType: decisionpb.DecisionTypeUpsertWorkflowSearchAttributes,

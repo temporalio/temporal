@@ -179,13 +179,13 @@ func (s *IntegrationBase) randomizeStr(id string) string {
 
 func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *executionpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
-	history := &historypb.History{
+	history := &eventpb.History{
 		Events: events,
 	}
 	common.PrettyPrintHistory(history, s.Logger)
 }
 
-func (s *IntegrationBase) getHistory(namespace string, execution *executionpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (s *IntegrationBase) getHistory(namespace string, execution *executionpb.WorkflowExecution) []*eventpb.HistoryEvent {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,

@@ -95,10 +95,10 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	workflowID := "events-cache-hit-success-workflow-id"
 	runID := "events-cache-hit-success-run-id"
 	eventID := int64(23)
-	event := &historypb.HistoryEvent{
+	event := &eventpb.HistoryEvent{
 		EventId:    eventID,
 		EventType:  eventpb.EventTypeActivityTaskStarted,
-		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{}},
 	}
 
 	s.cache.putEvent(namespaceID, workflowID, runID, eventID, event)
@@ -111,35 +111,35 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	namespaceID := "events-cache-miss-multi-events-batch-v2-success-namespace"
 	workflowID := "events-cache-miss-multi-events-batch-v2-success-workflow-id"
 	runID := "events-cache-miss-multi-events-batch-v2-success-run-id"
-	event1 := &historypb.HistoryEvent{
+	event1 := &eventpb.HistoryEvent{
 		EventId:    11,
 		EventType:  eventpb.EventTypeDecisionTaskCompleted,
-		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{}},
 	}
-	event2 := &historypb.HistoryEvent{
+	event2 := &eventpb.HistoryEvent{
 		EventId:    12,
 		EventType:  eventpb.EventTypeActivityTaskScheduled,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
-	event3 := &historypb.HistoryEvent{
+	event3 := &eventpb.HistoryEvent{
 		EventId:    13,
 		EventType:  eventpb.EventTypeActivityTaskScheduled,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
-	event4 := &historypb.HistoryEvent{
+	event4 := &eventpb.HistoryEvent{
 		EventId:    14,
 		EventType:  eventpb.EventTypeActivityTaskScheduled,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
-	event5 := &historypb.HistoryEvent{
+	event5 := &eventpb.HistoryEvent{
 		EventId:    15,
 		EventType:  eventpb.EventTypeActivityTaskScheduled,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
-	event6 := &historypb.HistoryEvent{
+	event6 := &eventpb.HistoryEvent{
 		EventId:    16,
 		EventType:  eventpb.EventTypeActivityTaskScheduled,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
 
 	shardId := 10
@@ -151,7 +151,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6},
+		HistoryEvents:    []*eventpb.HistoryEvent{event1, event2, event3, event4, event5, event6},
 		NextPageToken:    nil,
 		LastFirstEventID: event1.GetEventId(),
 	}, nil)
@@ -189,15 +189,15 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	namespaceID := "events-cache-disable-success-namespace"
 	workflowID := "events-cache-disable-success-workflow-id"
 	runID := "events-cache-disable-success-run-id"
-	event1 := &historypb.HistoryEvent{
+	event1 := &eventpb.HistoryEvent{
 		EventId:    23,
 		EventType:  eventpb.EventTypeActivityTaskStarted,
-		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{}},
 	}
-	event2 := &historypb.HistoryEvent{
+	event2 := &eventpb.HistoryEvent{
 		EventId:    32,
 		EventType:  eventpb.EventTypeActivityTaskStarted,
-		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
+		Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{}},
 	}
 
 	shardId := 10
@@ -209,7 +209,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    []*historypb.HistoryEvent{event2},
+		HistoryEvents:    []*eventpb.HistoryEvent{event2},
 		NextPageToken:    nil,
 		LastFirstEventID: event2.GetEventId(),
 	}, nil)

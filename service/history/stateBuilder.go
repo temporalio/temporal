@@ -52,8 +52,8 @@ type (
 			namespaceID string,
 			requestID string,
 			execution executionpb.WorkflowExecution,
-			history []*historypb.HistoryEvent,
-			newRunHistory []*historypb.HistoryEvent,
+			history []*eventpb.HistoryEvent,
+			newRunHistory []*eventpb.HistoryEvent,
 			newRunNDC bool,
 		) (mutableState, error)
 	}
@@ -97,8 +97,8 @@ func (b *stateBuilderImpl) applyEvents(
 	namespaceID string,
 	requestID string,
 	execution executionpb.WorkflowExecution,
-	history []*historypb.HistoryEvent,
-	newRunHistory []*historypb.HistoryEvent,
+	history []*eventpb.HistoryEvent,
+	newRunHistory []*eventpb.HistoryEvent,
 	newRunNDC bool,
 ) (mutableState, error) {
 

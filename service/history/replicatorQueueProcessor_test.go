@@ -503,11 +503,11 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 		ShardID:       &shardID,
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*historypb.HistoryEvent{
+		HistoryEvents: []*eventpb.HistoryEvent{
 			{
 				EventId: int64(1),
 				// EventType:  eventpb.EventTypeWorkflowExecutionStarted,
-				// Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
+				// Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 			},
 		},
 		NextPageToken:    []byte{},

@@ -209,7 +209,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 		"",
 		"",
 		int64(0),
-	).Return(&historypb.HistoryEvent{}, nil).Times(1)
+	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()

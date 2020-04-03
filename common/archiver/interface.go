@@ -66,7 +66,7 @@ type (
 
 	// GetHistoryResponse is the response of Get archived history
 	GetHistoryResponse struct {
-		HistoryBatches []*historypb.History
+		HistoryBatches []*eventpb.History
 		NextPageToken  []byte
 	}
 

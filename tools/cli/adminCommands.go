@@ -87,7 +87,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	if len(history) == 0 {
 		ErrorAndExit("no events", nil)
 	}
-	allEvents := &historypb.History{}
+	allEvents := &eventpb.History{}
 	totalSize := 0
 	for idx, b := range history {
 		totalSize += len(b.Data)

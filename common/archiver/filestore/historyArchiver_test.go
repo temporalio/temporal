@@ -75,8 +75,8 @@ type historyArchiverSuite struct {
 	container          *archiver.HistoryBootstrapContainer
 	testArchivalURI    archiver.URI
 	testGetDirectory   string
-	historyBatchesV1   []*historypb.History
-	historyBatchesV100 []*historypb.History
+	historyBatchesV1   []*eventpb.History
+	historyBatchesV100 []*eventpb.History
 }
 
 func TestHistoryArchiverSuite(t *testing.T) {
@@ -213,9 +213,9 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*historypb.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -277,9 +277,9 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*historypb.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -293,7 +293,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			},
 		},
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
 					Timestamp: time.Now().UnixNano(),
@@ -459,7 +459,7 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 		PageSize:             1,
 		CloseFailoverVersion: &testCloseFailoverVersion,
 	}
-	var combinedHistory []*historypb.History
+	var combinedHistory []*eventpb.History
 
 	URI, err := archiver.NewURI("file://" + s.testGetDirectory)
 	s.NoError(err)
@@ -545,9 +545,9 @@ func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.H
 }
 
 func (s *historyArchiverSuite) setupHistoryDirectory() {
-	s.historyBatchesV1 = []*historypb.History{
+	s.historyBatchesV1 = []*eventpb.History{
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
 					Timestamp: time.Now().UnixNano(),
@@ -557,9 +557,9 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 		},
 	}
 
-	s.historyBatchesV100 = []*historypb.History{
+	s.historyBatchesV100 = []*eventpb.History{
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -573,7 +573,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			},
 		},
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
 					Timestamp: time.Now().UnixNano(),
@@ -587,7 +587,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 	s.writeHistoryBatchesForGetTest(s.historyBatchesV100, testCloseFailoverVersion)
 }
 
-func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*historypb.History, version int64) {
+func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*eventpb.History, version int64) {
 	data, err := encodeHistories(historyBatches)
 	s.Require().NoError(err)
 	filename := constructHistoryFilename(testNamespaceID, testWorkflowID, testRunID, version)

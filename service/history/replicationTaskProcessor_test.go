@@ -221,7 +221,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	namespaceID := uuid.NewRandom()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom()
-	events := []*historypb.HistoryEvent{
+	events := []*eventpb.HistoryEvent{
 		{
 			EventId: 1,
 			Version: 1,

@@ -412,7 +412,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 func (m *historyV2ManagerImpl) readHistoryBranch(
 	byBatch bool,
 	request *ReadHistoryBranchRequest,
-) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, int64, error) {
+) ([]*eventpb.HistoryEvent, []*eventpb.History, []byte, int, int64, error) {
 
 	dataBlobs, token, dataSize, logger, err := m.readRawHistoryBranch(request)
 	if err != nil {
@@ -420,8 +420,8 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	}
 	defaultLastEventID := request.MinEventID - 1
 
-	historyEvents := make([]*historypb.HistoryEvent, 0, request.PageSize)
-	historyEventBatches := make([]*historypb.History, 0, request.PageSize)
+	historyEvents := make([]*eventpb.HistoryEvent, 0, request.PageSize)
+	historyEventBatches := make([]*eventpb.History, 0, request.PageSize)
 	// first_event_id of the last batch
 	lastFirstEventID := common.EmptyEventID
 
@@ -476,7 +476,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 		token.LastEventVersion = firstEvent.GetVersion()
 		token.LastEventID = lastEvent.GetEventId()
 		if byBatch {
-			historyEventBatches = append(historyEventBatches, &historypb.History{Events: events})
+			historyEventBatches = append(historyEventBatches, &eventpb.History{Events: events})
 		} else {
 			historyEvents = append(historyEvents, events...)
 		}

@@ -91,9 +91,9 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	workflowComplete := false
 	activityScheduled := false
 	activityData := int32(1)
-	var signalEvent *historypb.HistoryEvent
+	var signalEvent *eventpb.HistoryEvent
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -264,10 +264,10 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	workflowComplete := false
 	activityScheduled := false
 	activityData := int32(1)
-	var signalEvent *historypb.HistoryEvent
+	var signalEvent *eventpb.HistoryEvent
 	numOfSignaledEvent := 0
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -421,7 +421,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -475,9 +475,9 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	workflowComplete := false
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
-	var signalEvent *historypb.HistoryEvent
+	var signalEvent *eventpb.HistoryEvent
 	foreignDtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
@@ -639,7 +639,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoDecisionTaskCreated() {
 	// decider logic
 	var decisionTaskDelay time.Duration
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		decisionTaskDelay = time.Now().Sub(now)
 
 		return nil, []*decisionpb.Decision{{
@@ -714,7 +714,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -768,9 +768,9 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	workflowComplete := false
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
-	var signalEvent *historypb.HistoryEvent
+	var signalEvent *eventpb.HistoryEvent
 	foreignDtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
@@ -913,7 +913,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -1038,7 +1038,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -1171,9 +1171,9 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	activityScheduled := false
 	activityData := int32(1)
 	newWorkflowStarted := false
-	var signalEvent, startedEvent *historypb.HistoryEvent
+	var signalEvent, startedEvent *eventpb.HistoryEvent
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -1431,7 +1431,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)

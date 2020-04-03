@@ -152,7 +152,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*historypb.HistoryEvent{{EventId: 1}},
+		Events: []*eventpb.HistoryEvent{{EventId: 1}},
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -262,7 +262,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*historypb.HistoryEvent{{EventId: 1}},
+		Events: []*eventpb.HistoryEvent{{EventId: 1}},
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -350,7 +350,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*historypb.HistoryEvent{{
+		Events: []*eventpb.HistoryEvent{{
 			EventType: eventpb.EventTypeWorkflowExecutionSignaled,
 		}},
 		NamespaceID: namespaceID,
@@ -404,7 +404,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*historypb.HistoryEvent{{
+		Events: []*eventpb.HistoryEvent{{
 			EventType: eventpb.EventTypeWorkflowExecutionSignaled,
 		}},
 		NamespaceID: namespaceID,

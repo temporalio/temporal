@@ -163,10 +163,10 @@ func (i *historyIterator) GetState() ([]byte, error) {
 	return json.Marshal(i.historyIteratorState)
 }
 
-func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*historypb.History, historyIteratorState, error) {
+func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*eventpb.History, historyIteratorState, error) {
 	size := 0
 	targetSize := i.targetHistoryBlobSize
-	var historyBatches []*historypb.History
+	var historyBatches []*eventpb.History
 	newIterState := historyIteratorState{}
 	for size < targetSize {
 		currHistoryBatches, err := i.readHistory(firstEventID)
@@ -211,7 +211,7 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*historypb.H
 	return historyBatches, newIterState, nil
 }
 
-func (i *historyIterator) readHistory(firstEventID int64) ([]*historypb.History, error) {
+func (i *historyIterator) readHistory(firstEventID int64) ([]*eventpb.History, error) {
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken: i.request.BranchToken,
 		MinEventID:  firstEventID,

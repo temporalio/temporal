@@ -53,9 +53,9 @@ type utilSuite struct {
 }
 
 func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
-	historyBatches := []*historypb.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId: common.FirstEventID,
 					Version: 1,
@@ -63,7 +63,7 @@ func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 			},
 		},
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -72,7 +72,7 @@ func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 				{
 					EventId: common.FirstEventID + 2,
 					Version: 2,
-					Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
+					Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
 						Identity: "some random identity",
 					}},
 				},

@@ -141,7 +141,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	startEventVersion := int64(100)
 	token := []byte{1}
 	pageSize := defaultPageSize
-	eventBatch := []*historypb.HistoryEvent{
+	eventBatch := []*eventpb.HistoryEvent{
 		{
 			EventId:   2,
 			Version:   123,
@@ -368,7 +368,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 	s.Equal(response, out)
 }
 
-func (s *nDCHistoryResenderSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
+func (s *nDCHistoryResenderSuite) serializeEvents(events []*eventpb.HistoryEvent) *commonpb.DataBlob {
 	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
 	s.Nil(err)
 	return &commonpb.DataBlob{

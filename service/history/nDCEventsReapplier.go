@@ -46,9 +46,9 @@ type (
 		reapplyEvents(
 			ctx context.Context,
 			msBuilder mutableState,
-			historyEvents []*historypb.HistoryEvent,
+			historyEvents []*eventpb.HistoryEvent,
 			runID string,
-		) ([]*historypb.HistoryEvent, error)
+		) ([]*eventpb.HistoryEvent, error)
 	}
 
 	nDCEventsReapplierImpl struct {
@@ -71,11 +71,11 @@ func newNDCEventsReapplier(
 func (r *nDCEventsReapplierImpl) reapplyEvents(
 	_ context.Context,
 	msBuilder mutableState,
-	historyEvents []*historypb.HistoryEvent,
+	historyEvents []*eventpb.HistoryEvent,
 	runID string,
-) ([]*historypb.HistoryEvent, error) {
+) ([]*eventpb.HistoryEvent, error) {
 
-	var reappliedEvents []*historypb.HistoryEvent
+	var reappliedEvents []*eventpb.HistoryEvent
 	for _, event := range historyEvents {
 		switch event.GetEventType() {
 		case eventpb.EventTypeWorkflowExecutionSignaled:

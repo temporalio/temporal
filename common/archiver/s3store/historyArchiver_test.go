@@ -342,9 +342,9 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*historypb.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -406,9 +406,9 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*historypb.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -422,7 +422,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			},
 		},
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
 					Timestamp: time.Now().UnixNano(),
@@ -570,7 +570,7 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 		PageSize:             1,
 		CloseFailoverVersion: &testCloseFailoverVersion,
 	}
-	var combinedHistory []*historypb.History
+	var combinedHistory []*eventpb.History
 
 	URI, err := archiver.NewURI(testBucketURI)
 	s.NoError(err)
@@ -652,9 +652,9 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Header: &archiverproto.HistoryBlobHeader{
 				IsLast: true,
 			},
-			Body: []*historypb.History{
+			Body: []*eventpb.History{
 				{
-					Events: []*historypb.HistoryEvent{
+					Events: []*eventpb.HistoryEvent{
 						{
 							EventId:   testNextEventID - 1,
 							Timestamp: time.Now().UnixNano(),
@@ -671,9 +671,9 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Header: &archiverproto.HistoryBlobHeader{
 				IsLast: false,
 			},
-			Body: []*historypb.History{
+			Body: []*eventpb.History{
 				{
-					Events: []*historypb.HistoryEvent{
+					Events: []*eventpb.HistoryEvent{
 						{
 							EventId:   common.FirstEventID + 1,
 							Timestamp: time.Now().UnixNano(),
@@ -692,9 +692,9 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Header: &archiverproto.HistoryBlobHeader{
 				IsLast: true,
 			},
-			Body: []*historypb.History{
+			Body: []*eventpb.History{
 				{
-					Events: []*historypb.HistoryEvent{
+					Events: []*eventpb.HistoryEvent{
 						{
 							EventId:   testNextEventID - 1,
 							Timestamp: time.Now().UnixNano(),

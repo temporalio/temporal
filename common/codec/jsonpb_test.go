@@ -46,12 +46,12 @@ type (
 )
 
 var (
-	historyEvent = &historypb.HistoryEvent{
+	historyEvent = &eventpb.HistoryEvent{
 		Version:   1234,
 		EventId:   130,
 		Timestamp: 112345132134,
 		EventType: eventpb.EventTypeRequestCancelExternalWorkflowExecutionInitiated,
-		Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 			Namespace: "some random target namespace",
 			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: "some random target workflow ID",
@@ -83,14 +83,14 @@ func (s *jsonpbEncoderSuite) TestEncode() {
 }
 
 func (s *jsonpbEncoderSuite) TestDecode() {
-	var val historypb.HistoryEvent
+	var val eventpb.HistoryEvent
 	err := s.encoder.Decode([]byte(encodedHistoryEvent), &val)
 	s.Nil(err)
 	s.EqualValues(val, *historyEvent)
 }
 
 func (s *jsonpbEncoderSuite) TestEncodeSlice() {
-	var historyEvents []*historypb.HistoryEvent
+	var historyEvents []*eventpb.HistoryEvent
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
@@ -103,7 +103,7 @@ func (s *jsonpbEncoderSuite) TestEncodeSlice() {
 func (s *jsonpbEncoderSuite) TestDecodeSlice() {
 	historyEventsJSON := fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", encodedHistoryEvent)
 
-	var historyEvents []*historypb.HistoryEvent
+	var historyEvents []*eventpb.HistoryEvent
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)

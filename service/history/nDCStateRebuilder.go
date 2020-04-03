@@ -129,7 +129,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err != nil {
 		return nil, 0, err
 	}
-	firstEventBatch := batch.(*historypb.History).Events
+	firstEventBatch := batch.(*eventpb.History).Events
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
 	)
@@ -142,7 +142,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		if err != nil {
 			return nil, 0, err
 		}
-		events := batch.(*historypb.History).Events
+		events := batch.(*eventpb.History).Events
 		if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, events, requestID); err != nil {
 			return nil, 0, err
 		}
@@ -205,7 +205,7 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 func (r *nDCStateRebuilderImpl) applyEvents(
 	workflowIdentifier definition.WorkflowIdentifier,
 	stateBuilder stateBuilder,
-	events []*historypb.HistoryEvent,
+	events []*eventpb.HistoryEvent,
 	requestID string,
 ) error {
 

@@ -343,7 +343,7 @@ Update_History_Loop:
 
 		decisionHeartbeating := request.GetForceCreateNewDecisionTask() && len(request.Decisions) == 0
 		var decisionHeartbeatTimeout bool
-		var completedEvent *historypb.HistoryEvent
+		var completedEvent *eventpb.HistoryEvent
 		if decisionHeartbeating {
 			namespace := namespaceEntry.GetInfo().Name
 			timeout := handler.config.DecisionHeartbeatTimeout(namespace)

@@ -931,25 +931,25 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 
 	nextPageToken := []byte{'1', '2', '3'}
-	historyBatch1 := &historypb.History{
-		Events: []*historypb.HistoryEvent{
+	historyBatch1 := &eventpb.History{
+		Events: []*eventpb.HistoryEvent{
 			{EventId: 1},
 			{EventId: 2},
 		},
 	}
-	historyBatch2 := &historypb.History{
-		Events: []*historypb.HistoryEvent{
+	historyBatch2 := &eventpb.History{
+		Events: []*eventpb.HistoryEvent{
 			{EventId: 3},
 			{EventId: 4},
 			{EventId: 5},
 		},
 	}
-	history := &historypb.History{}
+	history := &eventpb.History{}
 	history.Events = append(history.Events, historyBatch1.Events...)
 	history.Events = append(history.Events, historyBatch2.Events...)
 	s.mockHistoryArchiver.On("Get", mock.Anything, mock.Anything, mock.Anything).Return(&archiver.GetHistoryResponse{
 		NextPageToken:  nextPageToken,
-		HistoryBatches: []*historypb.History{historyBatch1, historyBatch2},
+		HistoryBatches: []*eventpb.History{historyBatch1, historyBatch2},
 	}, nil)
 	s.mockArchiverProvider.On("GetHistoryArchiver", mock.Anything, mock.Anything).Return(s.mockHistoryArchiver, nil)
 
@@ -983,7 +983,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		ShardID:       common.IntPtr(shardID),
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*historypb.HistoryEvent{
+		HistoryEvents: []*eventpb.HistoryEvent{
 			{
 				EventId: int64(100),
 			},
@@ -1234,16 +1234,16 @@ func (s *workflowHandlerSuite) TestConvertIndexedKeyToThrift() {
 func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	events := make([]*historypb.HistoryEvent, 50)
+	events := make([]*eventpb.HistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
-		events[i] = &historypb.HistoryEvent{EventId: int64(i + 1)}
+		events[i] = &eventpb.HistoryEvent{EventId: int64(i + 1)}
 	}
-	var eventsWithHoles []*historypb.HistoryEvent
+	var eventsWithHoles []*eventpb.HistoryEvent
 	eventsWithHoles = append(eventsWithHoles, events[9:12]...)
 	eventsWithHoles = append(eventsWithHoles, events[20:31]...)
 
 	testCases := []struct {
-		events       []*historypb.HistoryEvent
+		events       []*eventpb.HistoryEvent
 		firstEventID int64
 		lastEventID  int64
 		isFirstPage  bool

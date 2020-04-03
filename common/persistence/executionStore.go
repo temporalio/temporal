@@ -197,9 +197,9 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 
 func (m *executionManagerImpl) DeserializeBufferedEvents(
 	blobs []*serialization.DataBlob,
-) ([]*historypb.HistoryEvent, error) {
+) ([]*eventpb.HistoryEvent, error) {
 
-	events := make([]*historypb.HistoryEvent, 0)
+	events := make([]*eventpb.HistoryEvent, 0)
 	for _, b := range blobs {
 		history, err := m.serializer.DeserializeBatchEvents(b)
 		if err != nil {

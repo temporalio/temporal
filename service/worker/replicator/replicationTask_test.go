@@ -826,11 +826,11 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replication.R
 				LastEventId: 0644,
 			},
 		},
-		History: &historypb.History{
-			Events: []*historypb.HistoryEvent{{EventId: 1}},
+		History: &eventpb.History{
+			Events: []*eventpb.HistoryEvent{{EventId: 1}},
 		},
-		NewRunHistory: &historypb.History{
-			Events: []*historypb.HistoryEvent{{EventId: 2}},
+		NewRunHistory: &eventpb.History{
+			Events: []*eventpb.HistoryEvent{{EventId: 2}},
 		},
 		ResetWorkflow: true,
 	}

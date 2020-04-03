@@ -335,8 +335,8 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success()
 		FirstEventId:    728,
 		NextEventId:     1015,
 		ReplicationInfo: map[string]*replication.ReplicationInfo{},
-		History: &historypb.History{
-			Events: []*historypb.HistoryEvent{{EventId: 1}},
+		History: &eventpb.History{
+			Events: []*eventpb.HistoryEvent{{EventId: 1}},
 		},
 		NewRunHistory: nil,
 		ResetWorkflow: true,
@@ -363,8 +363,8 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThe
 		FirstEventId:    728,
 		NextEventId:     1015,
 		ReplicationInfo: map[string]*replication.ReplicationInfo{},
-		History: &historypb.History{
-			Events: []*historypb.HistoryEvent{{EventId: 1}},
+		History: &eventpb.History{
+			Events: []*eventpb.HistoryEvent{{EventId: 1}},
 		},
 		NewRunHistory: nil,
 		ResetWorkflow: true,

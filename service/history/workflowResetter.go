@@ -63,7 +63,7 @@ type (
 			resetRequestID string,
 			currentWorkflow nDCWorkflow,
 			resetReason string,
-			additionalReapplyEvents []*historypb.HistoryEvent,
+			additionalReapplyEvents []*eventpb.HistoryEvent,
 		) error
 	}
 
@@ -113,7 +113,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 	resetRequestID string,
 	currentWorkflow nDCWorkflow,
 	resetReason string,
-	additionalReapplyEvents []*historypb.HistoryEvent,
+	additionalReapplyEvents []*eventpb.HistoryEvent,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(namespaceID)
@@ -175,7 +175,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetRequestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
-	additionalReapplyEvents []*historypb.HistoryEvent,
+	additionalReapplyEvents []*eventpb.HistoryEvent,
 ) (nDCWorkflow, error) {
 
 	resetWorkflow, err := r.replayResetWorkflow(
@@ -528,14 +528,14 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	))
 
 	var nextRunID string
-	var lastEvents []*historypb.HistoryEvent
+	var lastEvents []*eventpb.HistoryEvent
 
 	for iter.HasNext() {
 		batch, err := iter.Next()
 		if err != nil {
 			return "", err
 		}
-		lastEvents = batch.(*historypb.History).Events
+		lastEvents = batch.(*eventpb.History).Events
 		if err := r.reapplyEvents(mutableState, lastEvents); err != nil {
 			return "", err
 		}
@@ -552,7 +552,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 func (r *workflowResetterImpl) reapplyEvents(
 	mutableState mutableState,
-	events []*historypb.HistoryEvent,
+	events []*eventpb.HistoryEvent,
 ) error {
 
 	for _, event := range events {

@@ -99,7 +99,7 @@ func (r *conflictResolverImpl) reset(
 	var nextPageToken []byte
 	var resetMutableStateBuilder *mutableStateBuilder
 	var sBuilder stateBuilder
-	var history []*historypb.HistoryEvent
+	var history []*eventpb.HistoryEvent
 	var totalSize int64
 
 	eventsToApply := replayNextEventID - common.FirstEventID
@@ -201,7 +201,7 @@ func (r *conflictResolverImpl) reset(
 }
 
 func (r *conflictResolverImpl) getHistory(namespaceID string, execution executionpb.WorkflowExecution, firstEventID,
-	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*historypb.HistoryEvent, int, int64, []byte, error) {
+	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*eventpb.HistoryEvent, int, int64, []byte, error) {
 
 	response, err := r.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,

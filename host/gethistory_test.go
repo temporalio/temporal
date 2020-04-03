@@ -77,9 +77,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *historypb.HistoryEvent
+	// var signalEvent *eventpb.HistoryEvent
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -128,7 +128,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	}
 
 	// this function poll events from history side
-	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*historypb.HistoryEvent, []byte) {
+	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*eventpb.HistoryEvent, []byte) {
 		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &executionpb.WorkflowExecution{
@@ -145,8 +145,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		return responseInner.History.Events, responseInner.NextPageToken
 	}
 
-	var allEvents []*historypb.HistoryEvent
-	var events []*historypb.HistoryEvent
+	var allEvents []*eventpb.HistoryEvent
+	var events []*eventpb.HistoryEvent
 	var token []byte
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
@@ -243,9 +243,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *historypb.HistoryEvent
+	// var signalEvent *eventpb.HistoryEvent
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -294,7 +294,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	}
 
 	// this function poll events from history side
-	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*historypb.HistoryEvent, []byte) {
+	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*eventpb.HistoryEvent, []byte) {
 		closeEventOnly := filterpb.HistoryEventFilterTypeCloseEvent
 		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
@@ -313,7 +313,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		return responseInner.History.Events, responseInner.NextPageToken
 	}
 
-	var events []*historypb.HistoryEvent
+	var events []*eventpb.HistoryEvent
 	var token []byte
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
@@ -405,9 +405,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *historypb.HistoryEvent
+	// var signalEvent *eventpb.HistoryEvent
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -471,8 +471,8 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	}
 
 	serializer := persistence.NewPayloadSerializer()
-	convertBlob := func(blobs []*commonpb.DataBlob) []*historypb.HistoryEvent {
-		var events []*historypb.HistoryEvent
+	convertBlob := func(blobs []*commonpb.DataBlob) []*eventpb.HistoryEvent {
+		var events []*eventpb.HistoryEvent
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == commonpb.EncodingTypeProto3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
@@ -622,9 +622,9 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *historypb.HistoryEvent
+	// var signalEvent *eventpb.HistoryEvent
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -767,9 +767,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *historypb.HistoryEvent
+	// var signalEvent *eventpb.HistoryEvent
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -834,8 +834,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 
 	serializer := persistence.NewPayloadSerializer()
 
-	convertBlob := func(blobs []*commonpb.DataBlob) []*historypb.HistoryEvent {
-		var events []*historypb.HistoryEvent
+	convertBlob := func(blobs []*commonpb.DataBlob) []*eventpb.HistoryEvent {
+		var events []*eventpb.HistoryEvent
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == commonpb.EncodingTypeProto3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
@@ -967,9 +967,9 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *historypb.HistoryEvent
+	// var signalEvent *eventpb.HistoryEvent
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -1052,8 +1052,8 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 	}
 
 	serializer := persistence.NewPayloadSerializer()
-	convertBlob := func(blobs []*commonpb.DataBlob) []*historypb.HistoryEvent {
-		events := []*historypb.HistoryEvent{}
+	convertBlob := func(blobs []*commonpb.DataBlob) []*eventpb.HistoryEvent {
+		events := []*eventpb.HistoryEvent{}
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == commonpb.EncodingTypeProto3)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
@@ -1069,8 +1069,8 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 	var blobs []*commonpb.DataBlob
 	var token []byte
 
-	var allEvents []*historypb.HistoryEvent
-	var events []*historypb.HistoryEvent
+	var allEvents []*eventpb.HistoryEvent
+	var events []*eventpb.HistoryEvent
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
 	start := time.Now()

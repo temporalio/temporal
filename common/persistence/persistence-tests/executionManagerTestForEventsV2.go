@@ -909,7 +909,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		ScheduleID:     111,
 		StartedID:      112,
 		ActivityID:     uuid.New(),
-		ScheduledEvent: &historypb.HistoryEvent{EventId: 1},
+		ScheduledEvent: &eventpb.HistoryEvent{EventId: 1},
 	}}
 
 	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{
@@ -923,7 +923,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		InitiatedID:     131,
 		StartedID:       132,
 		CreateRequestID: uuid.New(),
-		InitiatedEvent:  &historypb.HistoryEvent{EventId: 1},
+		InitiatedEvent:  &eventpb.HistoryEvent{EventId: 1},
 	}}
 
 	insertSignalInfos := []*persistenceblobs.SignalInfo{{
@@ -1324,7 +1324,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		ScheduleID:     111,
 		StartedID:      112,
 		ActivityID:     uuid.New(),
-		ScheduledEvent: &historypb.HistoryEvent{EventId: 1},
+		ScheduledEvent: &eventpb.HistoryEvent{EventId: 1},
 	}}
 
 	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{
@@ -1338,7 +1338,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		InitiatedID:     131,
 		StartedID:       132,
 		CreateRequestID: uuid.New(),
-		InitiatedEvent:  &historypb.HistoryEvent{EventId: 1},
+		InitiatedEvent:  &eventpb.HistoryEvent{EventId: 1},
 	}}
 
 	insertSignalInfos := []*persistenceblobs.SignalInfo{{
@@ -1609,7 +1609,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		ScheduleID:     111,
 		StartedID:      112,
 		ActivityID:     uuid.New(),
-		ScheduledEvent: &historypb.HistoryEvent{EventId: 1},
+		ScheduledEvent: &eventpb.HistoryEvent{EventId: 1},
 	}}
 
 	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{

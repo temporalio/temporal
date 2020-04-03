@@ -100,7 +100,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 		ErrorAndExit(fmt.Sprintf("Failed to get history on workflow id: %s, run id: %s.", wid, rid), err)
 	}
 
-	prevEvent := historypb.HistoryEvent{}
+	prevEvent := eventpb.HistoryEvent{}
 	if printFully { // dump everything
 		for _, e := range history.Events {
 			if resetPointsOnly {
@@ -358,7 +358,7 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 	timeElapse := 1
 	isTimeElapseExist := false
 	doneChan := make(chan bool)
-	var lastEvent *historypb.HistoryEvent // used for print result of this run
+	var lastEvent *eventpb.HistoryEvent // used for print result of this run
 	ticker := time.NewTicker(time.Second).C
 
 	tcCtx, cancel := newContextForLongPoll(c)
@@ -1087,7 +1087,7 @@ func appendWorkflowExecutionsToTable(
 	}
 }
 
-func printRunStatus(event *historypb.HistoryEvent) {
+func printRunStatus(event *eventpb.HistoryEvent) {
 	switch event.GetEventType() {
 	case eventpb.EventTypeWorkflowExecutionCompleted:
 		fmt.Printf("  Status: %s\n", colorGreen("COMPLETED"))
@@ -1685,7 +1685,7 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 		NextPageToken:   nil,
 	}
 
-	var firstEvent, decisionFailed *historypb.HistoryEvent
+	var firstEvent, decisionFailed *eventpb.HistoryEvent
 	for {
 		resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
 		if err != nil {

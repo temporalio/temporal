@@ -116,8 +116,8 @@ type (
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
 		deleteSignalRequestedID   string              // Deleted signaled requestId
 
-		bufferedEvents       []*historypb.HistoryEvent // buffered history events that are already persisted
-		updateBufferedEvents []*historypb.HistoryEvent // buffered history events that needs to be persisted
+		bufferedEvents       []*eventpb.HistoryEvent // buffered history events that are already persisted
+		updateBufferedEvents []*eventpb.HistoryEvent // buffered history events that needs to be persisted
 		clearBufferedEvents  bool                        // delete buffered events from persistence
 
 		executionInfo    *persistence.WorkflowExecutionInfo // Workflow mutable state info.
@@ -404,8 +404,8 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	// put new events into 2 buckets:
 	//  1) if the event was added while there was in-flight decision, then put it in buffered bucket
 	//  2) otherwise, put it in committed bucket
-	var newBufferedEvents []*historypb.HistoryEvent
-	var newCommittedEvents []*historypb.HistoryEvent
+	var newBufferedEvents []*eventpb.HistoryEvent
+	var newCommittedEvents []*eventpb.HistoryEvent
 	for _, event := range e.hBuilder.history {
 		if event.GetEventId() == common.BufferedEventID {
 			newBufferedEvents = append(newBufferedEvents, event)
@@ -417,8 +417,8 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	// Sometimes we see buffered events are out of order when read back from database.  This is mostly not an issue
 	// except in the Activity case where ActivityStarted and ActivityCompleted gets out of order.  The following code
 	// is added to reorder buffered events to guarantee all activity completion events will always be processed at the end.
-	var reorderedEvents []*historypb.HistoryEvent
-	reorderFunc := func(bufferedEvents []*historypb.HistoryEvent) {
+	var reorderedEvents []*eventpb.HistoryEvent
+	reorderFunc := func(bufferedEvents []*eventpb.HistoryEvent) {
 		for _, event := range bufferedEvents {
 			switch event.GetEventType() {
 			case eventpb.EventTypeActivityTaskCompleted,
@@ -623,9 +623,9 @@ func (e *mutableStateBuilder) UpdateReplicationStateLastEventID(
 
 func (e *mutableStateBuilder) checkAndClearTimerFiredEvent(
 	timerID string,
-) *historypb.HistoryEvent {
+) *eventpb.HistoryEvent {
 
-	var timerEvent *historypb.HistoryEvent
+	var timerEvent *eventpb.HistoryEvent
 
 	e.bufferedEvents, timerEvent = checkAndClearTimerFiredEvent(e.bufferedEvents, timerID)
 	if timerEvent != nil {
@@ -640,9 +640,9 @@ func (e *mutableStateBuilder) checkAndClearTimerFiredEvent(
 }
 
 func checkAndClearTimerFiredEvent(
-	events []*historypb.HistoryEvent,
+	events []*eventpb.HistoryEvent,
 	timerID string,
-) ([]*historypb.HistoryEvent, *historypb.HistoryEvent) {
+) ([]*eventpb.HistoryEvent, *eventpb.HistoryEvent) {
 	// go over all history events. if we find a timer fired event for the given
 	// timerID, clear it
 	timerFiredIdx := -1
@@ -662,8 +662,8 @@ func checkAndClearTimerFiredEvent(
 }
 
 func (e *mutableStateBuilder) trimEventsAfterWorkflowClose(
-	input []*historypb.HistoryEvent,
-) []*historypb.HistoryEvent {
+	input []*eventpb.HistoryEvent,
+) []*eventpb.HistoryEvent {
 
 	if len(input) == 0 {
 		return input
@@ -853,7 +853,7 @@ func (e *mutableStateBuilder) IsStickyTaskListEnabled() bool {
 
 func (e *mutableStateBuilder) CreateNewHistoryEvent(
 	eventType eventpb.EventType,
-) *historypb.HistoryEvent {
+) *eventpb.HistoryEvent {
 
 	return e.CreateNewHistoryEventWithTimestamp(eventType, e.timeSource.Now().UnixNano())
 }
@@ -861,7 +861,7 @@ func (e *mutableStateBuilder) CreateNewHistoryEvent(
 func (e *mutableStateBuilder) CreateNewHistoryEventWithTimestamp(
 	eventType eventpb.EventType,
 	timestamp int64,
-) *historypb.HistoryEvent {
+) *eventpb.HistoryEvent {
 	eventID := e.executionInfo.NextEventID
 	if e.shouldBufferEvent(eventType) {
 		eventID = common.BufferedEventID
@@ -871,7 +871,7 @@ func (e *mutableStateBuilder) CreateNewHistoryEventWithTimestamp(
 	}
 
 	ts := timestamp
-	historyEvent := &historypb.HistoryEvent{}
+	historyEvent := &eventpb.HistoryEvent{}
 	historyEvent.EventId = eventID
 	historyEvent.Timestamp = ts
 	historyEvent.EventType = eventType
@@ -949,7 +949,7 @@ func (e *mutableStateBuilder) GetQueryRegistry() queryRegistry {
 
 func (e *mutableStateBuilder) GetActivityScheduledEvent(
 	scheduleEventID int64,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
 	if !ok {
@@ -1016,7 +1016,7 @@ func (e *mutableStateBuilder) GetChildExecutionInfo(
 // executions
 func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(
 	initiatedEventID int64,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	ci, ok := e.pendingChildExecutionInfoIDs[initiatedEventID]
 	if !ok {
@@ -1109,7 +1109,7 @@ func (e *mutableStateBuilder) GetSignalInfo(
 }
 
 // GetCompletionEvent retrieves the workflow completion event from mutable state
-func (e *mutableStateBuilder) GetCompletionEvent() (*historypb.HistoryEvent, error) {
+func (e *mutableStateBuilder) GetCompletionEvent() (*eventpb.HistoryEvent, error) {
 	if e.executionInfo.State != persistence.WorkflowStateCompleted {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
@@ -1151,7 +1151,7 @@ func (e *mutableStateBuilder) GetCompletionEvent() (*historypb.HistoryEvent, err
 }
 
 // GetStartEvent retrieves the workflow start event from mutable state
-func (e *mutableStateBuilder) GetStartEvent() (*historypb.HistoryEvent, error) {
+func (e *mutableStateBuilder) GetStartEvent() (*eventpb.HistoryEvent, error) {
 
 	currentBranchToken, err := e.GetCurrentBranchToken()
 	if err != nil {
@@ -1236,7 +1236,7 @@ func (e *mutableStateBuilder) DeletePendingSignal(
 }
 
 func (e *mutableStateBuilder) writeEventToCache(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) {
 
 	// For start event: store it within events cache so the recordWorkflowStarted transfer task doesn't need to
@@ -1619,7 +1619,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	previousExecutionState mutableState,
 	attributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
 	firstRunID string,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
 	taskList := previousExecutionInfo.TaskList
@@ -1730,7 +1730,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 	execution executionpb.WorkflowExecution,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowStarted
 	if err := e.checkMutability(opTag); err != nil {
@@ -1779,7 +1779,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	parentNamespaceID string,
 	execution executionpb.WorkflowExecution,
 	requestID string,
-	startEvent *historypb.HistoryEvent,
+	startEvent *eventpb.HistoryEvent,
 ) error {
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
@@ -1854,7 +1854,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 }
 
 func (e *mutableStateBuilder) AddFirstDecisionTaskScheduled(
-	startEvent *historypb.HistoryEvent,
+	startEvent *eventpb.HistoryEvent,
 ) error {
 	opTag := tag.WorkflowActionDecisionTaskScheduled
 	if err := e.checkMutability(opTag); err != nil {
@@ -1905,7 +1905,7 @@ func (e *mutableStateBuilder) AddDecisionTaskStartedEvent(
 	scheduleEventID int64,
 	requestID string,
 	request *workflowservice.PollForDecisionTaskRequest,
-) (*historypb.HistoryEvent, *decisionInfo, error) {
+) (*eventpb.HistoryEvent, *decisionInfo, error) {
 	opTag := tag.WorkflowActionDecisionTaskStarted
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, nil, err
@@ -1928,13 +1928,13 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskStartedEvent(
 func (e *mutableStateBuilder) CreateTransientDecisionEvents(
 	decision *decisionInfo,
 	identity string,
-) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
+) (*eventpb.HistoryEvent, *eventpb.HistoryEvent) {
 	return e.decisionTaskManager.CreateTransientDecisionEvents(decision, identity)
 }
 
 // add BinaryCheckSum for the first decisionTaskCompletedID for auto-reset
 func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 	maxResetPoints int,
 ) error {
 	binChecksum := event.GetDecisionTaskCompletedEventAttributes().GetBinaryChecksum()
@@ -2017,7 +2017,7 @@ func (e *mutableStateBuilder) AddDecisionTaskCompletedEvent(
 	startedEventID int64,
 	request *workflowservice.RespondDecisionTaskCompletedRequest,
 	maxResetPoints int,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionDecisionTaskCompleted
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
@@ -2026,7 +2026,7 @@ func (e *mutableStateBuilder) AddDecisionTaskCompletedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateDecisionTaskCompletedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 	return e.decisionTaskManager.ReplicateDecisionTaskCompletedEvent(event)
 }
@@ -2034,7 +2034,7 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskCompletedEvent(
 func (e *mutableStateBuilder) AddDecisionTaskTimedOutEvent(
 	scheduleEventID int64,
 	startedEventID int64,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionDecisionTaskTimedOut
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
@@ -2050,7 +2050,7 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskTimedOutEvent(
 
 func (e *mutableStateBuilder) AddDecisionTaskScheduleToStartTimeoutEvent(
 	scheduleEventID int64,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionDecisionTaskTimedOut
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
@@ -2069,7 +2069,7 @@ func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(
 	baseRunID string,
 	newRunID string,
 	forkEventVersion int64,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionDecisionTaskFailed
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
@@ -2095,7 +2095,7 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskFailedEvent() error {
 func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(
 	decisionCompletedEventID int64,
 	attributes *decisionpb.ScheduleActivityTaskDecisionAttributes,
-) (*historypb.HistoryEvent, *persistence.ActivityInfo, error) {
+) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error) {
 
 	opTag := tag.WorkflowActionActivityTaskScheduled
 	if err := e.checkMutability(opTag); err != nil {
@@ -2134,7 +2134,7 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(
 
 func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 	firstEventID int64,
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) (*persistence.ActivityInfo, error) {
 
 	attributes := event.GetActivityTaskScheduledEventAttributes()
@@ -2212,7 +2212,7 @@ func (e *mutableStateBuilder) AddActivityTaskStartedEvent(
 	scheduleEventID int64,
 	requestID string,
 	identity string,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskStarted
 	if err := e.checkMutability(opTag); err != nil {
@@ -2243,7 +2243,7 @@ func (e *mutableStateBuilder) AddActivityTaskStartedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateActivityTaskStartedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetActivityTaskStartedEventAttributes()
@@ -2270,7 +2270,7 @@ func (e *mutableStateBuilder) AddActivityTaskCompletedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	request *workflowservice.RespondActivityTaskCompletedRequest,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskCompleted
 	if err := e.checkMutability(opTag); err != nil {
@@ -2299,7 +2299,7 @@ func (e *mutableStateBuilder) AddActivityTaskCompletedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateActivityTaskCompletedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetActivityTaskCompletedEventAttributes()
@@ -2312,7 +2312,7 @@ func (e *mutableStateBuilder) AddActivityTaskFailedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	request *workflowservice.RespondActivityTaskFailedRequest,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskFailed
 	if err := e.checkMutability(opTag); err != nil {
@@ -2341,7 +2341,7 @@ func (e *mutableStateBuilder) AddActivityTaskFailedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateActivityTaskFailedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetActivityTaskFailedEventAttributes()
@@ -2355,7 +2355,7 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	startedEventID int64,
 	timeoutType eventpb.TimeoutType,
 	lastHeartBeatDetails []byte,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskTimedOut
 	if err := e.checkMutability(opTag); err != nil {
@@ -2387,7 +2387,7 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateActivityTaskTimedOutEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetActivityTaskTimedOutEventAttributes()
@@ -2400,7 +2400,7 @@ func (e *mutableStateBuilder) AddActivityTaskCancelRequestedEvent(
 	decisionCompletedEventID int64,
 	activityID string,
 	identity string,
-) (*historypb.HistoryEvent, *persistence.ActivityInfo, error) {
+) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error) {
 
 	opTag := tag.WorkflowActionActivityTaskCancelRequested
 	if err := e.checkMutability(opTag); err != nil {
@@ -2431,7 +2431,7 @@ func (e *mutableStateBuilder) AddActivityTaskCancelRequestedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateActivityTaskCancelRequestedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetActivityTaskCancelRequestedEventAttributes()
@@ -2459,7 +2459,7 @@ func (e *mutableStateBuilder) AddRequestCancelActivityTaskFailedEvent(
 	decisionCompletedEventID int64,
 	activityID string,
 	cause string,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskCancelFailed
 	if err := e.checkMutability(opTag); err != nil {
@@ -2475,7 +2475,7 @@ func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(
 	latestCancelRequestedEventID int64,
 	details []byte,
 	identity string,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskCanceled
 	if err := e.checkMutability(opTag); err != nil {
@@ -2515,7 +2515,7 @@ func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateActivityTaskCanceledEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetActivityTaskCanceledEventAttributes()
@@ -2527,7 +2527,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskCanceledEvent(
 func (e *mutableStateBuilder) AddCompletedWorkflowEvent(
 	decisionCompletedEventID int64,
 	attributes *decisionpb.CompleteWorkflowExecutionDecisionAttributes,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowCompleted
 	if err := e.checkMutability(opTag); err != nil {
@@ -2549,7 +2549,7 @@ func (e *mutableStateBuilder) AddCompletedWorkflowEvent(
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionCompletedEvent(
 	firstEventID int64,
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
@@ -2567,7 +2567,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCompletedEvent(
 func (e *mutableStateBuilder) AddFailWorkflowEvent(
 	decisionCompletedEventID int64,
 	attributes *decisionpb.FailWorkflowExecutionDecisionAttributes,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowFailed
 	if err := e.checkMutability(opTag); err != nil {
@@ -2589,7 +2589,7 @@ func (e *mutableStateBuilder) AddFailWorkflowEvent(
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionFailedEvent(
 	firstEventID int64,
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
@@ -2606,7 +2606,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionFailedEvent(
 
 func (e *mutableStateBuilder) AddTimeoutWorkflowEvent(
 	firstEventID int64,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowTimeout
 	if err := e.checkMutability(opTag); err != nil {
@@ -2628,7 +2628,7 @@ func (e *mutableStateBuilder) AddTimeoutWorkflowEvent(
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionTimedoutEvent(
 	firstEventID int64,
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
@@ -2646,7 +2646,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTimedoutEvent(
 func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(
 	cause string,
 	request *historyservice.RequestCancelWorkflowExecutionRequest,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowCancelRequested
 	if err := e.checkMutability(opTag); err != nil {
@@ -2675,7 +2675,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionCancelRequestedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	e.executionInfo.CancelRequested = true
@@ -2685,7 +2685,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCancelRequestedEvent(
 func (e *mutableStateBuilder) AddWorkflowExecutionCanceledEvent(
 	decisionTaskCompletedEventID int64,
 	attributes *decisionpb.CancelWorkflowExecutionDecisionAttributes,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowCanceled
 	if err := e.checkMutability(opTag); err != nil {
@@ -2707,7 +2707,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionCanceledEvent(
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionCanceledEvent(
 	firstEventID int64,
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 	if err := e.UpdateWorkflowStateStatus(
 		persistence.WorkflowStateCompleted,
@@ -2725,7 +2725,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiated
 	decisionCompletedEventID int64,
 	cancelRequestID string,
 	request *decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes,
-) (*historypb.HistoryEvent, *persistenceblobs.RequestCancelInfo, error) {
+) (*eventpb.HistoryEvent, *persistenceblobs.RequestCancelInfo, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowCancelInitiated
 	if err := e.checkMutability(opTag); err != nil {
@@ -2749,7 +2749,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiated
 
 func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(
 	firstEventID int64,
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 	cancelRequestID string,
 ) (*persistenceblobs.RequestCancelInfo, error) {
 
@@ -2773,7 +2773,7 @@ func (e *mutableStateBuilder) AddExternalWorkflowExecutionCancelRequested(
 	namespace string,
 	workflowID string,
 	runID string,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowCancelRequested
 	if err := e.checkMutability(opTag); err != nil {
@@ -2797,7 +2797,7 @@ func (e *mutableStateBuilder) AddExternalWorkflowExecutionCancelRequested(
 }
 
 func (e *mutableStateBuilder) ReplicateExternalWorkflowExecutionCancelRequested(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	initiatedID := event.GetExternalWorkflowExecutionCancelRequestedEventAttributes().GetInitiatedEventId()
@@ -2812,7 +2812,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionFailedEve
 	workflowID string,
 	runID string,
 	cause eventpb.CancelExternalWorkflowExecutionFailedCause,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowCancelFailed
 	if err := e.checkMutability(opTag); err != nil {
@@ -2837,7 +2837,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionFailedEve
 }
 
 func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	initiatedID := event.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes().GetInitiatedEventId()
@@ -2849,7 +2849,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 	decisionCompletedEventID int64,
 	signalRequestID string,
 	request *decisionpb.SignalExternalWorkflowExecutionDecisionAttributes,
-) (*historypb.HistoryEvent, *persistenceblobs.SignalInfo, error) {
+) (*eventpb.HistoryEvent, *persistenceblobs.SignalInfo, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowSignalInitiated
 	if err := e.checkMutability(opTag); err != nil {
@@ -2873,7 +2873,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 
 func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedEvent(
 	firstEventID int64,
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 	signalRequestID string,
 ) (*persistenceblobs.SignalInfo, error) {
 
@@ -2898,7 +2898,7 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedE
 func (e *mutableStateBuilder) AddUpsertWorkflowSearchAttributesEvent(
 	decisionCompletedEventID int64,
 	request *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionUpsertWorkflowSearchAttributes
 	if err := e.checkMutability(opTag); err != nil {
@@ -2917,7 +2917,7 @@ func (e *mutableStateBuilder) AddUpsertWorkflowSearchAttributesEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateUpsertWorkflowSearchAttributesEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) {
 
 	upsertSearchAttr := event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes().GetIndexedFields()
@@ -2946,7 +2946,7 @@ func (e *mutableStateBuilder) AddExternalWorkflowExecutionSignaled(
 	workflowID string,
 	runID string,
 	control []byte,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowSignalRequested
 	if err := e.checkMutability(opTag); err != nil {
@@ -2970,7 +2970,7 @@ func (e *mutableStateBuilder) AddExternalWorkflowExecutionSignaled(
 }
 
 func (e *mutableStateBuilder) ReplicateExternalWorkflowExecutionSignaled(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	initiatedID := event.GetExternalWorkflowExecutionSignaledEventAttributes().GetInitiatedEventId()
@@ -2986,7 +2986,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionFailedEvent(
 	runID string,
 	control []byte,
 	cause eventpb.SignalExternalWorkflowExecutionFailedCause,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowSignalFailed
 	if err := e.checkMutability(opTag); err != nil {
@@ -3011,7 +3011,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionFailedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionFailedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	initiatedID := event.GetSignalExternalWorkflowExecutionFailedEventAttributes().GetInitiatedEventId()
@@ -3022,7 +3022,7 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionFailedEven
 func (e *mutableStateBuilder) AddTimerStartedEvent(
 	decisionCompletedEventID int64,
 	request *decisionpb.StartTimerDecisionAttributes,
-) (*historypb.HistoryEvent, *persistenceblobs.TimerInfo, error) {
+) (*eventpb.HistoryEvent, *persistenceblobs.TimerInfo, error) {
 
 	opTag := tag.WorkflowActionTimerStarted
 	if err := e.checkMutability(opTag); err != nil {
@@ -3048,7 +3048,7 @@ func (e *mutableStateBuilder) AddTimerStartedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) (*persistenceblobs.TimerInfo, error) {
 
 	attributes := event.GetTimerStartedEventAttributes()
@@ -3080,7 +3080,7 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 
 func (e *mutableStateBuilder) AddTimerFiredEvent(
 	timerID string,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionTimerFired
 	if err := e.checkMutability(opTag); err != nil {
@@ -3105,7 +3105,7 @@ func (e *mutableStateBuilder) AddTimerFiredEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateTimerFiredEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetTimerFiredEventAttributes()
@@ -3118,7 +3118,7 @@ func (e *mutableStateBuilder) AddTimerCanceledEvent(
 	decisionCompletedEventID int64,
 	attributes *decisionpb.CancelTimerDecisionAttributes,
 	identity string,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionTimerCanceled
 	if err := e.checkMutability(opTag); err != nil {
@@ -3156,7 +3156,7 @@ func (e *mutableStateBuilder) AddTimerCanceledEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateTimerCanceledEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetTimerCanceledEventAttributes()
@@ -3169,7 +3169,7 @@ func (e *mutableStateBuilder) AddCancelTimerFailedEvent(
 	decisionCompletedEventID int64,
 	attributes *decisionpb.CancelTimerDecisionAttributes,
 	identity string,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionTimerCancelFailed
 	if err := e.checkMutability(opTag); err != nil {
@@ -3185,7 +3185,7 @@ func (e *mutableStateBuilder) AddCancelTimerFailedEvent(
 func (e *mutableStateBuilder) AddRecordMarkerEvent(
 	decisionCompletedEventID int64,
 	attributes *decisionpb.RecordMarkerDecisionAttributes,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowRecordMarker
 	if err := e.checkMutability(opTag); err != nil {
@@ -3200,7 +3200,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionTerminatedEvent(
 	reason string,
 	details []byte,
 	identity string,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowTerminated
 	if err := e.checkMutability(opTag); err != nil {
@@ -3222,7 +3222,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionTerminatedEvent(
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionTerminatedEvent(
 	firstEventID int64,
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
@@ -3241,7 +3241,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionSignaled(
 	signalName string,
 	input []byte,
 	identity string,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowSignaled
 	if err := e.checkMutability(opTag); err != nil {
@@ -3256,7 +3256,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionSignaled(
 }
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionSignaled(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	// Increment signal count in mutable state for this workflow execution
@@ -3269,7 +3269,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	decisionCompletedEventID int64,
 	parentNamespace string,
 	attributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
-) (*historypb.HistoryEvent, mutableState, error) {
+) (*eventpb.HistoryEvent, mutableState, error) {
 
 	opTag := tag.WorkflowActionWorkflowContinueAsNew
 	if err := e.checkMutability(opTag); err != nil {
@@ -3384,7 +3384,7 @@ func rolloverAutoResetPointsWithExpiringTime(
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 	firstEventID int64,
 	namespaceID string,
-	continueAsNewEvent *historypb.HistoryEvent,
+	continueAsNewEvent *eventpb.HistoryEvent,
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
@@ -3403,7 +3403,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 	decisionCompletedEventID int64,
 	createRequestID string,
 	attributes *decisionpb.StartChildWorkflowExecutionDecisionAttributes,
-) (*historypb.HistoryEvent, *persistence.ChildExecutionInfo, error) {
+) (*eventpb.HistoryEvent, *persistence.ChildExecutionInfo, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowInitiated
 	if err := e.checkMutability(opTag); err != nil {
@@ -3431,7 +3431,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 
 func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 	firstEventID int64,
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 	createRequestID string,
 ) (*persistence.ChildExecutionInfo, error) {
 
@@ -3461,7 +3461,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionStartedEvent(
 	workflowType *commonpb.WorkflowType,
 	initiatedID int64,
 	header *commonpb.Header,
-) (*historypb.HistoryEvent, error) {
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowStarted
 	if err := e.checkMutability(opTag); err != nil {
@@ -3486,7 +3486,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionStartedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionStartedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetChildWorkflowExecutionStartedEventAttributes()
@@ -3503,8 +3503,8 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionStartedEvent(
 func (e *mutableStateBuilder) AddStartChildWorkflowExecutionFailedEvent(
 	initiatedID int64,
 	cause eventpb.ChildWorkflowExecutionFailedCause,
-	initiatedEventAttributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
-) (*historypb.HistoryEvent, error) {
+	initiatedEventAttributes *eventpb.StartChildWorkflowExecutionInitiatedEventAttributes,
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowInitiationFailed
 	if err := e.checkMutability(opTag); err != nil {
@@ -3529,7 +3529,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionFailedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionFailedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetStartChildWorkflowExecutionFailedEventAttributes()
@@ -3541,8 +3541,8 @@ func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionFailedEvent(
 func (e *mutableStateBuilder) AddChildWorkflowExecutionCompletedEvent(
 	initiatedID int64,
 	childExecution *executionpb.WorkflowExecution,
-	attributes *historypb.WorkflowExecutionCompletedEventAttributes,
-) (*historypb.HistoryEvent, error) {
+	attributes *eventpb.WorkflowExecutionCompletedEventAttributes,
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowCompleted
 	if err := e.checkMutability(opTag); err != nil {
@@ -3572,7 +3572,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionCompletedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionCompletedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetChildWorkflowExecutionCompletedEventAttributes()
@@ -3584,8 +3584,8 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionCompletedEvent(
 func (e *mutableStateBuilder) AddChildWorkflowExecutionFailedEvent(
 	initiatedID int64,
 	childExecution *executionpb.WorkflowExecution,
-	attributes *historypb.WorkflowExecutionFailedEventAttributes,
-) (*historypb.HistoryEvent, error) {
+	attributes *eventpb.WorkflowExecutionFailedEventAttributes,
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowFailed
 	if err := e.checkMutability(opTag); err != nil {
@@ -3615,7 +3615,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionFailedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionFailedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetChildWorkflowExecutionFailedEventAttributes()
@@ -3627,8 +3627,8 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionFailedEvent(
 func (e *mutableStateBuilder) AddChildWorkflowExecutionCanceledEvent(
 	initiatedID int64,
 	childExecution *executionpb.WorkflowExecution,
-	attributes *historypb.WorkflowExecutionCanceledEventAttributes,
-) (*historypb.HistoryEvent, error) {
+	attributes *eventpb.WorkflowExecutionCanceledEventAttributes,
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowCanceled
 	if err := e.checkMutability(opTag); err != nil {
@@ -3658,7 +3658,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionCanceledEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionCanceledEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetChildWorkflowExecutionCanceledEventAttributes()
@@ -3670,8 +3670,8 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionCanceledEvent(
 func (e *mutableStateBuilder) AddChildWorkflowExecutionTerminatedEvent(
 	initiatedID int64,
 	childExecution *executionpb.WorkflowExecution,
-	attributes *historypb.WorkflowExecutionTerminatedEventAttributes,
-) (*historypb.HistoryEvent, error) {
+	attributes *eventpb.WorkflowExecutionTerminatedEventAttributes,
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowTerminated
 	if err := e.checkMutability(opTag); err != nil {
@@ -3701,7 +3701,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTerminatedEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTerminatedEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetChildWorkflowExecutionTerminatedEventAttributes()
@@ -3713,8 +3713,8 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTerminatedEvent(
 func (e *mutableStateBuilder) AddChildWorkflowExecutionTimedOutEvent(
 	initiatedID int64,
 	childExecution *executionpb.WorkflowExecution,
-	attributes *historypb.WorkflowExecutionTimedOutEventAttributes,
-) (*historypb.HistoryEvent, error) {
+	attributes *eventpb.WorkflowExecutionTimedOutEventAttributes,
+) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowTimedOut
 	if err := e.checkMutability(opTag); err != nil {
@@ -3744,7 +3744,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTimedOutEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTimedOutEvent(
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) error {
 
 	attributes := event.GetChildWorkflowExecutionTimedOutEventAttributes()
@@ -4183,7 +4183,7 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 
 func (e *mutableStateBuilder) eventsToReplicationTask(
 	transactionPolicy transactionPolicy,
-	events []*historypb.HistoryEvent,
+	events []*eventpb.HistoryEvent,
 ) ([]persistence.Task, error) {
 
 	if transactionPolicy == transactionPolicyPassive ||
@@ -4244,7 +4244,7 @@ func (e *mutableStateBuilder) syncActivityToReplicationTask(
 }
 
 func (e *mutableStateBuilder) updateWithLastWriteEvent(
-	lastEvent *historypb.HistoryEvent,
+	lastEvent *eventpb.HistoryEvent,
 	transactionPolicy transactionPolicy,
 ) error {
 
@@ -4274,7 +4274,7 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 }
 
 func (e *mutableStateBuilder) updateWithLastFirstEvent(
-	lastFirstEvent *historypb.HistoryEvent,
+	lastFirstEvent *eventpb.HistoryEvent,
 ) {
 	e.GetExecutionInfo().SetLastFirstEventID(lastFirstEvent.GetEventId())
 }
@@ -4289,7 +4289,7 @@ func (e *mutableStateBuilder) canReplicateEvents() bool {
 // decision && workflow finish will be broken (the first batch)
 func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	transactionPolicy transactionPolicy,
-	events []*historypb.HistoryEvent,
+	events []*eventpb.HistoryEvent,
 ) error {
 
 	if transactionPolicy == transactionPolicyPassive ||

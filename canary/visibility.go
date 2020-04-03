@@ -130,12 +130,12 @@ func listMyWorkflow(client cadenceClient, wfID string, scope tally.Scope) error 
 	return nil
 }
 
-func getMyHistory(client cadenceClient, execInfo workflow.Execution, scope tally.Scope) ([]*historypb.HistoryEvent, error) {
+func getMyHistory(client cadenceClient, execInfo workflow.Execution, scope tally.Scope) ([]*eventpb.HistoryEvent, error) {
 	scope.Counter(getWorkflowHistoryCount).Inc(1)
 	sw := scope.Timer(getWorkflowHistoryLatency).Start()
 	defer sw.Stop()
 
-	var events []*historypb.HistoryEvent
+	var events []*eventpb.HistoryEvent
 	iter := client.GetWorkflowHistory(context.Background(), execInfo.ID, execInfo.RunID, false, filterpb.HistoryEventFilterTypeAllEvent)
 
 	for iter.HasNext() {

@@ -1675,10 +1675,10 @@ func (s *matchingEngineSuite) awaitCondition(cond func() bool, timeout time.Dura
 }
 
 func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID int64,
-	scheduleAttributes *decisionpb.ScheduleActivityTaskDecisionAttributes) *historypb.HistoryEvent {
+	scheduleAttributes *decisionpb.ScheduleActivityTaskDecisionAttributes) *eventpb.HistoryEvent {
 
 	historyEvent := newHistoryEvent(eventID, eventpb.EventTypeActivityTaskScheduled)
-	historyEvent.Attributes = &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+	historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 		ActivityId:                    scheduleAttributes.ActivityId,
 		ActivityType:                  scheduleAttributes.ActivityType,
 		TaskList:                      scheduleAttributes.TaskList,
@@ -1693,8 +1693,8 @@ func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID i
 	return historyEvent
 }
 
-func newHistoryEvent(eventID int64, eventType eventpb.EventType) *historypb.HistoryEvent {
-	historyEvent := &historypb.HistoryEvent{
+func newHistoryEvent(eventID int64, eventType eventpb.EventType) *eventpb.HistoryEvent {
+	historyEvent := &eventpb.HistoryEvent{
 		EventId:   eventID,
 		Timestamp: time.Now().UnixNano(),
 		EventType: eventType,

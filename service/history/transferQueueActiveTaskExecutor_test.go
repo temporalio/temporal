@@ -1735,7 +1735,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 
 	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), testChildNamespaceID, childExecution.GetWorkflowId(), childExecution.GetRunId(), childWorkflowType)
 	ci.StartedID = event.GetEventId()
-	event = addChildWorkflowExecutionCompletedEvent(mutableState, ci.InitiatedID, &childExecution, &historypb.WorkflowExecutionCompletedEventAttributes{
+	event = addChildWorkflowExecutionCompletedEvent(mutableState, ci.InitiatedID, &childExecution, &eventpb.WorkflowExecutionCompletedEventAttributes{
 		Result:                       []byte("some random child workflow execution result"),
 		DecisionTaskCompletedEventId: transferTask.GetScheduleId(),
 	})
@@ -1905,7 +1905,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddDecisionTaskRequest(
 
 func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStartedRequest(
 	namespace string,
-	startEvent *historypb.HistoryEvent,
+	startEvent *eventpb.HistoryEvent,
 	task *persistenceblobs.TransferTaskInfo,
 	mutableState mutableState,
 	backoffSeconds int32,
@@ -2032,7 +2032,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 
 func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttributesRequest(
 	namespace string,
-	startEvent *historypb.HistoryEvent,
+	startEvent *eventpb.HistoryEvent,
 	task *persistenceblobs.TransferTaskInfo,
 	mutableState mutableState,
 ) *persistence.UpsertWorkflowExecutionRequest {

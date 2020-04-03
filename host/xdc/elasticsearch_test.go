@@ -248,7 +248,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	// upsert search attributes
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
 			DecisionType: decisionpb.DecisionTypeUpsertWorkflowSearchAttributes,

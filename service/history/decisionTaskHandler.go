@@ -868,7 +868,7 @@ func convertSearchAttributesToByteArray(fields map[string][]byte) []byte {
 }
 
 func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
-	attr *historypb.WorkflowExecutionStartedEventAttributes,
+	attr *eventpb.WorkflowExecutionStartedEventAttributes,
 	backoffInterval int32,
 	continueAsNewIter commonpb.ContinueAsNewInitiator,
 	failureReason string,

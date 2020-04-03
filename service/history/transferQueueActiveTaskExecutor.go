@@ -834,7 +834,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 	task *persistenceblobs.TransferTaskInfo,
 	context workflowExecutionContext,
-	initiatedAttributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
+	initiatedAttributes *eventpb.StartChildWorkflowExecutionInitiatedEventAttributes,
 	runID string,
 ) error {
 
@@ -869,7 +869,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 	task *persistenceblobs.TransferTaskInfo,
 	context workflowExecutionContext,
-	initiatedAttributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
+	initiatedAttributes *eventpb.StartChildWorkflowExecutionInitiatedEventAttributes,
 ) error {
 
 	return t.updateWorkflowExecution(context, true,
@@ -1186,7 +1186,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 	namespace string,
 	targetNamespace string,
 	childInfo *persistence.ChildExecutionInfo,
-	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
+	attributes *eventpb.StartChildWorkflowExecutionInitiatedEventAttributes,
 ) (string, error) {
 
 	now := t.shard.GetTimeSource().Now()

@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/token"
@@ -532,8 +533,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		continuationToken.PersistenceToken = nil
 	}
 
-	history := &historypb.History{}
-	history.Events = []*historypb.HistoryEvent{}
+	history := &eventpb.History{}
+	history.Events = []*eventpb.HistoryEvent{}
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
 			history, _, err = wh.getHistory(
@@ -563,7 +564,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		// return all events
 		if continuationToken.FirstEventId >= continuationToken.NextEventId {
 			// currently there is no new event
-			history.Events = []*historypb.HistoryEvent{}
+			history.Events = []*eventpb.HistoryEvent{}
 			if !isWorkflowRunning {
 				continuationToken = nil
 			}
@@ -3228,7 +3229,7 @@ func (wh *WorkflowHandler) getRawHistory(
 	nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *commonproto.TransientDecisionInfo,
+	transientDecision *eventgenpb.TransientDecisionInfo,
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
 	var rawHistory []*commonpb.DataBlob
@@ -3301,16 +3302,16 @@ func (wh *WorkflowHandler) getHistory(
 	firstEventID, nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
-	transientDecision *commonproto.TransientDecisionInfo,
+	transientDecision *eventgenpb.TransientDecisionInfo,
 	branchToken []byte,
-) (*historypb.History, []byte, error) {
+) (*eventpb.History, []byte, error) {
 
 	var size int
 
 	isFirstPage := len(nextPageToken) == 0
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
-	var historyEvents []*historypb.HistoryEvent
+	var historyEvents []*eventpb.HistoryEvent
 	historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
@@ -3355,14 +3356,14 @@ func (wh *WorkflowHandler) getHistory(
 		historyEvents = append(historyEvents, transientDecision.ScheduledEvent, transientDecision.StartedEvent)
 	}
 
-	executionHistory := &historypb.History{}
+	executionHistory := &eventpb.History{}
 	executionHistory.Events = historyEvents
 	return executionHistory, nextPageToken, nil
 }
 
 func (wh *WorkflowHandler) validateTransientDecisionEvents(
 	expectedNextEventID int64,
-	decision *commonproto.TransientDecisionInfo,
+	decision *eventgenpb.TransientDecisionInfo,
 ) error {
 
 	if decision.ScheduledEvent.GetEventId() == expectedNextEventID &&
@@ -3479,15 +3480,15 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		return &workflowservice.PollForDecisionTaskResponse{}, nil
 	}
 
-	var history *historypb.History
+	var history *eventpb.History
 	var continuation []byte
 	var err error
 
 	if matchingResp.GetStickyExecutionEnabled() && matchingResp.Query != nil {
 		// meaning sticky query, we should not return any events to worker
 		// since query task only check the current status
-		history = &historypb.History{
-			Events: []*historypb.HistoryEvent{},
+		history = &eventpb.History{
+			Events: []*eventpb.HistoryEvent{},
 		}
 	} else {
 		// here we have 3 cases:
@@ -3560,7 +3561,7 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 }
 
 func (wh *WorkflowHandler) verifyHistoryIsComplete(
-	events []*historypb.HistoryEvent,
+	events []*eventpb.HistoryEvent,
 	expectedFirstEventID int64,
 	expectedLastEventID int64,
 	isFirstPage bool,
@@ -3680,7 +3681,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, wh.error(err, scope)
 	}
 
-	history := &historypb.History{}
+	history := &eventpb.History{}
 	for _, batch := range resp.HistoryBatches {
 		history.Events = append(history.Events, batch.Events...)
 	}

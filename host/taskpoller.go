@@ -44,7 +44,7 @@ import (
 
 type (
 	decisionTaskHandler func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error)
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error)
 	activityTaskHandler func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input []byte, takeToken []byte) ([]byte, bool, error)
 
@@ -159,7 +159,7 @@ Loop:
 			continue Loop
 		}
 
-		var events []*historypb.HistoryEvent
+		var events []*eventpb.HistoryEvent
 		if response.Query == nil || !pollStickyTaskList {
 			// if not query task, should have some history events
 			// for non sticky query, there should be events returned
@@ -228,7 +228,7 @@ Loop:
 		}
 
 		// handle normal decision task / non query task response
-		var lastDecisionScheduleEvent *historypb.HistoryEvent
+		var lastDecisionScheduleEvent *eventpb.HistoryEvent
 		for _, e := range events {
 			if e.GetEventType() == eventpb.EventTypeDecisionTaskScheduled {
 				lastDecisionScheduleEvent = e
@@ -296,7 +296,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		return nil, nil
 	}
 
-	var events []*historypb.HistoryEvent
+	var events []*eventpb.HistoryEvent
 	history := response.History
 	if history == nil {
 		p.Logger.Fatal("History is nil")

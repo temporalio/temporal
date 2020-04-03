@@ -84,7 +84,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	activityCounter := int32(0)
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -202,7 +202,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	activitiesScheduled := false
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 			return nil, []*decisionpb.Decision{
@@ -374,10 +374,10 @@ func (s *integrationSuite) TestActivityRetry() {
 
 	workflowComplete := false
 	activitiesScheduled := false
-	var activityAScheduled, activityAFailed, activityBScheduled, activityBTimeout *historypb.HistoryEvent
+	var activityAScheduled, activityAFailed, activityBScheduled, activityBTimeout *eventpb.HistoryEvent
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 
@@ -587,7 +587,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	activityCounter := int32(0)
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		s.Logger.Info("Calling DecisionTask Handler", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
 
@@ -685,12 +685,12 @@ func (s *integrationSuite) TestActivityTimeouts() {
 
 	workflowComplete := false
 	activitiesScheduled := false
-	activitiesMap := map[int64]*historypb.HistoryEvent{}
+	activitiesMap := map[int64]*eventpb.HistoryEvent{}
 	failWorkflow := false
 	failReason := ""
 	var activityATimedout, activityBTimedout, activityCTimedout, activityDTimedout bool
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 			return nil, []*decisionpb.Decision{{
@@ -923,7 +923,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	activityCount := 10
 	activitiesTimedout := 0
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 			var decisions []*decisionpb.Decision
@@ -1109,7 +1109,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 	requestCancellation := false
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -1234,7 +1234,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	requestCancellation := false
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)

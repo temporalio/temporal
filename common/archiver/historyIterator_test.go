@@ -78,7 +78,7 @@ type (
 )
 
 func (e *testSizeEstimator) EstimateSize(v interface{}) (int, error) {
-	historyBatch, ok := v.(*historypb.History)
+	historyBatch, ok := v.(*eventpb.History)
 	if !ok {
 		return -1, errors.New("test size estimator only estimate the size of history batches")
 	}
@@ -110,7 +110,7 @@ func (s *HistoryIteratorSuite) TestReadHistory_Failed_EventsV2() {
 func (s *HistoryIteratorSuite) TestReadHistory_Success_EventsV2() {
 	mockHistoryV2Manager := &mocks.HistoryV2Manager{}
 	resp := persistence.ReadHistoryBranchByBatchResponse{
-		History:       []*historypb.History{},
+		History:       []*eventpb.History{},
 		NextPageToken: []byte{},
 	}
 	mockHistoryV2Manager.On("ReadHistoryBranchByBatch", mock.Anything).Return(&resp, nil)
@@ -668,13 +668,13 @@ func (s *HistoryIteratorSuite) assertStateMatches(expected historyIteratorState,
 	s.Equal(expected.FinishedIteration, itr.FinishedIteration)
 }
 
-func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page page, firstEventID int64) []*historypb.History {
-	var batches []*historypb.History
+func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page page, firstEventID int64) []*eventpb.History {
+	var batches []*eventpb.History
 	eventsID := firstEventID
 	for batchIdx, numEvents := range batchInfo[page.firstbatchIdx : page.firstbatchIdx+page.numBatches] {
-		var events []*historypb.HistoryEvent
+		var events []*eventpb.HistoryEvent
 		for i := 0; i < numEvents; i++ {
-			event := &historypb.HistoryEvent{
+			event := &eventpb.HistoryEvent{
 				EventId: eventsID,
 				Version: page.firstEventFailoverVersion,
 			}
@@ -684,7 +684,7 @@ func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page pag
 			}
 			events = append(events, event)
 		}
-		batches = append(batches, &historypb.History{
+		batches = append(batches, &eventpb.History{
 			Events: events,
 		})
 	}

@@ -1104,7 +1104,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			DeleteSignalInfo:          nil,
 			UpsertSignalRequestedIDs:  []string{},
 			DeleteSignalRequestedID:   "",
-			NewBufferedEvents:         []*historypb.HistoryEvent{},
+			NewBufferedEvents:         []*eventpb.HistoryEvent{},
 			ClearBufferedEvents:       false,
 
 			TransferTasks:    currTransferTasks,
@@ -1184,7 +1184,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	namespaceID := eventBatches[0].NamespaceID
 	workflowID := eventBatches[0].WorkflowID
 	runID := eventBatches[0].RunID
-	var reapplyEvents []*historypb.HistoryEvent
+	var reapplyEvents []*eventpb.HistoryEvent
 	for _, events := range eventBatches {
 		if events.NamespaceID != namespaceID ||
 			events.WorkflowID != workflowID {

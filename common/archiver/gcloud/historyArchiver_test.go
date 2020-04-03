@@ -256,9 +256,9 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*historypb.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -333,9 +333,9 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*historypb.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -349,7 +349,7 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 			},
 		},
 		{
-			Events: []*historypb.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
 					Timestamp: time.Now().UnixNano(),

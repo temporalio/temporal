@@ -467,7 +467,7 @@ func (w *workflowResetorImpl) generateReplicationTasksForReset(
 // replay signals in the base run, and also signals in all the runs along the chain of contineAsNew
 func (w *workflowResetorImpl) replayReceivedSignals(
 	ctx context.Context,
-	receivedSignals []*historypb.HistoryEvent,
+	receivedSignals []*eventpb.HistoryEvent,
 	continueRunID string,
 	newMutableState, currMutableState mutableState,
 ) error {
@@ -619,7 +619,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 	requestID string,
 	prevMutableState mutableState,
 	newRunID string,
-) (forkEventVersion, wfTimeoutSecs int64, receivedSignalsAfterReset []*historypb.HistoryEvent, continueRunID string, sBuilder stateBuilder, newHistorySize int64, retError error) {
+) (forkEventVersion, wfTimeoutSecs int64, receivedSignalsAfterReset []*eventpb.HistoryEvent, continueRunID string, sBuilder stateBuilder, newHistorySize int64, retError error) {
 
 	prevExecution := executionpb.WorkflowExecution{
 		WorkflowId: prevMutableState.GetExecutionInfo().WorkflowID,
@@ -642,7 +642,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 		ShardID:       &shardId,
 	}
 	var resetMutableState *mutableStateBuilder
-	var lastBatch []*historypb.HistoryEvent
+	var lastBatch []*eventpb.HistoryEvent
 
 	for {
 		var readResp *persistence.ReadHistoryBranchByBatchResponse
@@ -739,7 +739,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 	return
 }
 
-func validateLastBatchOfReset(lastBatch []*historypb.HistoryEvent, decisionFinishEventID int64) error {
+func validateLastBatchOfReset(lastBatch []*eventpb.HistoryEvent, decisionFinishEventID int64) error {
 	firstEvent := lastBatch[0]
 	lastEvent := lastBatch[len(lastBatch)-1]
 	if decisionFinishEventID != lastEvent.GetEventId()+1 {
@@ -882,7 +882,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 func (w *workflowResetorImpl) replicateResetEvent(
 	baseMutableState mutableState,
 	baseExecution *executionpb.WorkflowExecution,
-	newRunHistory []*historypb.HistoryEvent,
+	newRunHistory []*eventpb.HistoryEvent,
 	forkEventVersion int64,
 ) (newMsBuilder mutableState, newHistorySize int64, transferTasks, timerTasks []persistence.Task, retError error) {
 	namespaceID := baseMutableState.GetExecutionInfo().NamespaceID
@@ -903,7 +903,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 
 	// replay old history from beginning of the baseRun upto decisionFinishEventID(exclusive)
 	var nextPageToken []byte
-	var lastEvent *historypb.HistoryEvent
+	var lastEvent *eventpb.HistoryEvent
 	baseBranchToken, err := baseMutableState.GetCurrentBranchToken()
 	if err != nil {
 		return nil, 0, nil, nil, err

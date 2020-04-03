@@ -158,10 +158,10 @@ func (s *conflictResolverSuite) TestReset() {
 	nextEventID := int64(2)
 	branchToken := []byte("some random branch token")
 
-	event1 := &historypb.HistoryEvent{
+	event1 := &eventpb.HistoryEvent{
 		EventId: 1,
 		Version: version,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                        &commonpb.WorkflowType{Name: "some random workflow type"},
 			TaskList:                            &tasklistpb.TaskList{Name: "some random workflow type"},
 			Input:                               []byte("some random input"),
@@ -170,9 +170,9 @@ func (s *conflictResolverSuite) TestReset() {
 			Identity:                            "some random identity",
 		}},
 	}
-	event2 := &historypb.HistoryEvent{
+	event2 := &eventpb.HistoryEvent{
 		EventId:    2,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}}}
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{}}}
 
 	historySize := int64(1234567)
 	shardId := s.mockShard.GetShardID()
@@ -184,7 +184,7 @@ func (s *conflictResolverSuite) TestReset() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    []*historypb.HistoryEvent{event1, event2},
+		HistoryEvents:    []*eventpb.HistoryEvent{event1, event2},
 		NextPageToken:    nil,
 		LastFirstEventID: event1.GetEventId(),
 		Size:             int(historySize),

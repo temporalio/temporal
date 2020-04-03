@@ -86,9 +86,9 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	continueAsNewCount := int32(10)
 	continueAsNewCounter := int32(0)
 	var previousRunID string
-	var lastRunStartedEvent *historypb.HistoryEvent
+	var lastRunStartedEvent *eventpb.HistoryEvent
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			previousRunID = execution.GetRunId()
 			continueAsNewCounter++
@@ -177,7 +177,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	continueAsNewCount := int32(1)
 	continueAsNewCounter := int32(0)
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
@@ -280,7 +280,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 
 	continueAsNewed := false
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		executions = append(executions, execution)
 
@@ -375,10 +375,10 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	childData := int32(1)
 	continueAsNewCount := int32(10)
 	continueAsNewCounter := int32(0)
-	var startedEvent *historypb.HistoryEvent
-	var completedEvent *historypb.HistoryEvent
+	var startedEvent *eventpb.HistoryEvent
+	var completedEvent *eventpb.HistoryEvent
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		s.Logger.Info("Processing decision task for WorkflowId:", tag.WorkflowID(execution.GetWorkflowId()))
 
 		// Child Decider Logic

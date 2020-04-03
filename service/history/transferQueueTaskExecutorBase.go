@@ -332,7 +332,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 // Argument startEvent is to save additional call of msBuilder.GetStartEvent
 func getWorkflowExecutionTimestamp(
 	msBuilder mutableState,
-	startEvent *historypb.HistoryEvent,
+	startEvent *eventpb.HistoryEvent,
 ) time.Time {
 	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
 	// comparison between two field, we need a value to differentiate them from cron workflows

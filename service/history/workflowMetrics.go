@@ -118,7 +118,7 @@ func emitWorkflowCompletionStats(
 	metricsClient metrics.Client,
 	namespace string,
 	taskList string,
-	event *historypb.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) {
 	scope := metricsClient.Scope(
 		metrics.WorkflowCompletionStatsScope,

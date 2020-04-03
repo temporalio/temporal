@@ -170,8 +170,8 @@ func (r *historyReplicator) ApplyRawEvents(
 ) (retError error) {
 
 	var err error
-	var events []*historypb.HistoryEvent
-	var newRunEvents []*historypb.HistoryEvent
+	var events []*eventpb.HistoryEvent
+	var newRunEvents []*eventpb.HistoryEvent
 
 	events, err = r.deserializeBlob(requestIn.History)
 	if err != nil {
@@ -191,7 +191,7 @@ func (r *historyReplicator) ApplyRawEvents(
 		NextEventId:       nextEventID,
 		Version:           version,
 		ReplicationInfo:   requestIn.ReplicationInfo,
-		History:           &historypb.History{Events: events},
+		History:           &eventpb.History{Events: events},
 		NewRunHistory:     nil,
 	}
 
@@ -200,7 +200,7 @@ func (r *historyReplicator) ApplyRawEvents(
 		if err != nil {
 			return err
 		}
-		requestOut.NewRunHistory = &historypb.History{Events: newRunEvents}
+		requestOut.NewRunHistory = &eventpb.History{Events: newRunEvents}
 	}
 
 	return r.ApplyEvents(ctx, requestOut)
@@ -593,7 +593,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	sBuilder := r.getNewStateBuilder(msBuilder, logger)
-	var newRunHistory []*historypb.HistoryEvent
+	var newRunHistory []*eventpb.HistoryEvent
 	if request.NewRunHistory != nil {
 		newRunHistory = request.NewRunHistory.Events
 	}
@@ -641,7 +641,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	history *historypb.History,
+	history *eventpb.History,
 	sBuilder stateBuilder,
 	logger log.Logger,
 ) (retError error) {
@@ -1071,7 +1071,7 @@ func (r *historyReplicator) resetMutableState(
 
 func (r *historyReplicator) deserializeBlob(
 	blob *commonpb.DataBlob,
-) ([]*historypb.HistoryEvent, error) {
+) ([]*eventpb.HistoryEvent, error) {
 
 	if blob.GetEncodingType() != commonpb.EncodingTypeProto3 {
 		return nil, ErrUnknownEncodingType
@@ -1127,11 +1127,11 @@ func (r *historyReplicator) reapplyEvents(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	events []*historypb.HistoryEvent,
+	events []*eventpb.HistoryEvent,
 	logger log.Logger,
 ) error {
 
-	var reapplyEvents []*historypb.HistoryEvent
+	var reapplyEvents []*eventpb.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
 		case eventpb.EventTypeWorkflowExecutionSignaled:
@@ -1154,7 +1154,7 @@ func (r *historyReplicator) reapplyEventsToCurrentRunningWorkflow(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	events []*historypb.HistoryEvent,
+	events []*eventpb.HistoryEvent,
 	logger log.Logger,
 ) error {
 
@@ -1189,7 +1189,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
-	events []*historypb.HistoryEvent,
+	events []*eventpb.HistoryEvent,
 	logger log.Logger,
 ) (retError error) {
 

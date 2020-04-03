@@ -152,7 +152,7 @@ func (h *historyArchiver) Archive(
 		historyIterator = archiver.NewHistoryIterator(request, h.container.HistoryV2Manager, targetHistoryBlobSize)
 	}
 
-	var historyBatches []*historypb.History
+	var historyBatches []*eventpb.History
 	for historyIterator.HasNext() {
 		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
 		if err != nil {

@@ -123,12 +123,12 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 
 	newDecisionScheduleEvent, newDecisionStartedEvent := s.prepareTransientDecisionCompletionFirstBatchReplicated(version, runID)
 
-	newDecisionCompletedEvent := &historypb.HistoryEvent{
+	newDecisionCompletedEvent := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   newDecisionStartedEvent.GetEventId() + 1,
 		Timestamp: time.Now().UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskCompleted,
-		Attributes: &historypb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &decisionpb.DecisionTaskCompletedEventAttributes{
 			ScheduledEventId: newDecisionScheduleEvent.GetEventId(),
 			StartedEventId:   newDecisionStartedEvent.GetEventId(),
 			Identity:         "some random identity",
@@ -305,12 +305,12 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		},
 	}
 
-	bufferedEvents := []*historypb.HistoryEvent{
+	bufferedEvents := []*eventpb.HistoryEvent{
 		{
 			EventId:   common.BufferedEventID,
 			EventType: eventpb.EventTypeActivityTaskCompleted,
 			Version:   1,
-			Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
+			Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 				Result:           activityResult,
 				ScheduledEventId: 5,
 				StartedEventId:   common.BufferedEventID,
@@ -321,7 +321,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 			EventId:   common.BufferedEventID,
 			EventType: eventpb.EventTypeActivityTaskStarted,
 			Version:   1,
-			Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
+			Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 				ScheduledEventId: 5,
 			}},
 		},
@@ -478,15 +478,15 @@ func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 }
 
 func (s *mutableStateSuite) TestTrimEvents() {
-	var input []*historypb.HistoryEvent
+	var input []*eventpb.HistoryEvent
 	output := s.msBuilder.trimEventsAfterWorkflowClose(input)
 	s.Equal(input, output)
 
-	input = []*historypb.HistoryEvent{}
+	input = []*eventpb.HistoryEvent{}
 	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
 	s.Equal(input, output)
 
-	input = []*historypb.HistoryEvent{
+	input = []*eventpb.HistoryEvent{
 		{
 			EventType: eventpb.EventTypeActivityTaskCanceled,
 		},
@@ -497,7 +497,7 @@ func (s *mutableStateSuite) TestTrimEvents() {
 	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
 	s.Equal(input, output)
 
-	input = []*historypb.HistoryEvent{
+	input = []*eventpb.HistoryEvent{
 		{
 			EventType: eventpb.EventTypeActivityTaskCanceled,
 		},
@@ -508,7 +508,7 @@ func (s *mutableStateSuite) TestTrimEvents() {
 	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
 	s.Equal(input, output)
 
-	input = []*historypb.HistoryEvent{
+	input = []*eventpb.HistoryEvent{
 		{
 			EventType: eventpb.EventTypeWorkflowExecutionCompleted,
 		},
@@ -517,7 +517,7 @@ func (s *mutableStateSuite) TestTrimEvents() {
 		},
 	}
 	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
-	s.Equal([]*historypb.HistoryEvent{
+	s.Equal([]*eventpb.HistoryEvent{
 		{
 			EventType: eventpb.EventTypeWorkflowExecutionCompleted,
 		},
@@ -551,7 +551,7 @@ func (s *mutableStateSuite) TestEventReapplied() {
 	s.True(isReapplied)
 }
 
-func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicated(version int64, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
+func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicated(version int64, runID string) (*eventpb.HistoryEvent, *eventpb.HistoryEvent) {
 	namespaceID := testNamespaceID
 	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -566,12 +566,12 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	decisionAttempt := int64(0)
 
 	eventID := int64(1)
-	workflowStartEvent := &historypb.HistoryEvent{
+	workflowStartEvent := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeWorkflowExecutionStarted,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 			TaskList:                            &tasklistpb.TaskList{Name: tasklist},
 			Input:                               nil,
@@ -581,12 +581,12 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	}
 	eventID++
 
-	decisionScheduleEvent := &historypb.HistoryEvent{
+	decisionScheduleEvent := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskScheduled,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
 			Attempt:                    decisionAttempt,
@@ -594,24 +594,24 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	}
 	eventID++
 
-	decisionStartedEvent := &historypb.HistoryEvent{
+	decisionStartedEvent := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskStarted,
-		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			RequestId:        uuid.New(),
 		}},
 	}
 	eventID++
 
-	_ = &historypb.HistoryEvent{
+	_ = &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskFailed,
-		Attributes: &historypb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &decisionpb.DecisionTaskFailedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &decisionpb.DecisionTaskFailedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			StartedEventId:   decisionStartedEvent.GetEventId(),
 		}},
@@ -657,12 +657,12 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	s.Nil(err)
 
 	decisionAttempt = int64(123)
-	newDecisionScheduleEvent := &historypb.HistoryEvent{
+	newDecisionScheduleEvent := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskScheduled,
-		Attributes: &historypb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &decisionpb.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
 			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
 			Attempt:                    decisionAttempt,
@@ -670,12 +670,12 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	}
 	eventID++
 
-	newDecisionStartedEvent := &historypb.HistoryEvent{
+	newDecisionStartedEvent := &eventpb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventTypeDecisionTaskStarted,
-		Attributes: &historypb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &decisionpb.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: decisionScheduleEvent.GetEventId(),
 			RequestId:        uuid.New(),
 		}},
@@ -777,7 +777,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 			Version:               failoverVersion,
 			InitiatedID:           80,
 			InitiatedEventBatchID: 20,
-			InitiatedEvent:        &historypb.HistoryEvent{},
+			InitiatedEvent:        &eventpb.HistoryEvent{},
 			StartedID:             common.EmptyEventID,
 			CreateRequestID:       uuid.New(),
 			Namespace:             testNamespaceID,
@@ -800,12 +800,12 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		uuid.New(): {},
 	}
 
-	bufferedEvents := []*historypb.HistoryEvent{
+	bufferedEvents := []*eventpb.HistoryEvent{
 		{
 			EventId:   common.BufferedEventID,
 			EventType: eventpb.EventTypeWorkflowExecutionSignaled,
 			Version:   failoverVersion,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+			Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 				SignalName: "test-signal-buffered",
 				Input:      []byte("test-signal-buffered-input"),
 			}},
