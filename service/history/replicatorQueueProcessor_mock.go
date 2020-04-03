@@ -30,7 +30,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 )
 
 // MockReplicatorQueueProcessor is a mock of ReplicatorQueueProcessor interface

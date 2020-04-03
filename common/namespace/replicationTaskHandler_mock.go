@@ -57,7 +57,7 @@ func (m *MockReplicationTaskExecutor) EXPECT() *MockReplicationTaskExecutorMockR
 }
 
 // Execute mocks base method.
-func (m *MockReplicationTaskExecutor) Execute(task *replicationgenpb.NamespaceTaskAttributes) error {
+func (m *MockReplicationTaskExecutor) Execute(task *replication.NamespaceTaskAttributes) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", task)
 	ret0, _ := ret[0].(error)

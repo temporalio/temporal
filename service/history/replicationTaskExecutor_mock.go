@@ -57,7 +57,7 @@ func (m *MockreplicationTaskExecutor) EXPECT() *MockreplicationTaskExecutorMockR
 }
 
 // execute mocks base method.
-func (m *MockreplicationTaskExecutor) execute(sourceCluster string, replicationTask *replicationgenpb.ReplicationTask, forceApply bool) (int, error) {
+func (m *MockreplicationTaskExecutor) execute(sourceCluster string, replicationTask *replication.ReplicationTask, forceApply bool) (int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "execute", sourceCluster, replicationTask, forceApply)
 	ret0, _ := ret[0].(int)

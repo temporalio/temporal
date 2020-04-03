@@ -29,7 +29,7 @@ package persistence
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	replication "github.com/temporalio/temporal/.gen/proto/replication"
 	reflect "reflect"
 )
 
@@ -109,10 +109,10 @@ func (mr *MockNamespaceReplicationQueueMockRecorder) PublishToDLQ(message interf
 }
 
 // GetReplicationMessages mocks base method.
-func (m *MockNamespaceReplicationQueue) GetReplicationMessages(lastMessageID, maxCount int) ([]*replicationgenpb.ReplicationTask, int, error) {
+func (m *MockNamespaceReplicationQueue) GetReplicationMessages(lastMessageID, maxCount int) ([]*replication.ReplicationTask, int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationMessages", lastMessageID, maxCount)
-	ret0, _ := ret[0].([]*replicationgenpb.ReplicationTask)
+	ret0, _ := ret[0].([]*replication.ReplicationTask)
 	ret1, _ := ret[1].(int)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -154,10 +154,10 @@ func (mr *MockNamespaceReplicationQueueMockRecorder) GetAckLevels() *gomock.Call
 }
 
 // GetMessagesFromDLQ mocks base method.
-func (m *MockNamespaceReplicationQueue) GetMessagesFromDLQ(firstMessageID, lastMessageID, pageSize int, pageToken []byte) ([]*replicationgenpb.ReplicationTask, []byte, error) {
+func (m *MockNamespaceReplicationQueue) GetMessagesFromDLQ(firstMessageID, lastMessageID, pageSize int, pageToken []byte) ([]*replication.ReplicationTask, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMessagesFromDLQ", firstMessageID, lastMessageID, pageSize, pageToken)
-	ret0, _ := ret[0].([]*replicationgenpb.ReplicationTask)
+	ret0, _ := ret[0].([]*replication.ReplicationTask)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
