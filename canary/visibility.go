@@ -28,7 +28,6 @@ import (
 
 	"github.com/uber-go/tally"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	filterpb "go.temporal.io/temporal-proto/filter"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
