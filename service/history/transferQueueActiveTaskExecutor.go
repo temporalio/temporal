@@ -374,7 +374,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		targetNamespace,
 		requestCancelInfo,
 	); err != nil {
-		t.logger.Debug(fmt.Sprintf("Failed to cancel external commonproto execution. Error: %v", err))
+		t.logger.Debug(fmt.Sprintf("Failed to cancel external workflow execution. Error: %v", err))
 
 		// Check to see if the error is non-transient, in which case add RequestCancelFailed
 		// event and complete transfer task by setting the err = nil
@@ -429,7 +429,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	initiatedEventID := task.GetScheduleId()
 	signalInfo, ok := mutableState.GetSignalInfo(initiatedEventID)
 	if !ok {
-		// TODO: here we should also RemoveSignalMutableState from target commonproto
+		// TODO: here we should also RemoveSignalMutableState from target workflow
 		// Otherwise, target SignalRequestID still can leak if shard restart after signalExternalExecutionCompleted
 		// To do that, probably need to add the SignalRequestID in transfer task.
 		return nil
@@ -501,7 +501,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	// release the weContext lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(retError)
-	// remove signalRequestedID from target commonproto, after Signal detail is removed from source commonproto
+	// remove signalRequestedID from target workflow, after Signal detail is removed from source workflow
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
@@ -904,7 +904,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstDecisionTask(
 
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
-			// Maybe child commonproto execution already timedout or terminated
+			// Maybe child workflow execution already timed out or terminated
 			// Safe to discard the error and complete this transfer task
 			return nil
 		}
@@ -1324,12 +1324,12 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		// This means the reset point is corrupted and not retry able.
 		// There must be a bug in our system that we must fix.(for example, history is not the same in active/passive)
 		t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.AutoResetPointCorruptionCounter)
-		logger.Error("Auto-Reset commonproto failed and not retryable. The reset point is corrupted.", tag.Error(err))
+		logger.Error("Auto-Reset workflow failed and not retryable. The reset point is corrupted.", tag.Error(err))
 		return nil
 
 	default:
 		// log this error and retry
-		logger.Error("Auto-Reset commonproto failed", tag.Error(err))
+		logger.Error("Auto-Reset workflow failed", tag.Error(err))
 		return err
 	}
 }
