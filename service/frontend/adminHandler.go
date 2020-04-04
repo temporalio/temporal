@@ -420,7 +420,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 			return nil, err
 		}
 		blobs = append(blobs, &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingTypeProto3,
+			EncodingType: commonpb.EncodingType_Proto3,
 			Data:         blob.Data,
 		})
 	}
@@ -785,7 +785,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case commongenpb.DLQTypeReplication:
+	case commongenpb.DLQType_Replication:
 		resp, err := adh.GetHistoryClient().ReadDLQMessages(ctx, &historyservice.ReadDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -804,7 +804,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 			ReplicationTasks: resp.GetReplicationTasks(),
 			NextPageToken:    resp.GetNextPageToken(),
 		}, err
-	case commongenpb.DLQTypeNamespace:
+	case commongenpb.DLQType_Namespace:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -852,7 +852,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 
 	var op func() error
 	switch request.GetType() {
-	case commongenpb.DLQTypeReplication:
+	case commongenpb.DLQType_Replication:
 		resp, err := adh.GetHistoryClient().PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -865,7 +865,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		}
 
 		return &adminservice.PurgeDLQMessagesResponse{}, err
-	case commongenpb.DLQTypeNamespace:
+	case commongenpb.DLQType_Namespace:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -906,7 +906,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case commongenpb.DLQTypeReplication:
+	case commongenpb.DLQType_Replication:
 		resp, err := adh.GetHistoryClient().MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -922,7 +922,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 		return &adminservice.MergeDLQMessagesResponse{
 			NextPageToken: request.GetNextPageToken(),
 		}, nil
-	case commongenpb.DLQTypeNamespace:
+	case commongenpb.DLQType_Namespace:
 
 		op = func() error {
 			select {
@@ -1139,17 +1139,17 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 
 func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType commonpb.IndexedValueType) string {
 	switch valueType {
-	case commonpb.IndexedValueTypeString:
+	case commonpb.IndexedValueType_String:
 		return "text"
-	case commonpb.IndexedValueTypeKeyword:
+	case commonpb.IndexedValueType_Keyword:
 		return "keyword"
-	case commonpb.IndexedValueTypeInt:
+	case commonpb.IndexedValueType_Int:
 		return "long"
-	case commonpb.IndexedValueTypeDouble:
+	case commonpb.IndexedValueType_Double:
 		return "double"
-	case commonpb.IndexedValueTypeBool:
+	case commonpb.IndexedValueType_Bool:
 		return "boolean"
-	case commonpb.IndexedValueTypeDatetime:
+	case commonpb.IndexedValueType_Datetime:
 		return "date"
 	default:
 		return ""

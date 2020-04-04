@@ -193,10 +193,10 @@ func triggerResetActivity(ctx context.Context, namespace string, baseWE workflow
 		return workflow.Execution{}, err
 	}
 	for _, event := range events {
-		if event.GetEventType() == eventpb.EventTypeDecisionTaskCompleted {
+		if event.GetEventType() == eventpb.EventType_DecisionTaskCompleted {
 			resetEventID = event.GetEventId()
 		}
-		if event.GetEventType() == eventpb.EventTypeSignalExternalWorkflowExecutionInitiated {
+		if event.GetEventType() == eventpb.EventType_SignalExternalWorkflowExecutionInitiated {
 			seenTrigger = true
 			break
 		}
@@ -237,7 +237,7 @@ func verifyResetActivity(ctx context.Context, namespace string, newWE workflow.E
 	if err != nil {
 		return err
 	}
-	if resp.WorkflowExecutionInfo.GetStatus() == executionpb.WorkflowExecutionStatusRunning || resp.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatusCompleted {
+	if resp.WorkflowExecutionInfo.GetStatus() == executionpb.WorkflowExecutionStatus_Running || resp.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatus_Completed {
 		return fmt.Errorf("new execution triggered by reset is not completed")
 	}
 	return nil

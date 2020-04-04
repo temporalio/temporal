@@ -186,7 +186,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
-	isHeartBeatTask := task.TimeoutType == int32(eventpb.TimeoutTypeHeartbeat)
+	isHeartBeatTask := task.TimeoutType == int32(eventpb.TimeoutType_Heartbeat)
 	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
 	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTimestamp)
 	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibility <= goVisibilityTS.Unix() {
@@ -480,14 +480,14 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	timeoutReason := timerTypeToReason(timerTypeStartToClose)
 	backoffInterval := mutableState.GetRetryBackoffDuration(timeoutReason)
-	continueAsNewInitiator := commonpb.ContinueAsNewInitiatorRetryPolicy
+	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_RetryPolicy
 	if backoffInterval == backoff.NoBackoff {
 		// check if a cron backoff is needed
 		backoffInterval, err = mutableState.GetCronBackoffDuration()
 		if err != nil {
 			return err
 		}
-		continueAsNewInitiator = commonpb.ContinueAsNewInitiatorCronSchedule
+		continueAsNewInitiator = commonpb.ContinueAsNewInitiator_CronSchedule
 	}
 	if backoffInterval == backoff.NoBackoff {
 		if err := timeoutWorkflow(mutableState, eventBatchFirstEventID); err != nil {

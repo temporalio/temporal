@@ -76,7 +76,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -91,7 +91,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCancelWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CancelWorkflowExecution,
 			Attributes: &decisionpb.Decision_CancelWorkflowExecutionDecisionAttributes{CancelWorkflowExecutionDecisionAttributes: &decisionpb.CancelWorkflowExecutionDecisionAttributes{
 				Details: []byte("Cancelled"),
 			}},
@@ -159,7 +159,7 @@ GetHistoryLoop:
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
-		if lastEvent.EventType != eventpb.EventTypeWorkflowExecutionCanceled {
+		if lastEvent.EventType != eventpb.EventType_WorkflowExecutionCanceled {
 			s.Logger.Warn("Execution not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
@@ -224,7 +224,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -239,7 +239,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeRequestCancelExternalWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_RequestCancelExternalWorkflowExecution,
 			Attributes: &decisionpb.Decision_RequestCancelExternalWorkflowExecutionDecisionAttributes{RequestCancelExternalWorkflowExecutionDecisionAttributes: &decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes{
 				Namespace:  s.foreignNamespace,
 				WorkflowId: id,
@@ -274,7 +274,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
 
 			return []byte(strconv.Itoa(int(foreignActivityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -289,7 +289,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		}
 
 		return []byte(strconv.Itoa(int(foreignActivityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCancelWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CancelWorkflowExecution,
 			Attributes: &decisionpb.Decision_CancelWorkflowExecutionDecisionAttributes{CancelWorkflowExecutionDecisionAttributes: &decisionpb.CancelWorkflowExecutionDecisionAttributes{
 				Details: []byte("Cancelled"),
 			}},
@@ -340,7 +340,7 @@ CheckHistoryLoopForCancelSent:
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-2]
-		if lastEvent.EventType != eventpb.EventTypeExternalWorkflowExecutionCancelRequested {
+		if lastEvent.EventType != eventpb.EventType_ExternalWorkflowExecutionCancelRequested {
 			s.Logger.Info("Cancellation still not sent")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
@@ -376,7 +376,7 @@ GetHistoryLoop:
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
-		if lastEvent.EventType != eventpb.EventTypeWorkflowExecutionCanceled {
+		if lastEvent.EventType != eventpb.EventType_WorkflowExecutionCanceled {
 			s.Logger.Warn("Execution not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
@@ -389,7 +389,7 @@ GetHistoryLoop:
 		// Find cancel requested event and verify it.
 		var cancelRequestEvent *eventpb.HistoryEvent
 		for _, x := range history.Events {
-			if x.EventType == eventpb.EventTypeWorkflowExecutionCancelRequested {
+			if x.EventType == eventpb.EventType_WorkflowExecutionCancelRequested {
 				cancelRequestEvent = x
 			}
 		}
@@ -441,7 +441,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -456,7 +456,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeRequestCancelExternalWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_RequestCancelExternalWorkflowExecution,
 			Attributes: &decisionpb.Decision_RequestCancelExternalWorkflowExecutionDecisionAttributes{RequestCancelExternalWorkflowExecutionDecisionAttributes: &decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes{
 				Namespace:  s.foreignNamespace,
 				WorkflowId: "workflow_not_exist",
@@ -506,7 +506,7 @@ CheckHistoryLoopForCancelSent:
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-2]
-		if lastEvent.EventType != eventpb.EventTypeRequestCancelExternalWorkflowExecutionFailed {
+		if lastEvent.EventType != eventpb.EventType_RequestCancelExternalWorkflowExecutionFailed {
 			s.Logger.Info("Cancellaton not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent

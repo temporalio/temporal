@@ -257,10 +257,10 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	for iter.HasNext() {
 		event, err := iter.Next()
 		s.NoError(err)
-		if event.GetEventType() == eventpb.EventTypeActivityTaskCompleted {
+		if event.GetEventType() == eventpb.EventType_ActivityTaskCompleted {
 			completedAct++
 		}
-		if event.GetEventType() == eventpb.EventTypeActivityTaskFailed {
+		if event.GetEventType() == eventpb.EventType_ActivityTaskFailed {
 			failedAct++
 			attr := event.GetActivityTaskFailedEventAttributes()
 			s.True(strings.HasPrefix(string(attr.Details), "unable to decode the activity function input bytes with error"))

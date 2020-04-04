@@ -227,7 +227,7 @@ Loop:
 		// handle normal decision task / non query task response
 		var lastDecisionScheduleEvent *eventpb.HistoryEvent
 		for _, e := range events {
-			if e.GetEventType() == eventpb.EventTypeDecisionTaskScheduled {
+			if e.GetEventType() == eventpb.EventType_DecisionTaskScheduled {
 				lastDecisionScheduleEvent = e
 			}
 		}
@@ -240,7 +240,7 @@ Loop:
 			p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 			_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 				TaskToken: response.TaskToken,
-				Cause:     eventpb.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
+				Cause:     eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
 				Details:   []byte(err.Error()),
 				Identity:  p.Identity,
 			})
@@ -310,7 +310,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 		_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 			TaskToken: response.TaskToken,
-			Cause:     eventpb.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
+			Cause:     eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
 			Details:   []byte(err.Error()),
 			Identity:  p.Identity,
 		})

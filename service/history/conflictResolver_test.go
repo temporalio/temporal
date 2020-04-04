@@ -202,7 +202,7 @@ func (s *conflictResolverSuite) TestReset() {
 		WorkflowTimeout:             event1.GetWorkflowExecutionStartedEventAttributes().ExecutionStartToCloseTimeoutSeconds,
 		DecisionStartToCloseTimeout: event1.GetWorkflowExecutionStartedEventAttributes().TaskStartToCloseTimeoutSeconds,
 		State:                       persistence.WorkflowStateCreated,
-		Status:                      executionpb.WorkflowExecutionStatusRunning,
+		Status:                      executionpb.WorkflowExecutionStatus_Running,
 		LastFirstEventID:            event1.GetEventId(),
 		NextEventID:                 nextEventID,
 		LastProcessedEvent:          common.EmptyEventID,

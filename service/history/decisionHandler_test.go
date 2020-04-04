@@ -113,7 +113,7 @@ func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize in
 	results := make(map[string]*querypb.WorkflowQueryResult)
 	for _, id := range ids {
 		results[id] = &querypb.WorkflowQueryResult{
-			ResultType: querypb.QueryResultTypeAnswered,
+			ResultType: querypb.QueryResultType_Answered,
 			Answer:     make([]byte, resultSize, resultSize),
 		}
 	}

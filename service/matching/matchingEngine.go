@@ -550,7 +550,7 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request 
 func (e *matchingEngineImpl) DescribeTaskList(ctx context.Context, request *matchingservice.DescribeTaskListRequest) (*matchingservice.DescribeTaskListResponse, error) {
 	namespaceID := request.GetNamespaceId()
 	taskListType := persistence.TaskListTypeDecision
-	if request.DescRequest.GetTaskListType() == tasklistpb.TaskListTypeActivity {
+	if request.DescRequest.GetTaskListType() == tasklistpb.TaskListType_Activity {
 		taskListType = persistence.TaskListTypeActivity
 	}
 	taskListName := request.DescRequest.TaskList.GetName()

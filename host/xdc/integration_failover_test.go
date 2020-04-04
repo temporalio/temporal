@@ -280,7 +280,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -296,7 +296,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 		workflowComplete = true
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -586,7 +586,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 
 		workflowCompleted = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -734,7 +734,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		ExecutionStartToCloseTimeoutSeconds: 100,
 		TaskStartToCloseTimeoutSeconds:      1,
 		Identity:                            identity,
-		WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicyAllowDuplicate,
+		WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
@@ -747,7 +747,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 		workflowCompleteTimes++
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -800,21 +800,21 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 	// start the same workflow in cluster 2 is not allowed if policy is AllowDuplicateFailedOnly
 	startReq.RequestId = uuid.New()
-	startReq.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	startReq.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly
 	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 	s.Nil(we)
 
 	// start the same workflow in cluster 2 is not allowed if policy is RejectDuplicate
 	startReq.RequestId = uuid.New()
-	startReq.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicyRejectDuplicate
+	startReq.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicy_RejectDuplicate
 	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 	s.Nil(we)
 
 	// start the workflow in cluster 2
 	startReq.RequestId = uuid.New()
-	startReq.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicyAllowDuplicate
+	startReq.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicy_AllowDuplicate
 	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -883,7 +883,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -898,7 +898,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -972,7 +972,7 @@ GetHistoryLoop:
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
-		if lastEvent.EventType != eventpb.EventTypeWorkflowExecutionTerminated {
+		if lastEvent.EventType != eventpb.EventType_WorkflowExecutionTerminated {
 			s.logger.Warn("Execution not terminated yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
@@ -996,7 +996,7 @@ GetHistoryLoop2:
 		if err == nil {
 			history := historyResponse.History
 			lastEvent := history.Events[len(history.Events)-1]
-			if lastEvent.EventType == eventpb.EventTypeWorkflowExecutionTerminated {
+			if lastEvent.EventType == eventpb.EventType_WorkflowExecutionTerminated {
 				terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
 				s.Equal(terminateReason, terminateEventAttributes.Reason)
 				s.Equal(terminateDetails, terminateEventAttributes.Details)
@@ -1071,7 +1071,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
 			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeContinueAsNewWorkflowExecution,
+				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
 					TaskList:                            &tasklistpb.TaskList{Name: tl},
@@ -1085,7 +1085,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		lastRunStartedEvent = history.Events[0]
 		workflowComplete = true
 		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1202,7 +1202,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if !eventSignaled {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.EventType == eventpb.EventTypeWorkflowExecutionSignaled {
+				if event.EventType == eventpb.EventType_WorkflowExecutionSignaled {
 					eventSignaled = true
 					return nil, []*decisionpb.Decision{}, nil
 				}
@@ -1210,7 +1210,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		}
 
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1409,7 +1409,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 			})
 			s.NoError(err)
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeStartTimer,
+				DecisionType: decisionpb.DecisionType_StartTimer,
 				Attributes: &decisionpb.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &decisionpb.StartTimerDecisionAttributes{
 					TimerId:                   "timer-id",
 					StartToFireTimeoutSeconds: 2,
@@ -1427,7 +1427,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 			})
 			s.NoError(err)
 			for _, event := range resp.History.Events {
-				if event.GetEventType() == eventpb.EventTypeTimerFired {
+				if event.GetEventType() == eventpb.EventType_TimerFired {
 					timerFired = true
 				}
 			}
@@ -1438,7 +1438,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 
 		workflowCompleted = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1564,7 +1564,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		if !activitySent {
 			activitySent = true
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: "some random activity type"},
@@ -1587,7 +1587,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		}
 
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1675,7 +1675,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.NoError(err)
 	pendingActivities := dweResponse.GetPendingActivities()
 	s.Equal(1, len(pendingActivities))
-	s.Equal(executionpb.PendingActivityStateScheduled, pendingActivities[0].GetState())
+	s.Equal(executionpb.PendingActivityState_Scheduled, pendingActivities[0].GetState())
 	s.Equal(heartbeatDetails, pendingActivities[0].GetHeartbeatDetails())
 	s.Equal("temporalInternal:Timeout TimeoutTypeHeartbeat", pendingActivities[0].GetLastFailureReason())
 	s.Equal(identity1, pendingActivities[0].GetLastWorkerIdentity())
@@ -1703,7 +1703,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	activityRetryFound := false
 	for _, event := range history.Events {
-		if event.GetEventType() == eventpb.EventTypeActivityTaskStarted {
+		if event.GetEventType() == eventpb.EventType_ActivityTaskStarted {
 			attribute := event.GetActivityTaskStartedEventAttributes()
 			s.True(attribute.GetAttempt() > 0)
 			activityRetryFound = true
@@ -1778,7 +1778,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 
 		workflowFinished = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1884,7 +1884,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		return nil, []*decisionpb.Decision{
 			{
-				DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 					Result: []byte("cron-test-result"),
 				}},
@@ -1993,7 +1993,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 		executions = append(executions, execution)
 		return nil, []*decisionpb.Decision{
 			{
-				DecisionType: decisionpb.DecisionTypeFailWorkflowExecution,
+				DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
 					Reason:  "retryable-error",
 					Details: nil,
@@ -2031,21 +2031,21 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
 	events := s.getHistory(client2, namespace, executions[0])
-	s.Equal(eventpb.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// second attempt
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
 	events = s.getHistory(client2, namespace, executions[1])
-	s.Equal(eventpb.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// third attempt. Still failing, should stop retry.
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
 	events = s.getHistory(client2, namespace, executions[2])
-	s.Equal(eventpb.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionFailed, events[len(events)-1].GetEventType())
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 

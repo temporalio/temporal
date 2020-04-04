@@ -255,7 +255,7 @@ func (d *HandlerImpl) RegisterNamespace(
 
 	if namespaceRequest.IsGlobalNamespace {
 		err = d.namespaceReplicator.HandleTransmissionTask(
-			replicationgenpb.NamespaceOperationCreate,
+			replicationgenpb.NamespaceOperation_Create,
 			namespaceRequest.Info,
 			namespaceRequest.Config,
 			namespaceRequest.ReplicationConfig,
@@ -547,7 +547,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	}
 
 	if isGlobalNamespace {
-		err = d.namespaceReplicator.HandleTransmissionTask(replicationgenpb.NamespaceOperationUpdate,
+		err = d.namespaceReplicator.HandleTransmissionTask(replicationgenpb.NamespaceOperation_Update,
 			info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 		if err != nil {
 			return nil, err
@@ -696,7 +696,7 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 		URI:        URI,
 		defaultURI: defaultURI,
 	}
-	if event.status == namespacepb.ArchivalStatusDefault {
+	if event.status == namespacepb.ArchivalStatus_Default {
 		event.status = defaultStatus
 	}
 	if err := event.validate(); err != nil {
@@ -753,13 +753,13 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 func getNamespaceStatus(info *persistence.NamespaceInfo) namespacepb.NamespaceStatus {
 	switch info.Status {
 	case persistence.NamespaceStatusRegistered:
-		return namespacepb.NamespaceStatusRegistered
+		return namespacepb.NamespaceStatus_Registered
 	case persistence.NamespaceStatusDeprecated:
-		return namespacepb.NamespaceStatusDeprecated
+		return namespacepb.NamespaceStatus_Deprecated
 	case persistence.NamespaceStatusDeleted:
-		return namespacepb.NamespaceStatusDeleted
+		return namespacepb.NamespaceStatus_Deleted
 	}
 
 	// TODO: panic, log, ...?
-	return namespacepb.NamespaceStatusRegistered
+	return namespacepb.NamespaceStatus_Registered
 }

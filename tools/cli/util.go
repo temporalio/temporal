@@ -52,7 +52,7 @@ import (
 // GetHistory helper method to iterate over all pages and return complete list of history events
 func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID, runID string) (*eventpb.History, error) {
 	iter := workflowClient.GetWorkflowHistory(ctx, workflowID, runID, false,
-		filterpb.HistoryEventFilterTypeAllEvent)
+		filterpb.HistoryEventFilterType_AllEvent)
 	var events []*eventpb.HistoryEvent
 	for iter.HasNext() {
 		event, err := iter.Next()
@@ -201,127 +201,127 @@ func breakLongWords(input string, maxWordLength int) string {
 func ColorEvent(e *eventpb.HistoryEvent) string {
 	var data string
 	switch e.GetEventType() {
-	case eventpb.EventTypeWorkflowExecutionStarted:
+	case eventpb.EventType_WorkflowExecutionStarted:
 		data = color.BlueString(e.EventType.String())
 
-	case eventpb.EventTypeWorkflowExecutionCompleted:
+	case eventpb.EventType_WorkflowExecutionCompleted:
 		data = color.GreenString(e.EventType.String())
 
-	case eventpb.EventTypeWorkflowExecutionFailed:
+	case eventpb.EventType_WorkflowExecutionFailed:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventTypeWorkflowExecutionTimedOut:
+	case eventpb.EventType_WorkflowExecutionTimedOut:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EventTypeDecisionTaskScheduled:
+	case eventpb.EventType_DecisionTaskScheduled:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeDecisionTaskStarted:
+	case eventpb.EventType_DecisionTaskStarted:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeDecisionTaskCompleted:
+	case eventpb.EventType_DecisionTaskCompleted:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeDecisionTaskTimedOut:
+	case eventpb.EventType_DecisionTaskTimedOut:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EventTypeActivityTaskScheduled:
+	case eventpb.EventType_ActivityTaskScheduled:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeActivityTaskStarted:
+	case eventpb.EventType_ActivityTaskStarted:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeActivityTaskCompleted:
+	case eventpb.EventType_ActivityTaskCompleted:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeActivityTaskFailed:
+	case eventpb.EventType_ActivityTaskFailed:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventTypeActivityTaskTimedOut:
+	case eventpb.EventType_ActivityTaskTimedOut:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EventTypeActivityTaskCancelRequested:
+	case eventpb.EventType_ActivityTaskCancelRequested:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeRequestCancelActivityTaskFailed:
+	case eventpb.EventType_RequestCancelActivityTaskFailed:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventTypeActivityTaskCanceled:
+	case eventpb.EventType_ActivityTaskCanceled:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeTimerStarted:
+	case eventpb.EventType_TimerStarted:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeTimerFired:
+	case eventpb.EventType_TimerFired:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeCancelTimerFailed:
+	case eventpb.EventType_CancelTimerFailed:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventTypeTimerCanceled:
+	case eventpb.EventType_TimerCanceled:
 		data = color.MagentaString(e.EventType.String())
 
-	case eventpb.EventTypeWorkflowExecutionCancelRequested:
+	case eventpb.EventType_WorkflowExecutionCancelRequested:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeWorkflowExecutionCanceled:
+	case eventpb.EventType_WorkflowExecutionCanceled:
 		data = color.MagentaString(e.EventType.String())
 
-	case eventpb.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
+	case eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeRequestCancelExternalWorkflowExecutionFailed:
+	case eventpb.EventType_RequestCancelExternalWorkflowExecutionFailed:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventTypeExternalWorkflowExecutionCancelRequested:
+	case eventpb.EventType_ExternalWorkflowExecutionCancelRequested:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeMarkerRecorded:
+	case eventpb.EventType_MarkerRecorded:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeWorkflowExecutionSignaled:
+	case eventpb.EventType_WorkflowExecutionSignaled:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeWorkflowExecutionTerminated:
+	case eventpb.EventType_WorkflowExecutionTerminated:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeWorkflowExecutionContinuedAsNew:
+	case eventpb.EventType_WorkflowExecutionContinuedAsNew:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeStartChildWorkflowExecutionInitiated:
+	case eventpb.EventType_StartChildWorkflowExecutionInitiated:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeStartChildWorkflowExecutionFailed:
+	case eventpb.EventType_StartChildWorkflowExecutionFailed:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventTypeChildWorkflowExecutionStarted:
+	case eventpb.EventType_ChildWorkflowExecutionStarted:
 		data = color.BlueString(e.EventType.String())
 
-	case eventpb.EventTypeChildWorkflowExecutionCompleted:
+	case eventpb.EventType_ChildWorkflowExecutionCompleted:
 		data = color.GreenString(e.EventType.String())
 
-	case eventpb.EventTypeChildWorkflowExecutionFailed:
+	case eventpb.EventType_ChildWorkflowExecutionFailed:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventTypeChildWorkflowExecutionCanceled:
+	case eventpb.EventType_ChildWorkflowExecutionCanceled:
 		data = color.MagentaString(e.EventType.String())
 
-	case eventpb.EventTypeChildWorkflowExecutionTimedOut:
+	case eventpb.EventType_ChildWorkflowExecutionTimedOut:
 		data = color.YellowString(e.EventType.String())
 
-	case eventpb.EventTypeChildWorkflowExecutionTerminated:
+	case eventpb.EventType_ChildWorkflowExecutionTerminated:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeSignalExternalWorkflowExecutionInitiated:
+	case eventpb.EventType_SignalExternalWorkflowExecutionInitiated:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeSignalExternalWorkflowExecutionFailed:
+	case eventpb.EventType_SignalExternalWorkflowExecutionFailed:
 		data = color.RedString(e.EventType.String())
 
-	case eventpb.EventTypeExternalWorkflowExecutionSignaled:
+	case eventpb.EventType_ExternalWorkflowExecutionSignaled:
 		data = e.EventType.String()
 
-	case eventpb.EventTypeUpsertWorkflowSearchAttributes:
+	case eventpb.EventType_UpsertWorkflowSearchAttributes:
 		data = e.EventType.String()
 
 	default:
@@ -333,124 +333,124 @@ func ColorEvent(e *eventpb.HistoryEvent) string {
 func getEventAttributes(e *eventpb.HistoryEvent) interface{} {
 	var data interface{}
 	switch e.GetEventType() {
-	case eventpb.EventTypeWorkflowExecutionStarted:
+	case eventpb.EventType_WorkflowExecutionStarted:
 		data = e.GetWorkflowExecutionStartedEventAttributes()
 
-	case eventpb.EventTypeWorkflowExecutionCompleted:
+	case eventpb.EventType_WorkflowExecutionCompleted:
 		data = e.GetWorkflowExecutionCompletedEventAttributes()
 
-	case eventpb.EventTypeWorkflowExecutionFailed:
+	case eventpb.EventType_WorkflowExecutionFailed:
 		data = e.GetWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EventTypeWorkflowExecutionTimedOut:
+	case eventpb.EventType_WorkflowExecutionTimedOut:
 		data = e.GetWorkflowExecutionTimedOutEventAttributes()
 
-	case eventpb.EventTypeDecisionTaskScheduled:
+	case eventpb.EventType_DecisionTaskScheduled:
 		data = e.GetDecisionTaskScheduledEventAttributes()
 
-	case eventpb.EventTypeDecisionTaskStarted:
+	case eventpb.EventType_DecisionTaskStarted:
 		data = e.GetDecisionTaskStartedEventAttributes()
 
-	case eventpb.EventTypeDecisionTaskCompleted:
+	case eventpb.EventType_DecisionTaskCompleted:
 		data = e.GetDecisionTaskCompletedEventAttributes()
 
-	case eventpb.EventTypeDecisionTaskTimedOut:
+	case eventpb.EventType_DecisionTaskTimedOut:
 		data = e.GetDecisionTaskTimedOutEventAttributes()
 
-	case eventpb.EventTypeActivityTaskScheduled:
+	case eventpb.EventType_ActivityTaskScheduled:
 		data = e.GetActivityTaskScheduledEventAttributes()
 
-	case eventpb.EventTypeActivityTaskStarted:
+	case eventpb.EventType_ActivityTaskStarted:
 		data = e.GetActivityTaskStartedEventAttributes()
 
-	case eventpb.EventTypeActivityTaskCompleted:
+	case eventpb.EventType_ActivityTaskCompleted:
 		data = e.GetActivityTaskCompletedEventAttributes()
 
-	case eventpb.EventTypeActivityTaskFailed:
+	case eventpb.EventType_ActivityTaskFailed:
 		data = e.GetActivityTaskFailedEventAttributes()
 
-	case eventpb.EventTypeActivityTaskTimedOut:
+	case eventpb.EventType_ActivityTaskTimedOut:
 		data = e.GetActivityTaskTimedOutEventAttributes()
 
-	case eventpb.EventTypeActivityTaskCancelRequested:
+	case eventpb.EventType_ActivityTaskCancelRequested:
 		data = e.GetActivityTaskCancelRequestedEventAttributes()
 
-	case eventpb.EventTypeRequestCancelActivityTaskFailed:
+	case eventpb.EventType_RequestCancelActivityTaskFailed:
 		data = e.GetRequestCancelActivityTaskFailedEventAttributes()
 
-	case eventpb.EventTypeActivityTaskCanceled:
+	case eventpb.EventType_ActivityTaskCanceled:
 		data = e.GetActivityTaskCanceledEventAttributes()
 
-	case eventpb.EventTypeTimerStarted:
+	case eventpb.EventType_TimerStarted:
 		data = e.GetTimerStartedEventAttributes()
 
-	case eventpb.EventTypeTimerFired:
+	case eventpb.EventType_TimerFired:
 		data = e.GetTimerFiredEventAttributes()
 
-	case eventpb.EventTypeCancelTimerFailed:
+	case eventpb.EventType_CancelTimerFailed:
 		data = e.GetCancelTimerFailedEventAttributes()
 
-	case eventpb.EventTypeTimerCanceled:
+	case eventpb.EventType_TimerCanceled:
 		data = e.GetTimerCanceledEventAttributes()
 
-	case eventpb.EventTypeWorkflowExecutionCancelRequested:
+	case eventpb.EventType_WorkflowExecutionCancelRequested:
 		data = e.GetWorkflowExecutionCancelRequestedEventAttributes()
 
-	case eventpb.EventTypeWorkflowExecutionCanceled:
+	case eventpb.EventType_WorkflowExecutionCanceled:
 		data = e.GetWorkflowExecutionCanceledEventAttributes()
 
-	case eventpb.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
+	case eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated:
 		data = e.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 
-	case eventpb.EventTypeRequestCancelExternalWorkflowExecutionFailed:
+	case eventpb.EventType_RequestCancelExternalWorkflowExecutionFailed:
 		data = e.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EventTypeExternalWorkflowExecutionCancelRequested:
+	case eventpb.EventType_ExternalWorkflowExecutionCancelRequested:
 		data = e.GetExternalWorkflowExecutionCancelRequestedEventAttributes()
 
-	case eventpb.EventTypeMarkerRecorded:
+	case eventpb.EventType_MarkerRecorded:
 		data = e.GetMarkerRecordedEventAttributes()
 
-	case eventpb.EventTypeWorkflowExecutionSignaled:
+	case eventpb.EventType_WorkflowExecutionSignaled:
 		data = e.GetWorkflowExecutionSignaledEventAttributes()
 
-	case eventpb.EventTypeWorkflowExecutionTerminated:
+	case eventpb.EventType_WorkflowExecutionTerminated:
 		data = e.GetWorkflowExecutionTerminatedEventAttributes()
 
-	case eventpb.EventTypeWorkflowExecutionContinuedAsNew:
+	case eventpb.EventType_WorkflowExecutionContinuedAsNew:
 		data = e.GetWorkflowExecutionContinuedAsNewEventAttributes()
 
-	case eventpb.EventTypeStartChildWorkflowExecutionInitiated:
+	case eventpb.EventType_StartChildWorkflowExecutionInitiated:
 		data = e.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 
-	case eventpb.EventTypeStartChildWorkflowExecutionFailed:
+	case eventpb.EventType_StartChildWorkflowExecutionFailed:
 		data = e.GetStartChildWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EventTypeChildWorkflowExecutionStarted:
+	case eventpb.EventType_ChildWorkflowExecutionStarted:
 		data = e.GetChildWorkflowExecutionStartedEventAttributes()
 
-	case eventpb.EventTypeChildWorkflowExecutionCompleted:
+	case eventpb.EventType_ChildWorkflowExecutionCompleted:
 		data = e.GetChildWorkflowExecutionCompletedEventAttributes()
 
-	case eventpb.EventTypeChildWorkflowExecutionFailed:
+	case eventpb.EventType_ChildWorkflowExecutionFailed:
 		data = e.GetChildWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EventTypeChildWorkflowExecutionCanceled:
+	case eventpb.EventType_ChildWorkflowExecutionCanceled:
 		data = e.GetChildWorkflowExecutionCanceledEventAttributes()
 
-	case eventpb.EventTypeChildWorkflowExecutionTimedOut:
+	case eventpb.EventType_ChildWorkflowExecutionTimedOut:
 		data = e.GetChildWorkflowExecutionTimedOutEventAttributes()
 
-	case eventpb.EventTypeChildWorkflowExecutionTerminated:
+	case eventpb.EventType_ChildWorkflowExecutionTerminated:
 		data = e.GetChildWorkflowExecutionTerminatedEventAttributes()
 
-	case eventpb.EventTypeSignalExternalWorkflowExecutionInitiated:
+	case eventpb.EventType_SignalExternalWorkflowExecutionInitiated:
 		data = e.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 
-	case eventpb.EventTypeSignalExternalWorkflowExecutionFailed:
+	case eventpb.EventType_SignalExternalWorkflowExecutionFailed:
 		data = e.GetSignalExternalWorkflowExecutionFailedEventAttributes()
 
-	case eventpb.EventTypeExternalWorkflowExecutionSignaled:
+	case eventpb.EventType_ExternalWorkflowExecutionSignaled:
 		data = e.GetExternalWorkflowExecutionSignaledEventAttributes()
 
 	default:
@@ -689,9 +689,9 @@ func parseTimeDuration(duration string) (dur time.Duration, err error) {
 
 func strToTaskListType(str string) tasklistpb.TaskListType {
 	if strings.ToLower(str) == "activity" {
-		return tasklistpb.TaskListTypeActivity
+		return tasklistpb.TaskListType_Activity
 	}
-	return tasklistpb.TaskListTypeDecision
+	return tasklistpb.TaskListType_Decision
 }
 
 func getCliIdentity() string {

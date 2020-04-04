@@ -151,21 +151,21 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "ExecutionStatus = \"Completed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatusCompleted),
+				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Completed),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'continuedasnew'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatusContinuedAsNew),
+				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_ContinuedAsNew),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'Failed' and ExecutionStatus = \"Failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatusFailed),
+				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
 			},
 		},
 		{
@@ -296,7 +296,7 @@ func (s *queryParserSuite) TestParse() {
 				earliestCloseTime: 2000,
 				latestCloseTime:   9999,
 				runID:             common.StringPtr("random runID"),
-				status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatusFailed),
+				status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
 			},
 		},
 		{

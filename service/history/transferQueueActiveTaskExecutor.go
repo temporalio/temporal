@@ -202,7 +202,7 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 	if mutableState.GetExecutionInfo().TaskList != task.TaskList {
 		// this decision is an sticky decision
 		// there shall already be an timer set
-		taskList.Kind = tasklistpb.TaskListKindSticky
+		taskList.Kind = tasklistpb.TaskListKind_Sticky
 		decisionTimeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
@@ -242,7 +242,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.Status != executionpb.WorkflowExecutionStatusContinuedAsNew
+	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.Status != executionpb.WorkflowExecutionStatus_ContinuedAsNew
 	completionEvent, err := mutableState.GetCompletionEvent()
 	if err != nil {
 		return err
@@ -1351,7 +1351,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 
 		executions := make([]parentclosepolicy.RequestDetail, 0, len(childInfos))
 		for _, childInfo := range childInfos {
-			if childInfo.ParentClosePolicy == commonpb.ParentClosePolicyAbandon {
+			if childInfo.ParentClosePolicy == commonpb.ParentClosePolicy_Abandon {
 				continue
 			}
 
@@ -1400,11 +1400,11 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	defer cancel()
 
 	switch childInfo.ParentClosePolicy {
-	case commonpb.ParentClosePolicyAbandon:
+	case commonpb.ParentClosePolicy_Abandon:
 		// noop
 		return nil
 
-	case commonpb.ParentClosePolicyTerminate:
+	case commonpb.ParentClosePolicy_Terminate:
 		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 			NamespaceId: namespaceID,
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
@@ -1419,7 +1419,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		})
 		return err
 
-	case commonpb.ParentClosePolicyRequestCancel:
+	case commonpb.ParentClosePolicy_RequestCancel:
 		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 			NamespaceId: namespaceID,
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{

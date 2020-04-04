@@ -66,8 +66,8 @@ func DescribeBatchJob(c *cli.Context) {
 	}
 
 	output := map[string]interface{}{}
-	if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatusRunning {
-		if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatusCompleted {
+	if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatus_Running {
+		if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatus_Completed {
 			output["msg"] = "batch job stopped status: " + wf.WorkflowExecutionInfo.GetStatus().String()
 		} else {
 			output["msg"] = "batch job is finished successfully"
@@ -111,7 +111,7 @@ func ListBatchJobs(c *cli.Context) {
 			"operator":  string(wf.SearchAttributes.IndexedFields["Operator"]),
 		}
 
-		if wf.GetStatus() != executionpb.WorkflowExecutionStatusRunning {
+		if wf.GetStatus() != executionpb.WorkflowExecutionStatus_Running {
 			job["status"] = wf.GetStatus().String()
 			job["closeTime"] = convertTime(wf.GetCloseTime().GetValue(), false)
 		} else {

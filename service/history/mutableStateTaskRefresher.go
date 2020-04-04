@@ -200,7 +200,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowClose(
 
 	executionInfo := mutableState.GetExecutionInfo()
 
-	if executionInfo.Status != executionpb.WorkflowExecutionStatusRunning {
+	if executionInfo.Status != executionpb.WorkflowExecutionStatus_Running {
 		return taskGenerator.generateWorkflowCloseTasks(
 			now,
 		)
@@ -222,7 +222,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 
 	executionInfo := mutableState.GetExecutionInfo()
 
-	if executionInfo.Status == executionpb.WorkflowExecutionStatusRunning {
+	if executionInfo.Status == executionpb.WorkflowExecutionStatus_Running {
 		return taskGenerator.generateRecordWorkflowStartedTasks(
 			now,
 			startEvent,

@@ -51,7 +51,7 @@ func DescribeTaskList(c *cli.Context) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	if taskListType == tasklistpb.TaskListTypeActivity {
+	if taskListType == tasklistpb.TaskListType_Activity {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
 		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})

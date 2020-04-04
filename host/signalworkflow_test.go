@@ -98,7 +98,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -112,7 +112,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventTypeWorkflowExecutionSignaled {
+				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 					signalEvent = event
 					return nil, []*decisionpb.Decision{}, nil
 				}
@@ -121,7 +121,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -272,7 +272,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -287,7 +287,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 		} else if previousStartedEventID > 0 {
 			numOfSignaledEvent = 0
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventTypeWorkflowExecutionSignaled {
+				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 					signalEvent = event
 					numOfSignaledEvent++
 				}
@@ -297,7 +297,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -425,7 +425,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -440,7 +440,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeSignalExternalWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_SignalExternalWorkflowExecution,
 			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
 				Namespace: s.foreignNamespace,
 				Execution: &executionpb.WorkflowExecution{
@@ -481,7 +481,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
 
 			return []byte(strconv.Itoa(int(foreignActivityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -495,7 +495,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventTypeWorkflowExecutionSignaled {
+				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 					signalEvent = event
 					return nil, []*decisionpb.Decision{}, nil
 				}
@@ -504,7 +504,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -557,7 +557,7 @@ CheckHistoryLoopForSignalSent:
 		//common.PrettyPrintHistory(history, s.Logger)
 
 		signalRequestedEvent := history.Events[len(history.Events)-2]
-		if signalRequestedEvent.GetEventType() != eventpb.EventTypeExternalWorkflowExecutionSignaled {
+		if signalRequestedEvent.GetEventType() != eventpb.EventType_ExternalWorkflowExecutionSignaled {
 			s.Logger.Info("Signal still not sent")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForSignalSent
@@ -640,7 +640,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoDecisionTaskCreated() {
 		decisionTaskDelay = time.Now().Sub(now)
 
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -718,7 +718,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -733,7 +733,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeSignalExternalWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_SignalExternalWorkflowExecution,
 			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
 				Namespace: s.foreignNamespace,
 				Execution: &executionpb.WorkflowExecution{
@@ -774,7 +774,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
 
 			return []byte(strconv.Itoa(int(foreignActivityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -788,7 +788,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventTypeWorkflowExecutionSignaled {
+				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 					signalEvent = event
 					return nil, []*decisionpb.Decision{}, nil
 				}
@@ -797,7 +797,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -849,7 +849,7 @@ CheckHistoryLoopForSignalSent:
 		history := historyResponse.History
 
 		signalRequestedEvent := history.Events[len(history.Events)-2]
-		if signalRequestedEvent.GetEventType() != eventpb.EventTypeExternalWorkflowExecutionSignaled {
+		if signalRequestedEvent.GetEventType() != eventpb.EventType_ExternalWorkflowExecutionSignaled {
 			s.Logger.Info("Signal still not sent")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForSignalSent
@@ -917,7 +917,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -932,7 +932,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeSignalExternalWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_SignalExternalWorkflowExecution,
 			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
 				Namespace: s.foreignNamespace,
 				Execution: &executionpb.WorkflowExecution{
@@ -986,7 +986,7 @@ CheckHistoryLoopForCancelSent:
 		history := historyResponse.History
 
 		signalFailedEvent := history.Events[len(history.Events)-2]
-		if signalFailedEvent.GetEventType() != eventpb.EventTypeSignalExternalWorkflowExecutionFailed {
+		if signalFailedEvent.GetEventType() != eventpb.EventType_SignalExternalWorkflowExecutionFailed {
 			s.Logger.Info("Cancellaton not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
@@ -1042,7 +1042,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -1057,7 +1057,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeSignalExternalWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_SignalExternalWorkflowExecution,
 			Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
 				Namespace: s.namespace,
 				Execution: &executionpb.WorkflowExecution{
@@ -1111,7 +1111,7 @@ CheckHistoryLoopForCancelSent:
 		history := historyResponse.History
 
 		signalFailedEvent := history.Events[len(history.Events)-2]
-		if signalFailedEvent.GetEventType() != eventpb.EventTypeSignalExternalWorkflowExecutionFailed {
+		if signalFailedEvent.GetEventType() != eventpb.EventType_SignalExternalWorkflowExecutionFailed {
 			s.Logger.Info("Cancellaton not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
@@ -1178,7 +1178,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -1192,7 +1192,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventTypeWorkflowExecutionSignaled {
+				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 					signalEvent = event
 					return nil, []*decisionpb.Decision{}, nil
 				}
@@ -1202,10 +1202,10 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 			signalEvent = nil
 			startedEvent = nil
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventTypeWorkflowExecutionSignaled {
+				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 					signalEvent = event
 				}
-				if event.GetEventType() == eventpb.EventTypeWorkflowExecutionStarted {
+				if event.GetEventType() == eventpb.EventType_WorkflowExecutionStarted {
 					startedEvent = event
 				}
 			}
@@ -1216,7 +1216,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1249,7 +1249,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	// Send a signal
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
-	wfIDReusePolicy := commonpb.WorkflowIdReusePolicyAllowDuplicate
+	wfIDReusePolicy := commonpb.WorkflowIdReusePolicy_AllowDuplicate
 	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           s.namespace,
@@ -1435,7 +1435,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -1451,7 +1451,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 
 		workflowComplete = true
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1498,7 +1498,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		SignalName:                          signalName,
 		SignalInput:                         signalInput,
 		Identity:                            identity,
-		WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicyRejectDuplicate,
+		WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_RejectDuplicate,
 	}
 	ctx, _ := rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
 	resp, err := s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
@@ -1508,7 +1508,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
-	sRequest.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	sRequest.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly
 	ctx, _ = rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
@@ -1517,7 +1517,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test policy WorkflowIdReusePolicyAllowDuplicate
-	sRequest.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicyAllowDuplicate
+	sRequest.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicy_AllowDuplicate
 	ctx, _ = rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.NoError(err)
@@ -1536,7 +1536,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.NoError(err)
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly success start
-	sRequest.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	sRequest.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly
 	resp, err = s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())

@@ -120,15 +120,15 @@ func emitWorkflowCompletionStats(
 	)
 
 	switch event.EventType {
-	case eventpb.EventTypeWorkflowExecutionCompleted:
+	case eventpb.EventType_WorkflowExecutionCompleted:
 		scope.IncCounter(metrics.WorkflowSuccessCount)
-	case eventpb.EventTypeWorkflowExecutionCanceled:
+	case eventpb.EventType_WorkflowExecutionCanceled:
 		scope.IncCounter(metrics.WorkflowCancelCount)
-	case eventpb.EventTypeWorkflowExecutionFailed:
+	case eventpb.EventType_WorkflowExecutionFailed:
 		scope.IncCounter(metrics.WorkflowFailedCount)
-	case eventpb.EventTypeWorkflowExecutionTimedOut:
+	case eventpb.EventType_WorkflowExecutionTimedOut:
 		scope.IncCounter(metrics.WorkflowTimeoutCount)
-	case eventpb.EventTypeWorkflowExecutionTerminated:
+	case eventpb.EventType_WorkflowExecutionTerminated:
 		scope.IncCounter(metrics.WorkflowTerminateCount)
 	}
 }

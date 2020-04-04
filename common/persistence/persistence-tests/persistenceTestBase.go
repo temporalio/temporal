@@ -296,7 +296,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				DecisionStartToCloseTimeout: decisionTimeout,
 				ExecutionContext:            executionContext,
 				State:                       p.WorkflowStateRunning,
-				Status:                      executionpb.WorkflowExecutionStatusRunning,
+				Status:                      executionpb.WorkflowExecutionStatus_Running,
 				LastFirstEventID:            common.FirstEventID,
 				NextEventID:                 nextEventID,
 				LastProcessedEvent:          lastProcessedEventID,
@@ -367,7 +367,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, wo
 				WorkflowTimeout:             wTimeout,
 				DecisionStartToCloseTimeout: decisionTimeout,
 				State:                       p.WorkflowStateRunning,
-				Status:                      executionpb.WorkflowExecutionStatusRunning,
+				Status:                      executionpb.WorkflowExecutionStatus_Running,
 				LastFirstEventID:            common.FirstEventID,
 				NextEventID:                 nextEventID,
 				LastProcessedEvent:          lastProcessedEventID,
@@ -423,7 +423,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 				TaskList:           taskList,
 				ExecutionContext:   executionContext,
 				State:              p.WorkflowStateRunning,
-				Status:             executionpb.WorkflowExecutionStatusRunning,
+				Status:             executionpb.WorkflowExecutionStatus_Running,
 				LastFirstEventID:   common.FirstEventID,
 				NextEventID:        nextEventID,
 				LastProcessedEvent: lastProcessedEventID,
@@ -463,7 +463,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				DecisionStartToCloseTimeout: decisionTimeout,
 				ExecutionContext:            executionContext,
 				State:                       p.WorkflowStateCreated,
-				Status:                      executionpb.WorkflowExecutionStatusRunning,
+				Status:                      executionpb.WorkflowExecutionStatus_Running,
 				LastFirstEventID:            common.FirstEventID,
 				NextEventID:                 nextEventID,
 				LastProcessedEvent:          lastProcessedEventID,
@@ -592,7 +592,7 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 		Encoding: pickRandomEncoding(),
 	}
 	req.UpdateWorkflowMutation.ExecutionInfo.State = p.WorkflowStateCompleted
-	req.UpdateWorkflowMutation.ExecutionInfo.Status = executionpb.WorkflowExecutionStatusContinuedAsNew
+	req.UpdateWorkflowMutation.ExecutionInfo.Status = executionpb.WorkflowExecutionStatus_ContinuedAsNew
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(req)
 	return err
 }

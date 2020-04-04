@@ -271,7 +271,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockMutableState.EXPECT().AddDecisionTaskFailedEvent(
 		inFlightDecision.ScheduleID,
 		inFlightDecision.StartedID,
-		eventpb.DecisionTaskFailedCauseFailoverCloseDecision,
+		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
 		[]byte(nil),
 		identityHistoryService,
 		"",
@@ -308,7 +308,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		RunID:           s.runID,
 		LastEventTaskID: lastEventTaskID,
 		State:           persistence.WorkflowStateRunning,
-		Status:          executionpb.WorkflowExecutionStatusRunning,
+		Status:          executionpb.WorkflowExecutionStatus_Running,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	nDCWorkflow := newNDCWorkflow(
@@ -355,5 +355,5 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
 	s.Equal(persistence.WorkflowStateZombie, executionInfo.State)
-	s.EqualValues(executionpb.WorkflowExecutionStatusRunning, executionInfo.Status)
+	s.EqualValues(executionpb.WorkflowExecutionStatus_Running, executionInfo.Status)
 }

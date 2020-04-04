@@ -214,7 +214,7 @@ func (t *nDCReplicationTaskImpl) getVersionHistory() *persistence.VersionHistory
 
 func (t *nDCReplicationTaskImpl) isWorkflowReset() bool {
 	switch t.getFirstEvent().GetEventType() {
-	case eventpb.EventTypeDecisionTaskFailed:
+	case eventpb.EventType_DecisionTaskFailed:
 		decisionTaskFailedEvent := t.getFirstEvent()
 		attr := decisionTaskFailedEvent.GetDecisionTaskFailedEventAttributes()
 		baseRunID := attr.GetBaseRunId()
@@ -237,7 +237,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 	}
 	newHistoryEvents := t.newEvents
 
-	if t.getLastEvent().GetEventType() != eventpb.EventTypeWorkflowExecutionContinuedAsNew ||
+	if t.getLastEvent().GetEventType() != eventpb.EventType_WorkflowExecutionContinuedAsNew ||
 		t.getLastEvent().GetWorkflowExecutionContinuedAsNewEventAttributes() == nil {
 		return nil, nil, ErrLastEventIsNotContinueAsNew
 	}

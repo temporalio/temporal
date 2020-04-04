@@ -90,7 +90,7 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	eventID := int64(23)
 	event := &eventpb.HistoryEvent{
 		EventId:    eventID,
-		EventType:  eventpb.EventTypeActivityTaskStarted,
+		EventType:  eventpb.EventType_ActivityTaskStarted,
 		Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{}},
 	}
 
@@ -106,32 +106,32 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	runID := "events-cache-miss-multi-events-batch-v2-success-run-id"
 	event1 := &eventpb.HistoryEvent{
 		EventId:    11,
-		EventType:  eventpb.EventTypeDecisionTaskCompleted,
+		EventType:  eventpb.EventType_DecisionTaskCompleted,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{}},
 	}
 	event2 := &eventpb.HistoryEvent{
 		EventId:    12,
-		EventType:  eventpb.EventTypeActivityTaskScheduled,
+		EventType:  eventpb.EventType_ActivityTaskScheduled,
 		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
 	event3 := &eventpb.HistoryEvent{
 		EventId:    13,
-		EventType:  eventpb.EventTypeActivityTaskScheduled,
+		EventType:  eventpb.EventType_ActivityTaskScheduled,
 		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
 	event4 := &eventpb.HistoryEvent{
 		EventId:    14,
-		EventType:  eventpb.EventTypeActivityTaskScheduled,
+		EventType:  eventpb.EventType_ActivityTaskScheduled,
 		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
 	event5 := &eventpb.HistoryEvent{
 		EventId:    15,
-		EventType:  eventpb.EventTypeActivityTaskScheduled,
+		EventType:  eventpb.EventType_ActivityTaskScheduled,
 		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
 	event6 := &eventpb.HistoryEvent{
 		EventId:    16,
-		EventType:  eventpb.EventTypeActivityTaskScheduled,
+		EventType:  eventpb.EventType_ActivityTaskScheduled,
 		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
 
@@ -184,12 +184,12 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	runID := "events-cache-disable-success-run-id"
 	event1 := &eventpb.HistoryEvent{
 		EventId:    23,
-		EventType:  eventpb.EventTypeActivityTaskStarted,
+		EventType:  eventpb.EventType_ActivityTaskStarted,
 		Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{}},
 	}
 	event2 := &eventpb.HistoryEvent{
 		EventId:    32,
-		EventType:  eventpb.EventTypeActivityTaskStarted,
+		EventType:  eventpb.EventType_ActivityTaskStarted,
 		Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{}},
 	}
 

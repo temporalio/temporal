@@ -146,7 +146,7 @@ func NewDisabledArchvialConfig() ArchivalConfig {
 		staticClusterStatus:    ArchivalDisabled,
 		dynamicClusterStatus:   nil,
 		enableRead:             nil,
-		namespaceDefaultStatus: namespacepb.ArchivalStatusDisabled,
+		namespaceDefaultStatus: namespacepb.ArchivalStatus_Disabled,
 		namespaceDefaultURI:    "",
 	}
 }
@@ -206,9 +206,9 @@ func getNamespaceArchivalStatus(str string) (namespacepb.ArchivalStatus, error) 
 	str = strings.TrimSpace(strings.ToLower(str))
 	switch str {
 	case "", common.ArchivalDisabled:
-		return namespacepb.ArchivalStatusDisabled, nil
+		return namespacepb.ArchivalStatus_Disabled, nil
 	case common.ArchivalEnabled:
-		return namespacepb.ArchivalStatusEnabled, nil
+		return namespacepb.ArchivalStatus_Enabled, nil
 	}
-	return namespacepb.ArchivalStatusDisabled, fmt.Errorf("invalid archival status of %v for namespace, valid status are: {\"\", \"disabled\", \"enabled\"}", str)
+	return namespacepb.ArchivalStatus_Disabled, fmt.Errorf("invalid archival status of %v for namespace, valid status are: {\"\", \"disabled\", \"enabled\"}", str)
 }

@@ -503,7 +503,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlob
 
 func (s *decisionAttrValidatorSuite) TestValidateTaskListName() {
 	taskList := func(name string) *tasklistpb.TaskList {
-		return &tasklistpb.TaskList{Name: name, Kind: tasklistpb.TaskListKindNormal}
+		return &tasklistpb.TaskList{Name: name, Kind: tasklistpb.TaskListKind_Normal}
 	}
 
 	testCases := []struct {

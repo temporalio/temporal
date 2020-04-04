@@ -129,7 +129,7 @@ func newForwarder(
 
 // ForwardTask forwards an activity or decision task to the parent task list partition if it exist
 func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) error {
-	if fwdr.taskListKind == tasklistpb.TaskListKindSticky {
+	if fwdr.taskListKind == tasklistpb.TaskListKind_Sticky {
 		return errTaskListKind
 	}
 
@@ -198,7 +198,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 
-	if fwdr.taskListKind == tasklistpb.TaskListKindSticky {
+	if fwdr.taskListKind == tasklistpb.TaskListKind_Sticky {
 		return nil, errTaskListKind
 	}
 
@@ -222,7 +222,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 
 // ForwardPoll forwards a poll request to parent task list partition if it exist
 func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
-	if fwdr.taskListKind == tasklistpb.TaskListKindSticky {
+	if fwdr.taskListKind == tasklistpb.TaskListKind_Sticky {
 		return nil, errTaskListKind
 	}
 

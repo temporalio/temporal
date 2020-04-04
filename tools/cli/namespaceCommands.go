@@ -404,12 +404,12 @@ func archivalStatus(c *cli.Context, statusFlagName string) namespacepb.ArchivalS
 	if c.IsSet(statusFlagName) {
 		switch c.String(statusFlagName) {
 		case "disabled":
-			return namespacepb.ArchivalStatusDisabled
+			return namespacepb.ArchivalStatus_Disabled
 		case "enabled":
-			return namespacepb.ArchivalStatusEnabled
+			return namespacepb.ArchivalStatus_Enabled
 		default:
 			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", statusFlagName), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
 		}
 	}
-	return namespacepb.ArchivalStatusDefault
+	return namespacepb.ArchivalStatus_Default
 }

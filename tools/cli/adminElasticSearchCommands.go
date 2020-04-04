@@ -149,7 +149,7 @@ func AdminIndex(c *cli.Context) {
 		docID := message.GetWorkflowId() + esDocIDDelimiter + message.GetRunId()
 		var req elastic.BulkableRequest
 		switch message.GetMessageType() {
-		case indexergenpb.MessageTypeIndex:
+		case indexergenpb.MessageType_Index:
 			doc := generateESDoc(message)
 			req = elastic.NewBulkIndexRequest().
 				Index(indexName).
@@ -158,7 +158,7 @@ func AdminIndex(c *cli.Context) {
 				VersionType(versionTypeExternal).
 				Version(message.GetVersion()).
 				Doc(doc)
-		case indexergenpb.MessageTypeDelete:
+		case indexergenpb.MessageType_Delete:
 			req = elastic.NewBulkDeleteRequest().
 				Index(indexName).
 				Type(esDocType).
@@ -278,13 +278,13 @@ func generateESDoc(msg *indexergenpb.Message) map[string]interface{} {
 
 	for k, v := range msg.Fields {
 		switch v.GetType() {
-		case indexergenpb.FieldTypeString:
+		case indexergenpb.FieldType_String:
 			doc[k] = v.GetStringData()
-		case indexergenpb.FieldTypeInt:
+		case indexergenpb.FieldType_Int:
 			doc[k] = v.GetIntData()
-		case indexergenpb.FieldTypeBool:
+		case indexergenpb.FieldType_Bool:
 			doc[k] = v.GetBoolData()
-		case indexergenpb.FieldTypeBinary:
+		case indexergenpb.FieldType_Binary:
 			doc[k] = v.GetBinaryData()
 		default:
 			ErrorAndExit("Unknown field type", nil)

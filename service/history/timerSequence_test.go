@@ -185,7 +185,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
 		VisibilityTimestamp: activityInfo.ScheduledTime.Add(
 			time.Duration(activityInfo.ScheduleToStartTimeout) * time.Second,
 		),
-		TimeoutType: int(eventpb.TimeoutTypeScheduleToStart),
+		TimeoutType: int(eventpb.TimeoutType_ScheduleToStart),
 		EventID:     activityInfo.ScheduleID,
 		Attempt:     int64(activityInfo.Attempt),
 		Version:     currentVersion,
@@ -230,7 +230,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.ActivityTimeoutTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: taskVisibilityTimestamp,
-		TimeoutType:         int(eventpb.TimeoutTypeHeartbeat),
+		TimeoutType:         int(eventpb.TimeoutType_Heartbeat),
 		EventID:             activityInfo.ScheduleID,
 		Attempt:             int64(activityInfo.Attempt),
 		Version:             currentVersion,
@@ -1059,15 +1059,15 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_St
 }
 
 func (s *timerSequenceSuite) TestConversion() {
-	s.Equal(eventpb.TimeoutTypeStartToClose, timerTypeToProto(timerTypeStartToClose))
-	s.Equal(eventpb.TimeoutTypeScheduleToStart, timerTypeToProto(timerTypeScheduleToStart))
-	s.Equal(eventpb.TimeoutTypeScheduleToClose, timerTypeToProto(timerTypeScheduleToClose))
-	s.Equal(eventpb.TimeoutTypeHeartbeat, timerTypeToProto(timerTypeHeartbeat))
+	s.Equal(eventpb.TimeoutType_StartToClose, timerTypeToProto(timerTypeStartToClose))
+	s.Equal(eventpb.TimeoutType_ScheduleToStart, timerTypeToProto(timerTypeScheduleToStart))
+	s.Equal(eventpb.TimeoutType_ScheduleToClose, timerTypeToProto(timerTypeScheduleToClose))
+	s.Equal(eventpb.TimeoutType_Heartbeat, timerTypeToProto(timerTypeHeartbeat))
 
-	s.Equal(timerTypeFromProto(eventpb.TimeoutTypeStartToClose), timerTypeStartToClose)
-	s.Equal(timerTypeFromProto(eventpb.TimeoutTypeScheduleToStart), timerTypeScheduleToStart)
-	s.Equal(timerTypeFromProto(eventpb.TimeoutTypeScheduleToClose), timerTypeScheduleToClose)
-	s.Equal(timerTypeFromProto(eventpb.TimeoutTypeHeartbeat), timerTypeHeartbeat)
+	s.Equal(timerTypeFromProto(eventpb.TimeoutType_StartToClose), timerTypeStartToClose)
+	s.Equal(timerTypeFromProto(eventpb.TimeoutType_ScheduleToStart), timerTypeScheduleToStart)
+	s.Equal(timerTypeFromProto(eventpb.TimeoutType_ScheduleToClose), timerTypeScheduleToClose)
+	s.Equal(timerTypeFromProto(eventpb.TimeoutType_Heartbeat), timerTypeHeartbeat)
 
 	s.Equal(int32(timerTaskStatusCreatedStartToClose), timerTypeToTimerMask(timerTypeStartToClose))
 	s.Equal(int32(timerTaskStatusCreatedScheduleToStart), timerTypeToTimerMask(timerTypeScheduleToStart))

@@ -731,7 +731,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
-	if currentWorkflowMutation.ExecutionInfo.Status != executionpb.WorkflowExecutionStatusContinuedAsNew {
+	if currentWorkflowMutation.ExecutionInfo.Status != executionpb.WorkflowExecutionStatus_ContinuedAsNew {
 		return nil
 	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
 		// update current workflow as zombie & continue as new without new zombie workflow
@@ -1187,7 +1187,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 		for _, e := range events.Events {
 			event := e
 			switch event.GetEventType() {
-			case eventpb.EventTypeWorkflowExecutionSignaled:
+			case eventpb.EventType_WorkflowExecutionSignaled:
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}

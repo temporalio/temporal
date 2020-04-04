@@ -43,8 +43,8 @@ const (
 
 // Supported field types
 var (
-	FieldTypeString = indexergenpb.FieldTypeString
-	FieldTypeInt    = indexergenpb.FieldTypeInt
-	FieldTypeBool   = indexergenpb.FieldTypeBool
-	FieldTypeBinary = indexergenpb.FieldTypeBinary
+	FieldTypeString = indexergenpb.FieldType_String
+	FieldTypeInt    = indexergenpb.FieldType_Int
+	FieldTypeBool   = indexergenpb.FieldType_Bool
+	FieldTypeBinary = indexergenpb.FieldType_Binary
 )

@@ -137,7 +137,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			token.release()
 		default:
 			if !tm.isForwardingAllowed() && // we are the root partition and forwarding is not possible
-				task.source == commongenpb.TaskSourceDbBacklog && // task was from backlog (stored in db)
+				task.source == commongenpb.TaskSource_DbBacklog && // task was from backlog (stored in db)
 				task.isForwarded() { // task came from a child partition
 				// a forwarded backlog task from a child partition, block trying
 				// to match with a poller until ctx timeout

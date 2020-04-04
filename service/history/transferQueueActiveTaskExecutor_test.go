@@ -751,10 +751,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := decisionpb.DecisionTypeStartChildWorkflowExecution
-	parentClosePolicy1 := commonpb.ParentClosePolicyAbandon
-	parentClosePolicy2 := commonpb.ParentClosePolicyTerminate
-	parentClosePolicy3 := commonpb.ParentClosePolicyRequestCancel
+	dt := decisionpb.DecisionType_StartChildWorkflowExecution
+	parentClosePolicy1 := commonpb.ParentClosePolicy_Abandon
+	parentClosePolicy2 := commonpb.ParentClosePolicy_Terminate
+	parentClosePolicy3 := commonpb.ParentClosePolicy_RequestCancel
 
 	event, _ = mutableState.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondDecisionTaskCompletedRequest{
 		ExecutionContext: nil,
@@ -885,8 +885,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := decisionpb.DecisionTypeStartChildWorkflowExecution
-	parentClosePolicy := commonpb.ParentClosePolicyTerminate
+	dt := decisionpb.DecisionType_StartChildWorkflowExecution
+	parentClosePolicy := commonpb.ParentClosePolicy_Terminate
 	var decisions []*decisionpb.Decision
 	for i := 0; i < 10; i++ {
 		decisions = append(decisions, &decisionpb.Decision{
@@ -976,8 +976,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := decisionpb.DecisionTypeStartChildWorkflowExecution
-	parentClosePolicy := commonpb.ParentClosePolicyAbandon
+	dt := decisionpb.DecisionType_StartChildWorkflowExecution
+	parentClosePolicy := commonpb.ParentClosePolicy_Abandon
 	var decisions []*decisionpb.Decision
 	for i := 0; i < 10; i++ {
 		decisions = append(decisions, &decisionpb.Decision{
@@ -1887,7 +1887,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddDecisionTaskRequest(
 	executionInfo := mutableState.GetExecutionInfo()
 	timeout := executionInfo.WorkflowTimeout
 	if mutableState.GetExecutionInfo().TaskList != task.TaskList {
-		taskList.Kind = tasklistpb.TaskListKindSticky
+		taskList.Kind = tasklistpb.TaskListKind_Sticky
 		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 

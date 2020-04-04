@@ -236,7 +236,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
 	stickyTl := "makeStickyToast"
-	stickyTlKind := tasklistpb.TaskListKindSticky
+	stickyTlKind := tasklistpb.TaskListKind_Sticky
 	identity := "selfDrivingToaster"
 
 	stickyTaskList := &tasklistpb.TaskList{Name: stickyTl, Kind: stickyTlKind}
@@ -262,7 +262,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 				ScheduledEventId:          scheduleID + 1,
 				Attempt:                   0,
 				StickyExecutionEnabled:    true,
-				WorkflowExecutionTaskList: &tasklistpb.TaskList{Name: tl, Kind: tasklistpb.TaskListKindNormal},
+				WorkflowExecutionTaskList: &tasklistpb.TaskList{Name: tl, Kind: tasklistpb.TaskListKind_Normal},
 			}
 			return response, nil
 		}).AnyTimes()
@@ -299,7 +299,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 		DecisionInfo:           nil,
 		WorkflowExecutionTaskList: &tasklistpb.TaskList{
 			Name: tl,
-			Kind: tasklistpb.TaskListKindNormal,
+			Kind: tasklistpb.TaskListKind_Normal,
 		},
 		EventStoreVersion:  0,
 		BranchToken:        nil,
@@ -339,7 +339,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 			s.NoError(err)
 			s.Equal(emptyPollForActivityTaskResponse, pollResp)
 
-			taskListType = tasklistpb.TaskListTypeActivity
+			taskListType = tasklistpb.TaskListType_Activity
 		} else {
 			resp, err := s.matchingEngine.PollForDecisionTask(callContext, &matchingservice.PollForDecisionTaskRequest{
 				NamespaceId: namespaceID.String(),
@@ -350,7 +350,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 			s.NoError(err)
 			s.Equal(emptyPollForDecisionTaskResponse, resp)
 
-			taskListType = tasklistpb.TaskListTypeDecision
+			taskListType = tasklistpb.TaskListType_Decision
 		}
 		select {
 		case <-callContext.Done():
@@ -461,7 +461,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	execution := &executionpb.WorkflowExecution{RunId: runID.String(), WorkflowId: workflowID}
 
 	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
-	tlKind := tasklistpb.TaskListKindNormal
+	tlKind := tasklistpb.TaskListKind_Normal
 	tlm, err := s.matchingEngine.getTaskListManager(tlID, tlKind)
 	s.Nil(err)
 
@@ -617,7 +617,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
 	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
-	tlKind := tasklistpb.TaskListKindNormal
+	tlKind := tasklistpb.TaskListKind_Normal
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	// So we can get snapshots
 	scope := tally.NewTestScope("test", nil)
@@ -756,7 +756,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
 
 	// check the poller information
-	tlType := tasklistpb.TaskListTypeActivity
+	tlType := tasklistpb.TaskListType_Activity
 	descResp, err := s.matchingEngine.DescribeTaskList(s.callContext, &matchingservice.DescribeTaskListRequest{
 		NamespaceId: namespaceID.String(),
 		DescRequest: &workflowservice.DescribeTaskListRequest{
@@ -817,7 +817,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
 	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
-	tlKind := tasklistpb.TaskListKindNormal
+	tlKind := tasklistpb.TaskListKind_Normal
 	dispatchTTL := time.Nanosecond
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	dPtr := _defaultTaskDispatchRPS
@@ -1389,7 +1389,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
 	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
-	tlKind := tasklistpb.TaskListKindNormal
+	tlKind := tasklistpb.TaskListKind_Normal
 
 	taskList := &tasklistpb.TaskList{Name: tl}
 
@@ -1525,7 +1525,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch_ReadBatchDone() {
 	namespaceID := primitives.UUID(uuid.NewRandom())
 	tl := "makeToast"
 	tlID := newTestTaskListID(namespaceID.String(), tl, persistence.TaskListTypeActivity)
-	tlNormal := tasklistpb.TaskListKindNormal
+	tlNormal := tasklistpb.TaskListKind_Normal
 
 	const rangeSize = 10
 	const maxReadLevel = int64(120)
@@ -1673,7 +1673,7 @@ func (s *matchingEngineSuite) awaitCondition(cond func() bool, timeout time.Dura
 func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID int64,
 	scheduleAttributes *decisionpb.ScheduleActivityTaskDecisionAttributes) *eventpb.HistoryEvent {
 
-	historyEvent := newHistoryEvent(eventID, eventpb.EventTypeActivityTaskScheduled)
+	historyEvent := newHistoryEvent(eventID, eventpb.EventType_ActivityTaskScheduled)
 	historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 		ActivityId:                    scheduleAttributes.ActivityId,
 		ActivityType:                  scheduleAttributes.ActivityType,

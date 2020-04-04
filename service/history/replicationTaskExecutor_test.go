@@ -207,7 +207,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 	workflowID := uuid.New()
 	runID := uuid.New()
 	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskTypeSyncActivity,
+		TaskType: replicationgenpb.ReplicationTaskType_SyncActivity,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId: namespaceID,
@@ -241,7 +241,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 	workflowID := uuid.New()
 	runID := uuid.New()
 	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskTypeHistory,
+		TaskType: replicationgenpb.ReplicationTaskType_History,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{
 			HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
 				NamespaceId:  namespaceID,
@@ -278,7 +278,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 	workflowID := uuid.New()
 	runID := uuid.New()
 	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskTypeHistoryV2,
+		TaskType: replicationgenpb.ReplicationTaskType_HistoryV2,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{
 			HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
 				NamespaceId: namespaceID,

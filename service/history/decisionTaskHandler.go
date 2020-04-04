@@ -131,43 +131,43 @@ func (handler *decisionTaskHandlerImpl) handleDecisions(
 
 func (handler *decisionTaskHandlerImpl) handleDecision(decision *decisionpb.Decision) error {
 	switch decision.GetDecisionType() {
-	case decisionpb.DecisionTypeScheduleActivityTask:
+	case decisionpb.DecisionType_ScheduleActivityTask:
 		return handler.handleDecisionScheduleActivity(decision.GetScheduleActivityTaskDecisionAttributes())
 
-	case decisionpb.DecisionTypeCompleteWorkflowExecution:
+	case decisionpb.DecisionType_CompleteWorkflowExecution:
 		return handler.handleDecisionCompleteWorkflow(decision.GetCompleteWorkflowExecutionDecisionAttributes())
 
-	case decisionpb.DecisionTypeFailWorkflowExecution:
+	case decisionpb.DecisionType_FailWorkflowExecution:
 		return handler.handleDecisionFailWorkflow(decision.GetFailWorkflowExecutionDecisionAttributes())
 
-	case decisionpb.DecisionTypeCancelWorkflowExecution:
+	case decisionpb.DecisionType_CancelWorkflowExecution:
 		return handler.handleDecisionCancelWorkflow(decision.GetCancelWorkflowExecutionDecisionAttributes())
 
-	case decisionpb.DecisionTypeStartTimer:
+	case decisionpb.DecisionType_StartTimer:
 		return handler.handleDecisionStartTimer(decision.GetStartTimerDecisionAttributes())
 
-	case decisionpb.DecisionTypeRequestCancelActivityTask:
+	case decisionpb.DecisionType_RequestCancelActivityTask:
 		return handler.handleDecisionRequestCancelActivity(decision.GetRequestCancelActivityTaskDecisionAttributes())
 
-	case decisionpb.DecisionTypeCancelTimer:
+	case decisionpb.DecisionType_CancelTimer:
 		return handler.handleDecisionCancelTimer(decision.GetCancelTimerDecisionAttributes())
 
-	case decisionpb.DecisionTypeRecordMarker:
+	case decisionpb.DecisionType_RecordMarker:
 		return handler.handleDecisionRecordMarker(decision.GetRecordMarkerDecisionAttributes())
 
-	case decisionpb.DecisionTypeRequestCancelExternalWorkflowExecution:
+	case decisionpb.DecisionType_RequestCancelExternalWorkflowExecution:
 		return handler.handleDecisionRequestCancelExternalWorkflow(decision.GetRequestCancelExternalWorkflowExecutionDecisionAttributes())
 
-	case decisionpb.DecisionTypeSignalExternalWorkflowExecution:
+	case decisionpb.DecisionType_SignalExternalWorkflowExecution:
 		return handler.handleDecisionSignalExternalWorkflow(decision.GetSignalExternalWorkflowExecutionDecisionAttributes())
 
-	case decisionpb.DecisionTypeContinueAsNewWorkflowExecution:
+	case decisionpb.DecisionType_ContinueAsNewWorkflowExecution:
 		return handler.handleDecisionContinueAsNewWorkflow(decision.GetContinueAsNewWorkflowExecutionDecisionAttributes())
 
-	case decisionpb.DecisionTypeStartChildWorkflowExecution:
+	case decisionpb.DecisionType_StartChildWorkflowExecution:
 		return handler.handleDecisionStartChildWorkflow(decision.GetStartChildWorkflowExecutionDecisionAttributes())
 
-	case decisionpb.DecisionTypeUpsertWorkflowSearchAttributes:
+	case decisionpb.DecisionType_UpsertWorkflowSearchAttributes:
 		return handler.handleDecisionUpsertWorkflowSearchAttributes(decision.GetUpsertWorkflowSearchAttributesDecisionAttributes())
 
 	default:
@@ -204,7 +204,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 				executionInfo.WorkflowTimeout,
 			)
 		},
-		eventpb.DecisionTaskFailedCauseBadScheduleActivityAttributes,
+		eventpb.DecisionTaskFailedCause_BadScheduleActivityAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -224,7 +224,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 		return nil
 	case *serviceerror.InvalidArgument:
 		return handler.handlerFailDecision(
-			eventpb.DecisionTaskFailedCauseScheduleActivityDuplicateId, "",
+			eventpb.DecisionTaskFailedCause_ScheduleActivityDuplicateId, "",
 		)
 	default:
 		return err
@@ -244,7 +244,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 		func() error {
 			return handler.attrValidator.validateActivityCancelAttributes(attr)
 		},
-		eventpb.DecisionTaskFailedCauseBadRequestCancelActivityAttributes,
+		eventpb.DecisionTaskFailedCause_BadRequestCancelActivityAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -298,7 +298,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartTimer(
 		func() error {
 			return handler.attrValidator.validateTimerScheduleAttributes(attr)
 		},
-		eventpb.DecisionTaskFailedCauseBadStartTimerAttributes,
+		eventpb.DecisionTaskFailedCause_BadStartTimerAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -309,7 +309,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartTimer(
 		return nil
 	case *serviceerror.InvalidArgument:
 		return handler.handlerFailDecision(
-			eventpb.DecisionTaskFailedCauseStartTimerDuplicateId, "",
+			eventpb.DecisionTaskFailedCause_StartTimerDuplicateId, "",
 		)
 	default:
 		return err
@@ -326,14 +326,14 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(eventpb.DecisionTaskFailedCauseUnhandledDecision, "")
+		return handler.handlerFailDecision(eventpb.DecisionTaskFailedCause_UnhandledDecision, "")
 	}
 
 	if err := handler.validateDecisionAttr(
 		func() error {
 			return handler.attrValidator.validateCompleteWorkflowExecutionAttributes(attr)
 		},
-		eventpb.DecisionTaskFailedCauseBadCompleteWorkflowExecutionAttributes,
+		eventpb.DecisionTaskFailedCause_BadCompleteWorkflowExecutionAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -355,7 +355,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(int64(decisionpb.DecisionTypeCompleteWorkflowExecution)),
+			tag.WorkflowDecisionType(int64(decisionpb.DecisionType_CompleteWorkflowExecution)),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
@@ -384,7 +384,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	return handler.retryCronContinueAsNew(
 		startAttributes,
 		int32(cronBackoff.Seconds()),
-		commonpb.ContinueAsNewInitiatorCronSchedule,
+		commonpb.ContinueAsNewInitiator_CronSchedule,
 		"",
 		nil,
 		attr.Result,
@@ -401,14 +401,14 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(eventpb.DecisionTaskFailedCauseUnhandledDecision, "")
+		return handler.handlerFailDecision(eventpb.DecisionTaskFailedCause_UnhandledDecision, "")
 	}
 
 	if err := handler.validateDecisionAttr(
 		func() error {
 			return handler.attrValidator.validateFailWorkflowExecutionAttributes(attr)
 		},
-		eventpb.DecisionTaskFailedCauseBadFailWorkflowExecutionAttributes,
+		eventpb.DecisionTaskFailedCause_BadFailWorkflowExecutionAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -430,7 +430,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(int64(decisionpb.DecisionTypeFailWorkflowExecution)),
+			tag.WorkflowDecisionType(int64(decisionpb.DecisionType_FailWorkflowExecution)),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
@@ -438,7 +438,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 
 	// below will check whether to do continue as new based on backoff & backoff or cron
 	backoffInterval := handler.mutableState.GetRetryBackoffDuration(attr.GetReason())
-	continueAsNewInitiator := commonpb.ContinueAsNewInitiatorRetryPolicy
+	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_RetryPolicy
 	// first check the backoff retry
 	if backoffInterval == backoff.NoBackoff {
 		// if no backoff retry, set the backoffInterval using cron schedule
@@ -447,7 +447,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 			handler.stopProcessing = true
 			return err
 		}
-		continueAsNewInitiator = commonpb.ContinueAsNewInitiatorCronSchedule
+		continueAsNewInitiator = commonpb.ContinueAsNewInitiator_CronSchedule
 	}
 	// second check the backoff / cron schedule
 	if backoffInterval == backoff.NoBackoff {
@@ -487,7 +487,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelTimer(
 		func() error {
 			return handler.attrValidator.validateTimerCancelAttributes(attr)
 		},
-		eventpb.DecisionTaskFailedCauseBadCancelTimerAttributes,
+		eventpb.DecisionTaskFailedCause_BadCancelTimerAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -524,14 +524,14 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelWorkflow(
 		metrics.DecisionTypeCancelWorkflowCounter)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(eventpb.DecisionTaskFailedCauseUnhandledDecision, "")
+		return handler.handlerFailDecision(eventpb.DecisionTaskFailedCause_UnhandledDecision, "")
 	}
 
 	if err := handler.validateDecisionAttr(
 		func() error {
 			return handler.attrValidator.validateCancelWorkflowExecutionAttributes(attr)
 		},
-		eventpb.DecisionTaskFailedCauseBadCancelWorkflowExecutionAttributes,
+		eventpb.DecisionTaskFailedCause_BadCancelWorkflowExecutionAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -544,7 +544,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(int64(decisionpb.DecisionTypeCancelWorkflowExecution)),
+			tag.WorkflowDecisionType(int64(decisionpb.DecisionType_CancelWorkflowExecution)),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
@@ -582,7 +582,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelExternalWorkf
 				attr,
 			)
 		},
-		eventpb.DecisionTaskFailedCauseBadRequestCancelExternalWorkflowExecutionAttributes,
+		eventpb.DecisionTaskFailedCause_BadRequestCancelExternalWorkflowExecutionAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -607,7 +607,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRecordMarker(
 		func() error {
 			return handler.attrValidator.validateRecordMarkerAttributes(attr)
 		},
-		eventpb.DecisionTaskFailedCauseBadRecordMarkerAttributes,
+		eventpb.DecisionTaskFailedCause_BadRecordMarkerAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -635,7 +635,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 	)
 
 	if handler.hasUnhandledEventsBeforeDecisions {
-		return handler.handlerFailDecision(eventpb.DecisionTaskFailedCauseUnhandledDecision, "")
+		return handler.handlerFailDecision(eventpb.DecisionTaskFailedCause_UnhandledDecision, "")
 	}
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -647,7 +647,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 				executionInfo,
 			)
 		},
-		eventpb.DecisionTaskFailedCauseBadContinueAsNewAttributes,
+		eventpb.DecisionTaskFailedCause_BadContinueAsNewAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -669,7 +669,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 		)
 		handler.logger.Warn(
 			"Multiple completion decisions",
-			tag.WorkflowDecisionType(int64(decisionpb.DecisionTypeContinueAsNewWorkflowExecution)),
+			tag.WorkflowDecisionType(int64(decisionpb.DecisionType_ContinueAsNewWorkflowExecution)),
 			tag.ErrorTypeMultipleCompletionDecisions,
 		)
 		return nil
@@ -729,7 +729,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 				executionInfo,
 			)
 		},
-		eventpb.DecisionTaskFailedCauseBadStartChildExecutionAttributes,
+		eventpb.DecisionTaskFailedCause_BadStartChildExecutionAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -745,7 +745,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 
 	enabled := handler.config.EnableParentClosePolicy(handler.namespaceEntry.GetInfo().Name)
 	if !enabled {
-		attr.ParentClosePolicy = commonpb.ParentClosePolicyAbandon
+		attr.ParentClosePolicy = commonpb.ParentClosePolicy_Abandon
 	}
 
 	requestID := uuid.New()
@@ -783,7 +783,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 				attr,
 			)
 		},
-		eventpb.DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes,
+		eventpb.DecisionTaskFailedCause_BadSignalWorkflowExecutionAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}
@@ -830,7 +830,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 				attr,
 			)
 		},
-		eventpb.DecisionTaskFailedCauseBadSearchAttributes,
+		eventpb.DecisionTaskFailedCause_BadSearchAttributes,
 	); err != nil || handler.stopProcessing {
 		return err
 	}

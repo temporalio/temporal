@@ -209,7 +209,7 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
 
 func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(targetClusters []string, task *persistenceblobs.ReplicationTaskInfo) *replicationgenpb.ReplicationTask {
 	return &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskTypeHistoryMetadata,
+		TaskType: replicationgenpb.ReplicationTaskType_HistoryMetadata,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{
 			HistoryMetadataTaskAttributes: &replicationgenpb.HistoryMetadataTaskAttributes{
 				TargetClusters: targetClusters,
@@ -251,7 +251,7 @@ func GenerateReplicationTask(
 	events := history.Events
 	if len(events) > 0 {
 		lastEvent := events[len(events)-1]
-		if lastEvent.GetEventType() == eventpb.EventTypeWorkflowExecutionContinuedAsNew {
+		if lastEvent.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
 			// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
 			newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 			newRunHistory, _, err = GetAllHistory(
@@ -269,7 +269,7 @@ func GenerateReplicationTask(
 	}
 
 	ret := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskTypeHistory,
+		TaskType: replicationgenpb.ReplicationTaskType_History,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{
 			HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
 				TargetClusters:  targetClusters,
@@ -301,7 +301,7 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 	now := clock.NewRealTimeSource().Now()
 	if p.lastShardSyncTimestamp.Add(p.shard.GetConfig().ShardSyncMinInterval()).Before(now) {
 		syncStatusTask := &replicationgenpb.ReplicationTask{
-			TaskType: replicationgenpb.ReplicationTaskTypeSyncShardStatus,
+			TaskType: replicationgenpb.ReplicationTaskType_SyncShardStatus,
 			Attributes: &replicationgenpb.ReplicationTask_SyncShardStatusTaskAttributes{
 				SyncShardStatusTaskAttributes: &replicationgenpb.SyncShardStatusTaskAttributes{
 					SourceCluster: p.currentClusterName,
@@ -610,7 +610,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			}
 
 			return &replicationgenpb.ReplicationTask{
-				TaskType: replicationgenpb.ReplicationTaskTypeSyncActivity,
+				TaskType: replicationgenpb.ReplicationTaskType_SyncActivity,
 				Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
 					SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 						NamespaceId:        namespaceID,
@@ -723,7 +723,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 			}
 
 			replicationTask := &replicationgenpb.ReplicationTask{
-				TaskType: replicationgenpb.ReplicationTaskTypeHistoryV2,
+				TaskType: replicationgenpb.ReplicationTaskType_HistoryV2,
 				Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{
 					HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
 						TaskId:              task.GetFirstEventId(),

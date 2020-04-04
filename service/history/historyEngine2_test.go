@@ -215,7 +215,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	expectedResponse.Attempt = di.Attempt
 	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: tasklistpb.TaskListKindNormal,
+		Kind: tasklistpb.TaskListKind_Normal,
 	}
 	expectedResponse.BranchToken, _ = msBuilder.GetCurrentBranchToken()
 
@@ -284,7 +284,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	expectedResponse.Attempt = di.Attempt
 	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: tasklistpb.TaskListKindNormal,
+		Kind: tasklistpb.TaskListKind_Normal,
 	}
 	currentBranchTokken, err := msBuilder.GetCurrentBranchToken()
 	s.NoError(err)
@@ -860,7 +860,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
 	decisions := []*decisionpb.Decision{{
-		DecisionType: decisionpb.DecisionTypeRecordMarker,
+		DecisionType: decisionpb.DecisionType_RecordMarker,
 		Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 			MarkerName: markerName,
 			Details:    markerDetails,
@@ -937,7 +937,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		StartRequestID:   requestID,
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		Status:           executionpb.WorkflowExecutionStatusRunning,
+		Status:           executionpb.WorkflowExecutionStatus_Running,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
 
@@ -973,7 +973,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		StartRequestID:   "oldRequestID",
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		Status:           executionpb.WorkflowExecutionStatusRunning,
+		Status:           executionpb.WorkflowExecutionStatus_Running,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
 
@@ -1006,9 +1006,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 	lastWriteVersion := common.EmptyVersion
 
 	options := []commonpb.WorkflowIdReusePolicy{
-		commonpb.WorkflowIdReusePolicyAllowDuplicateFailedOnly,
-		commonpb.WorkflowIdReusePolicyAllowDuplicate,
-		commonpb.WorkflowIdReusePolicyRejectDuplicate,
+		commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly,
+		commonpb.WorkflowIdReusePolicy_AllowDuplicate,
+		commonpb.WorkflowIdReusePolicy_RejectDuplicate,
 	}
 
 	expecedErrs := []bool{true, false, true}
@@ -1024,7 +1024,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		StartRequestID:   "oldRequestID",
 		RunID:            runID,
 		State:            p.WorkflowStateCompleted,
-		Status:           executionpb.WorkflowExecutionStatusCompleted,
+		Status:           executionpb.WorkflowExecutionStatus_Completed,
 		LastWriteVersion: lastWriteVersion,
 	}).Times(len(expecedErrs))
 
@@ -1076,18 +1076,18 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 	lastWriteVersion := common.EmptyVersion
 
 	options := []commonpb.WorkflowIdReusePolicy{
-		commonpb.WorkflowIdReusePolicyAllowDuplicateFailedOnly,
-		commonpb.WorkflowIdReusePolicyAllowDuplicate,
-		commonpb.WorkflowIdReusePolicyRejectDuplicate,
+		commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly,
+		commonpb.WorkflowIdReusePolicy_AllowDuplicate,
+		commonpb.WorkflowIdReusePolicy_RejectDuplicate,
 	}
 
 	expecedErrs := []bool{false, false, true}
 
 	statuses := []executionpb.WorkflowExecutionStatus{
-		executionpb.WorkflowExecutionStatusFailed,
-		executionpb.WorkflowExecutionStatusCanceled,
-		executionpb.WorkflowExecutionStatusTerminated,
-		executionpb.WorkflowExecutionStatusTimedOut,
+		executionpb.WorkflowExecutionStatus_Failed,
+		executionpb.WorkflowExecutionStatus_Canceled,
+		executionpb.WorkflowExecutionStatus_Terminated,
+		executionpb.WorkflowExecutionStatus_TimedOut,
 	}
 	runIDs := []string{"1", "2", "3", "4"}
 
@@ -1297,7 +1297,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           requestID,
-			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicyAllowDuplicate,
+			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                          signalName,
 			SignalInput:                         nil,
 			Control:                             nil,
@@ -1349,7 +1349,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           requestID,
-			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicyAllowDuplicate,
+			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                          signalName,
 			SignalInput:                         nil,
 			Control:                             nil,
@@ -1372,7 +1372,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 		StartRequestID:   requestID, // use same requestID
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		Status:           executionpb.WorkflowExecutionStatusRunning,
+		Status:           executionpb.WorkflowExecutionStatus_Running,
 		LastWriteVersion: common.EmptyVersion,
 	}
 
@@ -1409,7 +1409,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           requestID,
-			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicyAllowDuplicate,
+			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                          signalName,
 			SignalInput:                         nil,
 			Control:                             nil,
@@ -1432,7 +1432,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 		StartRequestID:   "new request ID",
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		Status:           executionpb.WorkflowExecutionStatusRunning,
+		Status:           executionpb.WorkflowExecutionStatus_Running,
 		LastWriteVersion: common.EmptyVersion,
 	}
 

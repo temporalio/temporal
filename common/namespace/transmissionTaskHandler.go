@@ -71,7 +71,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 		return err
 	}
 
-	taskType := replicationgenpb.ReplicationTaskTypeNamespace
+	taskType := replicationgenpb.ReplicationTaskType_Namespace
 	task := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: namespaceOperation,
 		Id:                 info.ID,
@@ -122,12 +122,12 @@ func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationCon
 func (namespaceReplicator *namespaceReplicatorImpl) convertNamespaceStatusToProto(input int) (namespacepb.NamespaceStatus, error) {
 	switch input {
 	case persistence.NamespaceStatusRegistered:
-		output := namespacepb.NamespaceStatusRegistered
+		output := namespacepb.NamespaceStatus_Registered
 		return output, nil
 	case persistence.NamespaceStatusDeprecated:
-		output := namespacepb.NamespaceStatusDeprecated
+		output := namespacepb.NamespaceStatus_Deprecated
 		return output, nil
 	default:
-		return namespacepb.NamespaceStatusRegistered, ErrInvalidNamespaceStatus
+		return namespacepb.NamespaceStatus_Registered, ErrInvalidNamespaceStatus
 	}
 }

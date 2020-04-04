@@ -390,7 +390,7 @@ Update_History_Loop:
 		binChecksum := request.GetBinaryChecksum()
 		if _, ok := namespaceEntry.GetConfig().BadBinaries.Binaries[binChecksum]; ok {
 			failDecision = &failDecisionInfo{
-				cause:   eventpb.DecisionTaskFailedCauseBadBinary,
+				cause:   eventpb.DecisionTaskFailedCause_BadBinary,
 				message: fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum),
 			}
 		} else {
@@ -597,7 +597,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	response.Attempt = decision.Attempt
 	response.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: tasklistpb.TaskListKindNormal,
+		Kind: tasklistpb.TaskListKind_Normal,
 	}
 	response.ScheduledTimestamp = decision.ScheduledTimestamp
 	response.StartedTimestamp = decision.StartedTimestamp

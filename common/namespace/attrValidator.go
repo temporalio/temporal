@@ -54,10 +54,10 @@ func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistence.Namespac
 	if config.Retention < int32(d.minRetentionDays) {
 		return errInvalidRetentionPeriod
 	}
-	if config.HistoryArchivalStatus == namespacepb.ArchivalStatusEnabled && len(config.HistoryArchivalURI) == 0 {
+	if config.HistoryArchivalStatus == namespacepb.ArchivalStatus_Enabled && len(config.HistoryArchivalURI) == 0 {
 		return errInvalidArchivalConfig
 	}
-	if config.VisibilityArchivalStatus == namespacepb.ArchivalStatusEnabled && len(config.VisibilityArchivalURI) == 0 {
+	if config.VisibilityArchivalStatus == namespacepb.ArchivalStatus_Enabled && len(config.VisibilityArchivalURI) == 0 {
 		return errInvalidArchivalConfig
 	}
 	return nil

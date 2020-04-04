@@ -523,7 +523,7 @@ func (c *taskListManagerImpl) newChildContext(
 }
 
 func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind tasklistpb.TaskListKind) bool {
-	return !taskList.IsRoot() && kind != tasklistpb.TaskListKindSticky
+	return !taskList.IsRoot() && kind != tasklistpb.TaskListKind_Sticky
 }
 
 func (c *taskListManagerImpl) namespaceScope() metrics.Scope {

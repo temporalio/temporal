@@ -98,9 +98,9 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatusEnabled
+	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatusEnabled
+	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	visibilityArchivalURI := "test://visibility/uri"
 	badBinaries := namespacepb.BadBinaries{map[string]*namespacepb.BadBinaryInfo{}}
 	isGlobalNamespace := false
@@ -172,9 +172,9 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 		&p.NamespaceConfig{
 			Retention:                100,
 			EmitMetric:               false,
-			HistoryArchivalStatus:    namespacepb.ArchivalStatusDisabled,
+			HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
 			HistoryArchivalURI:       "",
-			VisibilityArchivalStatus: namespacepb.ArchivalStatusDisabled,
+			VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
 			VisibilityArchivalURI:    "",
 		},
 		&p.NamespaceReplicationConfig{},
@@ -197,9 +197,9 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatusEnabled
+	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatusEnabled
+	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	visibilityArchivalURI := "test://visibility/uri"
 
 	clusterActive := "some random active cluster name"
@@ -331,9 +331,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	owner := "create-namespace-test-owner"
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatusEnabled
+	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatusEnabled
+	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	visibilityArchivalURI := "test://visibility/uri"
 
 	clusterActive := "some random active cluster name"
@@ -442,9 +442,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatusEnabled
+	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatusEnabled
+	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	visibilityArchivalURI := "test://visibility/uri"
 	badBinaries := namespacepb.BadBinaries{map[string]*namespacepb.BadBinaryInfo{}}
 
@@ -594,9 +594,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatusEnabled
+	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatusEnabled
+	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	visibilityArchivalURI := "test://visibility/uri"
 
 	clusterActive := "some random active cluster name"
@@ -654,9 +654,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	updatedData := map[string]string{"k1": "v2"}
 	updatedRetention := int32(20)
 	updatedEmitMetric := false
-	updatedHistoryArchivalStatus := namespacepb.ArchivalStatusDisabled
+	updatedHistoryArchivalStatus := namespacepb.ArchivalStatus_Disabled
 	updatedHistoryArchivalURI := ""
-	updatedVisibilityArchivalStatus := namespacepb.ArchivalStatusDisabled
+	updatedVisibilityArchivalStatus := namespacepb.ArchivalStatus_Disabled
 	updatedVisibilityArchivalURI := ""
 
 	updateClusterActive := "other random active cluster name"
@@ -775,9 +775,9 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	data := map[string]string{"k1": "v1"}
 	retention := 10
 	emitMetric := true
-	historyArchivalStatus := namespacepb.ArchivalStatusEnabled
+	historyArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := namespacepb.ArchivalStatusEnabled
+	visibilityArchivalStatus := namespacepb.ArchivalStatus_Enabled
 	visibilityArchivalURI := "test://visibility/uri"
 
 	clusterActive := "some random active cluster name"
@@ -938,9 +938,9 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 			Config: &p.NamespaceConfig{
 				Retention:                109,
 				EmitMetric:               true,
-				HistoryArchivalStatus:    namespacepb.ArchivalStatusEnabled,
+				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Enabled,
 				HistoryArchivalURI:       "test://history/uri",
-				VisibilityArchivalStatus: namespacepb.ArchivalStatusEnabled,
+				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Enabled,
 				VisibilityArchivalURI:    "test://visibility/uri",
 				BadBinaries:              testBinaries1,
 			},
@@ -964,9 +964,9 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 			Config: &p.NamespaceConfig{
 				Retention:                326,
 				EmitMetric:               false,
-				HistoryArchivalStatus:    namespacepb.ArchivalStatusDisabled,
+				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
 				HistoryArchivalURI:       "",
-				VisibilityArchivalStatus: namespacepb.ArchivalStatusDisabled,
+				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
 				VisibilityArchivalURI:    "",
 				BadBinaries:              testBinaries2,
 			},

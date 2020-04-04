@@ -344,7 +344,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 
 	workflowEvents := &persistence.WorkflowEvents{
 		Events: []*eventpb.HistoryEvent{{
-			EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+			EventType: eventpb.EventType_WorkflowExecutionSignaled,
 		}},
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -398,7 +398,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 
 	workflowEvents := &persistence.WorkflowEvents{
 		Events: []*eventpb.HistoryEvent{{
-			EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+			EventType: eventpb.EventType_WorkflowExecutionSignaled,
 		}},
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
