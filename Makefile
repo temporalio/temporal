@@ -93,7 +93,7 @@ PROTO_ROOT     := proto
 # Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
 PROTO_DIRS     = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto" | grep -v temporal-proto)))
 PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto" | grep -v temporal-proto)
-PROTO_IMPORT   := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/gogo/protobuf
+PROTO_IMPORT   := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/gogo/protobuf:$(GOPATH)/src/github.com/gogo/protobuf/protobuf
 PROTO_GEN      := .gen/proto
 
 ##### Tools #####
