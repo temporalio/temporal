@@ -48,6 +48,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -155,7 +156,7 @@ func (s *resetorSuite) TearDownTest() {
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: testNamespaceID}, &persistence.NamespaceConfig{Retention: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -832,7 +833,7 @@ func (s *resetorSuite) assertActivityIDs(ids []string, timers []*persistence.Act
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCancel() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: testNamespaceID}, &persistence.NamespaceConfig{Retention: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -1406,16 +1407,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("active").AnyTimes()
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: testNamespaceID},
-		&persistence.NamespaceConfig{Retention: 1},
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)},
+		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{
-					ClusterName: "active",
-				}, {
-					ClusterName: "standby",
-				},
+			Clusters: []string{
+"active", "standby",
 			},
 		},
 		afterResetVersion,
@@ -2112,16 +2109,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("standby").AnyTimes()
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: testNamespaceID},
-		&persistence.NamespaceConfig{Retention: 1},
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)},
+		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{
-					ClusterName: "active",
-				}, {
-					ClusterName: "standby",
-				},
+			Clusters: []string{
+				"active", "standby",
 			},
 		},
 		afterResetVersion,
@@ -2712,16 +2705,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("active").AnyTimes()
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: testNamespaceID},
-		&persistence.NamespaceConfig{Retention: 1},
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)},
+		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{
-					ClusterName: "active",
-				}, {
-					ClusterName: "standby",
-				},
+			Clusters: []string{
+"active", "standby",
 			},
 		},
 		afterResetVersion,
@@ -3405,13 +3394,13 @@ func (s *resetorSuite) TestApplyReset() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	testNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: testNamespaceID},
-		&persistence.NamespaceConfig{Retention: 1},
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(testNamespaceID)},
+		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 		afterResetVersion,

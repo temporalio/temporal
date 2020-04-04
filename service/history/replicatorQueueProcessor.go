@@ -658,7 +658,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 
 				var targetClusters []string
 				for _, cluster := range namespaceEntry.GetReplicationConfig().Clusters {
-					targetClusters = append(targetClusters, cluster.ClusterName)
+					targetClusters = append(targetClusters, cluster)
 				}
 
 				replicationTask, newRunID, err := GenerateReplicationTask(

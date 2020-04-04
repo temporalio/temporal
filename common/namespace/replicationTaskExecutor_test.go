@@ -35,6 +35,7 @@ import (
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
 	persistencetests "github.com/temporalio/temporal/common/persistence/persistence-tests"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -92,10 +93,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	clusters := []*commonproto.ClusterReplicationConfiguration{
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterActive,
 		},
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterStandby,
 		},
 	}
@@ -161,10 +162,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	clusters := []*commonproto.ClusterReplicationConfiguration{
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterActive,
 		},
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterStandby,
 		},
 	}
@@ -201,26 +202,26 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	err = s.namespaceReplicator.Execute(task)
 	s.Nil(err)
 
-	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{ID: id})
+	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{ID: primitives.MustParseUUID(id)})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.Equal(id, resp.Info.ID)
-	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.NamespaceStatusRegistered, resp.Info.Status)
-	s.Equal(description, resp.Info.Description)
-	s.Equal(ownerEmail, resp.Info.OwnerEmail)
-	s.Equal(data, resp.Info.Data)
-	s.Equal(retention, resp.Config.Retention)
-	s.Equal(emitMetric, resp.Config.EmitMetric)
-	s.Equal(historyArchivalStatus, resp.Config.HistoryArchivalStatus)
-	s.Equal(historyArchivalURI, resp.Config.HistoryArchivalURI)
-	s.Equal(visibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
-	s.Equal(visibilityArchivalURI, resp.Config.VisibilityArchivalURI)
-	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
-	s.Equal(configVersion, resp.ConfigVersion)
-	s.Equal(failoverVersion, resp.FailoverVersion)
-	s.Equal(int64(0), resp.FailoverNotificationVersion)
+	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.Equal(name, resp.Namespace.Info.Name)
+	s.Equal(enums.NamespaceStatusRegistered, resp.Namespace.Info.Status)
+	s.Equal(description, resp.Namespace.Info.Description)
+	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
+	s.Equal(data, resp.Namespace.Info.Data)
+	s.Equal(retention, resp.Namespace.Config.RetentionDays)
+	s.Equal(emitMetric, resp.Namespace.Config.EmitMetric)
+	s.Equal(historyArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
+	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(visibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
+	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.Namespace.ReplicationConfig.Clusters)
+	s.Equal(configVersion, resp.Namespace.ConfigVersion)
+	s.Equal(failoverVersion, resp.Namespace.FailoverVersion)
+	s.Equal(int64(0), resp.Namespace.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 
 	// handle duplicated task
@@ -247,10 +248,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	failoverVersion := int64(59)
 	namespaceData := map[string]string{"k1": "v1", "k2": "v2"}
 	clusters := []*commonproto.ClusterReplicationConfiguration{
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterActive,
 		},
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterStandby,
 		},
 	}
@@ -290,23 +291,23 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.Equal(id, resp.Info.ID)
-	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.NamespaceStatusRegistered, resp.Info.Status)
-	s.Equal(description, resp.Info.Description)
-	s.Equal(ownerEmail, resp.Info.OwnerEmail)
-	s.Equal(namespaceData, resp.Info.Data)
-	s.Equal(retention, resp.Config.Retention)
-	s.Equal(emitMetric, resp.Config.EmitMetric)
-	s.Equal(historyArchivalStatus, resp.Config.HistoryArchivalStatus)
-	s.Equal(historyArchivalURI, resp.Config.HistoryArchivalURI)
-	s.Equal(visibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
-	s.Equal(visibilityArchivalURI, resp.Config.VisibilityArchivalURI)
-	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
-	s.Equal(configVersion, resp.ConfigVersion)
-	s.Equal(failoverVersion, resp.FailoverVersion)
-	s.Equal(int64(0), resp.FailoverNotificationVersion)
+	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.Equal(name, resp.Namespace.Info.Name)
+	s.Equal(enums.NamespaceStatusRegistered, resp.Namespace.Info.Status)
+	s.Equal(description, resp.Namespace.Info.Description)
+	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
+	s.Equal(namespaceData, resp.Namespace.Info.Data)
+	s.Equal(retention, resp.Namespace.Config.RetentionDays)
+	s.Equal(emitMetric, resp.Namespace.Config.EmitMetric)
+	s.Equal(historyArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
+	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(visibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
+	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.Namespace.ReplicationConfig.Clusters)
+	s.Equal(configVersion, resp.Namespace.ConfigVersion)
+	s.Equal(failoverVersion, resp.Namespace.FailoverVersion)
+	s.Equal(int64(0), resp.Namespace.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
@@ -329,10 +330,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	clusters := []*commonproto.ClusterReplicationConfiguration{
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterActive,
 		},
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterStandby,
 		},
 	}
@@ -383,10 +384,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateConfigVersion := configVersion + 1
 	updateFailoverVersion := failoverVersion + 1
 	updateClusters := []*commonproto.ClusterReplicationConfiguration{
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: updateClusterActive,
 		},
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: updateClusterStandby,
 		},
 	}
@@ -423,23 +424,23 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.Equal(id, resp.Info.ID)
-	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.NamespaceStatusDeprecated, resp.Info.Status)
-	s.Equal(updateDescription, resp.Info.Description)
-	s.Equal(updateOwnerEmail, resp.Info.OwnerEmail)
-	s.Equal(updatedData, resp.Info.Data)
-	s.Equal(updateRetention, resp.Config.Retention)
-	s.Equal(updateEmitMetric, resp.Config.EmitMetric)
-	s.Equal(updateHistoryArchivalStatus, resp.Config.HistoryArchivalStatus)
-	s.Equal(updateHistoryArchivalURI, resp.Config.HistoryArchivalURI)
-	s.Equal(updateVisibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
-	s.Equal(updateVisibilityArchivalURI, resp.Config.VisibilityArchivalURI)
-	s.Equal(updateClusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(updateClusters), resp.ReplicationConfig.Clusters)
-	s.Equal(updateConfigVersion, resp.ConfigVersion)
-	s.Equal(updateFailoverVersion, resp.FailoverVersion)
-	s.Equal(notificationVersion, resp.FailoverNotificationVersion)
+	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.Equal(name, resp.Namespace.Info.Name)
+	s.Equal(enums.NamespaceStatusDeprecated, resp.Namespace.Info.Status)
+	s.Equal(updateDescription, resp.Namespace.Info.Description)
+	s.Equal(updateOwnerEmail, resp.Namespace.Info.Owner)
+	s.Equal(updatedData, resp.Namespace.Info.Data)
+	s.Equal(updateRetention, resp.Namespace.Config.RetentionDays)
+	s.Equal(updateEmitMetric, resp.Namespace.Config.EmitMetric)
+	s.Equal(updateHistoryArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
+	s.Equal(updateHistoryArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(updateVisibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
+	s.Equal(updateVisibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(updateClusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(updateClusters), resp.Namespace.ReplicationConfig.Clusters)
+	s.Equal(updateConfigVersion, resp.Namespace.ConfigVersion)
+	s.Equal(updateFailoverVersion, resp.Namespace.FailoverVersion)
+	s.Equal(notificationVersion, resp.Namespace.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
@@ -462,10 +463,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	clusters := []*commonproto.ClusterReplicationConfiguration{
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterActive,
 		},
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterStandby,
 		},
 	}
@@ -516,10 +517,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateConfigVersion := configVersion + 1
 	updateFailoverVersion := failoverVersion - 1
 	updateClusters := []*commonproto.ClusterReplicationConfiguration{
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: updateClusterActive,
 		},
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: updateClusterStandby,
 		},
 	}
@@ -556,23 +557,23 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.Equal(id, resp.Info.ID)
-	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.NamespaceStatusDeprecated, resp.Info.Status)
-	s.Equal(updateDescription, resp.Info.Description)
-	s.Equal(updateOwnerEmail, resp.Info.OwnerEmail)
-	s.Equal(updateData, resp.Info.Data)
-	s.Equal(updateRetention, resp.Config.Retention)
-	s.Equal(updateEmitMetric, resp.Config.EmitMetric)
-	s.Equal(updateHistoryArchivalStatus, resp.Config.HistoryArchivalStatus)
-	s.Equal(updateHistoryArchivalURI, resp.Config.HistoryArchivalURI)
-	s.Equal(updateVisibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
-	s.Equal(updateVisibilityArchivalURI, resp.Config.VisibilityArchivalURI)
-	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(updateClusters), resp.ReplicationConfig.Clusters)
-	s.Equal(updateConfigVersion, resp.ConfigVersion)
-	s.Equal(failoverVersion, resp.FailoverVersion)
-	s.Equal(int64(0), resp.FailoverNotificationVersion)
+	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.Equal(name, resp.Namespace.Info.Name)
+	s.Equal(enums.NamespaceStatusDeprecated, resp.Namespace.Info.Status)
+	s.Equal(updateDescription, resp.Namespace.Info.Description)
+	s.Equal(updateOwnerEmail, resp.Namespace.Info.Owner)
+	s.Equal(updateData, resp.Namespace.Info.Data)
+	s.Equal(updateRetention, resp.Namespace.Config.RetentionDays)
+	s.Equal(updateEmitMetric, resp.Namespace.Config.EmitMetric)
+	s.Equal(updateHistoryArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
+	s.Equal(updateHistoryArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(updateVisibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
+	s.Equal(updateVisibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(updateClusters), resp.Namespace.ReplicationConfig.Clusters)
+	s.Equal(updateConfigVersion, resp.Namespace.ConfigVersion)
+	s.Equal(failoverVersion, resp.Namespace.FailoverVersion)
+	s.Equal(int64(0), resp.Namespace.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
@@ -595,10 +596,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	clusters := []*commonproto.ClusterReplicationConfiguration{
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterActive,
 		},
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterStandby,
 		},
 	}
@@ -645,10 +646,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateConfigVersion := configVersion - 1
 	updateFailoverVersion := failoverVersion + 1
 	updateClusters := []*commonproto.ClusterReplicationConfiguration{
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: updateClusterActive,
 		},
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: updateClusterStandby,
 		},
 	}
@@ -685,23 +686,23 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.Equal(id, resp.Info.ID)
-	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.NamespaceStatusRegistered, resp.Info.Status)
-	s.Equal(description, resp.Info.Description)
-	s.Equal(ownerEmail, resp.Info.OwnerEmail)
-	s.Equal(data, resp.Info.Data)
-	s.Equal(retention, resp.Config.Retention)
-	s.Equal(emitMetric, resp.Config.EmitMetric)
-	s.Equal(historyArchivalStatus, resp.Config.HistoryArchivalStatus)
-	s.Equal(historyArchivalURI, resp.Config.HistoryArchivalURI)
-	s.Equal(visibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
-	s.Equal(visibilityArchivalURI, resp.Config.VisibilityArchivalURI)
-	s.Equal(updateClusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
-	s.Equal(configVersion, resp.ConfigVersion)
-	s.Equal(updateFailoverVersion, resp.FailoverVersion)
-	s.Equal(notificationVersion, resp.FailoverNotificationVersion)
+	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.Equal(name, resp.Namespace.Info.Name)
+	s.Equal(enums.NamespaceStatusRegistered, resp.Namespace.Info.Status)
+	s.Equal(description, resp.Namespace.Info.Description)
+	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
+	s.Equal(data, resp.Namespace.Info.Data)
+	s.Equal(retention, resp.Namespace.Config.RetentionDays)
+	s.Equal(emitMetric, resp.Namespace.Config.EmitMetric)
+	s.Equal(historyArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
+	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(visibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
+	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(updateClusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.Namespace.ReplicationConfig.Clusters)
+	s.Equal(configVersion, resp.Namespace.ConfigVersion)
+	s.Equal(updateFailoverVersion, resp.Namespace.FailoverVersion)
+	s.Equal(notificationVersion, resp.Namespace.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
@@ -724,10 +725,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	clusters := []*commonproto.ClusterReplicationConfiguration{
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterActive,
 		},
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: clusterStandby,
 		},
 	}
@@ -776,10 +777,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateConfigVersion := configVersion - 1
 	updateFailoverVersion := failoverVersion - 1
 	updateClusters := []*commonproto.ClusterReplicationConfiguration{
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: updateClusterActive,
 		},
-		&commonproto.ClusterReplicationConfiguration{
+		{
 			ClusterName: updateClusterStandby,
 		},
 	}
@@ -813,22 +814,22 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.Equal(id, resp.Info.ID)
-	s.Equal(name, resp.Info.Name)
-	s.Equal(persistence.NamespaceStatusRegistered, resp.Info.Status)
-	s.Equal(description, resp.Info.Description)
-	s.Equal(ownerEmail, resp.Info.OwnerEmail)
-	s.Equal(data, resp.Info.Data)
-	s.Equal(retention, resp.Config.Retention)
-	s.Equal(emitMetric, resp.Config.EmitMetric)
-	s.Equal(historyArchivalStatus, resp.Config.HistoryArchivalStatus)
-	s.Equal(historyArchivalURI, resp.Config.HistoryArchivalURI)
-	s.Equal(visibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
-	s.Equal(visibilityArchivalURI, resp.Config.VisibilityArchivalURI)
-	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.ReplicationConfig.Clusters)
-	s.Equal(configVersion, resp.ConfigVersion)
-	s.Equal(failoverVersion, resp.FailoverVersion)
-	s.Equal(int64(0), resp.FailoverNotificationVersion)
+	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.Equal(name, resp.Namespace.Info.Name)
+	s.Equal(enums.NamespaceStatusRegistered, resp.Namespace.Info.Status)
+	s.Equal(description, resp.Namespace.Info.Description)
+	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
+	s.Equal(data, resp.Namespace.Info.Data)
+	s.Equal(retention, resp.Namespace.Config.RetentionDays)
+	s.Equal(emitMetric, resp.Namespace.Config.EmitMetric)
+	s.Equal(historyArchivalStatus, resp.Namespace.Config.HistoryArchivalStatus)
+	s.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalURI)
+	s.Equal(visibilityArchivalStatus, resp.Namespace.Config.VisibilityArchivalStatus)
+	s.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalURI)
+	s.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
+	s.Equal(s.namespaceReplicator.convertClusterReplicationConfigFromProto(clusters), resp.Namespace.ReplicationConfig.Clusters)
+	s.Equal(configVersion, resp.Namespace.ConfigVersion)
+	s.Equal(failoverVersion, resp.Namespace.FailoverVersion)
+	s.Equal(int64(0), resp.Namespace.FailoverNotificationVersion)
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }

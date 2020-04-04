@@ -26,8 +26,8 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
@@ -50,8 +50,8 @@ func newAttrValidator(
 	}
 }
 
-func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistence.NamespaceConfig) error {
-	if config.Retention < int32(d.minRetentionDays) {
+func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistenceblobs.NamespaceConfig) error {
+	if config.RetentionDays < int32(d.minRetentionDays) {
 		return errInvalidRetentionPeriod
 	}
 	if config.HistoryArchivalStatus == enums.ArchivalStatusEnabled && len(config.HistoryArchivalURI) == 0 {
@@ -64,7 +64,7 @@ func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistence.Namespac
 }
 
 func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForLocalNamespace(
-	replicationConfig *persistence.NamespaceReplicationConfig,
+	replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 ) error {
 
 	activeCluster := replicationConfig.ActiveClusterName
@@ -73,8 +73,8 @@ func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForLocalNamespace(
 	if err := d.validateClusterName(activeCluster); err != nil {
 		return err
 	}
-	for _, clusterConfig := range clusters {
-		if err := d.validateClusterName(clusterConfig.ClusterName); err != nil {
+	for _, clusterName := range clusters {
+		if err := d.validateClusterName(clusterName); err != nil {
 			return err
 		}
 	}
@@ -83,7 +83,7 @@ func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForLocalNamespace(
 		return serviceerror.NewInvalidArgument("Invalid local namespace active cluster")
 	}
 
-	if len(clusters) != 1 || clusters[0].ClusterName != activeCluster {
+	if len(clusters) != 1 || clusters[0] != activeCluster {
 		return serviceerror.NewInvalidArgument("Invalid local namespace clusters")
 	}
 
@@ -91,7 +91,7 @@ func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForLocalNamespace(
 }
 
 func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForGlobalNamespace(
-	replicationConfig *persistence.NamespaceReplicationConfig,
+	replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 ) error {
 
 	activeCluster := replicationConfig.ActiveClusterName
@@ -100,15 +100,15 @@ func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForGlobalNamespace
 	if err := d.validateClusterName(activeCluster); err != nil {
 		return err
 	}
-	for _, clusterConfig := range clusters {
-		if err := d.validateClusterName(clusterConfig.ClusterName); err != nil {
+	for _, clusterName := range clusters {
+		if err := d.validateClusterName(clusterName); err != nil {
 			return err
 		}
 	}
 
 	activeClusterInClusters := false
-	for _, clusterConfig := range clusters {
-		if clusterConfig.ClusterName == activeCluster {
+	for _, clusterName := range clusters {
+		if clusterName == activeCluster {
 			activeClusterInClusters = true
 			break
 		}
@@ -121,17 +121,17 @@ func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForGlobalNamespace
 }
 
 func (d *AttrValidatorImpl) validateNamespaceReplicationConfigClustersDoesNotRemove(
-	clustersOld []*persistence.ClusterReplicationConfig,
-	clustersNew []*persistence.ClusterReplicationConfig,
+	clustersOld []string,
+	clustersNew []string,
 ) error {
 
 	clusterNamesOld := make(map[string]bool)
-	for _, clusterConfig := range clustersOld {
-		clusterNamesOld[clusterConfig.ClusterName] = true
+	for _, clusterName := range clustersOld {
+		clusterNamesOld[clusterName] = true
 	}
 	clusterNamesNew := make(map[string]bool)
-	for _, clusterConfig := range clustersNew {
-		clusterNamesNew[clusterConfig.ClusterName] = true
+	for _, clusterName := range clustersNew {
+		clusterNamesNew[clusterName] = true
 	}
 
 	if len(clusterNamesNew) < len(clusterNamesOld) {

@@ -82,7 +82,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.namespace = "some random namespace name"
-	s.namespaceID = "some random namespace ID"
+	s.namespaceID = "deadd0d0-c001-face-d00d-000000000000"
 
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)

@@ -1020,87 +1020,39 @@ type (
 		NextPageToken []byte
 	}
 
-	// NamespaceDetail describes the namespace entity
-	NamespaceInfo struct {
-		ID          string
-		Name        string
-		Status      int
-		Description string
-		OwnerEmail  string
-		Data        map[string]string
-	}
-
-	// NamespaceConfig describes the namespace configuration
-	NamespaceConfig struct {
-		// NOTE: this retention is in days, not in seconds
-		Retention                int32
-		EmitMetric               bool
-		HistoryArchivalStatus    enums.ArchivalStatus
-		HistoryArchivalURI       string
-		VisibilityArchivalStatus enums.ArchivalStatus
-		VisibilityArchivalURI    string
-		BadBinaries              commonproto.BadBinaries
-	}
-
-	// NamespaceReplicationConfig describes the cross DC namespace replication configuration
-	NamespaceReplicationConfig struct {
-		ActiveClusterName string
-		Clusters          []*ClusterReplicationConfig
-	}
-
-	// ClusterReplicationConfig describes the cross DC cluster replication configuration
-	ClusterReplicationConfig struct {
-		ClusterName string
-		// Note: if adding new properties of non-primitive types, remember to update GetCopy()
-	}
-
 	// CreateNamespaceRequest is used to create the namespace
 	CreateNamespaceRequest struct {
-		Info              *NamespaceInfo
-		Config            *NamespaceConfig
-		ReplicationConfig *NamespaceReplicationConfig
+		Namespace         *persistenceblobs.NamespaceDetail
 		IsGlobalNamespace bool
-		ConfigVersion     int64
-		FailoverVersion   int64
 	}
 
 	// CreateNamespaceResponse is the response for CreateNamespace
 	CreateNamespaceResponse struct {
-		ID string
+		ID primitives.UUID
 	}
 
 	// GetNamespaceRequest is used to read namespace
 	GetNamespaceRequest struct {
-		ID   string
+		ID   primitives.UUID
 		Name string
 	}
 
 	// GetNamespaceResponse is the response for GetNamespace
 	GetNamespaceResponse struct {
-		Info                        *NamespaceInfo
-		Config                      *NamespaceConfig
-		ReplicationConfig           *NamespaceReplicationConfig
+		Namespace                   *persistenceblobs.NamespaceDetail
 		IsGlobalNamespace           bool
-		ConfigVersion               int64
-		FailoverVersion             int64
-		FailoverNotificationVersion int64
 		NotificationVersion         int64
 	}
 
 	// UpdateNamespaceRequest is used to update namespace
 	UpdateNamespaceRequest struct {
-		Info                        *NamespaceInfo
-		Config                      *NamespaceConfig
-		ReplicationConfig           *NamespaceReplicationConfig
-		ConfigVersion               int64
-		FailoverVersion             int64
-		FailoverNotificationVersion int64
+		Namespace                   *persistenceblobs.NamespaceDetail
 		NotificationVersion         int64
 	}
 
 	// DeleteNamespaceRequest is used to delete namespace entry from namespaces table
 	DeleteNamespaceRequest struct {
-		ID string
+		ID primitives.UUID
 	}
 
 	// DeleteNamespaceByNameRequest is used to delete namespace entry from namespaces_by_name table
@@ -1520,6 +1472,7 @@ type (
 		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
 		ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error)
 		GetMetadata() (*GetMetadataResponse, error)
+		InitializeSystemNamespaces(currentClusterName string) error
 	}
 
 	// ClusterMetadataManager is used to manage cluster-wide metadata and configuration
@@ -2205,44 +2158,6 @@ func (a *SyncActivityTask) GetVisibilityTimestamp() time.Time {
 // SetVisibilityTimestamp set the visibility timestamp
 func (a *SyncActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
-}
-
-// SerializeClusterConfigs makes an array of *ClusterReplicationConfig serializable
-// by flattening them into map[string]interface{}
-func SerializeClusterConfigs(replicationConfigs []*ClusterReplicationConfig) []map[string]interface{} {
-	seriaizedReplicationConfigs := []map[string]interface{}{}
-	for index := range replicationConfigs {
-		seriaizedReplicationConfigs = append(seriaizedReplicationConfigs, replicationConfigs[index].serialize())
-	}
-	return seriaizedReplicationConfigs
-}
-
-// DeserializeClusterConfigs creates an array of ClusterReplicationConfigs from an array of map representations
-func DeserializeClusterConfigs(replicationConfigs []map[string]interface{}) []*ClusterReplicationConfig {
-	deseriaizedReplicationConfigs := []*ClusterReplicationConfig{}
-	for index := range replicationConfigs {
-		deseriaizedReplicationConfig := &ClusterReplicationConfig{}
-		deseriaizedReplicationConfig.deserialize(replicationConfigs[index])
-		deseriaizedReplicationConfigs = append(deseriaizedReplicationConfigs, deseriaizedReplicationConfig)
-	}
-
-	return deseriaizedReplicationConfigs
-}
-
-func (config *ClusterReplicationConfig) serialize() map[string]interface{} {
-	output := make(map[string]interface{})
-	output["cluster_name"] = config.ClusterName
-	return output
-}
-
-func (config *ClusterReplicationConfig) deserialize(input map[string]interface{}) {
-	config.ClusterName = input["cluster_name"].(string)
-}
-
-// GetCopy return a copy of ClusterReplicationConfig
-func (config *ClusterReplicationConfig) GetCopy() *ClusterReplicationConfig {
-	res := *config
-	return &res
 }
 
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano

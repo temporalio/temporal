@@ -459,8 +459,8 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 
 func (t *MatcherTestSuite) newNamespaceCache() cache.NamespaceCache {
 	entry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: "test-namespace"},
-		&persistence.NamespaceConfig{},
+		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
+		&persistenceblobs.NamespaceConfig{},
 		"",
 		nil)
 	dc := cache.NewMockNamespaceCache(t.controller)

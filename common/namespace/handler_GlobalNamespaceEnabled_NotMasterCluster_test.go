@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -122,9 +123,9 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 	namespace := s.getRandomNamespace()
 	isGlobalNamespace := false
 	var clusters []*commonproto.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: name,
 		})
 	}
 
@@ -185,9 +186,9 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 	isGlobalNamespace := false
 
 	var expectedClusters []*commonproto.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		expectedClusters = append(expectedClusters, &commonproto.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: name,
 		})
 	}
 
@@ -245,11 +246,12 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	emitMetric := true
 	data := map[string]string{"some random key": "some random value"}
 	var clusters []*commonproto.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: name,
 		})
 	}
+
 	isGlobalNamespace := false
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
@@ -337,9 +339,9 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	emitMetric := true
 	data := map[string]string{"some random key": "some random value"}
 	var clusters []*commonproto.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: name,
 		})
 	}
 
@@ -419,9 +421,9 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 	namespace := s.getRandomNamespace()
 	isGlobalNamespace := true
 	var clusters []*commonproto.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: name,
 		})
 	}
 	s.Equal(1, len(clusters))
@@ -493,14 +495,12 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	retention := int32(7)
 	emitMetric := true
 	activeClusterName := ""
-	clusters := []*persistence.ClusterReplicationConfig{}
+	clusters := []string{}
 	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 		if clusterName != s.ClusterMetadata.GetCurrentClusterName() {
 			activeClusterName = clusterName
 		}
-		clusters = append(clusters, &persistence.ClusterReplicationConfig{
-			ClusterName: clusterName,
-		})
+		clusters = append(clusters, clusterName)
 	}
 	s.True(len(activeClusterName) > 0)
 	s.True(len(clusters) > 1)
@@ -508,29 +508,31 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	isGlobalNamespace := true
 
 	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
-		Info: &persistence.NamespaceInfo{
-			ID:          uuid.New(),
-			Name:        namespace,
-			Status:      persistence.NamespaceStatusRegistered,
-			Description: description,
-			OwnerEmail:  email,
-			Data:        data,
-		},
-		Config: &persistence.NamespaceConfig{
-			Retention:                retention,
-			EmitMetric:               emitMetric,
-			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
-			HistoryArchivalURI:       "",
-			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
-			VisibilityArchivalURI:    "",
-		},
-		ReplicationConfig: &persistence.NamespaceReplicationConfig{
-			ActiveClusterName: activeClusterName,
-			Clusters:          clusters,
+		Namespace: &persistenceblobs.NamespaceDetail{
+			Info: &persistenceblobs.NamespaceInfo{
+				Id:          uuid.NewRandom(),
+				Name:        namespace,
+				Status:      enums.NamespaceStatusRegistered,
+				Description: description,
+				Owner:       email,
+				Data:        data,
+			},
+			Config: &persistenceblobs.NamespaceConfig{
+				RetentionDays:            retention,
+				EmitMetric:               emitMetric,
+				HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
+				HistoryArchivalURI:       "",
+				VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
+				VisibilityArchivalURI:    "",
+			},
+			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+				ActiveClusterName: activeClusterName,
+				Clusters:          clusters,
+			},
+			ConfigVersion:   0,
+			FailoverVersion: s.ClusterMetadata.GetNextFailoverVersion(activeClusterName, 0),
 		},
 		IsGlobalNamespace: isGlobalNamespace,
-		ConfigVersion:     0,
-		FailoverVersion:   s.ClusterMetadata.GetNextFailoverVersion(activeClusterName, 0),
 	})
 	s.NoError(err)
 
@@ -550,7 +552,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	emitMetric := true
 	activeClusterName := ""
 	clusters := []*commonproto.ClusterReplicationConfiguration{}
-	clustersDB := []*persistence.ClusterReplicationConfig{}
+	clustersDB := []string{}
 	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 		if clusterName != s.ClusterMetadata.GetCurrentClusterName() {
 			activeClusterName = clusterName
@@ -558,9 +560,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
 			ClusterName: clusterName,
 		})
-		clustersDB = append(clustersDB, &persistence.ClusterReplicationConfig{
-			ClusterName: clusterName,
-		})
+		clustersDB = append(clustersDB, clusterName)
 	}
 	s.True(len(activeClusterName) > 0)
 	s.True(len(clusters) > 1)
@@ -569,29 +569,31 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	isGlobalNamespace := true
 
 	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
-		Info: &persistence.NamespaceInfo{
-			ID:          uuid.New(),
-			Name:        namespace,
-			Status:      persistence.NamespaceStatusRegistered,
-			Description: "",
-			OwnerEmail:  "",
-			Data:        map[string]string{},
-		},
-		Config: &persistence.NamespaceConfig{
-			Retention:                0,
-			EmitMetric:               false,
-			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
-			HistoryArchivalURI:       "",
-			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
-			VisibilityArchivalURI:    "",
-		},
-		ReplicationConfig: &persistence.NamespaceReplicationConfig{
-			ActiveClusterName: activeClusterName,
-			Clusters:          clustersDB,
+		Namespace: &persistenceblobs.NamespaceDetail{
+			Info: &persistenceblobs.NamespaceInfo{
+				Id:          uuid.NewRandom(),
+				Name:        namespace,
+				Status:      enums.NamespaceStatusRegistered,
+				Description: "",
+				Owner:  "",
+				Data:        map[string]string{},
+			},
+			Config: &persistenceblobs.NamespaceConfig{
+				RetentionDays:                0,
+				EmitMetric:               false,
+				HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
+				HistoryArchivalURI:       "",
+				VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
+				VisibilityArchivalURI:    "",
+			},
+			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+				ActiveClusterName: activeClusterName,
+				Clusters:          clustersDB,
+			},
+			ConfigVersion:     0,
+			FailoverVersion:   s.ClusterMetadata.GetNextFailoverVersion(activeClusterName, 0),
 		},
 		IsGlobalNamespace: isGlobalNamespace,
-		ConfigVersion:     0,
-		FailoverVersion:   s.ClusterMetadata.GetNextFailoverVersion(activeClusterName, 0),
 	})
 	s.NoError(err)
 
@@ -630,7 +632,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	prevActiveClusterName := ""
 	nextActiveClusterName := s.ClusterMetadata.GetCurrentClusterName()
 	clusters := []*commonproto.ClusterReplicationConfiguration{}
-	clustersDB := []*persistence.ClusterReplicationConfig{}
+	clustersDB := []string{}
 	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 		if clusterName != s.ClusterMetadata.GetCurrentClusterName() {
 			prevActiveClusterName = clusterName
@@ -638,9 +640,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
 			ClusterName: clusterName,
 		})
-		clustersDB = append(clustersDB, &persistence.ClusterReplicationConfig{
-			ClusterName: clusterName,
-		})
+		clustersDB = append(clustersDB, clusterName)
 	}
 	s.True(len(prevActiveClusterName) > 0)
 	s.True(len(clusters) > 1)
@@ -649,29 +649,31 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	isGlobalNamespace := true
 
 	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
-		Info: &persistence.NamespaceInfo{
-			ID:          uuid.New(),
-			Name:        namespace,
-			Status:      persistence.NamespaceStatusRegistered,
-			Description: description,
-			OwnerEmail:  email,
-			Data:        data,
-		},
-		Config: &persistence.NamespaceConfig{
-			Retention:                retention,
-			EmitMetric:               emitMetric,
-			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
-			HistoryArchivalURI:       "",
-			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
-			VisibilityArchivalURI:    "",
-		},
-		ReplicationConfig: &persistence.NamespaceReplicationConfig{
-			ActiveClusterName: prevActiveClusterName,
-			Clusters:          clustersDB,
+		Namespace: &persistenceblobs.NamespaceDetail{
+			Info: &persistenceblobs.NamespaceInfo{
+				Id:          uuid.NewRandom(),
+				Name:        namespace,
+				Status:      enums.NamespaceStatusRegistered,
+				Description: description,
+				Owner:       email,
+				Data:        data,
+			},
+			Config: &persistenceblobs.NamespaceConfig{
+				RetentionDays:            retention,
+				EmitMetric:               emitMetric,
+				HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
+				HistoryArchivalURI:       "",
+				VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
+				VisibilityArchivalURI:    "",
+			},
+			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+				ActiveClusterName: prevActiveClusterName,
+				Clusters:          clustersDB,
+			},
+			ConfigVersion:   0,
+			FailoverVersion: s.ClusterMetadata.GetNextFailoverVersion(prevActiveClusterName, 0),
 		},
 		IsGlobalNamespace: isGlobalNamespace,
-		ConfigVersion:     0,
-		FailoverVersion:   s.ClusterMetadata.GetNextFailoverVersion(prevActiveClusterName, 0),
 	})
 	s.NoError(err)
 

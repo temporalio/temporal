@@ -25,11 +25,13 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 // NOTE: the counterpart of namespace replication receiving logic is in service/worker package
@@ -37,8 +39,8 @@ import (
 type (
 	// Replicator is the interface which can replicate the namespace
 	Replicator interface {
-		HandleTransmissionTask(namespaceOperation enums.NamespaceOperation, info *persistence.NamespaceInfo,
-			config *persistence.NamespaceConfig, replicationConfig *persistence.NamespaceReplicationConfig,
+		HandleTransmissionTask(namespaceOperation enums.NamespaceOperation, info *persistenceblobs.NamespaceInfo,
+			config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 			configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error
 	}
 
@@ -58,38 +60,33 @@ func NewNamespaceReplicator(replicationMessageSink messaging.Producer, logger lo
 
 // HandleTransmissionTask handle transmission of the namespace replication task
 func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(namespaceOperation enums.NamespaceOperation,
-	info *persistence.NamespaceInfo, config *persistence.NamespaceConfig, replicationConfig *persistence.NamespaceReplicationConfig,
+	info *persistenceblobs.NamespaceInfo, config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 	configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error {
 
 	if !isGlobalNamespaceEnabled {
-		namespaceReplicator.logger.Warn("Should not replicate non global namespace", tag.WorkflowNamespaceID(info.ID))
+		namespaceReplicator.logger.Warn("Should not replicate non global namespace", tag.WorkflowNamespaceIDBytes(info.Id))
 		return nil
-	}
-
-	status, err := namespaceReplicator.convertNamespaceStatusToProto(info.Status)
-	if err != nil {
-		return err
 	}
 
 	taskType := enums.ReplicationTaskTypeNamespace
 	task := &replication.NamespaceTaskAttributes{
 		NamespaceOperation: namespaceOperation,
-		Id:                 info.ID,
+		Id:                 primitives.UUIDString(info.Id),
 		Info: &commonproto.NamespaceInfo{
 			Name:        info.Name,
-			Status:      status,
+			Status:      info.Status,
 			Description: info.Description,
-			OwnerEmail:  info.OwnerEmail,
+			OwnerEmail:  info.Owner,
 			Data:        info.Data,
 		},
 		Config: &commonproto.NamespaceConfiguration{
-			WorkflowExecutionRetentionPeriodInDays: config.Retention,
+			WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
 			EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 			HistoryArchivalStatus:                  config.HistoryArchivalStatus,
 			HistoryArchivalURI:                     config.HistoryArchivalURI,
 			VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
 			VisibilityArchivalURI:                  config.VisibilityArchivalURI,
-			BadBinaries:                            &config.BadBinaries,
+			BadBinaries:                            config.BadBinaries,
 		},
 		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
 			ActiveClusterName: replicationConfig.ActiveClusterName,
@@ -109,11 +106,10 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 }
 
 func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationConfigToProto(
-	input []*persistence.ClusterReplicationConfig,
+	input []string,
 ) []*commonproto.ClusterReplicationConfiguration {
 	output := []*commonproto.ClusterReplicationConfiguration{}
-	for _, cluster := range input {
-		clusterName := cluster.ClusterName
+	for _, clusterName := range input {
 		output = append(output, &commonproto.ClusterReplicationConfiguration{ClusterName: clusterName})
 	}
 	return output

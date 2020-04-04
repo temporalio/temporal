@@ -107,14 +107,14 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().Id
 
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
 		RunId:      req.WorkflowExecution.RunId,
 	}
 
-	return handler.historyEngine.updateWorkflowExecutionWithAction(ctx, namespaceID, execution,
+	return handler.historyEngine.updateWorkflowExecutionWithAction(ctx, primitives.UUIDString(namespaceID), execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -149,7 +149,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().Id
 
 	execution := commonproto.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
@@ -160,7 +160,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	requestID := req.GetRequestId()
 
 	var resp *historyservice.RecordDecisionTaskStartedResponse
-	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, namespaceID, execution,
+	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, primitives.UUIDString(namespaceID), execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -190,7 +190,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			if decision.StartedID != common.EmptyEventID {
 				// If decision is started as part of the current request scope then return a positive response
 				if decision.RequestID == requestID {
-					resp, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordDecisionTaskStartedResponse(primitives.UUIDString(namespaceID), mutableState, decision, req.PollRequest.GetIdentity())
 					if err != nil {
 						return nil, err
 					}
@@ -209,7 +209,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 				return nil, serviceerror.NewInternal("Unable to add DecisionTaskStarted event to history.")
 			}
 
-			resp, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordDecisionTaskStartedResponse(primitives.UUIDString(namespaceID), mutableState, decision, req.PollRequest.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -231,7 +231,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().Id
 
 	request := req.FailedRequest
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
@@ -244,7 +244,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
-	return handler.historyEngine.updateWorkflowExecution(ctx, namespaceID, workflowExecution, true,
+	return handler.historyEngine.updateWorkflowExecution(ctx, primitives.UUIDString(namespaceID), workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -271,7 +271,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().Id
 
 	request := req.CompleteRequest
 	token, err0 := handler.tokenSerializer.Deserialize(request.TaskToken)
@@ -289,7 +289,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	clientFeatureVersion := clientHeaders[1]
 	clientImpl := clientHeaders[2]
 
-	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, workflowExecution)
+	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, primitives.UUIDString(namespaceID), workflowExecution)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +385,7 @@ Update_History_Loop:
 		executionInfo.ClientImpl = clientImpl
 
 		binChecksum := request.GetBinaryChecksum()
-		if _, ok := namespaceEntry.GetConfig().BadBinaries.Binaries[binChecksum]; ok {
+		if _, ok := namespaceEntry.GetConfig().GetBadBinaries().GetBinaries()[binChecksum]; ok {
 			failDecision = &failDecisionInfo{
 				cause:   enums.DecisionTaskFailedCauseBadBinary,
 				message: fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum),
@@ -445,7 +445,7 @@ Update_History_Loop:
 			handler.logger.Info("Failing the decision.", tag.WorkflowDecisionFailCause(int64(failDecision.cause)),
 				tag.WorkflowID(token.GetWorkflowId()),
 				tag.WorkflowRunIDBytes(token.GetRunId()),
-				tag.WorkflowNamespaceID(namespaceID))
+				tag.WorkflowNamespaceIDBytes(namespaceID))
 			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, []byte(failDecision.message), request)
 			if err != nil {
 				return nil, err
@@ -557,7 +557,7 @@ Update_History_Loop:
 		resp = &historyservice.RespondDecisionTaskCompletedResponse{}
 		if request.GetReturnNewDecisionTask() && createNewDecisionTask {
 			decision, _ := msBuilder.GetDecisionInfo(newDecisionTaskScheduledID)
-			resp.StartedResponse, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, msBuilder, decision, request.GetIdentity())
+			resp.StartedResponse, err = handler.createRecordDecisionTaskStartedResponse(primitives.UUIDString(namespaceID), msBuilder, decision, request.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -633,7 +633,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 		return
 	}
 
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().Id
 	namespace := namespaceEntry.GetInfo().Name
 	workflowID := msBuilder.GetExecutionInfo().WorkflowID
 	runID := msBuilder.GetExecutionInfo().RunID
@@ -655,7 +655,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 			len(result.GetAnswer()),
 			sizeLimitWarn,
 			sizeLimitError,
-			namespaceID,
+			primitives.UUIDString(namespaceID),
 			workflowID,
 			runID,
 			scope,

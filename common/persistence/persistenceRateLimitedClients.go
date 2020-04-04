@@ -905,3 +905,11 @@ func (c *clusterMetadataRateLimitedPersistenceClient) PruneClusterMembership(req
 	}
 	return c.persistence.PruneClusterMembership(request)
 }
+
+func (c *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(currentClusterName string) error {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return c.persistence.InitializeSystemNamespaces(currentClusterName)
+}
+

@@ -1110,7 +1110,7 @@ func (s *shardContextImpl) allocateTimerIDsLocked(
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
 			s.logger.Warn("New timer generated is less than read level",
-				tag.WorkflowNamespaceID(namespaceEntry.GetInfo().ID),
+				tag.WorkflowNamespaceIDBytes(namespaceEntry.GetInfo().Id),
 				tag.WorkflowID(workflowID),
 				tag.Timestamp(ts),
 				tag.CursorTimestamp(readCursorTS),

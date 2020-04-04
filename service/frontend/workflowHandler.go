@@ -647,7 +647,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 	if err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	wh.GetLogger().Debug("Poll for decision.", tag.WorkflowNamespace(namespace), tag.WorkflowNamespaceID(namespaceID))
 	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
@@ -2376,7 +2376,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	}
 
 	archiverRequest := &archiver.QueryVisibilityRequest{
-		NamespaceID:   entry.GetInfo().ID,
+		NamespaceID:   primitives.UUIDString(entry.GetInfo().Id),
 		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),

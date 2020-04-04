@@ -24,14 +24,11 @@ import (
 	"database/sql"
 	"fmt"
 
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -83,64 +80,18 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 		return nil, err
 	}
 
-	clusters := make([]string, len(request.ReplicationConfig.Clusters))
-	for i := range clusters {
-		clusters[i] = request.ReplicationConfig.Clusters[i].ClusterName
-	}
-
-	var badBinaries []byte
-	var badBinariesEncoding string
-	if request.Config.BadBinaries != nil {
-		badBinaries = request.Config.BadBinaries.Data
-		badBinariesEncoding = string(request.Config.BadBinaries.GetEncoding())
-	}
-	namespaceInfo := &persistenceblobs.NamespaceDetail{
-		Info: &persistenceblobs.NamespaceInfo{
-			Id:          			     request.Info.ID,
-			Name:        				 request.Info.Name,
-			Status:                      int32(request.Info.Status),
-			Description:                 request.Info.Description,
-			Owner:                       request.Info.OwnerEmail,
-			Data:                        request.Info.Data,
-		},
-		Config: &persistenceblobs.NamespaceConfig{
-			RetentionDays:               request.Config.Retention,
-			EmitMetric:                  request.Config.EmitMetric,
-			ArchivalBucket:              request.Config.ArchivalBucket,
-			ArchivalStatus:              int32(request.Config.ArchivalStatus),
-			HistoryArchivalStatus:       int32(request.Config.HistoryArchivalStatus),
-			HistoryArchivalURI:          request.Config.HistoryArchivalURI,
-			VisibilityArchivalStatus:    int32(request.Config.VisibilityArchivalStatus),
-			VisibilityArchivalURI:       request.Config.VisibilityArchivalURI,
-			BadBinaries:                 badBinaries,
-			BadBinariesEncoding:         badBinariesEncoding,
-		},
-		ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
-			ActiveClusterName: request.ReplicationConfig.ActiveClusterName,
-			Clusters:          clusters,
-		},
-		ConfigVersion:               request.ConfigVersion,
-		FailoverVersion:             request.FailoverVersion,
-		FailoverNotificationVersion: persistence.InitialFailoverNotificationVersion,
-	}
-
-	blob, err := serialization.NamespaceInfoToBlob(namespaceInfo)
-	if err != nil {
-		return nil, err
-	}
-
 	var resp *persistence.CreateNamespaceResponse
 	err = m.txExecute("CreateNamespace", func(tx sqlplugin.Tx) error {
 		if _, err1 := tx.InsertIntoNamespace(&sqlplugin.NamespaceRow{
-			Name:                request.Info.Name,
-			ID:                  primitives.MustParseUUID(request.Info.ID),
-			Data:                blob.Data,
-			DataEncoding:        string(blob.Encoding),
-			IsGlobal:            request.IsGlobalNamespace,
+			Name:                request.Name,
+			ID:                  request.ID,
+			Data:                request.Namespace.Data,
+			DataEncoding:        request.Namespace.Encoding.String(),
+			IsGlobal:            request.IsGlobal,
 			NotificationVersion: metadata.NotificationVersion,
 		}); err1 != nil {
 			if m.db.IsDupEntryError(err1) {
-				return serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("name: %v", request.Info.Name))
+				return serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("name: %v", request.Name))
 			}
 			return err1
 		}
@@ -150,7 +101,7 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 		if err1 := updateMetadata(tx, metadata.NotificationVersion); err1 != nil {
 			return err1
 		}
-		resp = &persistence.CreateNamespaceResponse{ID: request.Info.ID}
+		resp = &persistence.CreateNamespaceResponse{ID: request.ID}
 		return nil
 	})
 	return resp, err
@@ -159,12 +110,12 @@ func (m *sqlMetadataManagerV2) CreateNamespace(request *persistence.InternalCrea
 func (m *sqlMetadataManagerV2) GetNamespace(request *persistence.GetNamespaceRequest) (*persistence.InternalGetNamespaceResponse, error) {
 	filter := &sqlplugin.NamespaceFilter{}
 	switch {
-	case request.Name != "" && request.ID != "":
+	case request.Name != "" && request.ID != nil:
 		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name specified in request.")
 	case request.Name != "":
 		filter.Name = &request.Name
-	case request.ID != "":
-		filter.ID = primitives.UUIDPtr(primitives.MustParseUUID(request.ID))
+	case len(request.ID) != 0:
+		filter.ID = &request.ID
 	default:
 		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name are empty.")
 	}
@@ -176,7 +127,7 @@ func (m *sqlMetadataManagerV2) GetNamespace(request *persistence.GetNamespaceReq
 			// We did not return in the above for-loop because there were no rows.
 			identity := request.Name
 			if len(request.ID) > 0 {
-				identity = request.ID
+				identity = request.ID.String()
 			}
 
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("Namespace %s does not exist.", identity))
@@ -194,108 +145,20 @@ func (m *sqlMetadataManagerV2) GetNamespace(request *persistence.GetNamespaceReq
 }
 
 func (m *sqlMetadataManagerV2) namespaceRowToGetNamespaceResponse(row *sqlplugin.NamespaceRow) (*persistence.InternalGetNamespaceResponse, error) {
-	namespaceInfo, err := serialization.NamespaceInfoFromBlob(row.Data, row.DataEncoding)
-	if err != nil {
-		return nil, err
-	}
-
-	clusters := make([]*persistence.ClusterReplicationConfig, len(namespaceInfo.ReplicationConfig.Clusters))
-	for i := range namespaceInfo.ReplicationConfig.Clusters {
-		clusters[i] = &persistence.ClusterReplicationConfig{ClusterName: namespaceInfo.ReplicationConfig.Clusters[i]}
-	}
-
-	var badBinaries *serialization.DataBlob
-	if namespaceInfo.Config.BadBinaries != nil {
-		badBinaries = persistence.NewDataBlob(namespaceInfo.Config.BadBinaries, common.EncodingType(namespaceInfo.Config.BadBinariesEncoding))
-	}
-
 	return &persistence.InternalGetNamespaceResponse{
-		Info: &persistence.NamespaceInfo{
-			ID:          row.ID.String(),
-			Name:        row.Name,
-			Status:      int(namespaceInfo.Info.GetStatus()),
-			Description: namespaceInfo.Info.GetDescription(),
-			OwnerEmail:  namespaceInfo.Info.GetOwner(),
-			Data:        namespaceInfo.Info.GetData(),
-		},
-		Config: &persistence.InternalNamespaceConfig{
-			Retention:                namespaceInfo.Config.GetRetentionDays(),
-			EmitMetric:               namespaceInfo.Config.GetEmitMetric(),
-			ArchivalBucket:           namespaceInfo.Config.GetArchivalBucket(),
-			ArchivalStatus:           enums.ArchivalStatus(namespaceInfo.Config.GetArchivalStatus()),
-			HistoryArchivalStatus:    enums.ArchivalStatus(namespaceInfo.Config.GetHistoryArchivalStatus()),
-			HistoryArchivalURI:       namespaceInfo.Config.GetHistoryArchivalURI(),
-			VisibilityArchivalStatus: enums.ArchivalStatus(namespaceInfo.Config.GetVisibilityArchivalStatus()),
-			VisibilityArchivalURI:    namespaceInfo.Config.GetVisibilityArchivalURI(),
-			BadBinaries:              badBinaries,
-		},
-		ReplicationConfig: &persistence.NamespaceReplicationConfig{
-			ActiveClusterName: persistence.GetOrUseDefaultActiveCluster(m.activeClusterName, namespaceInfo.ReplicationConfig.GetActiveClusterName()),
-			Clusters:          persistence.GetOrUseDefaultClusters(m.activeClusterName, clusters),
-		},
-		IsGlobalNamespace:           row.IsGlobal,
-		FailoverVersion:             namespaceInfo.GetFailoverVersion(),
-		ConfigVersion:               namespaceInfo.GetConfigVersion(),
-		NotificationVersion:         row.NotificationVersion,
-		FailoverNotificationVersion: namespaceInfo.GetFailoverNotificationVersion(),
+		Namespace:           persistence.NewDataBlob(row.Data, common.EncodingType(row.DataEncoding)),
+		IsGlobal:            row.IsGlobal,
+		NotificationVersion: row.NotificationVersion,
 	}, nil
 }
 
 func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpdateNamespaceRequest) error {
-	clusters := make([]string, len(request.ReplicationConfig.Clusters))
-	for i := range clusters {
-		clusters[i] = request.ReplicationConfig.Clusters[i].ClusterName
-	}
-
-	var badBinaries []byte
-	var badBinariesEncoding string
-	if request.Config.BadBinaries != nil {
-		badBinaries = request.Config.BadBinaries.Data
-		badBinariesEncoding = string(request.Config.BadBinaries.GetEncoding())
-	}
-
-	namespaceInfo := &persistenceblobs.NamespaceDetail{
-		Info: &persistenceblobs.NamespaceInfo{
-			Id:          			     request.Info.ID,
-			Name:        				 request.Info.Name,
-			Status:                      int32(request.Info.Status),
-			Description:                 request.Info.Description,
-			Owner:                       request.Info.OwnerEmail,
-			Data:                        request.Info.Data,
-		},
-		Config: &persistenceblobs.NamespaceConfig{
-			RetentionDays:               request.Config.Retention,
-			EmitMetric:                  request.Config.EmitMetric,
-			ArchivalBucket:              request.Config.ArchivalBucket,
-			ArchivalStatus:              int32(request.Config.ArchivalStatus),
-			HistoryArchivalStatus:       int32(request.Config.HistoryArchivalStatus),
-			HistoryArchivalURI:          request.Config.HistoryArchivalURI,
-			VisibilityArchivalStatus:    int32(request.Config.VisibilityArchivalStatus),
-			VisibilityArchivalURI:       request.Config.VisibilityArchivalURI,
-			BadBinaries:                 badBinaries,
-			BadBinariesEncoding:         badBinariesEncoding,
-		},
-		ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
-			ActiveClusterName: request.ReplicationConfig.ActiveClusterName,
-			Clusters:          clusters,
-		},
-
-		ConfigVersion:               request.ConfigVersion,
-		FailoverVersion:             request.FailoverVersion,
-		FailoverNotificationVersion: request.FailoverNotificationVersion,
-	}
-
-	blob, err := serialization.NamespaceInfoToBlob(namespaceInfo)
-	if err != nil {
-		return err
-	}
-
 	return m.txExecute("UpdateNamespace", func(tx sqlplugin.Tx) error {
 		result, err := tx.UpdateNamespace(&sqlplugin.NamespaceRow{
-			Name:         request.Info.Name,
-			ID:           primitives.MustParseUUID(request.Info.ID),
-			Data:         blob.Data,
-			DataEncoding: string(blob.Encoding),
+			Name:         request.Name,
+			ID:           request.Id,
+			Data:         request.Namespace.Data,
+			DataEncoding: request.Namespace.Encoding.String(),
 			NotificationVersion: request.NotificationVersion,
 		})
 		if err != nil {
@@ -317,7 +180,7 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 
 func (m *sqlMetadataManagerV2) DeleteNamespace(request *persistence.DeleteNamespaceRequest) error {
 	return m.txExecute("DeleteNamespace", func(tx sqlplugin.Tx) error {
-		_, err := tx.DeleteFromNamespace(&sqlplugin.NamespaceFilter{ID: primitives.UUIDPtr(primitives.MustParseUUID(request.ID))})
+		_, err := tx.DeleteFromNamespace(&sqlplugin.NamespaceFilter{ID: &request.ID})
 		return err
 	})
 }

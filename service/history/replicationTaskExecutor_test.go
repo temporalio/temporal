@@ -172,11 +172,9 @@ func (s *replicationTaskExecutorSuite) TestFilterTask() {
 		Return(cache.NewGlobalNamespaceCacheEntryForTest(
 			nil,
 			nil,
-			&persistence.NamespaceReplicationConfig{
-				Clusters: []*persistence.ClusterReplicationConfig{
-					{
-						ClusterName: "test",
-					},
+			&persistenceblobs.NamespaceReplicationConfig{
+				Clusters: []string{
+	"test",
 				}},
 			0,
 			s.clusterMetadata,

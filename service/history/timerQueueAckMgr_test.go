@@ -569,7 +569,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.namespaceID = "some random failover namespace ID"
+	s.namespaceID = "deadd0d0-c001-face-d00d-020000000000"
 	s.minLevel = time.Now().Add(-10 * time.Minute)
 	s.maxLevel = time.Now().Add(10 * time.Minute)
 	s.timerQueueFailoverAckMgr = newTimerQueueFailoverAckMgr(

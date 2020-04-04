@@ -200,6 +200,8 @@ const (
 	PersistenceGetWorkflowExecutionHistoryScope
 	// PersistenceDeleteWorkflowExecutionHistoryScope tracks DeleteWorkflowExecutionHistory calls made by service to persistence layer
 	PersistenceDeleteWorkflowExecutionHistoryScope
+	// PersistenceInitializeSystemNamespaceScope tracks InitializeSystemNamespaceScope calls made by service to persistence layer
+	PersistenceInitializeSystemNamespaceScope
 	// PersistenceCreateNamespaceScope tracks CreateNamespace calls made by service to persistence layer
 	PersistenceCreateNamespaceScope
 	// PersistenceGetNamespaceScope tracks GetNamespace calls made by service to persistence layer
@@ -1089,6 +1091,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceAppendHistoryEventsScope:                      {operation: "AppendHistoryEvents"},
 		PersistenceGetWorkflowExecutionHistoryScope:              {operation: "GetWorkflowExecutionHistory"},
 		PersistenceDeleteWorkflowExecutionHistoryScope:           {operation: "DeleteWorkflowExecutionHistory"},
+		PersistenceInitializeSystemNamespaceScope:				  {operation: "InitializSystemNamespace"},
 		PersistenceCreateNamespaceScope:                          {operation: "CreateNamespace"},
 		PersistenceGetNamespaceScope:                             {operation: "GetNamespace"},
 		PersistenceUpdateNamespaceScope:                          {operation: "UpdateNamespace"},

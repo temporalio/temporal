@@ -1,34 +1,3 @@
-CREATE TYPE namespace (
-  id          uuid,
-  name        text,
-  status      int, -- enum NamespaceStatus {Registered, Deprecated, Deleted}
-  description text,
-  data        map<text,text>, -- Used for customized namespace information, key values pair
-  owner_email text,
-);
-
-CREATE TYPE namespace_config (
-  retention   int,
-  emit_metric boolean,
-  archival_bucket text, -- deprecated, use the two uri fields below
-  archival_status int, -- deprecated, use the two status fields below
-  history_archival_status int,
-  history_archival_uri text,
-  visibility_archival_status int,
-  visibility_archival_uri text,
-  bad_binaries    blob,
-  bad_binaries_encoding text,
-);
-
-CREATE TYPE cluster_replication_config (
-  cluster_name text,
-);
-
-CREATE TYPE namespace_replication_config (
-  active_cluster_name text,
-  clusters            list<frozen<cluster_replication_config>>
-);
-
 CREATE TYPE serialized_event_batch (
   encoding_type text,
   version       int,
@@ -133,15 +102,12 @@ CREATE TABLE namespaces (
   };
 
 CREATE TABLE namespaces_by_name_v2 (
-  namespaces_partition             int,
+  namespaces_partition          int,
   name                          text,
-  namespace                        frozen<namespace>,
-  config                        frozen<namespace_config>,
-  replication_config            frozen<namespace_replication_config>, -- indicating active cluster and standby cluster used for replication
-  is_global_namespace              boolean, -- indicating whether a namespace is a global namespace
-  config_version                bigint, -- indicating the version of namespace config, excluding the failover / change of active cluster name
-  failover_version              bigint, -- indicating the version of active namespace only, used for namespace failover
-  failover_notification_version bigint, -- indicating the last change related to namespace failover
+  id                            uuid,
+  detail                        blob,
+  detail_encoding               text,
+  is_global_namespace           boolean,
   notification_version          bigint,
   PRIMARY KEY (namespaces_partition, name)
 )  WITH COMPACTION = {
@@ -174,45 +140,6 @@ CREATE TABLE cluster_metadata (
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
     };
-
--- Create metadata for system namespace
-INSERT INTO namespaces (
-   id,
-   name
-) VALUES (
-   32049b68-7872-4094-8e63-d0dd59896a83,
-   'temporal-system'
-) IF NOT EXISTS;
-
-INSERT INTO namespaces_by_name_v2 (
-   namespaces_partition,
-   name,
-   namespace,
-   config,
-   is_global_namespace,
-   config_version,
-   failover_version,
-   failover_notification_version,
-   notification_version
-) VALUES (
-   0,
-   'temporal-system',
-   {
-       id: 32049b68-7872-4094-8e63-d0dd59896a83,
-       name: 'temporal-system',
-       description: 'temporal system workflow namespace',
-       owner_email: 'temporal-core@temporal.io'
-   },
-   {
-       retention:3,
-       emit_metric:False
-   },
-   False,
-   0,
-   -24,
-   -1,
-   -1
-) IF NOT EXISTS;
 
 CREATE TABLE cluster_membership
 (

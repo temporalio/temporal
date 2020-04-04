@@ -45,6 +45,7 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/history"
@@ -747,7 +748,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	}
 
 	_, err = adh.GetHistoryClient().ReapplyEvents(ctx, &historyservice.ReapplyEventsRequest{
-		NamespaceId: namespaceEntry.GetInfo().ID,
+		NamespaceId: primitives.UUIDString(namespaceEntry.GetInfo().Id),
 		Request:     request,
 	})
 	if err != nil {
@@ -969,7 +970,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	}
 
 	_, err = adh.GetHistoryClient().RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
-		NamespaceId: namespaceEntry.GetInfo().ID,
+		NamespaceId: primitives.UUIDString(namespaceEntry.GetInfo().Id),
 		Request:     request,
 	})
 	if err != nil {

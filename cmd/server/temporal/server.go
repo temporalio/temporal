@@ -255,19 +255,19 @@ func immutableClusterMetadataInitialization(
 	clusterMetadata *config.ClusterMetadata) {
 
 	logger = logger.WithTags(tag.ComponentMetadataInitializer)
-	clusterMetadataManager, err := persistenceClient.NewFactory(
+	factory := persistenceClient.NewFactory(
 		persistenceConfig,
 		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
 		*abstractDatastoreFactory,
 		clusterMetadata.CurrentClusterName,
 		*metricsClient,
 		logger,
-	).NewClusterMetadataManager()
+	)
 
+	clusterMetadataManager, err := factory.NewClusterMetadataManager()
 	if err != nil {
 		log.Fatalf("Error initializing cluster metadata manager: %v", err)
 	}
-
 	defer clusterMetadataManager.Close()
 
 	resp, err := clusterMetadataManager.InitializeImmutableClusterMetadata(
@@ -302,6 +302,15 @@ func immutableClusterMetadataInitialization(
 
 			persistenceConfig.NumHistoryShards = persistedShardCount
 		}
+	}
+
+	metadataManager, err := factory.NewMetadataManager()
+	if err != nil {
+		log.Fatalf("Error initializing metadata manager: %v", err)
+	}
+	defer metadataManager.Close()
+	if err := metadataManager.InitializeSystemNamespaces(clusterMetadata.CurrentClusterName); err != nil {
+		log.Fatalf("failed to register system namespace: %v", err)
 	}
 }
 
