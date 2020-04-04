@@ -25,15 +25,15 @@ package replication;
 option go_package = "github.com/temporalio/temporal/.gen/proto/replication";
 
 enum ReplicationTaskType {
-    ReplicationTaskTypeNamespace = 0;
-    ReplicationTaskTypeHistory = 1;
-    ReplicationTaskTypeSyncShardStatus = 2;
-    ReplicationTaskTypeSyncActivity = 3;
-    ReplicationTaskTypeHistoryMetadata = 4;
-    ReplicationTaskTypeHistoryV2 = 5;
+    NamespaceTask = 0;
+    HistoryTask = 1;
+    SyncShardStatusTask = 2;
+    SyncActivityTask = 3;
+    HistoryMetadataTask = 4;
+    HistoryV2Task = 5;
 }
 
 enum NamespaceOperation {
-    NamespaceOperationCreate = 0;
-    NamespaceOperationUpdate = 1;
+    Create = 0;
+    Update = 1;
 }

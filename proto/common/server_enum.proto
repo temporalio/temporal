@@ -25,13 +25,13 @@ package common;
 option go_package = "github.com/temporalio/temporal/.gen/proto/common";
 
 enum DLQType {
-    DLQTypeReplication = 0;
-    DLQTypeNamespace = 1;
+    Replication = 0;
+    Namespace = 1;
 }
 
 // TaskSource is the source from which a task was produced.
 enum TaskSource {
-    TaskSourceUnknown = 0;
-    TaskSourceHistory = 1;    // Task produced by history service
-    TaskSourceDbBacklog = 2;  // Task produced from matching db backlog
+    Unknown = 0;
+    History = 1;    // Task produced by history service
+    DbBacklog = 2;  // Task produced from matching db backlog
 }
