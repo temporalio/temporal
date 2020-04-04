@@ -164,7 +164,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 	workflowID := uuid.New()
 	runID := uuid.NewRandom()
 	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_SyncActivity,
+		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
@@ -190,7 +190,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 	workflowID := uuid.New()
 	runID := uuid.NewRandom()
 	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_History,
+		TaskType: replicationgenpb.ReplicationTaskType_HistoryTask,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
@@ -225,7 +225,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	data, err := serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
 	s.NoError(err)
 	task := &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskType_HistoryV2,
+		TaskType: replicationgenpb.ReplicationTaskType_HistoryV2Task,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,

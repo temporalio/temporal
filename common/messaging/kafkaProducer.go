@@ -94,27 +94,27 @@ func (p *kafkaProducer) getKeyForReplicationTask(task *replicationgenpb.Replicat
 	}
 
 	switch task.GetTaskType() {
-	case replicationgenpb.ReplicationTaskType_History:
+	case replicationgenpb.ReplicationTaskType_HistoryTask:
 		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
 		// the messaging layer perspective
 		attributes := task.GetHistoryTaskAttributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.ReplicationTaskType_HistoryV2:
+	case replicationgenpb.ReplicationTaskType_HistoryV2Task:
 		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
 		// the messaging layer perspective
 		attributes := task.GetHistoryTaskV2Attributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.ReplicationTaskType_SyncActivity:
+	case replicationgenpb.ReplicationTaskType_SyncActivityTask:
 		// Use workflowID as the partition key so all sync activity tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks atleast at
 		// the messaging layer perspective
 		attributes := task.GetSyncActivityTaskAttributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
-	case replicationgenpb.ReplicationTaskType_HistoryMetadata,
-		replicationgenpb.ReplicationTaskType_Namespace,
-		replicationgenpb.ReplicationTaskType_SyncShardStatus:
+	case replicationgenpb.ReplicationTaskType_HistoryMetadataTask,
+		replicationgenpb.ReplicationTaskType_NamespaceTask,
+		replicationgenpb.ReplicationTaskType_SyncShardStatusTask:
 		return nil
 	default:
 		panic(fmt.Sprintf("encounter unsupported replication task type: %v", task.GetTaskType()))

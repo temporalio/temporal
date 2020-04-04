@@ -71,7 +71,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 		return err
 	}
 
-	taskType := replicationgenpb.ReplicationTaskType_Namespace
+	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
 	task := &replicationgenpb.NamespaceTaskAttributes{
 		NamespaceOperation: namespaceOperation,
 		Id:                 info.ID,

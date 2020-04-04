@@ -881,7 +881,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 			}
 
 			_, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(initiatedEventID,
-				eventpb.ChildWorkflowExecutionFailedCauseWorkflowAlreadyRunning, initiatedAttributes)
+				eventpb.WorkflowExecutionFailedCause_WorkflowAlreadyRunning, initiatedAttributes)
 
 			return err
 		})
@@ -1015,7 +1015,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 				targetNamespace,
 				targetWorkflowID,
 				targetRunID,
-				eventpb.CancelExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution,
+				eventpb.WorkflowExecutionFailedCause_UnknownExternalWorkflowExecution,
 			)
 			return err
 		})
@@ -1056,7 +1056,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 				targetWorkflowID,
 				targetRunID,
 				control,
-				eventpb.SignalExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution,
+				eventpb.WorkflowExecutionFailedCause_UnknownExternalWorkflowExecution,
 			)
 			return err
 		})

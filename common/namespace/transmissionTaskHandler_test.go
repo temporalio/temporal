@@ -68,7 +68,7 @@ func (s *transmissionTaskSuite) TearDownTest() {
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask_IsGlobalNamespace() {
-	taskType := replicationgenpb.ReplicationTaskType_Namespace
+	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
 	id := uuid.New()
 	name := "some random namespace test name"
 	status := namespacepb.NamespaceStatus_Registered
@@ -208,7 +208,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_IsGlobalNamespace() {
-	taskType := replicationgenpb.ReplicationTaskType_Namespace
+	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
 	id := uuid.New()
 	name := "some random namespace test name"
 	status, _ := s.namespaceReplicator.convertNamespaceStatusToProto(int(namespacepb.NamespaceStatus_Deprecated))

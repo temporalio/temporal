@@ -1664,7 +1664,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		ContinueAsNewInitiator:          attributes.Initiator,
 		FirstDecisionTaskBackoffSeconds: attributes.BackoffStartIntervalInSeconds,
 	}
-	if attributes.GetInitiator() == commonpb.ContinueAsNewInitiator_RetryPolicy {
+	if attributes.GetInitiator() == commonpb.ContinueAsNewInitiator_Retry {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
 		expirationTime := previousExecutionState.GetExecutionInfo().ExpirationTime
 		if !expirationTime.IsZero() {
@@ -2808,7 +2808,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionFailedEve
 	namespace string,
 	workflowID string,
 	runID string,
-	cause eventpb.CancelExternalWorkflowExecutionFailedCause,
+	cause eventpb.WorkflowExecutionFailedCause,
 ) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowCancelFailed
@@ -2982,7 +2982,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionFailedEvent(
 	workflowID string,
 	runID string,
 	control []byte,
-	cause eventpb.SignalExternalWorkflowExecutionFailedCause,
+	cause eventpb.WorkflowExecutionFailedCause,
 ) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowSignalFailed
@@ -3499,7 +3499,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionStartedEvent(
 
 func (e *mutableStateBuilder) AddStartChildWorkflowExecutionFailedEvent(
 	initiatedID int64,
-	cause eventpb.ChildWorkflowExecutionFailedCause,
+	cause eventpb.WorkflowExecutionFailedCause,
 	initiatedEventAttributes *eventpb.StartChildWorkflowExecutionInitiatedEventAttributes,
 ) (*eventpb.HistoryEvent, error) {
 

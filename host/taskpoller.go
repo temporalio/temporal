@@ -211,11 +211,11 @@ Loop:
 
 			completeRequest := &workflowservice.RespondQueryTaskCompletedRequest{TaskToken: response.TaskToken}
 			if err != nil {
-				completeType := querypb.QueryTaskCompletedTypeFailed
+				completeType := querypb.QueryResultType_Failed
 				completeRequest.CompletedType = completeType
 				completeRequest.ErrorMessage = err.Error()
 			} else {
-				completeType := querypb.QueryTaskCompletedTypeCompleted
+				completeType := querypb.QueryResultType_Answered
 				completeRequest.CompletedType = completeType
 				completeRequest.QueryResult = blob
 			}

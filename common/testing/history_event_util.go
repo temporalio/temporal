@@ -639,7 +639,7 @@ func InitializeHistoryEventGenerator(
 			Namespace:                    namespace,
 			WorkflowId:                   childWorkflowID,
 			WorkflowType:                 &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
-			Cause:                        eventpb.ChildWorkflowExecutionFailedCauseWorkflowAlreadyRunning,
+			Cause:                        eventpb.WorkflowExecutionFailedCause_WorkflowAlreadyRunning,
 			InitiatedEventId:             lastEvent.EventId,
 			DecisionTaskCompletedEventId: lastEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 		}}
@@ -822,7 +822,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventType_SignalExternalWorkflowExecutionFailed
 		historyEvent.Attributes = &eventpb.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{SignalExternalWorkflowExecutionFailedEventAttributes: &eventpb.SignalExternalWorkflowExecutionFailedEventAttributes{
-			Cause:                        eventpb.SignalExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution,
+			Cause:                        eventpb.WorkflowExecutionFailedCause_UnknownExternalWorkflowExecution,
 			DecisionTaskCompletedEventId: lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 			Namespace:                    namespace,
 			WorkflowExecution: &executionpb.WorkflowExecution{
@@ -880,7 +880,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventType_RequestCancelExternalWorkflowExecutionFailed
 		historyEvent.Attributes = &eventpb.HistoryEvent_RequestCancelExternalWorkflowExecutionFailedEventAttributes{RequestCancelExternalWorkflowExecutionFailedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionFailedEventAttributes{
-			Cause:                        eventpb.CancelExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution,
+			Cause:                        eventpb.WorkflowExecutionFailedCause_UnknownExternalWorkflowExecution,
 			DecisionTaskCompletedEventId: lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 			Namespace:                    namespace,
 			WorkflowExecution: &executionpb.WorkflowExecution{

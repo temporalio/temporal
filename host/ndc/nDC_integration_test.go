@@ -1752,7 +1752,7 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
 
-		taskType := replicationgenpb.ReplicationTaskType_HistoryV2
+		taskType := replicationgenpb.ReplicationTaskType_HistoryV2Task
 		replicationTask := &replicationgenpb.ReplicationTask{
 			TaskType:     taskType,
 			SourceTaskId: 1,

@@ -210,23 +210,23 @@ SubmitLoop:
 	for {
 		var scope int
 		switch replicationTask.GetTaskType() {
-		case replicationgenpb.ReplicationTaskType_Namespace:
+		case replicationgenpb.ReplicationTaskType_NamespaceTask:
 			logger = logger.WithTags(tag.WorkflowNamespaceID(replicationTask.GetNamespaceTaskAttributes().GetId()))
 			scope = metrics.NamespaceReplicationTaskScope
 			err = p.handleNamespaceReplicationTask(replicationTask, msg, logger)
-		case replicationgenpb.ReplicationTaskType_SyncShardStatus:
+		case replicationgenpb.ReplicationTaskType_SyncShardStatusTask:
 			scope = metrics.SyncShardTaskScope
 			err = p.handleSyncShardTask(replicationTask, msg, logger)
-		case replicationgenpb.ReplicationTaskType_SyncActivity:
+		case replicationgenpb.ReplicationTaskType_SyncActivityTask:
 			scope = metrics.SyncActivityTaskScope
 			err = p.handleActivityTask(replicationTask, msg, logger)
-		case replicationgenpb.ReplicationTaskType_History:
+		case replicationgenpb.ReplicationTaskType_HistoryTask:
 			scope = metrics.HistoryReplicationTaskScope
 			err = p.handleHistoryReplicationTask(replicationTask, msg, logger)
-		case replicationgenpb.ReplicationTaskType_HistoryMetadata:
+		case replicationgenpb.ReplicationTaskType_HistoryMetadataTask:
 			scope = metrics.HistoryMetadataReplicationTaskScope
 			err = p.handleHistoryMetadataReplicationTask(replicationTask, msg, logger)
-		case replicationgenpb.ReplicationTaskType_HistoryV2:
+		case replicationgenpb.ReplicationTaskType_HistoryV2Task:
 			scope = metrics.HistoryReplicationV2TaskScope
 			err = p.handleHistoryReplicationV2Task(replicationTask, msg, logger)
 		default:

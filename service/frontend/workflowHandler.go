@@ -2589,7 +2589,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 	); err != nil {
 		request = &workflowservice.RespondQueryTaskCompletedRequest{
 			TaskToken:     request.TaskToken,
-			CompletedType: querypb.QueryTaskCompletedTypeFailed,
+			CompletedType: querypb.QueryResultType_Failed,
 			QueryResult:   nil,
 			ErrorMessage:  err.Error(),
 		}
