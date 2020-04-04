@@ -27,12 +27,11 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
-
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/common/checksum"
@@ -106,7 +105,7 @@ func (s *ExecutionManagerSuiteForEventsV2) assertChecksumsEqual(expected checksu
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	defer failOnPanic(s.T())
 	namespaceID := uuid.New()
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "test-eventsv2-workflow",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -126,7 +125,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				DecisionStartToCloseTimeout: 13,
 				ExecutionContext:            nil,
 				State:                       p.WorkflowStateRunning,
-				Status:                      enums.WorkflowExecutionStatusRunning,
+				Status:                      executionpb.WorkflowExecutionStatusRunning,
 				NextEventID:                 3,
 				LastProcessedEvent:          0,
 				DecisionScheduleID:          2,
@@ -204,7 +203,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistories() {
 	defer failOnPanic(s.T())
 	namespaceID := uuid.New()
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "test-eventsv2-workflow-version-history",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -230,7 +229,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				DecisionStartToCloseTimeout: 13,
 				ExecutionContext:            nil,
 				State:                       p.WorkflowStateRunning,
-				Status:                      enums.WorkflowExecutionStatusRunning,
+				Status:                      executionpb.WorkflowExecutionStatusRunning,
 				NextEventID:                 common.EmptyEventID,
 				LastProcessedEvent:          0,
 				DecisionScheduleID:          2,
@@ -299,7 +298,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 //TestContinueAsNew test
 func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	namespaceID := uuid.New()
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "continue-as-new-workflow-test",
 		RunId:      "551c88d2-d9e6-404f-8131-9eec14f36643",
 	}
@@ -313,11 +312,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.State = p.WorkflowStateCompleted
-	updatedInfo.Status = enums.WorkflowExecutionStatusCompleted
+	updatedInfo.Status = executionpb.WorkflowExecutionStatusCompleted
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 
-	newWorkflowExecution := commonproto.WorkflowExecution{
+	newWorkflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "continue-as-new-workflow-test",
 		RunId:      "64c7e15a-3fd7-4182-9c6f-6f25a4fa2614",
 	}
@@ -353,7 +352,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 				DecisionStartToCloseTimeout: updatedInfo.DecisionStartToCloseTimeout,
 				ExecutionContext:            nil,
 				State:                       p.WorkflowStateRunning,
-				Status:                      enums.WorkflowExecutionStatusRunning,
+				Status:                      executionpb.WorkflowExecutionStatusRunning,
 				NextEventID:                 info0.NextEventID,
 				LastProcessedEvent:          common.EmptyEventID,
 				DecisionScheduleID:          int64(2),
@@ -382,7 +381,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	s.NoError(err4)
 	newExecutionInfo := newExecutionState.ExecutionInfo
 	s.Equal(p.WorkflowStateRunning, newExecutionInfo.State)
-	s.EqualValues(enums.WorkflowExecutionStatusRunning, newExecutionInfo.Status)
+	s.EqualValues(executionpb.WorkflowExecutionStatusRunning, newExecutionInfo.Status)
 	s.Equal(int64(3), newExecutionInfo.NextEventID)
 	s.Equal(common.EmptyEventID, newExecutionInfo.LastProcessedEvent)
 	s.Equal(int64(2), newExecutionInfo.DecisionScheduleID)
@@ -397,7 +396,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "test-workflow-replication-state-test",
 		RunId:      runID,
 	}
@@ -407,7 +406,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
 		Version:      int64(9),
-		LastReplicationInfo: map[string]*replication.ReplicationInfo{
+		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			"dc1": {
 				Version:     int64(3),
 				LastEventId: int64(1),
@@ -427,7 +426,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 			StartVersion:     int64(8),
 			LastWriteVersion: int64(7),
 			LastWriteEventID: int64(6),
-			LastReplicationInfo: map[string]*replication.ReplicationInfo{
+			LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
 					LastEventId: int64(1),
@@ -461,7 +460,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal([]byte("branchToken2"), tsk.NewRunBranchToken)
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -497,7 +496,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(2, len(replicationState0.LastReplicationInfo))
 	s.assertChecksumsEqual(testWorkflowChecksum, state0.Checksum)
 	for k, v := range replicationState0.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -529,7 +528,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 		FirstEventID: int64(3),
 		NextEventID:  int64(5),
 		Version:      int64(10),
-		LastReplicationInfo: map[string]*replication.ReplicationInfo{
+		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			"dc1": {
 				Version:     int64(4),
 				LastEventId: int64(2),
@@ -560,7 +559,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 
 	s.Equal(2, len(tsk1.LastReplicationInfo))
 	for k, v := range tsk1.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(4), v.Version)
@@ -596,7 +595,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(2, len(replicationState1.LastReplicationInfo))
 	s.assertChecksumsEqual(testWorkflowChecksum, state1.Checksum)
 	for k, v := range replicationState1.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(4), v.Version)
@@ -610,7 +609,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	}
 }
 
-func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplication(namespaceID string, workflowExecution commonproto.WorkflowExecution,
+func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplication(namespaceID string, workflowExecution executionpb.WorkflowExecution,
 	taskList, wType string, wTimeout int32, decisionTimeout int32, nextEventID int64,
 	lastProcessedEventID int64, decisionScheduleID int64, state *p.ReplicationState, txTasks []p.Task, brToken []byte) (*p.CreateWorkflowExecutionResponse, error) {
 	var transferTasks []p.Task
@@ -647,7 +646,7 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 				WorkflowTimeout:             wTimeout,
 				DecisionStartToCloseTimeout: decisionTimeout,
 				State:                       p.WorkflowStateRunning,
-				Status:                      enums.WorkflowExecutionStatusRunning,
+				Status:                      executionpb.WorkflowExecutionStatusRunning,
 				NextEventID:                 nextEventID,
 				LastProcessedEvent:          lastProcessedEventID,
 				DecisionScheduleID:          decisionScheduleID,
@@ -672,7 +671,7 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicate() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "test-reset-workflow-with-replication-state-test",
 		RunId:      runID,
 	}
@@ -683,7 +682,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
 		Version:      int64(9),
-		LastReplicationInfo: map[string]*replication.ReplicationInfo{
+		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			"dc1": {
 				Version:     int64(3),
 				LastEventId: int64(1),
@@ -707,7 +706,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 			StartVersion:     int64(8),
 			LastWriteVersion: int64(7),
 			LastWriteEventID: int64(6),
-			LastReplicationInfo: map[string]*replication.ReplicationInfo{
+			LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
 					LastEventId: int64(1),
@@ -752,7 +751,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal([]byte("branchToken2"), tsk.NewRunBranchToken)
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -790,7 +789,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(int64(6), replicationState0.LastWriteEventID)
 	s.Equal(2, len(replicationState0.LastReplicationInfo))
 	for k, v := range replicationState0.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -834,7 +833,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	}
 
 	newRunID := uuid.New()
-	newExecution := commonproto.WorkflowExecution{
+	newExecution := executionpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      newRunID,
 	}
@@ -876,7 +875,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		FirstEventID: int64(10),
 		NextEventID:  int64(30),
 		Version:      int64(90),
-		LastReplicationInfo: map[string]*replication.ReplicationInfo{
+		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			"dc1": {
 				Version:     int64(30),
 				LastEventId: int64(10),
@@ -903,7 +902,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		ScheduleID:     111,
 		StartedID:      112,
 		ActivityID:     uuid.New(),
-		ScheduledEvent: &commonproto.HistoryEvent{EventId: 1},
+		ScheduledEvent: &eventpb.HistoryEvent{EventId: 1},
 	}}
 
 	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{
@@ -917,7 +916,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		InitiatedID:     131,
 		StartedID:       132,
 		CreateRequestID: uuid.New(),
-		InitiatedEvent:  &commonproto.HistoryEvent{EventId: 1},
+		InitiatedEvent:  &eventpb.HistoryEvent{EventId: 1},
 	}}
 
 	insertSignalInfos := []*persistenceblobs.SignalInfo{{
@@ -983,7 +982,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(0, len(tsk.NewRunBranchToken))
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(30), v.Version)
@@ -1029,7 +1028,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(int64(13), replicationState1.LastWriteEventID)
 	s.Equal(2, len(replicationState1.LastReplicationInfo))
 	for k, v := range replicationState1.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(30), v.Version)
@@ -1066,7 +1065,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(int64(130), replicationState2.LastWriteEventID)
 	s.Equal(2, len(replicationState2.LastReplicationInfo))
 	for k, v := range replicationState2.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(300), v.Version)
@@ -1104,7 +1103,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "test-reset-workflow-with-replication-state-test",
 		RunId:      runID,
 	}
@@ -1115,7 +1114,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
 		Version:      int64(9),
-		LastReplicationInfo: map[string]*replication.ReplicationInfo{
+		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			"dc1": {
 				Version:     int64(3),
 				LastEventId: int64(1),
@@ -1139,7 +1138,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 			StartVersion:     int64(8),
 			LastWriteVersion: int64(7),
 			LastWriteEventID: int64(6),
-			LastReplicationInfo: map[string]*replication.ReplicationInfo{
+			LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
 					LastEventId: int64(1),
@@ -1184,7 +1183,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal([]byte("branchToken2"), tsk.NewRunBranchToken)
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -1218,14 +1217,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(int64(0), info0.LastProcessedEvent)
 	s.Equal(int64(2), info0.DecisionScheduleID)
 	s.Equal(p.WorkflowStateRunning, info0.State)
-	s.EqualValues(enums.WorkflowExecutionStatusRunning, info0.Status)
+	s.EqualValues(executionpb.WorkflowExecutionStatusRunning, info0.Status)
 	s.Equal(int64(9), replicationState0.CurrentVersion)
 	s.Equal(int64(8), replicationState0.StartVersion)
 	s.Equal(int64(7), replicationState0.LastWriteVersion)
 	s.Equal(int64(6), replicationState0.LastWriteEventID)
 	s.Equal(2, len(replicationState0.LastReplicationInfo))
 	for k, v := range replicationState0.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -1239,7 +1238,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	}
 
 	info0.State = p.WorkflowStateCompleted
-	info0.Status = enums.WorkflowExecutionStatusCompleted
+	info0.Status = executionpb.WorkflowExecutionStatusCompleted
 	err = s.UpdateWorklowStateAndReplication(info0, stats0, replicationState0, nil, info0.NextEventID, nil)
 	s.Nil(err)
 
@@ -1248,14 +1247,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	updatedReplicationState := copyReplicationState(replicationState0)
 
 	newRunID := uuid.New()
-	newExecution := commonproto.WorkflowExecution{
+	newExecution := executionpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      newRunID,
 	}
 	insertInfo := copyWorkflowExecutionInfo(info0)
 	insterStats := copyExecutionStats(state0.ExecutionStats)
 	insertInfo.State = p.WorkflowStateRunning
-	insertInfo.Status = enums.WorkflowExecutionStatusRunning
+	insertInfo.Status = executionpb.WorkflowExecutionStatusRunning
 	insertInfo.RunID = newRunID
 	insertInfo.NextEventID = int64(50)
 	insertInfo.LastProcessedEvent = int64(20)
@@ -1292,7 +1291,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		FirstEventID: int64(10),
 		NextEventID:  int64(30),
 		Version:      int64(90),
-		LastReplicationInfo: map[string]*replication.ReplicationInfo{
+		LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 			"dc1": {
 				Version:     int64(30),
 				LastEventId: int64(10),
@@ -1318,7 +1317,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		ScheduleID:     111,
 		StartedID:      112,
 		ActivityID:     uuid.New(),
-		ScheduledEvent: &commonproto.HistoryEvent{EventId: 1},
+		ScheduledEvent: &eventpb.HistoryEvent{EventId: 1},
 	}}
 
 	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{
@@ -1332,7 +1331,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		InitiatedID:     131,
 		StartedID:       132,
 		CreateRequestID: uuid.New(),
-		InitiatedEvent:  &commonproto.HistoryEvent{EventId: 1},
+		InitiatedEvent:  &eventpb.HistoryEvent{EventId: 1},
 	}}
 
 	insertSignalInfos := []*persistenceblobs.SignalInfo{{
@@ -1390,7 +1389,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(0, len(tsk.NewRunBranchToken))
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(30), v.Version)
@@ -1436,7 +1435,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(int64(6), replicationState1.LastWriteEventID)
 	s.Equal(2, len(replicationState1.LastReplicationInfo))
 	for k, v := range replicationState1.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -1473,7 +1472,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(int64(130), replicationState2.LastWriteEventID)
 	s.Equal(2, len(replicationState2.LastReplicationInfo))
 	for k, v := range replicationState2.LastReplicationInfo {
-		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replicationgenpb.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(300), v.Version)
@@ -1511,7 +1510,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "test-reset-workflow-with-replication-state-test",
 		RunId:      runID,
 	}
@@ -1561,7 +1560,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 
 	newRunID := uuid.New()
-	newExecution := commonproto.WorkflowExecution{
+	newExecution := executionpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      newRunID,
 	}
@@ -1603,7 +1602,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		ScheduleID:     111,
 		StartedID:      112,
 		ActivityID:     uuid.New(),
-		ScheduledEvent: &commonproto.HistoryEvent{EventId: 1},
+		ScheduledEvent: &eventpb.HistoryEvent{EventId: 1},
 	}}
 
 	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{

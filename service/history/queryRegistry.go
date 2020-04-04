@@ -25,7 +25,7 @@ package history
 import (
 	"sync"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -45,10 +45,10 @@ type (
 		getFailedIDs() []string
 
 		getQueryTermCh(string) (<-chan struct{}, error)
-		getQueryInput(string) (*commonproto.WorkflowQuery, error)
+		getQueryInput(string) (*querypb.WorkflowQuery, error)
 		getTerminationState(string) (*queryTerminationState, error)
 
-		bufferQuery(queryInput *commonproto.WorkflowQuery) (string, <-chan struct{})
+		bufferQuery(queryInput *querypb.WorkflowQuery) (string, <-chan struct{})
 		setTerminationState(string, *queryTerminationState) error
 		removeQuery(id string)
 	}
@@ -130,7 +130,7 @@ func (r *queryRegistryImpl) getQueryTermCh(id string) (<-chan struct{}, error) {
 	return q.getQueryTermCh(), nil
 }
 
-func (r *queryRegistryImpl) getQueryInput(id string) (*commonproto.WorkflowQuery, error) {
+func (r *queryRegistryImpl) getQueryInput(id string) (*querypb.WorkflowQuery, error) {
 	r.RLock()
 	defer r.RUnlock()
 	q, err := r.getQueryNoLock(id)
@@ -150,7 +150,7 @@ func (r *queryRegistryImpl) getTerminationState(id string) (*queryTerminationSta
 	return q.getTerminationState()
 }
 
-func (r *queryRegistryImpl) bufferQuery(queryInput *commonproto.WorkflowQuery) (string, <-chan struct{}) {
+func (r *queryRegistryImpl) bufferQuery(queryInput *querypb.WorkflowQuery) (string, <-chan struct{}) {
 	r.Lock()
 	defer r.Unlock()
 	q := newQuery(queryInput)

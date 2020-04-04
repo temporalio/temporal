@@ -24,13 +24,14 @@ import (
 	"context"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -199,7 +200,7 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(namespaceID stri
 
 	var pendingRequest *historyservice.ReplicateRawEventsRequest // pending replication request to history, initialized to nil
 
-	var replicationInfo map[string]*replication.ReplicationInfo
+	var replicationInfo map[string]*replicationgenpb.ReplicationInfo
 
 	var token []byte
 	for doPaging := true; doPaging; doPaging = len(token) > 0 {
@@ -280,13 +281,13 @@ func (c *historyRereplicationContext) eventIDRange(currentRunID string,
 
 func (c *historyRereplicationContext) createReplicationRawRequest(
 	namespaceID string, workflowID string, runID string,
-	historyBlob *commonproto.DataBlob,
-	replicationInfo map[string]*replication.ReplicationInfo,
+	historyBlob *commonpb.DataBlob,
+	replicationInfo map[string]*replicationgenpb.ReplicationInfo,
 ) *historyservice.ReplicateRawEventsRequest {
 
 	request := &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: namespaceID,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -351,7 +352,7 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 }
 
 func (c *historyRereplicationContext) handleEmptyHistory(namespaceID string, workflowID string, runID string,
-	replicationInfo map[string]*replication.ReplicationInfo) error {
+	replicationInfo map[string]*replicationgenpb.ReplicationInfo) error {
 
 	if c.seenEmptyEvents {
 		c.logger.Error("error, encounter empty history more than once", tag.WorkflowRunID(runID))
@@ -404,7 +405,7 @@ func (c *historyRereplicationContext) getHistory(
 	defer cancel()
 	response, err := c.rereplicator.adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -451,7 +452,7 @@ func (c *historyRereplicationContext) getPrevRunID(namespaceID string, workflowI
 	return attr.GetContinuedExecutionRunId(), nil
 }
 
-func (c *historyRereplicationContext) getNextRunID(blob *commonproto.DataBlob) (string, error) {
+func (c *historyRereplicationContext) getNextRunID(blob *commonpb.DataBlob) (string, error) {
 
 	historyEvents, err := c.deserializeBlob(blob)
 	if err != nil {
@@ -467,11 +468,11 @@ func (c *historyRereplicationContext) getNextRunID(blob *commonproto.DataBlob) (
 	return attr.GetNewExecutionRunId(), nil
 }
 
-func (c *historyRereplicationContext) deserializeBlob(blob *commonproto.DataBlob) ([]*commonproto.HistoryEvent, error) {
-	var historyEvents []*commonproto.HistoryEvent
+func (c *historyRereplicationContext) deserializeBlob(blob *commonpb.DataBlob) ([]*eventpb.HistoryEvent, error) {
+	var historyEvents []*eventpb.HistoryEvent
 
 	switch blob.GetEncodingType() {
-	case enums.EncodingTypeProto3:
+	case commonpb.EncodingTypeProto3:
 		he, err := c.rereplicator.serializer.DeserializeBatchEvents(&serialization.DataBlob{
 			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,

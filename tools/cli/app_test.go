@@ -32,9 +32,13 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	replicationpb "go.temporal.io/temporal-proto/replication"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal-proto/workflowservicemock"
 	sdkclient "go.temporal.io/temporal/client"
@@ -148,18 +152,18 @@ func (s *cliAppSuite) TestNamespaceRegister_Failed() {
 }
 
 var describeNamespaceResponseServer = &workflowservice.DescribeNamespaceResponse{
-	NamespaceInfo: &commonproto.NamespaceInfo{
+	NamespaceInfo: &namespacepb.NamespaceInfo{
 		Name:        "test-namespace",
 		Description: "a test namespace",
 		OwnerEmail:  "test@uber.com",
 	},
-	Configuration: &commonproto.NamespaceConfiguration{
+	Configuration: &namespacepb.NamespaceConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: 3,
 		EmitMetric:                             &types.BoolValue{Value: true},
 	},
-	ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+	ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 		ActiveClusterName: "active",
-		Clusters: []*commonproto.ClusterReplicationConfiguration{
+		Clusters: []*replicationpb.ClusterReplicationConfiguration{
 			{
 				ClusterName: "active",
 			},
@@ -224,16 +228,16 @@ func (s *cliAppSuite) TestNamespaceDescribe_Failed() {
 }
 
 var (
-	eventType = enums.EventTypeWorkflowExecutionStarted
+	eventType = eventpb.EventTypeWorkflowExecutionStarted
 
 	getWorkflowExecutionHistoryResponse = &workflowservice.GetWorkflowExecutionHistoryResponse{
-		History: &commonproto.History{
-			Events: []*commonproto.HistoryEvent{
+		History: &eventpb.History{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventType: eventType,
-					Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
-						WorkflowType:                        &commonproto.WorkflowType{Name: "TestWorkflow"},
-						TaskList:                            &commonproto.TaskList{Name: "taskList"},
+					Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+						WorkflowType:                        &commonpb.WorkflowType{Name: "TestWorkflow"},
+						TaskList:                            &tasklistpb.TaskList{Name: "taskList"},
 						ExecutionStartToCloseTimeoutSeconds: 60,
 						TaskStartToCloseTimeoutSeconds:      10,
 						Identity:                            "tester",
@@ -389,16 +393,16 @@ func (s *cliAppSuite) TestQueryWorkflow_Failed() {
 }
 
 var (
-	status = enums.WorkflowExecutionStatusCompleted
+	status = executionpb.WorkflowExecutionStatusCompleted
 
 	listClosedWorkflowExecutionsResponse = &workflowservice.ListClosedWorkflowExecutionsResponse{
-		Executions: []*commonproto.WorkflowExecutionInfo{
+		Executions: []*executionpb.WorkflowExecutionInfo{
 			{
-				Execution: &commonproto.WorkflowExecution{
+				Execution: &executionpb.WorkflowExecution{
 					WorkflowId: "test-list-workflow-id",
 					RunId:      uuid.New(),
 				},
-				Type: &commonproto.WorkflowType{
+				Type: &commonpb.WorkflowType{
 					Name: "test-list-workflow-type",
 				},
 				StartTime:     &types.Int64Value{Value: time.Now().UnixNano()},
@@ -410,13 +414,13 @@ var (
 	}
 
 	listOpenWorkflowExecutionsResponse = &workflowservice.ListOpenWorkflowExecutionsResponse{
-		Executions: []*commonproto.WorkflowExecutionInfo{
+		Executions: []*executionpb.WorkflowExecutionInfo{
 			{
-				Execution: &commonproto.WorkflowExecution{
+				Execution: &executionpb.WorkflowExecution{
 					WorkflowId: "test-list-open-workflow-id",
 					RunId:      uuid.New(),
 				},
-				Type: &commonproto.WorkflowType{
+				Type: &commonpb.WorkflowType{
 					Name: "test-list-open-workflow-type",
 				},
 				StartTime:     &types.Int64Value{Value: time.Now().UnixNano()},
@@ -503,7 +507,7 @@ func (s *cliAppSuite) TestCountWorkflow() {
 }
 
 var describeTaskListResponse = &workflowservice.DescribeTaskListResponse{
-	Pollers: []*commonproto.PollerInfo{
+	Pollers: []*tasklistpb.PollerInfo{
 		{
 			LastAccessTime: time.Now().UnixNano(),
 			Identity:       "tester",
@@ -683,12 +687,12 @@ func (s *cliAppSuite) TestBreakLongWords() {
 
 func (s *cliAppSuite) TestAnyToString() {
 	arg := strings.Repeat("LongText", 80)
-	event := &commonproto.HistoryEvent{
+	event := &eventpb.HistoryEvent{
 		EventId:   1,
 		EventType: eventType,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonproto.WorkflowType{Name: "helloworldWorkflow"},
-			TaskList:                            &commonproto.TaskList{Name: "taskList"},
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:                        &commonpb.WorkflowType{Name: "helloworldWorkflow"},
+			TaskList:                            &tasklistpb.TaskList{Name: "taskList"},
 			ExecutionStartToCloseTimeoutSeconds: 60,
 			TaskStartToCloseTimeoutSeconds:      10,
 			Identity:                            "tester",
@@ -705,14 +709,14 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 	fields := map[string][]byte{
 		"TestKey": []byte("testValue"),
 	}
-	execution := &commonproto.WorkflowExecutionInfo{
-		Status: enums.WorkflowExecutionStatusRunning,
-		Memo:   &commonproto.Memo{Fields: fields},
+	execution := &executionpb.WorkflowExecutionInfo{
+		Status: executionpb.WorkflowExecutionStatusRunning,
+		Memo:   &commonpb.Memo{Fields: fields},
 	}
 	s.Equal("{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
 
 	fields["TestKey2"] = []byte(`anotherTestValue`)
-	execution.Memo = &commonproto.Memo{Fields: fields}
+	execution.Memo = &commonpb.Memo{Fields: fields}
 	got := anyToString(execution, true, 0)
 	expected := got == "{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
 		got == "{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
@@ -726,7 +730,7 @@ func (s *cliAppSuite) TestIsAttributeName() {
 
 func (s *cliAppSuite) TestGetWorkflowIdReusePolicy() {
 	res := getWorkflowIDReusePolicy(2)
-	s.Equal(res.String(), enums.WorkflowIdReusePolicyRejectDuplicate.String())
+	s.Equal(res.String(), commonpb.WorkflowIdReusePolicyRejectDuplicate.String())
 }
 
 func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_ExceedRange() {
@@ -886,13 +890,13 @@ func historyEventIterator() sdkclient.HistoryEventIterator {
 		}
 	}
 
-	nextFn := func() *commonproto.HistoryEvent {
+	nextFn := func() *eventpb.HistoryEvent {
 		if counter == 0 {
-			event := &commonproto.HistoryEvent{
+			event := &eventpb.HistoryEvent{
 				EventType: eventType,
-				Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
-					WorkflowType:                        &commonproto.WorkflowType{Name: "TestWorkflow"},
-					TaskList:                            &commonproto.TaskList{Name: "taskList"},
+				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+					WorkflowType:                        &commonpb.WorkflowType{Name: "TestWorkflow"},
+					TaskList:                            &tasklistpb.TaskList{Name: "taskList"},
 					ExecutionStartToCloseTimeoutSeconds: 60,
 					TaskStartToCloseTimeoutSeconds:      10,
 					Identity:                            "tester",

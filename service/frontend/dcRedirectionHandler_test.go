@@ -28,11 +28,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal-proto/workflowservicemock"
 
-	"github.com/temporalio/temporal/.gen/proto/token"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/primitives"
@@ -391,7 +391,7 @@ func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeat() {
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
-	taskToken, err := s.handler.tokenSerializer.Serialize(&token.Task{
+	taskToken, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
 		NamespaceId: primitives.MustParseUUID(s.namespaceID),
 	})
 	s.Nil(err)
@@ -510,7 +510,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceled() {
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
-	token, err := s.handler.tokenSerializer.Serialize(&token.Task{
+	token, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
 		NamespaceId: primitives.MustParseUUID(s.namespaceID),
 	})
 	s.Nil(err)
@@ -558,7 +558,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompleted() {
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
-	taskToken, err := s.handler.tokenSerializer.Serialize(&token.Task{
+	taskToken, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
 		NamespaceId: primitives.MustParseUUID(s.namespaceID),
 	})
 	s.Nil(err)
@@ -606,7 +606,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailed() {
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
-	taskToken, err := s.handler.tokenSerializer.Serialize(&token.Task{
+	taskToken, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
 		NamespaceId: primitives.MustParseUUID(s.namespaceID),
 	})
 	s.Nil(err)
@@ -654,7 +654,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskCompleted() {
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
-	taskToken, err := s.handler.tokenSerializer.Serialize(&token.Task{
+	taskToken, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
 		NamespaceId: primitives.MustParseUUID(s.namespaceID),
 	})
 	s.Nil(err)
@@ -681,7 +681,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskFailed() {
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
-	token, err := s.handler.tokenSerializer.Serialize(&token.Task{
+	token, err := s.handler.tokenSerializer.Serialize(&tokengenpb.Task{
 		NamespaceId: primitives.MustParseUUID(s.namespaceID),
 	})
 	s.Nil(err)
@@ -707,7 +707,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondQueryTaskCompleted() {
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
 		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
 
-	taskToken, err := s.handler.tokenSerializer.SerializeQueryTaskToken(&token.QueryTask{
+	taskToken, err := s.handler.tokenSerializer.SerializeQueryTaskToken(&tokengenpb.QueryTask{
 		NamespaceId: s.namespaceID,
 	})
 	req := &workflowservice.RespondQueryTaskCompletedRequest{
@@ -824,7 +824,7 @@ func (s *dcRedirectionHandlerSuite) TestListTaskListPartitions() {
 
 	req := &workflowservice.ListTaskListPartitionsRequest{
 		Namespace: s.namespace,
-		TaskList: &commonproto.TaskList{
+		TaskList: &tasklistpb.TaskList{
 			Name: "test_tesk_list",
 			Kind: 0,
 		},

@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
@@ -248,9 +248,9 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*commonproto.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -325,9 +325,9 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*commonproto.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -341,7 +341,7 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 			},
 		},
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
 					Timestamp: time.Now().UnixNano(),

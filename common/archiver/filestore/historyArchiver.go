@@ -41,7 +41,7 @@ import (
 	"path"
 	"strconv"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
@@ -144,7 +144,7 @@ func (h *historyArchiver) Archive(
 		historyIterator = archiver.NewHistoryIterator(request, h.container.HistoryV2Manager, targetHistoryBlobSize)
 	}
 
-	var historyBatches []*commonproto.History
+	var historyBatches []*eventpb.History
 	for historyIterator.HasNext() {
 		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
 		if err != nil {

@@ -29,9 +29,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -56,9 +57,9 @@ const (
 
 type (
 	addTaskParams struct {
-		execution     *commonproto.WorkflowExecution
+		execution     *executionpb.WorkflowExecution
 		taskInfo      *persistenceblobs.TaskInfo
-		source        enums.TaskSource
+		source        commongenpb.TaskSource
 		forwardedFrom string
 	}
 
@@ -80,7 +81,7 @@ type (
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		CancelPoller(pollerID string)
-		GetAllPollerInfo() []*commonproto.PollerInfo
+		GetAllPollerInfo() []*tasklistpb.PollerInfo
 		// DescribeTaskList returns information about the target task list
 		DescribeTaskList(includeTaskListStatus bool) *matchingservice.DescribeTaskListResponse
 		String() string
@@ -131,7 +132,7 @@ var errRemoteSyncMatchFailed = errors.New("remote sync match failed")
 func newTaskListManager(
 	e *matchingEngineImpl,
 	taskList *taskListID,
-	taskListKind enums.TaskListKind,
+	taskListKind tasklistpb.TaskListKind,
 	config *Config,
 ) (taskListManager, error) {
 
@@ -325,7 +326,7 @@ func (c *taskListManagerImpl) getTask(ctx context.Context, maxDispatchPerSecond 
 }
 
 // GetAllPollerInfo returns all pollers that polled from this tasklist in last few minutes
-func (c *taskListManagerImpl) GetAllPollerInfo() []*commonproto.PollerInfo {
+func (c *taskListManagerImpl) GetAllPollerInfo() []*tasklistpb.PollerInfo {
 	return c.pollerHistory.getAllPollerInfo()
 }
 
@@ -349,12 +350,12 @@ func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *matc
 	}
 
 	taskIDBlock := c.rangeIDToTaskIDBlock(c.db.RangeID())
-	response.TaskListStatus = &commonproto.TaskListStatus{
+	response.TaskListStatus = &tasklistpb.TaskListStatus{
 		ReadLevel:        c.taskAckManager.getReadLevel(),
 		AckLevel:         c.taskAckManager.getAckLevel(),
 		BacklogCountHint: c.taskAckManager.getBacklogCountHint(),
 		RatePerSecond:    c.matcher.Rate(),
-		TaskIdBlock: &commonproto.TaskIdBlock{
+		TaskIdBlock: &tasklistpb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
 		},
@@ -394,7 +395,7 @@ func (c *taskListManagerImpl) completeTask(task *persistenceblobs.AllocatedTaskI
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
 		_, err = c.executeWithRetry(func() (interface{}, error) {
-			wf := &commonproto.WorkflowExecution{WorkflowId: task.Data.GetWorkflowId(), RunId: primitives.UUIDString(task.Data.GetRunId())}
+			wf := &executionpb.WorkflowExecution{WorkflowId: task.Data.GetWorkflowId(), RunId: primitives.UUIDString(task.Data.GetRunId())}
 			return c.taskWriter.appendTask(wf, task.Data)
 		})
 
@@ -521,8 +522,8 @@ func (c *taskListManagerImpl) newChildContext(
 	return context.WithTimeout(parent, timeout)
 }
 
-func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind enums.TaskListKind) bool {
-	return !taskList.IsRoot() && kind != enums.TaskListKindSticky
+func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind tasklistpb.TaskListKind) bool {
+	return !taskList.IsRoot() && kind != tasklistpb.TaskListKindSticky
 }
 
 func (c *taskListManagerImpl) namespaceScope() metrics.Scope {

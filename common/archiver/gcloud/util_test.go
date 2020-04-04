@@ -26,7 +26,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
@@ -45,9 +45,9 @@ type utilSuite struct {
 }
 
 func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
-	historyBatches := []*commonproto.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId: common.FirstEventID,
 					Version: 1,
@@ -55,7 +55,7 @@ func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 			},
 		},
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -64,7 +64,7 @@ func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 				{
 					EventId: common.FirstEventID + 2,
 					Version: 2,
-					Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 						Identity: "some random identity",
 					}},
 				},

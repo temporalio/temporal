@@ -24,7 +24,7 @@ import (
 	"database/sql"
 	"time"
 
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
@@ -164,7 +164,7 @@ type (
 		RunID            primitives.UUID
 		CreateRequestID  string
 		State            int
-		Status           enums.WorkflowExecutionStatus
+		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 		StartVersion     int64
 	}

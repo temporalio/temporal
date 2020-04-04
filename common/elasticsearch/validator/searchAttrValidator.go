@@ -23,7 +23,7 @@ package validator
 import (
 	"fmt"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/definition"
@@ -60,7 +60,7 @@ func NewSearchAttributesValidator(
 }
 
 // ValidateSearchAttributes validate search attributes are valid for writing and not exceed limits
-func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonproto.SearchAttributes, namespace string) error {
+func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.SearchAttributes, namespace string) error {
 	if input == nil {
 		return nil
 	}

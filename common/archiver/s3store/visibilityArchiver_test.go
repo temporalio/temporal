@@ -34,8 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.uber.org/zap"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
@@ -160,7 +160,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             enums.WorkflowExecutionStatusFailed,
+		Status:             executionpb.WorkflowExecutionStatusFailed,
 		HistoryLength:      int64(101),
 	}
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
@@ -199,9 +199,9 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     closeTimestamp.UnixNano(),
-		Status:             enums.WorkflowExecutionStatusFailed,
+		Status:             executionpb.WorkflowExecutionStatusFailed,
 		HistoryLength:      int64(101),
-		Memo: &commonproto.Memo{
+		Memo: &commonpb.Memo{
 			Fields: map[string][]byte{
 				"testFields": {1, 2, 3},
 			},
@@ -431,7 +431,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   testData.day*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
 			CloseTimestamp:   (testData.day+30)*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
-			Status:           enums.WorkflowExecutionStatusFailed,
+			Status:           executionpb.WorkflowExecutionStatusFailed,
 			HistoryLength:    101,
 		}
 		err := visibilityArchiver.Archive(context.Background(), URI, &record)
@@ -517,7 +517,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		PageSize:    1,
 		Query:       "parsed by mockParser",
 	}
-	executions := []*commonproto.WorkflowExecutionInfo{}
+	executions := []*executionpb.WorkflowExecutionInfo{}
 	var first = true
 	for first || request.NextPageToken != nil {
 		response, err := visibilityArchiver.Query(context.Background(), URI, request)
@@ -542,7 +542,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		PageSize:    1,
 		Query:       "parsed by mockParser",
 	}
-	executions = []*commonproto.WorkflowExecutionInfo{}
+	executions = []*executionpb.WorkflowExecutionInfo{}
 	first = true
 	for first || request.NextPageToken != nil {
 		response, err := visibilityArchiver.Query(context.Background(), URI, request)
@@ -568,7 +568,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(1 * time.Hour),
-			Status:           enums.WorkflowExecutionStatusFailed,
+			Status:           executionpb.WorkflowExecutionStatusFailed,
 			HistoryLength:    101,
 		},
 		{
@@ -579,7 +579,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(1*time.Hour + 30*time.Minute),
-			Status:           enums.WorkflowExecutionStatusFailed,
+			Status:           executionpb.WorkflowExecutionStatusFailed,
 			HistoryLength:    101,
 		},
 		{
@@ -590,7 +590,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(3 * time.Hour),
-			Status:           enums.WorkflowExecutionStatusFailed,
+			Status:           executionpb.WorkflowExecutionStatusFailed,
 			HistoryLength:    101,
 		},
 	}

@@ -27,8 +27,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 )
 
 type (
@@ -39,14 +39,14 @@ type (
 )
 
 var (
-	historyEvent = &commonproto.HistoryEvent{
+	historyEvent = &eventpb.HistoryEvent{
 		Version:   1234,
 		EventId:   130,
 		Timestamp: 112345132134,
-		EventType: enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated,
-		Attributes: &commonproto.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &commonproto.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
+		EventType: eventpb.EventTypeRequestCancelExternalWorkflowExecutionInitiated,
+		Attributes: &eventpb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 			Namespace: "some random target namespace",
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: "some random target workflow ID",
 				RunId:      "some random target run ID",
 			},
@@ -76,14 +76,14 @@ func (s *jsonpbEncoderSuite) TestEncode() {
 }
 
 func (s *jsonpbEncoderSuite) TestDecode() {
-	var val commonproto.HistoryEvent
+	var val eventpb.HistoryEvent
 	err := s.encoder.Decode([]byte(encodedHistoryEvent), &val)
 	s.Nil(err)
 	s.EqualValues(val, *historyEvent)
 }
 
 func (s *jsonpbEncoderSuite) TestEncodeSlice() {
-	var historyEvents []*commonproto.HistoryEvent
+	var historyEvents []*eventpb.HistoryEvent
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
@@ -96,7 +96,7 @@ func (s *jsonpbEncoderSuite) TestEncodeSlice() {
 func (s *jsonpbEncoderSuite) TestDecodeSlice() {
 	historyEventsJSON := fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", encodedHistoryEvent)
 
-	var historyEvents []*commonproto.HistoryEvent
+	var historyEvents []*eventpb.HistoryEvent
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)

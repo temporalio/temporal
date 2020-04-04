@@ -27,7 +27,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -179,7 +179,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 }
 
 func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
-	task *replication.ReplicationTask,
+	task *replicationgenpb.ReplicationTask,
 ) error {
 
 	namespaceAttribute := task.GetNamespaceTaskAttributes()
@@ -196,7 +196,7 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 }
 
 func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
-	task *replication.ReplicationTask,
+	task *replicationgenpb.ReplicationTask,
 ) error {
 	p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorLatency)

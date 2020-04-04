@@ -25,7 +25,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common"
 )
@@ -151,21 +151,21 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "ExecutionStatus = \"Completed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enums.WorkflowExecutionStatusCompleted),
+				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatusCompleted),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'continuedasnew'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enums.WorkflowExecutionStatusContinuedAsNew),
+				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatusContinuedAsNew),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'Failed' and ExecutionStatus = \"Failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enums.WorkflowExecutionStatusFailed),
+				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatusFailed),
 			},
 		},
 		{
@@ -296,7 +296,7 @@ func (s *queryParserSuite) TestParse() {
 				earliestCloseTime: 2000,
 				latestCloseTime:   9999,
 				runID:             common.StringPtr("random runID"),
-				status:            toWorkflowExecutionStatusPtr(enums.WorkflowExecutionStatusFailed),
+				status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatusFailed),
 			},
 		},
 		{

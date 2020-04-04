@@ -29,7 +29,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
-	"go.temporal.io/temporal-proto/enums"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"
@@ -710,8 +710,8 @@ func (c *cadenceImpl) createSystemNamespace() error {
 		},
 		Config: &persistence.NamespaceConfig{
 			Retention:                1,
-			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
-			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
+			HistoryArchivalStatus:    namespacepb.ArchivalStatusDisabled,
+			VisibilityArchivalStatus: namespacepb.ArchivalStatusDisabled,
 		},
 		ReplicationConfig: &persistence.NamespaceReplicationConfig{},
 		FailoverVersion:   common.EmptyVersion,

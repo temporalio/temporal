@@ -25,8 +25,7 @@ import (
 	"runtime"
 	"time"
 
-	"go.temporal.io/temporal-proto/enums"
-
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -94,7 +93,7 @@ dispatchLoop:
 			if !ok { // Task list getTasks pump is shutdown
 				break dispatchLoop
 			}
-			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, enums.TaskSourceDbBacklog, "", false)
+			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, commongenpb.TaskSourceDbBacklog, "", false)
 			for {
 				err := tr.tlMgr.DispatchTask(tr.cancelCtx, task)
 				if err == nil {

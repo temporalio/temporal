@@ -25,8 +25,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -49,7 +48,7 @@ type (
 		timestamp              time.Time
 		currentBranchToken     []byte
 		workflowState          int
-		workflowStatus         enums.WorkflowExecutionStatus
+		workflowStatus         executionpb.WorkflowExecutionStatus
 	}
 
 	historyEventNotifierImpl struct {
@@ -76,13 +75,13 @@ var _ historyEventNotifier = (*historyEventNotifierImpl)(nil)
 
 func newHistoryEventNotification(
 	namespaceID string,
-	workflowExecution *commonproto.WorkflowExecution,
+	workflowExecution *executionpb.WorkflowExecution,
 	lastFirstEventID int64,
 	nextEventID int64,
 	previousStartedEventID int64,
 	currentBranchToken []byte,
 	workflowState int,
-	workflowStatus enums.WorkflowExecutionStatus,
+	workflowStatus executionpb.WorkflowExecutionStatus,
 ) *historyEventNotification {
 
 	return &historyEventNotification{

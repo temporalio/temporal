@@ -28,8 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/definition"
@@ -78,7 +77,7 @@ func (s *historyEventNotifierSuite) TearDownTest() {
 
 func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	namespaceID := "namespace ID"
-	execution := &commonproto.WorkflowExecution{
+	execution := &executionpb.WorkflowExecution{
 		WorkflowId: "workflow ID",
 		RunId:      "run ID",
 	}
@@ -86,7 +85,7 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
 	workflowState := persistence.WorkflowStateCreated
-	workflowStatus := enums.WorkflowExecutionStatusRunning
+	workflowStatus := executionpb.WorkflowExecutionStatusRunning
 	branchToken := make([]byte, 0)
 	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 2).C
@@ -110,7 +109,7 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 
 func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	namespaceID := "namespace ID"
-	execution := &commonproto.WorkflowExecution{
+	execution := &executionpb.WorkflowExecution{
 		WorkflowId: "workflow ID",
 		RunId:      "run ID",
 	}
@@ -119,7 +118,7 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
 	workflowState := persistence.WorkflowStateCreated
-	workflowStatus := enums.WorkflowExecutionStatusRunning
+	workflowStatus := executionpb.WorkflowExecutionStatusRunning
 	branchToken := make([]byte, 0)
 	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 5).C

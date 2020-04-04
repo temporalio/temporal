@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/xwb1989/sqlparser"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common"
 )
@@ -49,7 +49,7 @@ type (
 		workflowID        *string
 		runID             *string
 		workflowTypeName  *string
-		status            *enums.WorkflowExecutionStatus
+		status            *executionpb.WorkflowExecutionStatus
 		emptyResult       bool
 	}
 )
@@ -241,19 +241,19 @@ func convertToTimestamp(timeStr string) (int64, error) {
 	return parsedTime.UnixNano(), nil
 }
 
-func convertStatusStr(statusStr string) (enums.WorkflowExecutionStatus, error) {
+func convertStatusStr(statusStr string) (executionpb.WorkflowExecutionStatus, error) {
 	statusStr = strings.ToLower(statusStr)
 	switch statusStr {
 	case "completed":
-		return enums.WorkflowExecutionStatusCompleted, nil
+		return executionpb.WorkflowExecutionStatusCompleted, nil
 	case "failed":
-		return enums.WorkflowExecutionStatusFailed, nil
+		return executionpb.WorkflowExecutionStatusFailed, nil
 	case "canceled":
-		return enums.WorkflowExecutionStatusCanceled, nil
+		return executionpb.WorkflowExecutionStatusCanceled, nil
 	case "continuedasnew":
-		return enums.WorkflowExecutionStatusContinuedAsNew, nil
+		return executionpb.WorkflowExecutionStatusContinuedAsNew, nil
 	case "timedout":
-		return enums.WorkflowExecutionStatusTimedOut, nil
+		return executionpb.WorkflowExecutionStatusTimedOut, nil
 	default:
 		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)
 	}

@@ -23,11 +23,11 @@
 package namespace
 
 import (
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	replicationpb "go.temporal.io/temporal-proto/replication"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -60,7 +60,7 @@ var (
 type (
 	// ReplicationTaskExecutor is the interface which is to execute namespace replication task
 	ReplicationTaskExecutor interface {
-		Execute(task *replication.NamespaceTaskAttributes) error
+		Execute(task *replicationgenpb.NamespaceTaskAttributes) error
 	}
 
 	namespaceReplicationTaskExecutorImpl struct {
@@ -82,15 +82,15 @@ func NewReplicationTaskExecutor(
 }
 
 // Execute handles receiving of the namespace replication task
-func (h *namespaceReplicationTaskExecutorImpl) Execute(task *replication.NamespaceTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) Execute(task *replicationgenpb.NamespaceTaskAttributes) error {
 	if err := h.validateNamespaceReplicationTask(task); err != nil {
 		return err
 	}
 
 	switch task.GetNamespaceOperation() {
-	case enums.NamespaceOperationCreate:
+	case replicationgenpb.NamespaceOperationCreate:
 		return h.handleNamespaceCreationReplicationTask(task)
-	case enums.NamespaceOperationUpdate:
+	case replicationgenpb.NamespaceOperationUpdate:
 		return h.handleNamespaceUpdateReplicationTask(task)
 	default:
 		return ErrInvalidNamespaceOperation
@@ -98,7 +98,7 @@ func (h *namespaceReplicationTaskExecutorImpl) Execute(task *replication.Namespa
 }
 
 // handleNamespaceCreationReplicationTask handles the namespace creation replication task
-func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicationTask(task *replication.NamespaceTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicationTask(task *replicationgenpb.NamespaceTaskAttributes) error {
 	// task already validated
 	status, err := h.convertNamespaceStatusFromProto(task.Info.Status)
 	if err != nil {
@@ -181,7 +181,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 }
 
 // handleNamespaceUpdateReplicationTask handles the namespace update replication task
-func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationTask(task *replication.NamespaceTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationTask(task *replicationgenpb.NamespaceTaskAttributes) error {
 	// task already validated
 	status, err := h.convertNamespaceStatusFromProto(task.Info.Status)
 	if err != nil {
@@ -258,7 +258,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 	return h.metadataManagerV2.UpdateNamespace(request)
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(task *replication.NamespaceTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(task *replicationgenpb.NamespaceTaskAttributes) error {
 	if task == nil {
 		return ErrEmptyNamespaceReplicationTask
 	}
@@ -276,8 +276,8 @@ func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(
 }
 
 func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFromProto(
-	input []*commonproto.ClusterReplicationConfiguration) []*persistence.ClusterReplicationConfig {
-	output := []*persistence.ClusterReplicationConfig{}
+	input []*replicationpb.ClusterReplicationConfiguration) []*persistence.ClusterReplicationConfig {
+	var output []*persistence.ClusterReplicationConfig
 	for _, cluster := range input {
 		clusterName := cluster.GetClusterName()
 		output = append(output, &persistence.ClusterReplicationConfig{ClusterName: clusterName})
@@ -285,11 +285,11 @@ func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFr
 	return output
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) convertNamespaceStatusFromProto(input enums.NamespaceStatus) (int, error) {
+func (h *namespaceReplicationTaskExecutorImpl) convertNamespaceStatusFromProto(input namespacepb.NamespaceStatus) (int, error) {
 	switch input {
-	case enums.NamespaceStatusRegistered:
+	case namespacepb.NamespaceStatusRegistered:
 		return persistence.NamespaceStatusRegistered, nil
-	case enums.NamespaceStatusDeprecated:
+	case namespacepb.NamespaceStatusDeprecated:
 		return persistence.NamespaceStatusDeprecated, nil
 	default:
 		return 0, ErrInvalidNamespaceStatus

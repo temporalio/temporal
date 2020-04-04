@@ -28,7 +28,7 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"
 
@@ -66,8 +66,8 @@ func DescribeBatchJob(c *cli.Context) {
 	}
 
 	output := map[string]interface{}{}
-	if wf.WorkflowExecutionInfo.GetStatus() != enums.WorkflowExecutionStatusRunning {
-		if wf.WorkflowExecutionInfo.GetStatus() != enums.WorkflowExecutionStatusCompleted {
+	if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatusRunning {
+		if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatusCompleted {
 			output["msg"] = "batch job stopped status: " + wf.WorkflowExecutionInfo.GetStatus().String()
 		} else {
 			output["msg"] = "batch job is finished successfully"
@@ -111,7 +111,7 @@ func ListBatchJobs(c *cli.Context) {
 			"operator":  string(wf.SearchAttributes.IndexedFields["Operator"]),
 		}
 
-		if wf.GetStatus() != enums.WorkflowExecutionStatusRunning {
+		if wf.GetStatus() != executionpb.WorkflowExecutionStatusRunning {
 			job["status"] = wf.GetStatus().String()
 			job["closeTime"] = convertTime(wf.GetCloseTime().GetValue(), false)
 		} else {

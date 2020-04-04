@@ -26,23 +26,19 @@ import (
 	"strings"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
-	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
 	"github.com/gogo/protobuf/types"
-
-	"github.com/temporalio/temporal/common/primitives"
+	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
-	"github.com/temporalio/temporal/common/checksum"
-
-	"github.com/pborman/uuid"
-
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/checksum"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 // Namespace status
@@ -223,7 +219,7 @@ type (
 		StartRequestID   string
 		RunID            string
 		State            int
-		Status           enums.WorkflowExecutionStatus
+		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
 
@@ -272,14 +268,14 @@ type (
 		ParentRunID                        string
 		InitiatedID                        int64
 		CompletionEventBatchID             int64
-		CompletionEvent                    *commonproto.HistoryEvent
+		CompletionEvent                    *eventpb.HistoryEvent
 		TaskList                           string
 		WorkflowTypeName                   string
 		WorkflowTimeout                    int32
 		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
-		Status                             enums.WorkflowExecutionStatus
+		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
 		NextEventID                        int64
@@ -304,7 +300,7 @@ type (
 		ClientLibraryVersion               string
 		ClientFeatureVersion               string
 		ClientImpl                         string
-		AutoResetPoints                    *commonproto.ResetPoints
+		AutoResetPoints                    *executionpb.ResetPoints
 		Memo                               map[string][]byte
 		SearchAttributes                   map[string][]byte
 		// for retry
@@ -334,7 +330,7 @@ type (
 		StartVersion        int64
 		LastWriteVersion    int64
 		LastWriteEventID    int64
-		LastReplicationInfo map[string]*replication.ReplicationInfo
+		LastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.
@@ -517,7 +513,7 @@ type (
 
 		// TODO when 2DC is deprecated remove these 2 attributes
 		ResetWorkflow       bool
-		LastReplicationInfo map[string]*replication.ReplicationInfo
+		LastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
 	}
 
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters
@@ -557,7 +553,7 @@ type (
 		ExecutionInfo       *WorkflowExecutionInfo
 		ExecutionStats      *ExecutionStats
 		ReplicationState    *ReplicationState
-		BufferedEvents      []*commonproto.HistoryEvent
+		BufferedEvents      []*eventpb.HistoryEvent
 		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
 	}
@@ -567,10 +563,10 @@ type (
 		Version                  int64
 		ScheduleID               int64
 		ScheduledEventBatchID    int64
-		ScheduledEvent           *commonproto.HistoryEvent
+		ScheduledEvent           *eventpb.HistoryEvent
 		ScheduledTime            time.Time
 		StartedID                int64
-		StartedEvent             *commonproto.HistoryEvent
+		StartedEvent             *eventpb.HistoryEvent
 		StartedTime              time.Time
 		NamespaceID              string
 		ActivityID               string
@@ -607,15 +603,15 @@ type (
 		Version               int64
 		InitiatedID           int64
 		InitiatedEventBatchID int64
-		InitiatedEvent        *commonproto.HistoryEvent
+		InitiatedEvent        *eventpb.HistoryEvent
 		StartedID             int64
 		StartedWorkflowID     string
 		StartedRunID          string
-		StartedEvent          *commonproto.HistoryEvent
+		StartedEvent          *eventpb.HistoryEvent
 		CreateRequestID       string
 		Namespace             string
 		WorkflowTypeName      string
-		ParentClosePolicy     enums.ParentClosePolicy
+		ParentClosePolicy     commonpb.ParentClosePolicy
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -658,7 +654,7 @@ type (
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
 	GetWorkflowExecutionRequest struct {
 		NamespaceID string
-		Execution   commonproto.WorkflowExecution
+		Execution   executionpb.WorkflowExecution
 	}
 
 	// GetWorkflowExecutionResponse is the response to GetworkflowExecutionRequest
@@ -678,7 +674,7 @@ type (
 		StartRequestID   string
 		RunID            string
 		State            int
-		Status           enums.WorkflowExecutionStatus
+		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
 
@@ -752,7 +748,7 @@ type (
 		WorkflowID  string
 		RunID       string
 		BranchToken []byte
-		Events      []*commonproto.HistoryEvent
+		Events      []*eventpb.HistoryEvent
 	}
 
 	// WorkflowMutation is used as generic workflow execution state mutation
@@ -774,7 +770,7 @@ type (
 		DeleteSignalInfo          *int64
 		UpsertSignalRequestedIDs  []string
 		DeleteSignalRequestedID   string
-		NewBufferedEvents         []*commonproto.HistoryEvent
+		NewBufferedEvents         []*eventpb.HistoryEvent
 		ClearBufferedEvents       bool
 
 		TransferTasks    []Task
@@ -1035,11 +1031,11 @@ type (
 		// NOTE: this retention is in days, not in seconds
 		Retention                int32
 		EmitMetric               bool
-		HistoryArchivalStatus    enums.ArchivalStatus
+		HistoryArchivalStatus    namespacepb.ArchivalStatus
 		HistoryArchivalURI       string
-		VisibilityArchivalStatus enums.ArchivalStatus
+		VisibilityArchivalStatus namespacepb.ArchivalStatus
 		VisibilityArchivalURI    string
-		BadBinaries              commonproto.BadBinaries
+		BadBinaries              namespacepb.BadBinaries
 	}
 
 	// NamespaceReplicationConfig describes the cross DC namespace replication configuration
@@ -1188,7 +1184,7 @@ type (
 		// The branch to be appended
 		BranchToken []byte
 		// The batch of events to be appended. The first eventID will become the nodeID of this batch
-		Events []*commonproto.HistoryEvent
+		Events []*eventpb.HistoryEvent
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 		// optional binary encoding type
@@ -1223,7 +1219,7 @@ type (
 	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	ReadHistoryBranchResponse struct {
 		// History events
-		HistoryEvents []*commonproto.HistoryEvent
+		HistoryEvents []*eventpb.HistoryEvent
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue
@@ -1237,7 +1233,7 @@ type (
 	// ReadHistoryBranchByBatchResponse is the response to ReadHistoryBranchRequest
 	ReadHistoryBranchByBatchResponse struct {
 		// History events by batch
-		History []*commonproto.History
+		History []*eventpb.History
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue

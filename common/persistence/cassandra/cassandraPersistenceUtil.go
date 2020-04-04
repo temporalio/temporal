@@ -26,11 +26,11 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -806,7 +806,7 @@ func createReplicationTasks(
 		firstEventID := common.EmptyEventID
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion //nolint:ineffassign
-		var lastReplicationInfo map[string]*replication.ReplicationInfo
+		var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
 		activityScheduleID := common.EmptyEventID
 		var branchToken, newRunBranchToken []byte
 		resetWorkflow := false
@@ -819,7 +819,7 @@ func createReplicationTasks(
 			firstEventID = histTask.FirstEventID
 			nextEventID = histTask.NextEventID
 			version = task.GetVersion()
-			lastReplicationInfo = make(map[string]*replication.ReplicationInfo)
+			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo)
 			for k, v := range histTask.LastReplicationInfo {
 				lastReplicationInfo[k] = v
 			}
@@ -829,7 +829,7 @@ func createReplicationTasks(
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 			// cassandra does not like null
-			lastReplicationInfo = make(map[string]*replication.ReplicationInfo)
+			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo)
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
@@ -968,7 +968,7 @@ func createOrUpdateCurrentExecution(
 	workflowID string,
 	runID string,
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1558,7 +1558,7 @@ func ReplicationStateFromProtos(wei *persistenceblobs.WorkflowExecutionInfo, rv 
 	}
 
 	if info.LastReplicationInfo == nil {
-		info.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, 0)
+		info.LastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, 0)
 	}
 
 	return info
@@ -1691,9 +1691,9 @@ func createHistoryEventBatchBlob(
 
 func createReplicationInfo(
 	result map[string]interface{},
-) *replication.ReplicationInfo {
+) *replicationgenpb.ReplicationInfo {
 
-	info := &replication.ReplicationInfo{}
+	info := &replicationgenpb.ReplicationInfo{}
 	for k, v := range result {
 		switch k {
 		case "version":
@@ -1707,7 +1707,7 @@ func createReplicationInfo(
 }
 
 func createReplicationInfoMap(
-	info *replication.ReplicationInfo,
+	info *replicationgenpb.ReplicationInfo,
 ) map[string]interface{} {
 
 	rInfoMap := make(map[string]interface{})

@@ -24,8 +24,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	querypb "go.temporal.io/temporal-proto/query"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common"
@@ -36,9 +40,9 @@ import (
 )
 
 type (
-	decisionTaskHandler func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error)
-	activityTaskHandler func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
+	decisionTaskHandler func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error)
+	activityTaskHandler func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input []byte, takeToken []byte) ([]byte, bool, error)
 
 	queryHandler func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error)
@@ -47,8 +51,8 @@ type (
 	TaskPoller struct {
 		Engine                              FrontendClient
 		Namespace                           string
-		TaskList                            *commonproto.TaskList
-		StickyTaskList                      *commonproto.TaskList
+		TaskList                            *tasklistpb.TaskList
+		StickyTaskList                      *tasklistpb.TaskList
 		StickyScheduleToStartTimeoutSeconds int32
 		Identity                            string
 		DecisionHandler                     decisionTaskHandler
@@ -123,7 +127,7 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDec
 	decisionAttempt int64,
 	retryCount int,
 	forceCreateNewDecision bool,
-	queryResult *commonproto.WorkflowQueryResult,
+	queryResult *querypb.WorkflowQueryResult,
 ) (isQueryTask bool, newTask *workflowservice.RespondDecisionTaskCompletedResponse, err error) {
 Loop:
 	for attempt := 0; attempt < retryCount; attempt++ {
@@ -152,7 +156,7 @@ Loop:
 			continue Loop
 		}
 
-		var events []*commonproto.HistoryEvent
+		var events []*eventpb.HistoryEvent
 		if response.Query == nil || !pollStickyTaskList {
 			// if not query task, should have some history events
 			// for non sticky query, there should be events returned
@@ -207,11 +211,11 @@ Loop:
 
 			completeRequest := &workflowservice.RespondQueryTaskCompletedRequest{TaskToken: response.TaskToken}
 			if err != nil {
-				completeType := enums.QueryTaskCompletedTypeFailed
+				completeType := querypb.QueryTaskCompletedTypeFailed
 				completeRequest.CompletedType = completeType
 				completeRequest.ErrorMessage = err.Error()
 			} else {
-				completeType := enums.QueryTaskCompletedTypeCompleted
+				completeType := querypb.QueryTaskCompletedTypeCompleted
 				completeRequest.CompletedType = completeType
 				completeRequest.QueryResult = blob
 			}
@@ -221,9 +225,9 @@ Loop:
 		}
 
 		// handle normal decision task / non query task response
-		var lastDecisionScheduleEvent *commonproto.HistoryEvent
+		var lastDecisionScheduleEvent *eventpb.HistoryEvent
 		for _, e := range events {
-			if e.GetEventType() == enums.EventTypeDecisionTaskScheduled {
+			if e.GetEventType() == eventpb.EventTypeDecisionTaskScheduled {
 				lastDecisionScheduleEvent = e
 			}
 		}
@@ -236,7 +240,7 @@ Loop:
 			p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 			_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 				TaskToken: response.TaskToken,
-				Cause:     enums.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
+				Cause:     eventpb.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
 				Details:   []byte(err.Error()),
 				Identity:  p.Identity,
 			})
@@ -265,7 +269,7 @@ Loop:
 				Identity:         p.Identity,
 				ExecutionContext: executionCtx,
 				Decisions:        decisions,
-				StickyAttributes: &commonproto.StickyExecutionAttributes{
+				StickyAttributes: &decisionpb.StickyExecutionAttributes{
 					WorkerTaskList:                p.StickyTaskList,
 					ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
 				},
@@ -289,7 +293,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		return nil, nil
 	}
 
-	var events []*commonproto.HistoryEvent
+	var events []*eventpb.HistoryEvent
 	history := response.History
 	if history == nil {
 		p.Logger.Fatal("History is nil")
@@ -306,7 +310,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 		_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 			TaskToken: response.TaskToken,
-			Cause:     enums.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
+			Cause:     eventpb.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
 			Details:   []byte(err.Error()),
 			Identity:  p.Identity,
 		})
@@ -323,7 +327,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 			Identity:         p.Identity,
 			ExecutionContext: executionCtx,
 			Decisions:        decisions,
-			StickyAttributes: &commonproto.StickyExecutionAttributes{
+			StickyAttributes: &decisionpb.StickyExecutionAttributes{
 				WorkerTaskList:                p.StickyTaskList,
 				ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
 			},
@@ -475,8 +479,8 @@ retry:
 	return matching.ErrNoTasks
 }
 
-func getQueryResults(queries map[string]*commonproto.WorkflowQuery, queryResult *commonproto.WorkflowQueryResult) map[string]*commonproto.WorkflowQueryResult {
-	result := make(map[string]*commonproto.WorkflowQueryResult)
+func getQueryResults(queries map[string]*querypb.WorkflowQuery, queryResult *querypb.WorkflowQueryResult) map[string]*querypb.WorkflowQueryResult {
+	result := make(map[string]*querypb.WorkflowQueryResult)
 	for k := range queries {
 		result[k] = queryResult
 	}

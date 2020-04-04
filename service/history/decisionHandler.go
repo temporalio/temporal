@@ -25,11 +25,14 @@ import (
 	"fmt"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -109,7 +112,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 	}
 	namespaceID := namespaceEntry.GetInfo().ID
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
 		RunId:      req.WorkflowExecution.RunId,
 	}
@@ -151,7 +154,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	}
 	namespaceID := namespaceEntry.GetInfo().ID
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
 		RunId:      req.WorkflowExecution.RunId,
 	}
@@ -239,7 +242,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 		return ErrDeserializingToken
 	}
 
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
@@ -279,7 +282,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 		return nil, ErrDeserializingToken
 	}
 
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
@@ -336,7 +339,7 @@ Update_History_Loop:
 
 		decisionHeartbeating := request.GetForceCreateNewDecisionTask() && len(request.Decisions) == 0
 		var decisionHeartbeatTimeout bool
-		var completedEvent *commonproto.HistoryEvent
+		var completedEvent *eventpb.HistoryEvent
 		if decisionHeartbeating {
 			namespace := namespaceEntry.GetInfo().Name
 			timeout := handler.config.DecisionHeartbeatTimeout(namespace)
@@ -387,7 +390,7 @@ Update_History_Loop:
 		binChecksum := request.GetBinaryChecksum()
 		if _, ok := namespaceEntry.GetConfig().BadBinaries.Binaries[binChecksum]; ok {
 			failDecision = &failDecisionInfo{
-				cause:   enums.DecisionTaskFailedCauseBadBinary,
+				cause:   eventpb.DecisionTaskFailedCauseBadBinary,
 				message: fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum),
 			}
 		} else {
@@ -479,7 +482,7 @@ Update_History_Loop:
 				// start the new decision task if request asked to do so
 				// TODO: replace the poll request
 				_, _, err := msBuilder.AddDecisionTaskStartedEvent(newDecision.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflowservice.PollForDecisionTaskRequest{
-					TaskList: &commonproto.TaskList{Name: newDecision.TaskList},
+					TaskList: &tasklistpb.TaskList{Name: newDecision.TaskList},
 					Identity: request.Identity,
 				})
 				if err != nil {
@@ -497,7 +500,7 @@ Update_History_Loop:
 				handler.shard.GetTimeSource().Now(),
 				newWorkflowExecutionContext(
 					continueAsNewExecutionInfo.NamespaceID,
-					commonproto.WorkflowExecution{
+					executionpb.WorkflowExecution{
 						WorkflowId: continueAsNewExecutionInfo.WorkflowID,
 						RunId:      continueAsNewExecutionInfo.RunID,
 					},
@@ -592,9 +595,9 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	response.StickyExecutionEnabled = msBuilder.IsStickyTaskListEnabled()
 	response.NextEventId = msBuilder.GetNextEventID()
 	response.Attempt = decision.Attempt
-	response.WorkflowExecutionTaskList = &commonproto.TaskList{
+	response.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: enums.TaskListKindNormal,
+		Kind: tasklistpb.TaskListKindNormal,
 	}
 	response.ScheduledTimestamp = decision.ScheduledTimestamp
 	response.StartedTimestamp = decision.StartedTimestamp
@@ -603,7 +606,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 		// This decision is retried from mutable state
 		// Also return schedule and started which are not written to history yet
 		scheduledEvent, startedEvent := msBuilder.CreateTransientDecisionEvents(decision, identity)
-		response.DecisionInfo = &commonproto.TransientDecisionInfo{}
+		response.DecisionInfo = &eventgenpb.TransientDecisionInfo{}
 		response.DecisionInfo.ScheduledEvent = scheduledEvent
 		response.DecisionInfo.StartedEvent = startedEvent
 	}
@@ -615,7 +618,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 
 	qr := msBuilder.GetQueryRegistry()
 	buffered := qr.getBufferedIDs()
-	queries := make(map[string]*commonproto.WorkflowQuery)
+	queries := make(map[string]*querypb.WorkflowQuery)
 	for _, id := range buffered {
 		input, err := qr.getQueryInput(id)
 		if err != nil {
@@ -627,7 +630,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	return response, nil
 }
 
-func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*commonproto.WorkflowQueryResult, createNewDecisionTask bool, namespaceEntry *cache.NamespaceCacheEntry, decisionHeartbeating bool) {
+func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewDecisionTask bool, namespaceEntry *cache.NamespaceCacheEntry, decisionHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.hasBufferedQuery() {
 		return

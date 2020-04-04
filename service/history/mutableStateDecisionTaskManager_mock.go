@@ -29,8 +29,7 @@ package history
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/temporal-proto/common"
-	enums "go.temporal.io/temporal-proto/enums"
+	event "go.temporal.io/temporal-proto/event"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice"
 	reflect "reflect"
 )
@@ -104,7 +103,7 @@ func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateDecisionTask
 }
 
 // ReplicateDecisionTaskCompletedEvent mocks base method.
-func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskCompletedEvent(event *common.HistoryEvent) error {
+func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskCompletedEvent(event *event.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateDecisionTaskCompletedEvent", event)
 	ret0, _ := ret[0].(error)
@@ -132,7 +131,7 @@ func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateDecisionTask
 }
 
 // ReplicateDecisionTaskTimedOutEvent mocks base method.
-func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskTimedOutEvent(timeoutType enums.TimeoutType) error {
+func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskTimedOutEvent(timeoutType event.TimeoutType) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateDecisionTaskTimedOutEvent", timeoutType)
 	ret0, _ := ret[0].(error)
@@ -146,10 +145,10 @@ func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateDecisionTask
 }
 
 // AddDecisionTaskScheduleToStartTimeoutEvent mocks base method.
-func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskScheduleToStartTimeoutEvent(scheduleEventID int64) (*common.HistoryEvent, error) {
+func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskScheduleToStartTimeoutEvent(scheduleEventID int64) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskScheduleToStartTimeoutEvent", scheduleEventID)
-	ret0, _ := ret[0].(*common.HistoryEvent)
+	ret0, _ := ret[0].(*event.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -191,7 +190,7 @@ func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskSchedu
 }
 
 // AddFirstDecisionTaskScheduled mocks base method.
-func (m *MockmutableStateDecisionTaskManager) AddFirstDecisionTaskScheduled(startEvent *common.HistoryEvent) error {
+func (m *MockmutableStateDecisionTaskManager) AddFirstDecisionTaskScheduled(startEvent *event.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddFirstDecisionTaskScheduled", startEvent)
 	ret0, _ := ret[0].(error)
@@ -205,10 +204,10 @@ func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddFirstDecisionTaskS
 }
 
 // AddDecisionTaskStartedEvent mocks base method.
-func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskStartedEvent(scheduleEventID int64, requestID string, request *workflowservice.PollForDecisionTaskRequest) (*common.HistoryEvent, *decisionInfo, error) {
+func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskStartedEvent(scheduleEventID int64, requestID string, request *workflowservice.PollForDecisionTaskRequest) (*event.HistoryEvent, *decisionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskStartedEvent", scheduleEventID, requestID, request)
-	ret0, _ := ret[0].(*common.HistoryEvent)
+	ret0, _ := ret[0].(*event.HistoryEvent)
 	ret1, _ := ret[1].(*decisionInfo)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -221,10 +220,10 @@ func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskStarte
 }
 
 // AddDecisionTaskCompletedEvent mocks base method.
-func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskCompletedEvent(scheduleEventID, startedEventID int64, request *workflowservice.RespondDecisionTaskCompletedRequest, maxResetPoints int) (*common.HistoryEvent, error) {
+func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskCompletedEvent(scheduleEventID, startedEventID int64, request *workflowservice.RespondDecisionTaskCompletedRequest, maxResetPoints int) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskCompletedEvent", scheduleEventID, startedEventID, request, maxResetPoints)
-	ret0, _ := ret[0].(*common.HistoryEvent)
+	ret0, _ := ret[0].(*event.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -236,10 +235,10 @@ func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskComple
 }
 
 // AddDecisionTaskFailedEvent mocks base method.
-func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID int64, cause enums.DecisionTaskFailedCause, details []byte, identity, reason, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*common.HistoryEvent, error) {
+func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID int64, cause event.DecisionTaskFailedCause, details []byte, identity, reason, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskFailedEvent", scheduleEventID, startedEventID, cause, details, identity, reason, binChecksum, baseRunID, newRunID, forkEventVersion)
-	ret0, _ := ret[0].(*common.HistoryEvent)
+	ret0, _ := ret[0].(*event.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -251,10 +250,10 @@ func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskFailed
 }
 
 // AddDecisionTaskTimedOutEvent mocks base method.
-func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID int64) (*common.HistoryEvent, error) {
+func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID int64) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskTimedOutEvent", scheduleEventID, startedEventID)
-	ret0, _ := ret[0].(*common.HistoryEvent)
+	ret0, _ := ret[0].(*event.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -389,11 +388,11 @@ func (mr *MockmutableStateDecisionTaskManagerMockRecorder) GetDecisionInfo(sched
 }
 
 // CreateTransientDecisionEvents mocks base method.
-func (m *MockmutableStateDecisionTaskManager) CreateTransientDecisionEvents(decision *decisionInfo, identity string) (*common.HistoryEvent, *common.HistoryEvent) {
+func (m *MockmutableStateDecisionTaskManager) CreateTransientDecisionEvents(decision *decisionInfo, identity string) (*event.HistoryEvent, *event.HistoryEvent) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateTransientDecisionEvents", decision, identity)
-	ret0, _ := ret[0].(*common.HistoryEvent)
-	ret1, _ := ret[1].(*common.HistoryEvent)
+	ret0, _ := ret[0].(*event.HistoryEvent)
+	ret1, _ := ret[1].(*event.HistoryEvent)
 	return ret0, ret1
 }
 

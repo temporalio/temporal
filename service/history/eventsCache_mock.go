@@ -29,7 +29,7 @@ package history
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/temporal-proto/common"
+	event "go.temporal.io/temporal-proto/event"
 	reflect "reflect"
 )
 
@@ -57,10 +57,10 @@ func (m *MockeventsCache) EXPECT() *MockeventsCacheMockRecorder {
 }
 
 // getEvent mocks base method.
-func (m *MockeventsCache) getEvent(namespaceID, workflowID, runID string, firstEventID, eventID int64, branchToken []byte) (*common.HistoryEvent, error) {
+func (m *MockeventsCache) getEvent(namespaceID, workflowID, runID string, firstEventID, eventID int64, branchToken []byte) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getEvent", namespaceID, workflowID, runID, firstEventID, eventID, branchToken)
-	ret0, _ := ret[0].(*common.HistoryEvent)
+	ret0, _ := ret[0].(*event.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -72,7 +72,7 @@ func (mr *MockeventsCacheMockRecorder) getEvent(namespaceID, workflowID, runID, 
 }
 
 // putEvent mocks base method.
-func (m *MockeventsCache) putEvent(namespaceID, workflowID, runID string, eventID int64, event *common.HistoryEvent) {
+func (m *MockeventsCache) putEvent(namespaceID, workflowID, runID string, eventID int64, event *event.HistoryEvent) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "putEvent", namespaceID, workflowID, runID, eventID, event)
 }

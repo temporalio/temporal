@@ -32,7 +32,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
@@ -147,7 +147,7 @@ func encode(message proto.Message) ([]byte, error) {
 	return encoder.Encode(message)
 }
 
-func encodeHistories(histories []*commonproto.History) ([]byte, error) {
+func encodeHistories(histories []*eventpb.History) ([]byte, error) {
 	encoder := codec.NewJSONPBEncoder()
 	return encoder.EncodeHistories(histories)
 }
@@ -231,7 +231,7 @@ func extractCloseFailoverVersion(filename string) (int64, error) {
 	return strconv.ParseInt(filenameParts[1], 10, 64)
 }
 
-func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*commonproto.History, isLast bool) bool {
+func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*eventpb.History, isLast bool) bool {
 	lastBatch := historyBatches[len(historyBatches)-1].Events
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()

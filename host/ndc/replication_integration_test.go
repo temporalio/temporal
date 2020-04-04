@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 
 	"github.com/temporalio/temporal/common/persistence"
 	test "github.com/temporalio/temporal/common/testing"
@@ -39,14 +39,14 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 	workflowType := "event-generator-workflow-type"
 	tasklist := "event-generator-taskList"
 
-	var historyBatch []*commonproto.History
+	var historyBatch []*eventpb.History
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
-		historyEvents := &commonproto.History{}
+		historyEvents := &eventpb.History{}
 		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
 		}
 		historyBatch = append(historyBatch, historyEvents)
 	}
@@ -82,13 +82,13 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	workflowType := "event-generator-workflow-type"
 	tasklist := "event-generator-taskList"
 
-	var historyBatch []*commonproto.History
+	var historyBatch []*eventpb.History
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, 1)
 
 	events := s.generator.GetNextVertices()
-	historyEvents := &commonproto.History{}
+	historyEvents := &eventpb.History{}
 	for _, event := range events {
-		historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
+		historyEvents.Events = append(historyEvents.Events, event.GetData().(*eventpb.HistoryEvent))
 	}
 	historyBatch = append(historyBatch, historyEvents)
 

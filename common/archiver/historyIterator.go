@@ -24,10 +24,10 @@ import (
 	"encoding/json"
 	"errors"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/archiver"
+	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -39,7 +39,7 @@ const (
 type (
 	// HistoryIterator is used to get history batches
 	HistoryIterator interface {
-		Next() (*archiver.HistoryBlob, error)
+		Next() (*archivergenpb.HistoryBlob, error)
 		HasNext() bool
 		GetState() ([]byte, error)
 	}
@@ -108,7 +108,7 @@ func newHistoryIterator(
 	}
 }
 
-func (i *historyIterator) Next() (*archiver.HistoryBlob, error) {
+func (i *historyIterator) Next() (*archivergenpb.HistoryBlob, error) {
 	if !i.HasNext() {
 		return nil, errIteratorDepleted
 	}
@@ -126,7 +126,7 @@ func (i *historyIterator) Next() (*archiver.HistoryBlob, error) {
 	for _, batch := range historyBatches {
 		eventCount += int64(len(batch.Events))
 	}
-	header := &archiver.HistoryBlobHeader{
+	header := &archivergenpb.HistoryBlobHeader{
 		Namespace:            i.request.Namespace,
 		NamespaceId:          i.request.NamespaceID,
 		WorkflowId:           i.request.WorkflowID,
@@ -139,7 +139,7 @@ func (i *historyIterator) Next() (*archiver.HistoryBlob, error) {
 		EventCount:           eventCount,
 	}
 
-	return &archiver.HistoryBlob{
+	return &archivergenpb.HistoryBlob{
 		Header: header,
 		Body:   historyBatches,
 	}, nil
@@ -155,10 +155,10 @@ func (i *historyIterator) GetState() ([]byte, error) {
 	return json.Marshal(i.historyIteratorState)
 }
 
-func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*commonproto.History, historyIteratorState, error) {
+func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*eventpb.History, historyIteratorState, error) {
 	size := 0
 	targetSize := i.targetHistoryBlobSize
-	var historyBatches []*commonproto.History
+	var historyBatches []*eventpb.History
 	newIterState := historyIteratorState{}
 	for size < targetSize {
 		currHistoryBatches, err := i.readHistory(firstEventID)
@@ -203,7 +203,7 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*commonproto
 	return historyBatches, newIterState, nil
 }
 
-func (i *historyIterator) readHistory(firstEventID int64) ([]*commonproto.History, error) {
+func (i *historyIterator) readHistory(firstEventID int64) ([]*eventpb.History, error) {
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken: i.request.BranchToken,
 		MinEventID:  firstEventID,

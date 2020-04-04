@@ -29,7 +29,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -101,7 +101,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.baseRunID = uuid.New()
 	s.newContext = newWorkflowExecutionContext(
 		s.namespaceID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.newRunID,
 		},

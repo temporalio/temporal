@@ -24,7 +24,7 @@ import (
 	"context"
 	"strings"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -242,7 +242,7 @@ func (c *metricClient) ListTaskListPartitions(
 	return resp, err
 }
 
-func (c *metricClient) emitForwardedFromStats(scope int, forwardedFrom string, taskList *commonproto.TaskList) {
+func (c *metricClient) emitForwardedFromStats(scope int, forwardedFrom string, taskList *tasklistpb.TaskList) {
 	if taskList == nil {
 		return
 	}

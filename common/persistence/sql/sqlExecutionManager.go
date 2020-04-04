@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
@@ -246,7 +246,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		state.ReplicationState.LastReplicationInfo = info.ReplicationData.LastReplicationInfo
 
 		if state.ReplicationState.LastReplicationInfo == nil {
-			state.ReplicationState.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, 0)
+			state.ReplicationState.LastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, 0)
 		}
 	}
 
@@ -825,11 +825,11 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 			return nil, err
 		}
 
-		var lastReplicationInfo map[string]*replication.ReplicationInfo
+		var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
 		if info.GetTaskType() == p.ReplicationTaskTypeHistory {
-			lastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(info.LastReplicationInfo))
+			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, len(info.LastReplicationInfo))
 			for k, v := range info.LastReplicationInfo {
-				lastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.GetLastEventId()}
+				lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.GetLastEventId()}
 			}
 		}
 

@@ -35,7 +35,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/multierr"
 
@@ -233,7 +235,7 @@ func download(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key st
 	return body, nil
 }
 
-func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*commonproto.History, isLast bool) bool {
+func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*eventpb.History, isLast bool) bool {
 	lastBatch := historyBatches[len(historyBatches)-1].Events
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()
@@ -257,13 +259,13 @@ func contextExpired(ctx context.Context) bool {
 	}
 }
 
-func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *commonproto.WorkflowExecutionInfo {
-	return &commonproto.WorkflowExecutionInfo{
-		Execution: &commonproto.WorkflowExecution{
+func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *executionpb.WorkflowExecutionInfo {
+	return &executionpb.WorkflowExecutionInfo{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
 			RunId:      record.GetRunId(),
 		},
-		Type: &commonproto.WorkflowType{
+		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
 		StartTime: &types.Int64Value{
@@ -274,7 +276,7 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *com
 		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,
-		SearchAttributes: &commonproto.SearchAttributes{
+		SearchAttributes: &commonpb.SearchAttributes{
 			IndexedFields: archiver.ConvertSearchAttrToBytes(record.SearchAttributes),
 		},
 	}

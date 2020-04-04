@@ -40,13 +40,13 @@ import (
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	yaml "gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/.gen/proto/indexer"
+	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"
@@ -59,8 +59,8 @@ import (
 	"github.com/temporalio/temporal/service/history"
 )
 
-type filterFn func(*replication.ReplicationTask) bool
-type filterFnForVisibility func(*indexer.Message) bool
+type filterFn func(*replicationgenpb.ReplicationTask) bool
+type filterFnForVisibility func(*indexergenpb.Message) bool
 
 type kafkaMessageType int
 
@@ -83,8 +83,8 @@ var (
 
 type writerChannel struct {
 	Type                   kafkaMessageType
-	ReplicationTaskChannel chan *replication.ReplicationTask
-	VisibilityMsgChannel   chan *indexer.Message
+	ReplicationTaskChannel chan *replicationgenpb.ReplicationTask
+	VisibilityMsgChannel   chan *indexergenpb.Message
 }
 
 func newWriterChannel(messageType kafkaMessageType) *writerChannel {
@@ -93,9 +93,9 @@ func newWriterChannel(messageType kafkaMessageType) *writerChannel {
 	}
 	switch messageType {
 	case kafkaMessageTypeReplicationTask:
-		ch.ReplicationTaskChannel = make(chan *replication.ReplicationTask, chanBufferSize)
+		ch.ReplicationTaskChannel = make(chan *replicationgenpb.ReplicationTask, chanBufferSize)
 	case kafkaMessageTypeVisibilityMsg:
-		ch.VisibilityMsgChannel = make(chan *indexer.Message, chanBufferSize)
+		ch.VisibilityMsgChannel = make(chan *indexergenpb.Message, chanBufferSize)
 	}
 	return ch
 }
@@ -136,7 +136,7 @@ func AdminKafkaParse(c *cli.Context) {
 }
 
 func buildFilterFn(workflowID, runID string) filterFn {
-	return func(task *replication.ReplicationTask) bool {
+	return func(task *replicationgenpb.ReplicationTask) bool {
 		if len(workflowID) != 0 || len(runID) != 0 {
 			if task.GetHistoryTaskAttributes() == nil {
 				return false
@@ -153,7 +153,7 @@ func buildFilterFn(workflowID, runID string) filterFn {
 }
 
 func buildFilterFnForVisibility(workflowID, runID string) filterFnForVisibility {
-	return func(msg *indexer.Message) bool {
+	return func(msg *indexergenpb.Message) bool {
 		if len(workflowID) != 0 && msg.GetWorkflowId() != workflowID {
 			return false
 		}
@@ -412,11 +412,11 @@ func getMessages(data []byte, skipErrors bool) ([][]byte, int32) {
 	return rawMessages, skipped
 }
 
-func deserializeMessages(messages [][]byte, skipErrors bool) ([]*replication.ReplicationTask, int32) {
-	var replicationTasks []*replication.ReplicationTask
+func deserializeMessages(messages [][]byte, skipErrors bool) ([]*replicationgenpb.ReplicationTask, int32) {
+	var replicationTasks []*replicationgenpb.ReplicationTask
 	var skipped int32
 	for _, m := range messages {
-		var task replication.ReplicationTask
+		var task replicationgenpb.ReplicationTask
 		err := decode(m, &task)
 		if err != nil {
 			if !skipErrors {
@@ -431,7 +431,7 @@ func deserializeMessages(messages [][]byte, skipErrors bool) ([]*replication.Rep
 	return replicationTasks, skipped
 }
 
-func decode(message []byte, val *replication.ReplicationTask) error {
+func decode(message []byte, val *replicationgenpb.ReplicationTask) error {
 	// TODO (shtin): Current proto implementation is most likely broken. It used to be:
 	// reader := bytes.NewReader(message[1:])
 	// wireVal, err := protocol.Binary.Decode(reader, wire.TStruct)
@@ -443,11 +443,11 @@ func decode(message []byte, val *replication.ReplicationTask) error {
 	return val.Unmarshal(message)
 }
 
-func deserializeVisibilityMessages(messages [][]byte, skipErrors bool) ([]*indexer.Message, int32) {
-	var visibilityMessages []*indexer.Message
+func deserializeVisibilityMessages(messages [][]byte, skipErrors bool) ([]*indexergenpb.Message, int32) {
+	var visibilityMessages []*indexergenpb.Message
 	var skipped int32
 	for _, m := range messages {
-		var msg indexer.Message
+		var msg indexergenpb.Message
 		err := decodeVisibility(m, &msg)
 		if err != nil {
 			if !skipErrors {
@@ -462,7 +462,7 @@ func deserializeVisibilityMessages(messages [][]byte, skipErrors bool) ([]*index
 	return visibilityMessages, skipped
 }
 
-func decodeVisibility(message []byte, val *indexer.Message) error {
+func decodeVisibility(message []byte, val *indexergenpb.Message) error {
 	// TODO (shtin): Current proto implementation is most likely broken. It used to be:
 	// reader := bytes.NewReader(message[1:])
 	// wireVal, err := protocol.Binary.Decode(reader, wire.TStruct)
@@ -497,7 +497,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 		fmt.Printf("Start rereplicate for wid: %v, rid:%v \n", wid, rid)
 		resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 			NamespaceID: namespaceID,
-			Execution: commonproto.WorkflowExecution{
+			Execution: executionpb.WorkflowExecution{
 				WorkflowId: wid,
 				RunId:      rid,
 			},
@@ -507,7 +507,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 		}
 
 		currVersion := resp.State.ReplicationState.CurrentVersion
-		repInfo := map[string]*replication.ReplicationInfo{
+		repInfo := map[string]*replicationgenpb.ReplicationInfo{
 			"": {
 				Version:     currVersion,
 				LastEventId: 0,
@@ -538,12 +538,12 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 			events := batch.Events
 			firstEvent := events[0]
 			lastEvent := events[len(events)-1]
-			if lastEvent.GetEventType() == enums.EventTypeWorkflowExecutionContinuedAsNew {
+			if lastEvent.GetEventType() == eventpb.EventTypeWorkflowExecutionContinuedAsNew {
 				continueAsNew = true
 				newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 					NamespaceID: namespaceID,
-					Execution: commonproto.WorkflowExecution{
+					Execution: executionpb.WorkflowExecution{
 						WorkflowId: wid,
 						RunId:      newRunID,
 					},
@@ -722,7 +722,7 @@ func AdminMergeDLQ(c *cli.Context) {
 
 	var err error
 	var inFile string
-	var tasks []*replication.ReplicationTask
+	var tasks []*replicationgenpb.ReplicationTask
 	if c.IsSet(FlagInputFile) && (c.IsSet(FlagInputCluster) || c.IsSet(FlagInputTopic) || c.IsSet(FlagStartOffset)) {
 		ErrorAndExit("", fmt.Errorf("ONLY Either from JSON file or from DLQ topic"))
 	}
@@ -784,7 +784,7 @@ func AdminMergeDLQ(c *cli.Context) {
 					ErrorAndExit("", fmt.Errorf("offset is not correct"))
 					continue
 				} else {
-					var task replication.ReplicationTask
+					var task replicationgenpb.ReplicationTask
 					err := decode(msg.Value, &task)
 					if err != nil {
 						ErrorAndExit("failed to deserialize message due to error", err)
@@ -837,7 +837,7 @@ func createConsumerAndWaitForReady(brokers []string, tlsConfig *tls.Config, grou
 	return consumer
 }
 
-func parseReplicationTask(in string) (tasks []*replication.ReplicationTask, err error) {
+func parseReplicationTask(in string) (tasks []*replicationgenpb.ReplicationTask, err error) {
 	// This code is executed from the CLI. All user input is from a CLI user.
 	// #nosec
 	file, err := os.Open(in)
@@ -857,7 +857,7 @@ func parseReplicationTask(in string) (tasks []*replication.ReplicationTask, err 
 			continue
 		}
 
-		t := &replication.ReplicationTask{}
+		t := &replicationgenpb.ReplicationTask{}
 		err := encoder.Decode([]byte(line), t)
 		if err != nil {
 			fmt.Printf("line %v cannot be deserialized to replicaiton task: %v.\n", idx, line)

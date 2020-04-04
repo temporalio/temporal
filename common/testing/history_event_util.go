@@ -24,8 +24,10 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 const (
@@ -60,11 +62,11 @@ func InitializeHistoryEventGenerator(
 		history := input[0].([]Vertex)
 		for _, e := range history {
 			switch e.GetName() {
-			case enums.EventTypeDecisionTaskScheduled.String():
+			case eventpb.EventTypeDecisionTaskScheduled.String():
 				count++
-			case enums.EventTypeDecisionTaskCompleted.String(),
-				enums.EventTypeDecisionTaskFailed.String(),
-				enums.EventTypeDecisionTaskTimedOut.String():
+			case eventpb.EventTypeDecisionTaskCompleted.String(),
+				eventpb.EventTypeDecisionTaskFailed.String(),
+				eventpb.EventTypeDecisionTaskTimedOut.String():
 				count--
 			}
 		}
@@ -73,7 +75,7 @@ func InitializeHistoryEventGenerator(
 	containActivityComplete := func(input ...interface{}) bool {
 		history := input[0].([]Vertex)
 		for _, e := range history {
-			if e.GetName() == enums.EventTypeActivityTaskCompleted.String() {
+			if e.GetName() == eventpb.EventTypeActivityTaskCompleted.String() {
 				return true
 			}
 		}
@@ -84,12 +86,12 @@ func InitializeHistoryEventGenerator(
 		history := input[0].([]Vertex)
 		for _, e := range history {
 			switch e.GetName() {
-			case enums.EventTypeActivityTaskScheduled.String():
+			case eventpb.EventTypeActivityTaskScheduled.String():
 				count++
-			case enums.EventTypeActivityTaskCanceled.String(),
-				enums.EventTypeActivityTaskFailed.String(),
-				enums.EventTypeActivityTaskTimedOut.String(),
-				enums.EventTypeActivityTaskCompleted.String():
+			case eventpb.EventTypeActivityTaskCanceled.String(),
+				eventpb.EventTypeActivityTaskFailed.String(),
+				eventpb.EventTypeActivityTaskTimedOut.String(),
+				eventpb.EventTypeActivityTaskCompleted.String():
 				count--
 			}
 		}
@@ -103,21 +105,21 @@ func InitializeHistoryEventGenerator(
 		hasPendingDecisionTask := false
 		for _, event := range history {
 			switch event.GetName() {
-			case enums.EventTypeDecisionTaskScheduled.String():
+			case eventpb.EventTypeDecisionTaskScheduled.String():
 				hasPendingDecisionTask = true
-			case enums.EventTypeDecisionTaskCompleted.String(),
-				enums.EventTypeDecisionTaskFailed.String(),
-				enums.EventTypeDecisionTaskTimedOut.String():
+			case eventpb.EventTypeDecisionTaskCompleted.String(),
+				eventpb.EventTypeDecisionTaskFailed.String(),
+				eventpb.EventTypeDecisionTaskTimedOut.String():
 				hasPendingDecisionTask = false
 			}
 		}
 		if hasPendingDecisionTask {
 			return false
 		}
-		if currentBatch[len(currentBatch)-1].GetName() == enums.EventTypeDecisionTaskScheduled.String() {
+		if currentBatch[len(currentBatch)-1].GetName() == eventpb.EventTypeDecisionTaskScheduled.String() {
 			return false
 		}
-		if currentBatch[0].GetName() == enums.EventTypeDecisionTaskCompleted.String() {
+		if currentBatch[0].GetName() == eventpb.EventTypeDecisionTaskCompleted.String() {
 			return len(currentBatch) == 1
 		}
 		return true
@@ -125,80 +127,80 @@ func InitializeHistoryEventGenerator(
 
 	// Setup decision task model
 	decisionModel := NewHistoryEventModel()
-	decisionSchedule := NewHistoryEventVertex(enums.EventTypeDecisionTaskScheduled.String())
+	decisionSchedule := NewHistoryEventVertex(eventpb.EventTypeDecisionTaskScheduled.String())
 	decisionSchedule.SetDataFunc(func(input ...interface{}) interface{} {
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeDecisionTaskScheduled
-		historyEvent.Attributes = &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
-			TaskList: &commonproto.TaskList{
+		historyEvent.EventType = eventpb.EventTypeDecisionTaskScheduled
+		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
+			TaskList: &tasklistpb.TaskList{
 				Name: taskList,
-				Kind: enums.TaskListKindNormal,
+				Kind: tasklistpb.TaskListKindNormal,
 			},
 			StartToCloseTimeoutSeconds: timeout,
 			Attempt:                    decisionTaskAttempts,
 		}}
 		return historyEvent
 	})
-	decisionStart := NewHistoryEventVertex(enums.EventTypeDecisionTaskStarted.String())
+	decisionStart := NewHistoryEventVertex(eventpb.EventTypeDecisionTaskStarted.String())
 	decisionStart.SetIsStrictOnNextVertex(true)
 	decisionStart.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeDecisionTaskStarted
-		historyEvent.Attributes = &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeDecisionTaskStarted
+		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 			ScheduledEventId: lastEvent.EventId,
 			Identity:         identity,
 			RequestId:        uuid.New(),
 		}}
 		return historyEvent
 	})
-	decisionFail := NewHistoryEventVertex(enums.EventTypeDecisionTaskFailed.String())
+	decisionFail := NewHistoryEventVertex(eventpb.EventTypeDecisionTaskFailed.String())
 	decisionFail.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeDecisionTaskFailed
-		historyEvent.Attributes = &commonproto.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &commonproto.DecisionTaskFailedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeDecisionTaskFailed
+		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &eventpb.DecisionTaskFailedEventAttributes{
 			ScheduledEventId: lastEvent.GetDecisionTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
-			Cause:            enums.DecisionTaskFailedCauseUnhandledDecision,
+			Cause:            eventpb.DecisionTaskFailedCauseUnhandledDecision,
 			Identity:         identity,
 			ForkEventVersion: version,
 		}}
 		return historyEvent
 	})
-	decisionTimedOut := NewHistoryEventVertex(enums.EventTypeDecisionTaskTimedOut.String())
+	decisionTimedOut := NewHistoryEventVertex(eventpb.EventTypeDecisionTaskTimedOut.String())
 	decisionTimedOut.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeDecisionTaskTimedOut
-		historyEvent.Attributes = &commonproto.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &commonproto.DecisionTaskTimedOutEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeDecisionTaskTimedOut
+		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &eventpb.DecisionTaskTimedOutEventAttributes{
 			ScheduledEventId: lastEvent.GetDecisionTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
-			TimeoutType:      enums.TimeoutTypeScheduleToStart,
+			TimeoutType:      eventpb.TimeoutTypeScheduleToStart,
 		}}
 		return historyEvent
 	})
-	decisionComplete := NewHistoryEventVertex(enums.EventTypeDecisionTaskCompleted.String())
+	decisionComplete := NewHistoryEventVertex(eventpb.EventTypeDecisionTaskCompleted.String())
 	decisionComplete.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeDecisionTaskCompleted
-		historyEvent.Attributes = &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeDecisionTaskCompleted
+		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 			ScheduledEventId: lastEvent.GetDecisionTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
 			Identity:         identity,
@@ -222,17 +224,17 @@ func InitializeHistoryEventGenerator(
 	// Setup workflow model
 	workflowModel := NewHistoryEventModel()
 
-	workflowStart := NewHistoryEventVertex(enums.EventTypeWorkflowExecutionStarted.String())
+	workflowStart := NewHistoryEventVertex(eventpb.EventTypeWorkflowExecutionStarted.String())
 	workflowStart.SetDataFunc(func(input ...interface{}) interface{} {
 		historyEvent := getDefaultHistoryEvent(1, defaultVersion)
-		historyEvent.EventType = enums.EventTypeWorkflowExecutionStarted
-		historyEvent.Attributes = &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
-			WorkflowType: &commonproto.WorkflowType{
+		historyEvent.EventType = eventpb.EventTypeWorkflowExecutionStarted
+		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+			WorkflowType: &commonpb.WorkflowType{
 				Name: workflowType,
 			},
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: taskList,
-				Kind: enums.TaskListKindNormal,
+				Kind: tasklistpb.TaskListKindNormal,
 			},
 			ExecutionStartToCloseTimeoutSeconds: timeout,
 			TaskStartToCloseTimeoutSeconds:      timeout,
@@ -241,90 +243,90 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	workflowSignal := NewHistoryEventVertex(enums.EventTypeWorkflowExecutionSignaled.String())
+	workflowSignal := NewHistoryEventVertex(eventpb.EventTypeWorkflowExecutionSignaled.String())
 	workflowSignal.SetDataFunc(func(input ...interface{}) interface{} {
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeWorkflowExecutionSignaled
-		historyEvent.Attributes = &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeWorkflowExecutionSignaled
+		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: signal,
 			Identity:   identity,
 		}}
 		return historyEvent
 	})
-	workflowComplete := NewHistoryEventVertex(enums.EventTypeWorkflowExecutionCompleted.String())
+	workflowComplete := NewHistoryEventVertex(eventpb.EventTypeWorkflowExecutionCompleted.String())
 	workflowComplete.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
 		eventID := lastEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeWorkflowExecutionCompleted
-		historyEvent.Attributes = &commonproto.HistoryEvent_WorkflowExecutionCompletedEventAttributes{WorkflowExecutionCompletedEventAttributes: &commonproto.WorkflowExecutionCompletedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeWorkflowExecutionCompleted
+		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{WorkflowExecutionCompletedEventAttributes: &eventpb.WorkflowExecutionCompletedEventAttributes{
 			DecisionTaskCompletedEventId: lastEvent.EventId,
 		}}
 		return historyEvent
 	})
-	continueAsNew := NewHistoryEventVertex(enums.EventTypeWorkflowExecutionContinuedAsNew.String())
+	continueAsNew := NewHistoryEventVertex(eventpb.EventTypeWorkflowExecutionContinuedAsNew.String())
 	continueAsNew.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
 		eventID := lastEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeWorkflowExecutionContinuedAsNew
-		historyEvent.Attributes = &commonproto.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &commonproto.WorkflowExecutionContinuedAsNewEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeWorkflowExecutionContinuedAsNew
+		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
 			NewExecutionRunId: uuid.New(),
-			WorkflowType: &commonproto.WorkflowType{
+			WorkflowType: &commonpb.WorkflowType{
 				Name: workflowType,
 			},
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: taskList,
-				Kind: enums.TaskListKindNormal,
+				Kind: tasklistpb.TaskListKindNormal,
 			},
 			ExecutionStartToCloseTimeoutSeconds: timeout,
 			TaskStartToCloseTimeoutSeconds:      timeout,
 			DecisionTaskCompletedEventId:        eventID - 1,
-			Initiator:                           enums.ContinueAsNewInitiatorDecider,
+			Initiator:                           commonpb.ContinueAsNewInitiatorDecider,
 		}}
 		return historyEvent
 	})
-	workflowFail := NewHistoryEventVertex(enums.EventTypeWorkflowExecutionFailed.String())
+	workflowFail := NewHistoryEventVertex(eventpb.EventTypeWorkflowExecutionFailed.String())
 	workflowFail.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
 		eventID := lastEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeWorkflowExecutionFailed
-		historyEvent.Attributes = &commonproto.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &commonproto.WorkflowExecutionFailedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeWorkflowExecutionFailed
+		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &eventpb.WorkflowExecutionFailedEventAttributes{
 			DecisionTaskCompletedEventId: lastEvent.EventId,
 		}}
 		return historyEvent
 	})
-	workflowCancel := NewHistoryEventVertex(enums.EventTypeWorkflowExecutionCanceled.String())
+	workflowCancel := NewHistoryEventVertex(eventpb.EventTypeWorkflowExecutionCanceled.String())
 	workflowCancel.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeWorkflowExecutionCanceled
-		historyEvent.Attributes = &commonproto.HistoryEvent_WorkflowExecutionCanceledEventAttributes{WorkflowExecutionCanceledEventAttributes: &commonproto.WorkflowExecutionCanceledEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeWorkflowExecutionCanceled
+		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionCanceledEventAttributes{WorkflowExecutionCanceledEventAttributes: &eventpb.WorkflowExecutionCanceledEventAttributes{
 			DecisionTaskCompletedEventId: lastEvent.EventId,
 		}}
 		return historyEvent
 	})
-	workflowCancelRequest := NewHistoryEventVertex(enums.EventTypeWorkflowExecutionCancelRequested.String())
+	workflowCancelRequest := NewHistoryEventVertex(eventpb.EventTypeWorkflowExecutionCancelRequested.String())
 	workflowCancelRequest.SetDataFunc(func(input ...interface{}) interface{} {
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeWorkflowExecutionCancelRequested
-		historyEvent.Attributes = &commonproto.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &commonproto.WorkflowExecutionCancelRequestedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeWorkflowExecutionCancelRequested
+		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &eventpb.WorkflowExecutionCancelRequestedEventAttributes{
 			Cause:                    "",
 			ExternalInitiatedEventId: 1,
-			ExternalWorkflowExecution: &commonproto.WorkflowExecution{
+			ExternalWorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: externalWorkflowID,
 				RunId:      uuid.New(),
 			},
@@ -332,28 +334,28 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	workflowTerminate := NewHistoryEventVertex(enums.EventTypeWorkflowExecutionTerminated.String())
+	workflowTerminate := NewHistoryEventVertex(eventpb.EventTypeWorkflowExecutionTerminated.String())
 	workflowTerminate.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
 		eventID := lastEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeWorkflowExecutionTerminated
-		historyEvent.Attributes = &commonproto.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{WorkflowExecutionTerminatedEventAttributes: &commonproto.WorkflowExecutionTerminatedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeWorkflowExecutionTerminated
+		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{WorkflowExecutionTerminatedEventAttributes: &eventpb.WorkflowExecutionTerminatedEventAttributes{
 			Identity: identity,
 			Reason:   reason,
 		}}
 		return historyEvent
 	})
-	workflowTimedOut := NewHistoryEventVertex(enums.EventTypeWorkflowExecutionTimedOut.String())
+	workflowTimedOut := NewHistoryEventVertex(eventpb.EventTypeWorkflowExecutionTimedOut.String())
 	workflowTimedOut.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
 		eventID := lastEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeWorkflowExecutionTimedOut
-		historyEvent.Attributes = &commonproto.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &commonproto.WorkflowExecutionTimedOutEventAttributes{
-			TimeoutType: enums.TimeoutTypeStartToClose,
+		historyEvent.EventType = eventpb.EventTypeWorkflowExecutionTimedOut
+		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
+			TimeoutType: eventpb.TimeoutTypeStartToClose,
 		}}
 		return historyEvent
 	})
@@ -374,21 +376,21 @@ func InitializeHistoryEventGenerator(
 
 	// Setup activity model
 	activityModel := NewHistoryEventModel()
-	activitySchedule := NewHistoryEventVertex(enums.EventTypeActivityTaskScheduled.String())
+	activitySchedule := NewHistoryEventVertex(eventpb.EventTypeActivityTaskScheduled.String())
 	activitySchedule.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeActivityTaskScheduled
-		historyEvent.Attributes = &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeActivityTaskScheduled
+		historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 			ActivityId:   uuid.New(),
-			ActivityType: &commonproto.ActivityType{Name: "activity"},
+			ActivityType: &commonpb.ActivityType{Name: "activity"},
 			Namespace:    namespace,
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: taskList,
-				Kind: enums.TaskListKindNormal,
+				Kind: tasklistpb.TaskListKindNormal,
 			},
 			ScheduleToCloseTimeoutSeconds: timeout,
 			ScheduleToStartTimeoutSeconds: timeout,
@@ -397,15 +399,15 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	activityStart := NewHistoryEventVertex(enums.EventTypeActivityTaskStarted.String())
+	activityStart := NewHistoryEventVertex(eventpb.EventTypeActivityTaskStarted.String())
 	activityStart.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeActivityTaskStarted
-		historyEvent.Attributes = &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeActivityTaskStarted
+		historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 			ScheduledEventId: lastEvent.EventId,
 			Identity:         identity,
 			RequestId:        uuid.New(),
@@ -413,30 +415,30 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	activityComplete := NewHistoryEventVertex(enums.EventTypeActivityTaskCompleted.String())
+	activityComplete := NewHistoryEventVertex(eventpb.EventTypeActivityTaskCompleted.String())
 	activityComplete.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeActivityTaskCompleted
-		historyEvent.Attributes = &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeActivityTaskCompleted
+		historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 			ScheduledEventId: lastEvent.GetActivityTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
 			Identity:         identity,
 		}}
 		return historyEvent
 	})
-	activityFail := NewHistoryEventVertex(enums.EventTypeActivityTaskFailed.String())
+	activityFail := NewHistoryEventVertex(eventpb.EventTypeActivityTaskFailed.String())
 	activityFail.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeActivityTaskFailed
-		historyEvent.Attributes = &commonproto.HistoryEvent_ActivityTaskFailedEventAttributes{ActivityTaskFailedEventAttributes: &commonproto.ActivityTaskFailedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeActivityTaskFailed
+		historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskFailedEventAttributes{ActivityTaskFailedEventAttributes: &eventpb.ActivityTaskFailedEventAttributes{
 			ScheduledEventId: lastEvent.GetActivityTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
 			Identity:         identity,
@@ -444,44 +446,44 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	activityTimedOut := NewHistoryEventVertex(enums.EventTypeActivityTaskTimedOut.String())
+	activityTimedOut := NewHistoryEventVertex(eventpb.EventTypeActivityTaskTimedOut.String())
 	activityTimedOut.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeActivityTaskTimedOut
-		historyEvent.Attributes = &commonproto.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &commonproto.ActivityTaskTimedOutEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeActivityTaskTimedOut
+		historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
 			ScheduledEventId: lastEvent.GetActivityTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
-			TimeoutType:      enums.TimeoutTypeScheduleToClose,
+			TimeoutType:      eventpb.TimeoutTypeScheduleToClose,
 		}}
 		return historyEvent
 	})
-	activityCancelRequest := NewHistoryEventVertex(enums.EventTypeActivityTaskCancelRequested.String())
+	activityCancelRequest := NewHistoryEventVertex(eventpb.EventTypeActivityTaskCancelRequested.String())
 	activityCancelRequest.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeActivityTaskCancelRequested
-		historyEvent.Attributes = &commonproto.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{ActivityTaskCancelRequestedEventAttributes: &commonproto.ActivityTaskCancelRequestedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeActivityTaskCancelRequested
+		historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{ActivityTaskCancelRequestedEventAttributes: &eventpb.ActivityTaskCancelRequestedEventAttributes{
 			DecisionTaskCompletedEventId: lastEvent.GetActivityTaskScheduledEventAttributes().DecisionTaskCompletedEventId,
 			ActivityId:                   lastEvent.GetActivityTaskScheduledEventAttributes().ActivityId,
 		}}
 		return historyEvent
 	})
-	activityCancel := NewHistoryEventVertex(enums.EventTypeActivityTaskCanceled.String())
+	activityCancel := NewHistoryEventVertex(eventpb.EventTypeActivityTaskCanceled.String())
 	activityCancel.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeActivityTaskCanceled
-		historyEvent.Attributes = &commonproto.HistoryEvent_ActivityTaskCanceledEventAttributes{ActivityTaskCanceledEventAttributes: &commonproto.ActivityTaskCanceledEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeActivityTaskCanceled
+		historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskCanceledEventAttributes{ActivityTaskCanceledEventAttributes: &eventpb.ActivityTaskCanceledEventAttributes{
 			LatestCancelRequestedEventId: lastEvent.EventId,
 			ScheduledEventId:             lastEvent.EventId,
 			StartedEventId:               lastEvent.EventId,
@@ -489,17 +491,17 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	activityCancelRequestFail := NewHistoryEventVertex(enums.EventTypeRequestCancelActivityTaskFailed.String())
+	activityCancelRequestFail := NewHistoryEventVertex(eventpb.EventTypeRequestCancelActivityTaskFailed.String())
 	activityCancelRequestFail.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		versionBump := input[2].(int64)
 		subVersion := input[3].(int64)
 		version := lastGeneratedEvent.GetVersion() + versionBump + subVersion
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeRequestCancelActivityTaskFailed
-		historyEvent.Attributes = &commonproto.HistoryEvent_RequestCancelActivityTaskFailedEventAttributes{RequestCancelActivityTaskFailedEventAttributes: &commonproto.RequestCancelActivityTaskFailedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeRequestCancelActivityTaskFailed
+		historyEvent.Attributes = &eventpb.HistoryEvent_RequestCancelActivityTaskFailedEventAttributes{RequestCancelActivityTaskFailedEventAttributes: &eventpb.RequestCancelActivityTaskFailedEventAttributes{
 			ActivityId:                   uuid.New(),
 			DecisionTaskCompletedEventId: lastEvent.GetActivityTaskCancelRequestedEventAttributes().DecisionTaskCompletedEventId,
 		}}
@@ -545,44 +547,44 @@ func InitializeHistoryEventGenerator(
 
 	// Setup timer model
 	timerModel := NewHistoryEventModel()
-	timerStart := NewHistoryEventVertex(enums.EventTypeTimerStarted.String())
+	timerStart := NewHistoryEventVertex(eventpb.EventTypeTimerStarted.String())
 	timerStart.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeTimerStarted
-		historyEvent.Attributes = &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeTimerStarted
+		historyEvent.Attributes = &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 			TimerId:                      uuid.New(),
 			StartToFireTimeoutSeconds:    10,
 			DecisionTaskCompletedEventId: lastEvent.EventId,
 		}}
 		return historyEvent
 	})
-	timerFired := NewHistoryEventVertex(enums.EventTypeTimerFired.String())
+	timerFired := NewHistoryEventVertex(eventpb.EventTypeTimerFired.String())
 	timerFired.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeTimerFired
-		historyEvent.Attributes = &commonproto.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &commonproto.TimerFiredEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeTimerFired
+		historyEvent.Attributes = &eventpb.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &eventpb.TimerFiredEventAttributes{
 			TimerId:        lastEvent.GetTimerStartedEventAttributes().TimerId,
 			StartedEventId: lastEvent.EventId,
 		}}
 		return historyEvent
 	})
-	timerCancel := NewHistoryEventVertex(enums.EventTypeTimerCanceled.String())
+	timerCancel := NewHistoryEventVertex(eventpb.EventTypeTimerCanceled.String())
 	timerCancel.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeTimerCanceled
-		historyEvent.Attributes = &commonproto.HistoryEvent_TimerCanceledEventAttributes{TimerCanceledEventAttributes: &commonproto.TimerCanceledEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeTimerCanceled
+		historyEvent.Attributes = &eventpb.HistoryEvent_TimerCanceledEventAttributes{TimerCanceledEventAttributes: &eventpb.TimerCanceledEventAttributes{
 			TimerId:                      lastEvent.GetTimerStartedEventAttributes().TimerId,
 			StartedEventId:               lastEvent.EventId,
 			DecisionTaskCompletedEventId: lastEvent.GetTimerStartedEventAttributes().DecisionTaskCompletedEventId,
@@ -602,79 +604,79 @@ func InitializeHistoryEventGenerator(
 
 	// Setup child workflow model
 	childWorkflowModel := NewHistoryEventModel()
-	childWorkflowInitial := NewHistoryEventVertex(enums.EventTypeStartChildWorkflowExecutionInitiated.String())
+	childWorkflowInitial := NewHistoryEventVertex(eventpb.EventTypeStartChildWorkflowExecutionInitiated.String())
 	childWorkflowInitial.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeStartChildWorkflowExecutionInitiated
-		historyEvent.Attributes = &commonproto.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: &commonproto.StartChildWorkflowExecutionInitiatedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeStartChildWorkflowExecutionInitiated
+		historyEvent.Attributes = &eventpb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: &eventpb.StartChildWorkflowExecutionInitiatedEventAttributes{
 			Namespace:    namespace,
 			WorkflowId:   childWorkflowID,
-			WorkflowType: &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
-			TaskList: &commonproto.TaskList{
+			WorkflowType: &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
+			TaskList: &tasklistpb.TaskList{
 				Name: taskList,
-				Kind: enums.TaskListKindNormal,
+				Kind: tasklistpb.TaskListKindNormal,
 			},
 			ExecutionStartToCloseTimeoutSeconds: timeout,
 			TaskStartToCloseTimeoutSeconds:      timeout,
 			DecisionTaskCompletedEventId:        lastEvent.EventId,
-			WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicyRejectDuplicate,
+			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicyRejectDuplicate,
 		}}
 		return historyEvent
 	})
-	childWorkflowInitialFail := NewHistoryEventVertex(enums.EventTypeStartChildWorkflowExecutionFailed.String())
+	childWorkflowInitialFail := NewHistoryEventVertex(eventpb.EventTypeStartChildWorkflowExecutionFailed.String())
 	childWorkflowInitialFail.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeStartChildWorkflowExecutionFailed
-		historyEvent.Attributes = &commonproto.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{StartChildWorkflowExecutionFailedEventAttributes: &commonproto.StartChildWorkflowExecutionFailedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeStartChildWorkflowExecutionFailed
+		historyEvent.Attributes = &eventpb.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{StartChildWorkflowExecutionFailedEventAttributes: &eventpb.StartChildWorkflowExecutionFailedEventAttributes{
 			Namespace:                    namespace,
 			WorkflowId:                   childWorkflowID,
-			WorkflowType:                 &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
-			Cause:                        enums.ChildWorkflowExecutionFailedCauseWorkflowAlreadyRunning,
+			WorkflowType:                 &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
+			Cause:                        eventpb.ChildWorkflowExecutionFailedCauseWorkflowAlreadyRunning,
 			InitiatedEventId:             lastEvent.EventId,
 			DecisionTaskCompletedEventId: lastEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 		}}
 		return historyEvent
 	})
-	childWorkflowStart := NewHistoryEventVertex(enums.EventTypeChildWorkflowExecutionStarted.String())
+	childWorkflowStart := NewHistoryEventVertex(eventpb.EventTypeChildWorkflowExecutionStarted.String())
 	childWorkflowStart.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionStarted
-		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{ChildWorkflowExecutionStartedEventAttributes: &commonproto.ChildWorkflowExecutionStartedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeChildWorkflowExecutionStarted
+		historyEvent.Attributes = &eventpb.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{ChildWorkflowExecutionStartedEventAttributes: &eventpb.ChildWorkflowExecutionStartedEventAttributes{
 			Namespace:        namespace,
-			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
+			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.EventId,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      uuid.New(),
 			},
 		}}
 		return historyEvent
 	})
-	childWorkflowCancel := NewHistoryEventVertex(enums.EventTypeChildWorkflowExecutionCanceled.String())
+	childWorkflowCancel := NewHistoryEventVertex(eventpb.EventTypeChildWorkflowExecutionCanceled.String())
 	childWorkflowCancel.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionCanceled
-		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{ChildWorkflowExecutionCanceledEventAttributes: &commonproto.ChildWorkflowExecutionCanceledEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeChildWorkflowExecutionCanceled
+		historyEvent.Attributes = &eventpb.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{ChildWorkflowExecutionCanceledEventAttributes: &eventpb.ChildWorkflowExecutionCanceledEventAttributes{
 			Namespace:        namespace,
-			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
+			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -682,19 +684,19 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	childWorkflowComplete := NewHistoryEventVertex(enums.EventTypeChildWorkflowExecutionCompleted.String())
+	childWorkflowComplete := NewHistoryEventVertex(eventpb.EventTypeChildWorkflowExecutionCompleted.String())
 	childWorkflowComplete.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionCompleted
-		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{ChildWorkflowExecutionCompletedEventAttributes: &commonproto.ChildWorkflowExecutionCompletedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeChildWorkflowExecutionCompleted
+		historyEvent.Attributes = &eventpb.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{ChildWorkflowExecutionCompletedEventAttributes: &eventpb.ChildWorkflowExecutionCompletedEventAttributes{
 			Namespace:        namespace,
-			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
+			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -702,19 +704,19 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	childWorkflowFail := NewHistoryEventVertex(enums.EventTypeChildWorkflowExecutionFailed.String())
+	childWorkflowFail := NewHistoryEventVertex(eventpb.EventTypeChildWorkflowExecutionFailed.String())
 	childWorkflowFail.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionFailed
-		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{ChildWorkflowExecutionFailedEventAttributes: &commonproto.ChildWorkflowExecutionFailedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeChildWorkflowExecutionFailed
+		historyEvent.Attributes = &eventpb.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{ChildWorkflowExecutionFailedEventAttributes: &eventpb.ChildWorkflowExecutionFailedEventAttributes{
 			Namespace:        namespace,
-			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
+			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -722,19 +724,19 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	childWorkflowTerminate := NewHistoryEventVertex(enums.EventTypeChildWorkflowExecutionTerminated.String())
+	childWorkflowTerminate := NewHistoryEventVertex(eventpb.EventTypeChildWorkflowExecutionTerminated.String())
 	childWorkflowTerminate.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionTerminated
-		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{ChildWorkflowExecutionTerminatedEventAttributes: &commonproto.ChildWorkflowExecutionTerminatedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeChildWorkflowExecutionTerminated
+		historyEvent.Attributes = &eventpb.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{ChildWorkflowExecutionTerminatedEventAttributes: &eventpb.ChildWorkflowExecutionTerminatedEventAttributes{
 			Namespace:        namespace,
-			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
+			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -742,24 +744,24 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	childWorkflowTimedOut := NewHistoryEventVertex(enums.EventTypeChildWorkflowExecutionTimedOut.String())
+	childWorkflowTimedOut := NewHistoryEventVertex(eventpb.EventTypeChildWorkflowExecutionTimedOut.String())
 	childWorkflowTimedOut.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeChildWorkflowExecutionTimedOut
-		historyEvent.Attributes = &commonproto.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{ChildWorkflowExecutionTimedOutEventAttributes: &commonproto.ChildWorkflowExecutionTimedOutEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeChildWorkflowExecutionTimedOut
+		historyEvent.Attributes = &eventpb.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{ChildWorkflowExecutionTimedOutEventAttributes: &eventpb.ChildWorkflowExecutionTimedOutEventAttributes{
 			Namespace:        namespace,
-			WorkflowType:     &commonproto.WorkflowType{Name: childWorkflowPrefix + workflowType},
+			WorkflowType:     &commonpb.WorkflowType{Name: childWorkflowPrefix + workflowType},
 			InitiatedEventId: lastEvent.GetChildWorkflowExecutionStartedEventAttributes().InitiatedEventId,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: childWorkflowID,
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
 			StartedEventId: lastEvent.EventId,
-			TimeoutType:    enums.TimeoutTypeScheduleToClose,
+			TimeoutType:    eventpb.TimeoutTypeScheduleToClose,
 		}}
 		return historyEvent
 	})
@@ -791,18 +793,18 @@ func InitializeHistoryEventGenerator(
 
 	// Setup external workflow model
 	externalWorkflowModel := NewHistoryEventModel()
-	externalWorkflowSignal := NewHistoryEventVertex(enums.EventTypeSignalExternalWorkflowExecutionInitiated.String())
+	externalWorkflowSignal := NewHistoryEventVertex(eventpb.EventTypeSignalExternalWorkflowExecutionInitiated.String())
 	externalWorkflowSignal.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeSignalExternalWorkflowExecutionInitiated
-		historyEvent.Attributes = &commonproto.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{SignalExternalWorkflowExecutionInitiatedEventAttributes: &commonproto.SignalExternalWorkflowExecutionInitiatedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeSignalExternalWorkflowExecutionInitiated
+		historyEvent.Attributes = &eventpb.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{SignalExternalWorkflowExecutionInitiatedEventAttributes: &eventpb.SignalExternalWorkflowExecutionInitiatedEventAttributes{
 			DecisionTaskCompletedEventId: lastEvent.EventId,
 			Namespace:                    namespace,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: externalWorkflowID,
 				RunId:      uuid.New(),
 			},
@@ -811,19 +813,19 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	externalWorkflowSignalFailed := NewHistoryEventVertex(enums.EventTypeSignalExternalWorkflowExecutionFailed.String())
+	externalWorkflowSignalFailed := NewHistoryEventVertex(eventpb.EventTypeSignalExternalWorkflowExecutionFailed.String())
 	externalWorkflowSignalFailed.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeSignalExternalWorkflowExecutionFailed
-		historyEvent.Attributes = &commonproto.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{SignalExternalWorkflowExecutionFailedEventAttributes: &commonproto.SignalExternalWorkflowExecutionFailedEventAttributes{
-			Cause:                        enums.SignalExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution,
+		historyEvent.EventType = eventpb.EventTypeSignalExternalWorkflowExecutionFailed
+		historyEvent.Attributes = &eventpb.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{SignalExternalWorkflowExecutionFailedEventAttributes: &eventpb.SignalExternalWorkflowExecutionFailedEventAttributes{
+			Cause:                        eventpb.SignalExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution,
 			DecisionTaskCompletedEventId: lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 			Namespace:                    namespace,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -831,37 +833,37 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	externalWorkflowSignaled := NewHistoryEventVertex(enums.EventTypeExternalWorkflowExecutionSignaled.String())
+	externalWorkflowSignaled := NewHistoryEventVertex(eventpb.EventTypeExternalWorkflowExecutionSignaled.String())
 	externalWorkflowSignaled.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeExternalWorkflowExecutionSignaled
-		historyEvent.Attributes = &commonproto.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{ExternalWorkflowExecutionSignaledEventAttributes: &commonproto.ExternalWorkflowExecutionSignaledEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeExternalWorkflowExecutionSignaled
+		historyEvent.Attributes = &eventpb.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{ExternalWorkflowExecutionSignaledEventAttributes: &eventpb.ExternalWorkflowExecutionSignaledEventAttributes{
 			InitiatedEventId: lastEvent.EventId,
 			Namespace:        namespace,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,
 			},
 		}}
 		return historyEvent
 	})
-	externalWorkflowCancel := NewHistoryEventVertex(enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated.String())
+	externalWorkflowCancel := NewHistoryEventVertex(eventpb.EventTypeRequestCancelExternalWorkflowExecutionInitiated.String())
 	externalWorkflowCancel.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated
-		historyEvent.Attributes = &commonproto.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
-			RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &commonproto.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeRequestCancelExternalWorkflowExecutionInitiated
+		historyEvent.Attributes = &eventpb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
+			RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 				DecisionTaskCompletedEventId: lastEvent.EventId,
 				Namespace:                    namespace,
-				WorkflowExecution: &commonproto.WorkflowExecution{
+				WorkflowExecution: &executionpb.WorkflowExecution{
 					WorkflowId: externalWorkflowID,
 					RunId:      uuid.New(),
 				},
@@ -869,19 +871,19 @@ func InitializeHistoryEventGenerator(
 			}}
 		return historyEvent
 	})
-	externalWorkflowCancelFail := NewHistoryEventVertex(enums.EventTypeRequestCancelExternalWorkflowExecutionFailed.String())
+	externalWorkflowCancelFail := NewHistoryEventVertex(eventpb.EventTypeRequestCancelExternalWorkflowExecutionFailed.String())
 	externalWorkflowCancelFail.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeRequestCancelExternalWorkflowExecutionFailed
-		historyEvent.Attributes = &commonproto.HistoryEvent_RequestCancelExternalWorkflowExecutionFailedEventAttributes{RequestCancelExternalWorkflowExecutionFailedEventAttributes: &commonproto.RequestCancelExternalWorkflowExecutionFailedEventAttributes{
-			Cause:                        enums.CancelExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution,
+		historyEvent.EventType = eventpb.EventTypeRequestCancelExternalWorkflowExecutionFailed
+		historyEvent.Attributes = &eventpb.HistoryEvent_RequestCancelExternalWorkflowExecutionFailedEventAttributes{RequestCancelExternalWorkflowExecutionFailedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionFailedEventAttributes{
+			Cause:                        eventpb.CancelExternalWorkflowExecutionFailedCauseUnknownExternalWorkflowExecution,
 			DecisionTaskCompletedEventId: lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().DecisionTaskCompletedEventId,
 			Namespace:                    namespace,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -889,18 +891,18 @@ func InitializeHistoryEventGenerator(
 		}}
 		return historyEvent
 	})
-	externalWorkflowCanceled := NewHistoryEventVertex(enums.EventTypeExternalWorkflowExecutionCancelRequested.String())
+	externalWorkflowCanceled := NewHistoryEventVertex(eventpb.EventTypeExternalWorkflowExecutionCancelRequested.String())
 	externalWorkflowCanceled.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*commonproto.HistoryEvent)
-		lastGeneratedEvent := input[1].(*commonproto.HistoryEvent)
+		lastEvent := input[0].(*eventpb.HistoryEvent)
+		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
 		eventID := lastGeneratedEvent.GetEventId() + 1
 		version := input[2].(int64)
 		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = enums.EventTypeExternalWorkflowExecutionCancelRequested
-		historyEvent.Attributes = &commonproto.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{ExternalWorkflowExecutionCancelRequestedEventAttributes: &commonproto.ExternalWorkflowExecutionCancelRequestedEventAttributes{
+		historyEvent.EventType = eventpb.EventTypeExternalWorkflowExecutionCancelRequested
+		historyEvent.Attributes = &eventpb.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{ExternalWorkflowExecutionCancelRequestedEventAttributes: &eventpb.ExternalWorkflowExecutionCancelRequestedEventAttributes{
 			InitiatedEventId: lastEvent.EventId,
 			Namespace:        namespace,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().WorkflowId,
 				RunId:      lastEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes().GetWorkflowExecution().RunId,
 			},
@@ -943,10 +945,10 @@ func InitializeHistoryEventGenerator(
 func getDefaultHistoryEvent(
 	eventID int64,
 	version int64,
-) *commonproto.HistoryEvent {
+) *eventpb.HistoryEvent {
 
 	globalTaskID++
-	return &commonproto.HistoryEvent{
+	return &eventpb.HistoryEvent{
 		EventId:   eventID,
 		Timestamp: time.Now().UnixNano(),
 		TaskId:    globalTaskID,

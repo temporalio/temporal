@@ -30,7 +30,7 @@ package history
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/temporal-proto/common"
+	event "go.temporal.io/temporal-proto/event"
 	reflect "reflect"
 )
 
@@ -58,7 +58,7 @@ func (m *MockworkflowResetter) EXPECT() *MockworkflowResetterMockRecorder {
 }
 
 // resetWorkflow mocks base method.
-func (m *MockworkflowResetter) resetWorkflow(ctx context.Context, namespaceID, workflowID, baseRunID string, baseBranchToken []byte, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID int64, resetRunID, resetRequestID string, currentWorkflow nDCWorkflow, resetReason string, additionalReapplyEvents []*common.HistoryEvent) error {
+func (m *MockworkflowResetter) resetWorkflow(ctx context.Context, namespaceID, workflowID, baseRunID string, baseBranchToken []byte, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID int64, resetRunID, resetRequestID string, currentWorkflow nDCWorkflow, resetReason string, additionalReapplyEvents []*event.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "resetWorkflow", ctx, namespaceID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, currentWorkflow, resetReason, additionalReapplyEvents)
 	ret0, _ := ret[0].(error)

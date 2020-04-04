@@ -31,9 +31,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -156,7 +158,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
 	namespaceID := testNamespaceID
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -190,7 +192,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: stickyTl,
 			},
 			Identity: identity,
@@ -208,9 +210,9 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt
-	expectedResponse.WorkflowExecutionTaskList = &commonproto.TaskList{
+	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: enums.TaskListKindNormal,
+		Kind: tasklistpb.TaskListKindNormal,
 	}
 	expectedResponse.BranchToken = msBuilder.GetExecutionInfo().BranchToken
 
@@ -219,7 +221,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	s.NotNil(response)
 	expectedResponse.StartedTimestamp = response.StartedTimestamp
 	expectedResponse.ScheduledTimestamp = 0
-	expectedResponse.Queries = make(map[string]*commonproto.WorkflowQuery)
+	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
 
@@ -245,8 +247,8 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
@@ -327,8 +329,8 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,

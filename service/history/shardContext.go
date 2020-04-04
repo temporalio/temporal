@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -107,7 +107,7 @@ type (
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error
-		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonproto.WorkflowExecution) (int, error)
+		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, namespaceID string, execution executionpb.WorkflowExecution) (int, error)
 	}
 
 	shardContextImpl struct {
@@ -805,7 +805,7 @@ Reset_Loop:
 }
 
 func (s *shardContextImpl) AppendHistoryV2Events(
-	request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonproto.WorkflowExecution) (int, error) {
+	request *persistence.AppendHistoryNodesRequest, namespaceID string, execution executionpb.WorkflowExecution) (int, error) {
 
 	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {

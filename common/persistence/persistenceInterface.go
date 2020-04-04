@@ -32,8 +32,9 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
@@ -217,7 +218,7 @@ type (
 		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
-		Status                             enums.WorkflowExecutionStatus
+		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
 		NextEventID                        int64
@@ -332,7 +333,7 @@ type (
 		CreateRequestID       string
 		Namespace             string
 		WorkflowTypeName      string
-		ParentClosePolicy     enums.ParentClosePolicy
+		ParentClosePolicy     commonpb.ParentClosePolicy
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -444,7 +445,7 @@ type (
 	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface
 	InternalAppendHistoryEventsRequest struct {
 		NamespaceID       string
-		Execution         commonproto.WorkflowExecution
+		Execution         executionpb.WorkflowExecution
 		FirstEventID      int64
 		EventBatchVersion int64
 		RangeID           int64
@@ -556,7 +557,7 @@ type (
 		StartTime        time.Time
 		ExecutionTime    time.Time
 		CloseTime        time.Time
-		Status           *enums.WorkflowExecutionStatus
+		Status           *executionpb.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *serialization.DataBlob
 		SearchAttributes map[string]interface{}
@@ -601,7 +602,7 @@ type (
 		Memo               *serialization.DataBlob
 		SearchAttributes   map[string][]byte
 		CloseTimestamp     int64
-		Status             enums.WorkflowExecutionStatus
+		Status             executionpb.WorkflowExecutionStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
 	}
@@ -626,10 +627,10 @@ type (
 		Retention                int32
 		EmitMetric               bool                 // deprecated
 		ArchivalBucket           string               // deprecated
-		ArchivalStatus           enums.ArchivalStatus // deprecated
-		HistoryArchivalStatus    enums.ArchivalStatus
+		ArchivalStatus           namespacepb.ArchivalStatus // deprecated
+		HistoryArchivalStatus    namespacepb.ArchivalStatus
 		HistoryArchivalURI       string
-		VisibilityArchivalStatus enums.ArchivalStatus
+		VisibilityArchivalStatus namespacepb.ArchivalStatus
 		VisibilityArchivalURI    string
 		BadBinaries              *serialization.DataBlob
 	}
@@ -724,14 +725,14 @@ func FromDataBlob(blob *serialization.DataBlob) ([]byte, string) {
 }
 
 // NewDataBlobFromProto convert data blob from Proto representation
-func NewDataBlobFromProto(blob *commonproto.DataBlob) *serialization.DataBlob {
+func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
 	switch blob.GetEncodingType() {
-	case enums.EncodingTypeJSON:
+	case commonpb.EncodingTypeJSON:
 		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeJSON,
 			Data:     blob.Data,
 		}
-	case enums.EncodingTypeProto3:
+	case commonpb.EncodingTypeProto3:
 		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,
@@ -1040,7 +1041,7 @@ func ProtoChildExecutionInfoToInternal(rowInfo *persistenceblobs.ChildExecutionI
 		CreateRequestID:       rowInfo.GetCreateRequestId(),
 		Namespace:             rowInfo.GetNamespace(),
 		WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
-		ParentClosePolicy:     enums.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
+		ParentClosePolicy:     commonpb.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
 		InitiatedEvent:        NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.InitiatedEventEncoding)),
 		StartedEvent:          NewDataBlob(rowInfo.StartedEvent, common.EncodingType(rowInfo.StartedEventEncoding)),
 	}

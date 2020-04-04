@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
@@ -95,7 +95,7 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 			Memo:          p.NewDataBlob([]byte(source[definition.Memo].(string)), common.EncodingType(source[definition.Encoding].(string))),
 		}
 		record.CloseTime = time.Unix(0, closeTime)
-		statusEnum := enums.WorkflowExecutionStatus(status)
+		statusEnum := executionpb.WorkflowExecutionStatus(status)
 		record.Status = &statusEnum
 		record.HistoryLength = historyLen
 	}

@@ -36,10 +36,11 @@ import (
 	"github.com/cch123/elasticsql"
 	"github.com/olivere/elastic"
 	"github.com/valyala/fastjson"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/indexer"
+	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
@@ -80,7 +81,7 @@ type (
 		StartTime       int64
 		ExecutionTime   int64
 		CloseTime       int64
-		ExecutionStatus enums.WorkflowExecutionStatus
+		ExecutionStatus executionpb.WorkflowExecutionStatus
 		HistoryLength   int64
 		Memo            []byte
 		Encoding        string
@@ -623,7 +624,7 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 		obj.Visit(func(k []byte, v *fastjson.Value) { // visit is only way to get object key in fastjson
 			sortField = string(k)
 		})
-		if v.getFieldType(sortField) == enums.IndexedValueTypeString {
+		if v.getFieldType(sortField) == commonpb.IndexedValueTypeString {
 			return "", errors.New("not able to sort by IndexedValueTypeString field, use IndexedValueTypeKeyword field")
 		}
 		// add RunID as tie-breaker
@@ -633,7 +634,7 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 	return sortField, nil
 }
 
-func (v *esVisibilityStore) getFieldType(fieldName string) enums.IndexedValueType {
+func (v *esVisibilityStore) getFieldType(fieldName string) commonpb.IndexedValueType {
 	if strings.HasPrefix(fieldName, definition.Attr) {
 		fieldName = fieldName[len(definition.Attr)+1:] // remove prefix
 	}
@@ -653,7 +654,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 	var sortVal interface{}
 	var err error
 	switch v.getFieldType(sortField) {
-	case enums.IndexedValueTypeInt, enums.IndexedValueTypeDatetime, enums.IndexedValueTypeBool:
+	case commonpb.IndexedValueTypeInt, commonpb.IndexedValueTypeDatetime, commonpb.IndexedValueTypeBool:
 		sortVal, err = token.SortValue.(json.Number).Int64()
 		if err != nil {
 			err, ok := err.(*strconv.NumError) // field not present, ES will return big int +-9223372036854776000
@@ -666,7 +667,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 				sortVal = math.MaxInt64
 			}
 		}
-	case enums.IndexedValueTypeDouble:
+	case commonpb.IndexedValueTypeDouble:
 		switch token.SortValue.(type) {
 		case json.Number:
 			sortVal, err = token.SortValue.(json.Number).Float64()
@@ -676,7 +677,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 		case string: // field not present, ES will return "-Infinity" or "Infinity"
 			sortVal = fmt.Sprintf(`"%s"`, token.SortValue.(string))
 		}
-	case enums.IndexedValueTypeKeyword:
+	case commonpb.IndexedValueTypeKeyword:
 		if token.SortValue != nil {
 			sortVal = fmt.Sprintf(`"%s"`, token.SortValue.(string))
 		} else { // field not present, ES will return null (so token.SortValue is nil)
@@ -885,23 +886,23 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 
 func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string,
 	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType,
-	searchAttributes map[string][]byte) *indexer.Message {
+	searchAttributes map[string][]byte) *indexergenpb.Message {
 
-	msgType := enums.MessageTypeIndex
-	fields := map[string]*indexer.Field{
+	msgType := indexergenpb.MessageTypeIndex
+	fields := map[string]*indexergenpb.Field{
 		es.WorkflowType:  {Type: es.FieldTypeString, StringData: workflowTypeName},
 		es.StartTime:     {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
 		es.ExecutionTime: {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexer.Field{Type: es.FieldTypeBinary, BinaryData: memo}
-		fields[es.Encoding] = &indexer.Field{Type: es.FieldTypeString, StringData: string(encoding)}
+		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: memo}
+		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
 	}
 	for k, v := range searchAttributes {
-		fields[k] = &indexer.Field{Type: es.FieldTypeBinary, BinaryData: v}
+		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: v}
 	}
 
-	msg := &indexer.Message{
+	msg := &indexergenpb.Message{
 		MessageType: msgType,
 		NamespaceId: namespaceID,
 		WorkflowId:  wid,
@@ -913,12 +914,12 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 }
 
 func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, workflowTypeName string,
-	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status enums.WorkflowExecutionStatus,
+	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status executionpb.WorkflowExecutionStatus,
 	historyLength int64, taskID int64, memo []byte, encoding common.EncodingType,
-	searchAttributes map[string][]byte) *indexer.Message {
+	searchAttributes map[string][]byte) *indexergenpb.Message {
 
-	msgType := enums.MessageTypeIndex
-	fields := map[string]*indexer.Field{
+	msgType := indexergenpb.MessageTypeIndex
+	fields := map[string]*indexergenpb.Field{
 		es.WorkflowType:    {Type: es.FieldTypeString, StringData: workflowTypeName},
 		es.StartTime:       {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
 		es.ExecutionTime:   {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
@@ -927,14 +928,14 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 		es.HistoryLength:   {Type: es.FieldTypeInt, IntData: historyLength},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexer.Field{Type: es.FieldTypeBinary, BinaryData: memo}
-		fields[es.Encoding] = &indexer.Field{Type: es.FieldTypeString, StringData: string(encoding)}
+		fields[es.Memo] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: memo}
+		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
 	}
 	for k, v := range searchAttributes {
-		fields[k] = &indexer.Field{Type: es.FieldTypeBinary, BinaryData: v}
+		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: v}
 	}
 
-	msg := &indexer.Message{
+	msg := &indexergenpb.Message{
 		MessageType: msgType,
 		NamespaceId: namespaceID,
 		WorkflowId:  wid,
@@ -945,9 +946,9 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 	return msg
 }
 
-func getVisibilityMessageForDeletion(namespaceID, workflowID, runID string, docVersion int64) *indexer.Message {
-	msgType := enums.MessageTypeDelete
-	msg := &indexer.Message{
+func getVisibilityMessageForDeletion(namespaceID, workflowID, runID string, docVersion int64) *indexergenpb.Message {
+	msgType := indexergenpb.MessageTypeDelete
+	msg := &indexergenpb.Message{
 		MessageType: msgType,
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,

@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 )
 
 type (
@@ -63,7 +63,7 @@ func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 
 		fmt.Println("########################")
 		for _, e := range events {
-			event := e.GetData().(*commonproto.HistoryEvent)
+			event := e.GetData().(*eventpb.HistoryEvent)
 			if maxEventID != event.GetEventId()-1 {
 				s.Fail("event id sequence is incorrect")
 			}
@@ -87,7 +87,7 @@ func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 		events := branchGenerator1.GetNextVertices()
 		fmt.Println("########################")
 		for _, e := range events {
-			event := e.GetData().(*commonproto.HistoryEvent)
+			event := e.GetData().(*eventpb.HistoryEvent)
 			if maxEventID != event.GetEventId()-1 {
 				s.Fail("event id sequence is incorrect")
 			}
@@ -106,12 +106,12 @@ func (s *historyEventTestSuit) Test_HistoryEvent_Generator() {
 	}
 	fmt.Println("==========================")
 	history := s.generator.ListGeneratedVertices()
-	maxEventID = history[len(history)-1].GetData().(*commonproto.HistoryEvent).GetEventId()
+	maxEventID = history[len(history)-1].GetData().(*eventpb.HistoryEvent).GetEventId()
 	for i := 0; i < 10 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
 		fmt.Println("########################")
 		for _, e := range events {
-			event := e.GetData().(*commonproto.HistoryEvent)
+			event := e.GetData().(*eventpb.HistoryEvent)
 			if maxEventID != event.GetEventId()-1 {
 				s.Fail("event id sequence is incorrect")
 			}

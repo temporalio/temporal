@@ -664,7 +664,7 @@ func newAdminElasticSearchCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagInputFileWithAlias,
-					Usage: "Input file of indexer.Message in json format, separated by newline",
+					Usage: "Input file of indexergenpb.Message in json format, separated by newline",
 				},
 				cli.IntFlag{
 					Name:  FlagBatchSizeWithAlias,

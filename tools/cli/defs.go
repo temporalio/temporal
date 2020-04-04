@@ -26,7 +26,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 )
 
 const (
@@ -59,7 +60,7 @@ const (
 	defaultDecisionTimeoutInSeconds = 10
 	defaultPageSizeForList          = 500
 	defaultPageSizeForScan          = 2000
-	defaultWorkflowIDReusePolicy    = enums.WorkflowIdReusePolicyAllowDuplicate
+	defaultWorkflowIDReusePolicy    = commonpb.WorkflowIdReusePolicyAllowDuplicate
 
 	workflowStatusNotSet = -1
 	showErrorStackEnv    = `TEMPORAL_CLI_SHOW_STACKS`
@@ -97,26 +98,26 @@ var (
 	tableHeaderBlue         = tablewriter.Colors{tablewriter.FgHiBlueColor}
 	optionErr               = "there is something wrong with your command options"
 	osExit                  = os.Exit
-	workflowClosedStatusMap = map[string]enums.WorkflowExecutionStatus{
-		"running":        enums.WorkflowExecutionStatusRunning,
-		"completed":      enums.WorkflowExecutionStatusCompleted,
-		"failed":         enums.WorkflowExecutionStatusFailed,
-		"canceled":       enums.WorkflowExecutionStatusCanceled,
-		"terminated":     enums.WorkflowExecutionStatusTerminated,
-		"continuedasnew": enums.WorkflowExecutionStatusContinuedAsNew,
-		"continueasnew":  enums.WorkflowExecutionStatusContinuedAsNew,
-		"timedout":       enums.WorkflowExecutionStatusTimedOut,
+	workflowClosedStatusMap = map[string]executionpb.WorkflowExecutionStatus{
+		"running":        executionpb.WorkflowExecutionStatusRunning,
+		"completed":      executionpb.WorkflowExecutionStatusCompleted,
+		"failed":         executionpb.WorkflowExecutionStatusFailed,
+		"canceled":       executionpb.WorkflowExecutionStatusCanceled,
+		"terminated":     executionpb.WorkflowExecutionStatusTerminated,
+		"continuedasnew": executionpb.WorkflowExecutionStatusContinuedAsNew,
+		"continueasnew":  executionpb.WorkflowExecutionStatusContinuedAsNew,
+		"timedout":       executionpb.WorkflowExecutionStatusTimedOut,
 		// below are some alias
-		"r":         enums.WorkflowExecutionStatusRunning,
-		"c":         enums.WorkflowExecutionStatusCompleted,
-		"complete":  enums.WorkflowExecutionStatusCompleted,
-		"f":         enums.WorkflowExecutionStatusFailed,
-		"fail":      enums.WorkflowExecutionStatusFailed,
-		"cancel":    enums.WorkflowExecutionStatusCanceled,
-		"terminate": enums.WorkflowExecutionStatusTerminated,
-		"term":      enums.WorkflowExecutionStatusTerminated,
-		"continue":  enums.WorkflowExecutionStatusContinuedAsNew,
-		"cont":      enums.WorkflowExecutionStatusContinuedAsNew,
-		"timeout":   enums.WorkflowExecutionStatusTimedOut,
+		"r":         executionpb.WorkflowExecutionStatusRunning,
+		"c":         executionpb.WorkflowExecutionStatusCompleted,
+		"complete":  executionpb.WorkflowExecutionStatusCompleted,
+		"f":         executionpb.WorkflowExecutionStatusFailed,
+		"fail":      executionpb.WorkflowExecutionStatusFailed,
+		"cancel":    executionpb.WorkflowExecutionStatusCanceled,
+		"terminate": executionpb.WorkflowExecutionStatusTerminated,
+		"term":      executionpb.WorkflowExecutionStatusTerminated,
+		"continue":  executionpb.WorkflowExecutionStatusContinuedAsNew,
+		"cont":      executionpb.WorkflowExecutionStatusContinuedAsNew,
+		"timeout":   executionpb.WorkflowExecutionStatusTimedOut,
 	}
 )

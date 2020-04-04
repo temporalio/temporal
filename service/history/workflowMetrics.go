@@ -23,8 +23,7 @@ package history
 import (
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
 
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
@@ -112,7 +111,7 @@ func emitWorkflowCompletionStats(
 	metricsClient metrics.Client,
 	namespace string,
 	taskList string,
-	event *commonproto.HistoryEvent,
+	event *eventpb.HistoryEvent,
 ) {
 	scope := metricsClient.Scope(
 		metrics.WorkflowCompletionStatsScope,
@@ -121,15 +120,15 @@ func emitWorkflowCompletionStats(
 	)
 
 	switch event.EventType {
-	case enums.EventTypeWorkflowExecutionCompleted:
+	case eventpb.EventTypeWorkflowExecutionCompleted:
 		scope.IncCounter(metrics.WorkflowSuccessCount)
-	case enums.EventTypeWorkflowExecutionCanceled:
+	case eventpb.EventTypeWorkflowExecutionCanceled:
 		scope.IncCounter(metrics.WorkflowCancelCount)
-	case enums.EventTypeWorkflowExecutionFailed:
+	case eventpb.EventTypeWorkflowExecutionFailed:
 		scope.IncCounter(metrics.WorkflowFailedCount)
-	case enums.EventTypeWorkflowExecutionTimedOut:
+	case eventpb.EventTypeWorkflowExecutionTimedOut:
 		scope.IncCounter(metrics.WorkflowTimeoutCount)
-	case enums.EventTypeWorkflowExecutionTerminated:
+	case eventpb.EventTypeWorkflowExecutionTerminated:
 		scope.IncCounter(metrics.WorkflowTerminateCount)
 	}
 }

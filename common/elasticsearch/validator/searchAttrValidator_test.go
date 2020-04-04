@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -52,7 +52,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
 
 	namespace := "namespace"
-	var attr *commonproto.SearchAttributes
+	var attr *commonpb.SearchAttributes
 
 	err := validator.ValidateSearchAttributes(attr, namespace)
 	s.Nil(err)
@@ -60,7 +60,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	fields := map[string][]byte{
 		"CustomIntField": []byte("1"),
 	}
-	attr = &commonproto.SearchAttributes{
+	attr = &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
 	err = validator.ValidateSearchAttributes(attr, namespace)

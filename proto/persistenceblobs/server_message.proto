@@ -25,8 +25,10 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
-import "replication/replication.proto";
-import "enums/enums.proto";
+
+import "persistenceblobs/server_enum.proto";
+import "replication/server_message.proto";
+import "execution/enum.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -218,7 +220,7 @@ message WorkflowExecutionState {
     string createRequestId = 1;
     bytes runId = 2;
     int32 state = 3;
-    enums.WorkflowExecutionStatus status = 4;
+    execution.WorkflowExecutionStatus status = 4;
 }
 
 message WorkflowExecutionInfo {
@@ -284,7 +286,7 @@ message WorkflowExecutionInfo {
 
 message Checksum {
     int32 version = 1;
-    enums.ChecksumFlavor flavor = 2;
+    ChecksumFlavor flavor = 2;
     bytes value = 3;
 }
 

@@ -37,9 +37,14 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	querypb "go.temporal.io/temporal-proto/query"
+	replicationpb "go.temporal.io/temporal-proto/replication"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -71,7 +76,7 @@ const (
 
 var (
 	clusterName              = []string{"active", "standby"}
-	clusterReplicationConfig = []*commonproto.ClusterReplicationConfiguration{
+	clusterReplicationConfig = []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: clusterName[0],
 		},
@@ -155,7 +160,7 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -185,8 +190,8 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	wt := "integration-namespace-failover-test-type"
 	tl := "integration-namespace-failover-test-tasklist"
 	identity := "worker1"
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           namespace,
@@ -243,8 +248,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	wt := "integration-simple-workflow-failover-test-type"
 	tl := "integration-simple-workflow-failover-test-tasklist"
 	identity := "worker1"
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           namespace,
@@ -267,19 +272,19 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	activityName := "activity_type1"
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
-				DecisionType: enums.DecisionTypeScheduleActivityTask,
-				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonproto.ActivityType{Name: activityName},
-					TaskList:                      &commonproto.TaskList{Name: tl},
+					ActivityType:                  &commonpb.ActivityType{Name: activityName},
+					TaskList:                      &tasklistpb.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 30,
@@ -290,15 +295,15 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		}
 
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
 
-	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
+	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result"), false, nil
@@ -352,11 +357,11 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	queryWorkflowFn := func(client workflowservice.WorkflowServiceClient, queryType string) {
 		queryResp, err := client.QueryWorkflow(host.NewContext(), &workflowservice.QueryWorkflowRequest{
 			Namespace: namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
-			Query: &commonproto.WorkflowQuery{
+			Query: &querypb.WorkflowQuery{
 				QueryType: queryType,
 			},
 		})
@@ -409,7 +414,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -425,7 +430,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// check history matched
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      rid,
 		},
@@ -542,10 +547,10 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	identity1 := "worker1"
 	identity2 := "worker2"
 
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
-	stickyTaskList1 := &commonproto.TaskList{Name: stl1}
-	stickyTaskList2 := &commonproto.TaskList{Name: stl2}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
+	stickyTaskList1 := &tasklistpb.TaskList{Name: stl1}
+	stickyTaskList2 := &tasklistpb.TaskList{Name: stl2}
 	stickyTaskTimeout := 100
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -567,22 +572,22 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	firstDecisionMade := false
 	secondDecisionMade := false
 	workflowCompleted := false
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if !firstDecisionMade {
 			firstDecisionMade = true
-			return nil, []*commonproto.Decision{}, nil
+			return nil, []*decisionpb.Decision{}, nil
 		}
 
 		if !secondDecisionMade {
 			secondDecisionMade = true
-			return nil, []*commonproto.Decision{}, nil
+			return nil, []*decisionpb.Decision{}, nil
 		}
 
 		workflowCompleted = true
-		return nil, []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
 		}}, nil
@@ -622,7 +627,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	signalInput := []byte("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
@@ -635,7 +640,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -655,7 +660,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 
 	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
@@ -668,7 +673,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	// Update namespace to fail over back
 	updateReq = &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[0],
 		},
 	}
@@ -717,8 +722,8 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	wt := "integration-start-workflow-failover-ID-reuse-policy-test-type"
 	tl := "integration-start-workflow-failover-ID-reuse-policy-test-tasklist"
 	identity := "worker1"
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           namespace,
@@ -729,7 +734,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		ExecutionStartToCloseTimeoutSeconds: 100,
 		TaskStartToCloseTimeoutSeconds:      1,
 		Identity:                            identity,
-		WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicyAllowDuplicate,
+		WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicyAllowDuplicate,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
@@ -737,13 +742,13 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.logger.Info("StartWorkflowExecution in cluster 1: ", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowCompleteTimes := 0
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		workflowCompleteTimes++
-		return nil, []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
 		}}, nil
@@ -780,7 +785,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -795,21 +800,21 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 	// start the same workflow in cluster 2 is not allowed if policy is AllowDuplicateFailedOnly
 	startReq.RequestId = uuid.New()
-	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	startReq.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 	s.Nil(we)
 
 	// start the same workflow in cluster 2 is not allowed if policy is RejectDuplicate
 	startReq.RequestId = uuid.New()
-	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyRejectDuplicate
+	startReq.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicyRejectDuplicate
 	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 	s.Nil(we)
 
 	// start the workflow in cluster 2
 	startReq.RequestId = uuid.New()
-	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicate
+	startReq.WorkflowIdReusePolicy = commonpb.WorkflowIdReusePolicyAllowDuplicate
 	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -850,8 +855,8 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	wt := "integration-terminate-workflow-failover-test-type"
 	tl := "integration-terminate-workflow-failover-test-tasklist"
 	identity := "worker1"
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           namespace,
@@ -870,19 +875,19 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	activityName := "activity_type1"
 	activityCount := int32(1)
 	activityCounter := int32(0)
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
-				DecisionType: enums.DecisionTypeScheduleActivityTask,
-				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &commonproto.ActivityType{Name: activityName},
-					TaskList:                      &commonproto.TaskList{Name: tl},
+					ActivityType:                  &commonpb.ActivityType{Name: activityName},
+					TaskList:                      &tasklistpb.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
@@ -892,15 +897,15 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 			}}, nil
 		}
 
-		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
 
-	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
+	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result"), false, nil
@@ -925,7 +930,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -943,7 +948,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	terminateDetails := []byte("terminate details")
 	_, err = client2.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 		Reason:   terminateReason,
@@ -956,7 +961,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	executionTerminated := false
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
@@ -967,7 +972,7 @@ GetHistoryLoop:
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
-		if lastEvent.EventType != enums.EventTypeWorkflowExecutionTerminated {
+		if lastEvent.EventType != eventpb.EventTypeWorkflowExecutionTerminated {
 			s.logger.Warn("Execution not terminated yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
@@ -991,7 +996,7 @@ GetHistoryLoop2:
 		if err == nil {
 			history := historyResponse.History
 			lastEvent := history.Events[len(history.Events)-1]
-			if lastEvent.EventType == enums.EventTypeWorkflowExecutionTerminated {
+			if lastEvent.EventType == eventpb.EventTypeWorkflowExecutionTerminated {
 				terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
 				s.Equal(terminateReason, terminateEventAttributes.Reason)
 				s.Equal(terminateDetails, terminateEventAttributes.Details)
@@ -1035,8 +1040,8 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	wt := "integration-continueAsNew-workflow-failover-test-type"
 	tl := "integration-continueAsNew-workflow-failover-test-tasklist"
 	identity := "worker1"
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           namespace,
@@ -1056,20 +1061,20 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	continueAsNewCount := int32(5)
 	continueAsNewCounter := int32(0)
 	var previousRunID string
-	var lastRunStartedEvent *commonproto.HistoryEvent
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	var lastRunStartedEvent *eventpb.HistoryEvent
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			previousRunID = execution.GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
-				DecisionType: enums.DecisionTypeContinueAsNewWorkflowExecution,
-				Attributes: &commonproto.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
+				DecisionType: decisionpb.DecisionTypeContinueAsNewWorkflowExecution,
+				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
-					TaskList:                            &commonproto.TaskList{Name: tl},
+					TaskList:                            &tasklistpb.TaskList{Name: tl},
 					Input:                               buf.Bytes(),
 					ExecutionStartToCloseTimeoutSeconds: 100,
 					TaskStartToCloseTimeoutSeconds:      10,
@@ -1079,9 +1084,9 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 
 		lastRunStartedEvent = history.Events[0]
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
 		}}, nil
@@ -1117,7 +1122,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -1173,8 +1178,8 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	wt := "integration-signal-workflow-failover-test-type"
 	tl := "integration-signal-workflow-failover-test-tasklist"
 	identity := "worker1"
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           namespace,
@@ -1193,20 +1198,20 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	eventSignaled := false
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if !eventSignaled {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.EventType == enums.EventTypeWorkflowExecutionSignaled {
+				if event.EventType == eventpb.EventTypeWorkflowExecutionSignaled {
 					eventSignaled = true
-					return nil, []*commonproto.Decision{}, nil
+					return nil, []*decisionpb.Decision{}, nil
 				}
 			}
 		}
 
-		return nil, []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
 		}}, nil
@@ -1237,7 +1242,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	signalInput := []byte("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
@@ -1257,7 +1262,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -1273,7 +1278,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// check history matched
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
@@ -1295,7 +1300,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	signalInput2 := []byte("my signal input 2")
 	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 		SignalName: signalName2,
@@ -1354,8 +1359,8 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	wt := "integration-user-timer-workflow-failover-test-type"
 	tl := "integration-user-timer-workflow-failover-test-tasklist"
 	identity := "worker1"
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           namespace,
@@ -1383,8 +1388,8 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	timerCreated := false
 	timerFired := false
 	workflowCompleted := false
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		if !timerCreated {
 			timerCreated = true
@@ -1394,7 +1399,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 			signalInput := []byte("my signal input")
 			_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace: namespace,
-				WorkflowExecution: &commonproto.WorkflowExecution{
+				WorkflowExecution: &executionpb.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
@@ -1403,9 +1408,9 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 				Identity:   "",
 			})
 			s.NoError(err)
-			return nil, []*commonproto.Decision{{
-				DecisionType: enums.DecisionTypeStartTimer,
-				Attributes: &commonproto.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &commonproto.StartTimerDecisionAttributes{
+			return nil, []*decisionpb.Decision{{
+				DecisionType: decisionpb.DecisionTypeStartTimer,
+				Attributes: &decisionpb.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &decisionpb.StartTimerDecisionAttributes{
 					TimerId:                   "timer-id",
 					StartToFireTimeoutSeconds: 2,
 				}},
@@ -1415,26 +1420,26 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 		if !timerFired {
 			resp, err := client2.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: namespace,
-				Execution: &commonproto.WorkflowExecution{
+				Execution: &executionpb.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
 			})
 			s.NoError(err)
 			for _, event := range resp.History.Events {
-				if event.GetEventType() == enums.EventTypeTimerFired {
+				if event.GetEventType() == eventpb.EventTypeTimerFired {
 					timerFired = true
 				}
 			}
 			if !timerFired {
-				return nil, []*commonproto.Decision{}, nil
+				return nil, []*decisionpb.Decision{}, nil
 			}
 		}
 
 		workflowCompleted = true
-		return nil, []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
 		}}, nil
@@ -1475,7 +1480,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -1527,8 +1532,8 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	tl := "integration-activity-heartbeat-workflow-failover-test-tasklist"
 	identity1 := "worker1"
 	identity2 := "worker2"
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           namespace,
@@ -1554,22 +1559,22 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	activitySent := false
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if !activitySent {
 			activitySent = true
-			return nil, []*commonproto.Decision{{
-				DecisionType: enums.DecisionTypeScheduleActivityTask,
-				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+			return nil, []*decisionpb.Decision{{
+				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(1),
-					ActivityType:                  &commonproto.ActivityType{Name: "some random activity type"},
-					TaskList:                      &commonproto.TaskList{Name: tl},
+					ActivityType:                  &commonpb.ActivityType{Name: "some random activity type"},
+					TaskList:                      &tasklistpb.TaskList{Name: tl},
 					Input:                         []byte("some random input"),
 					ScheduleToCloseTimeoutSeconds: 1000,
 					ScheduleToStartTimeoutSeconds: 1000,
 					StartToCloseTimeoutSeconds:    1000,
 					HeartbeatTimeoutSeconds:       3,
-					RetryPolicy: &commonproto.RetryPolicy{
+					RetryPolicy: &commonpb.RetryPolicy{
 						InitialIntervalInSeconds:    1,
 						MaximumAttempts:             3,
 						MaximumIntervalInSeconds:    1,
@@ -1581,9 +1586,9 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 			}}, nil
 		}
 
-		return nil, []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
 		}}, nil
@@ -1592,7 +1597,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	// activity handler
 	activity1Called := false
 	heartbeatDetails := []byte("details")
-	atHandler1 := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
+	atHandler1 := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		activity1Called = true
 		_, err = client1.RecordActivityTaskHeartbeat(host.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
@@ -1604,7 +1609,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	// activity handler
 	activity2Called := false
-	atHandler2 := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
+	atHandler2 := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		activity2Called = true
 		return []byte("Activity Result"), false, nil
@@ -1635,7 +1640,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	describeWorkflowExecution := func(client workflowservice.WorkflowServiceClient) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return client.DescribeWorkflowExecution(host.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -1650,7 +1655,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -1670,7 +1675,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.NoError(err)
 	pendingActivities := dweResponse.GetPendingActivities()
 	s.Equal(1, len(pendingActivities))
-	s.Equal(enums.PendingActivityStateScheduled, pendingActivities[0].GetState())
+	s.Equal(executionpb.PendingActivityStateScheduled, pendingActivities[0].GetState())
 	s.Equal(heartbeatDetails, pendingActivities[0].GetHeartbeatDetails())
 	s.Equal("temporalInternal:Timeout TimeoutTypeHeartbeat", pendingActivities[0].GetLastFailureReason())
 	s.Equal(identity1, pendingActivities[0].GetLastWorkerIdentity())
@@ -1689,7 +1694,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	historyResponse, err := client2.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	})
@@ -1698,7 +1703,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	activityRetryFound := false
 	for _, event := range history.Events {
-		if event.GetEventType() == enums.EventTypeActivityTaskStarted {
+		if event.GetEventType() == eventpb.EventTypeActivityTaskStarted {
 			attribute := event.GetActivityTaskStartedEventAttributes()
 			s.True(attribute.GetAttempt() > 0)
 			activityRetryFound = true
@@ -1736,8 +1741,8 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	wt := "integration-transient-decision-workflow-failover-test-type"
 	tl := "integration-transient-decision-workflow-failover-test-tasklist"
 	identity := "worker1"
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           namespace,
@@ -1764,17 +1769,17 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 
 	decisionFailed := false
 	workflowFinished := false
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if !decisionFailed {
 			decisionFailed = true
 			return nil, nil, errors.New("random fail decision reason")
 		}
 
 		workflowFinished = true
-		return nil, []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
 		}}, nil
@@ -1807,7 +1812,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -1857,8 +1862,8 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	wt := "integration-cron-workflow-failover-test-type"
 	tl := "integration-cron-workflow-failover-test-tasklist"
 	identity := "worker1"
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           namespace,
@@ -1875,12 +1880,12 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
-		return nil, []*commonproto.Decision{
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		return nil, []*decisionpb.Decision{
 			{
-				DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-				Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+				DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 					Result: []byte("cron-test-result"),
 				}},
 			}}, nil
@@ -1900,7 +1905,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -1921,7 +1926,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 
 	_, err = client2.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	})
@@ -1957,8 +1962,8 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	wt := "integration-workflow-retry-failover-test-type"
 	tl := "integration-workflow-retry-failover-test-tasklist"
 	identity := "worker1"
-	workflowType := &commonproto.WorkflowType{Name: wt}
-	taskList := &commonproto.TaskList{Name: tl}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskList := &tasklistpb.TaskList{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           namespace,
@@ -1969,7 +1974,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 		ExecutionStartToCloseTimeoutSeconds: 100,
 		TaskStartToCloseTimeoutSeconds:      1,
 		Identity:                            identity,
-		RetryPolicy: &commonproto.RetryPolicy{
+		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
 			MaximumAttempts:             3,
 			MaximumIntervalInSeconds:    1,
@@ -1982,14 +1987,14 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	var executions []*commonproto.WorkflowExecution
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	var executions []*executionpb.WorkflowExecution
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		executions = append(executions, execution)
-		return nil, []*commonproto.Decision{
+		return nil, []*decisionpb.Decision{
 			{
-				DecisionType: enums.DecisionTypeFailWorkflowExecution,
-				Attributes: &commonproto.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &commonproto.FailWorkflowExecutionDecisionAttributes{
+				DecisionType: decisionpb.DecisionTypeFailWorkflowExecution,
+				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
 					Reason:  "retryable-error",
 					Details: nil,
 				}},
@@ -2009,7 +2014,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	// Update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: clusterName[1],
 		},
 	}
@@ -2026,25 +2031,25 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
 	events := s.getHistory(client2, namespace, executions[0])
-	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(eventpb.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// second attempt
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
 	events = s.getHistory(client2, namespace, executions[1])
-	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(eventpb.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// third attempt. Still failing, should stop retry.
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
 	events = s.getHistory(client2, namespace, executions[2])
-	s.Equal(enums.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
+	s.Equal(eventpb.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
-func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, namespace string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
+func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, namespace string, execution *executionpb.WorkflowExecution) []*eventpb.HistoryEvent {
 	historyResponse, err := client.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,

@@ -21,7 +21,7 @@
 package elasticsearch
 
 import (
-	"go.temporal.io/temporal-proto/enums"
+	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 )
 
 // All legal fields allowed in elastic search index
@@ -43,8 +43,8 @@ const (
 
 // Supported field types
 var (
-	FieldTypeString = enums.FieldTypeString
-	FieldTypeInt    = enums.FieldTypeInt
-	FieldTypeBool   = enums.FieldTypeBool
-	FieldTypeBinary = enums.FieldTypeBinary
+	FieldTypeString = indexergenpb.FieldTypeString
+	FieldTypeInt    = indexergenpb.FieldTypeInt
+	FieldTypeBool   = indexergenpb.FieldTypeBool
+	FieldTypeBinary = indexergenpb.FieldTypeBinary
 )
