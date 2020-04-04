@@ -667,7 +667,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 			lastBatch = history
 			if firstEvent.GetEventId() == common.FirstEventID {
 				if firstEvent.GetEventType() != eventpb.EventType_WorkflowExecutionStarted {
-					retError = serviceerror.NewInternal(fmt.Sprintf("first event type is not EventTypeWorkflowExecutionStarted: %v", firstEvent.GetEventType()))
+					retError = serviceerror.NewInternal(fmt.Sprintf("first event type is not WorkflowExecutionStarted: %v", firstEvent.GetEventType()))
 					return
 				}
 				wfTimeoutSecs = int64(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetExecutionStartToCloseTimeoutSeconds())
@@ -741,7 +741,7 @@ func validateLastBatchOfReset(lastBatch []*eventpb.HistoryEvent, decisionFinishE
 	}
 
 	if lastEvent.GetEventType() != eventpb.EventType_DecisionTaskStarted {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, previous batch doesn't include EventTypeDecisionTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, previous batch doesn't include DecisionTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()))
 	}
 
 	return nil

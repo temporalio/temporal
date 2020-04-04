@@ -713,13 +713,13 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 		Status: executionpb.WorkflowExecutionStatus_Running,
 		Memo:   &commonpb.Memo{Fields: fields},
 	}
-	s.Equal("{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
+	s.Equal("{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
 
 	fields["TestKey2"] = []byte(`anotherTestValue`)
 	execution.Memo = &commonpb.Memo{Fields: fields}
 	got := anyToString(execution, true, 0)
-	expected := got == "{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
-		got == "{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
+	expected := got == "{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
+		got == "{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
 	s.True(expected)
 }
 

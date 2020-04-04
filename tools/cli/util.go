@@ -460,11 +460,11 @@ func getEventAttributes(e *eventpb.HistoryEvent) interface{} {
 }
 
 func isAttributeName(name string) bool {
-	name = "EventType" + name
-	for i := 0; i < len(eventpb.EventType_name); i++ {
-		if name == eventpb.EventType(i).String()+"EventAttributes" {
+	for _, eventTypeName := range eventpb.EventType_name {
+		if name == eventTypeName+"EventAttributes" {
 			return true
 		}
+
 	}
 	return false
 }

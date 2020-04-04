@@ -1088,7 +1088,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
-	s.Equal("temporalInternal:Timeout TimeoutTypeStartToClose", attributes.GetFailureReason())
+	s.Equal("temporalInternal:Timeout StartToClose", attributes.GetFailureReason())
 	s.Equal(memo, attributes.Memo)
 	s.Equal(searchAttr, attributes.SearchAttributes)
 
