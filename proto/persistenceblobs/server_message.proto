@@ -72,7 +72,6 @@ message ActivityInfo {
     int64 scheduleId = 33;
     bytes lastHeartbeatDetails = 34;
     google.protobuf.Timestamp lastHeartbeatUpdatedTime = 35;
-
 }
 
 message ShardInfo {
@@ -163,7 +162,6 @@ message HistoryTreeInfo {
     // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
     string info = 3;
 }
-
 
 message TimerInfo {
     int64 version = 1;
