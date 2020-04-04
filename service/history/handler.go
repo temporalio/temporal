@@ -522,7 +522,7 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 		tag.WorkflowRunIDBytes(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
-	if failedRequest != nil && failedRequest.GetCause() == eventpb.DecisionTaskFailedCauseUnhandledDecision {
+	if failedRequest != nil && failedRequest.GetCause() == eventpb.DecisionTaskFailedCause_UnhandledDecision {
 		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunIDBytes(token.GetRunId()))
 		namespace, err := h.GetNamespaceCache().GetNamespaceName(primitives.UUIDString(token.GetNamespaceId()))
 		var namespaceTag metrics.Tag

@@ -61,14 +61,14 @@ var defaultIndexedKeys = createDefaultIndexedKeys()
 
 func createDefaultIndexedKeys() map[string]interface{} {
 	defaultIndexedKeys := map[string]interface{}{
-		CustomStringField:     commonpb.IndexedValueTypeString,
-		CustomKeywordField:    commonpb.IndexedValueTypeKeyword,
-		CustomIntField:        commonpb.IndexedValueTypeInt,
-		CustomBoolField:       commonpb.IndexedValueTypeBool,
-		CustomDoubleField:     commonpb.IndexedValueTypeDouble,
-		CustomDatetimeField:   commonpb.IndexedValueTypeDatetime,
-		TemporalChangeVersion: commonpb.IndexedValueTypeKeyword,
-		BinaryChecksums:       commonpb.IndexedValueTypeKeyword,
+		CustomStringField:     commonpb.IndexedValueType_String,
+		CustomKeywordField:    commonpb.IndexedValueType_Keyword,
+		CustomIntField:        commonpb.IndexedValueType_Int,
+		CustomBoolField:       commonpb.IndexedValueType_Bool,
+		CustomDoubleField:     commonpb.IndexedValueType_Double,
+		CustomDatetimeField:   commonpb.IndexedValueType_Datetime,
+		TemporalChangeVersion: commonpb.IndexedValueType_Keyword,
+		BinaryChecksums:       commonpb.IndexedValueType_Keyword,
 	}
 	for k, v := range systemIndexedKeys {
 		defaultIndexedKeys[k] = v
@@ -83,15 +83,15 @@ func GetDefaultIndexedKeys() map[string]interface{} {
 
 // systemIndexedKeys is Temporal created visibility keys
 var systemIndexedKeys = map[string]interface{}{
-	NamespaceID:     commonpb.IndexedValueTypeKeyword,
-	WorkflowID:      commonpb.IndexedValueTypeKeyword,
-	RunID:           commonpb.IndexedValueTypeKeyword,
-	WorkflowType:    commonpb.IndexedValueTypeKeyword,
-	StartTime:       commonpb.IndexedValueTypeInt,
-	ExecutionTime:   commonpb.IndexedValueTypeInt,
-	CloseTime:       commonpb.IndexedValueTypeInt,
-	ExecutionStatus: commonpb.IndexedValueTypeInt,
-	HistoryLength:   commonpb.IndexedValueTypeInt,
+	NamespaceID:     commonpb.IndexedValueType_Keyword,
+	WorkflowID:      commonpb.IndexedValueType_Keyword,
+	RunID:           commonpb.IndexedValueType_Keyword,
+	WorkflowType:    commonpb.IndexedValueType_Keyword,
+	StartTime:       commonpb.IndexedValueType_Int,
+	ExecutionTime:   commonpb.IndexedValueType_Int,
+	CloseTime:       commonpb.IndexedValueType_Int,
+	ExecutionStatus: commonpb.IndexedValueType_Int,
+	HistoryLength:   commonpb.IndexedValueType_Int,
 }
 
 // IsSystemIndexedKey return true is key is system added

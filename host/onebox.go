@@ -710,8 +710,8 @@ func (c *cadenceImpl) createSystemNamespace() error {
 		},
 		Config: &persistence.NamespaceConfig{
 			Retention:                1,
-			HistoryArchivalStatus:    namespacepb.ArchivalStatusDisabled,
-			VisibilityArchivalStatus: namespacepb.ArchivalStatusDisabled,
+			HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
+			VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
 		},
 		ReplicationConfig: &persistence.NamespaceReplicationConfig{},
 		FailoverVersion:   common.EmptyVersion,

@@ -89,11 +89,11 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 	s.namespace = s.randomizeStr("integration-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.namespace, 1, namespacepb.ArchivalStatusDisabled, "", namespacepb.ArchivalStatusDisabled, ""))
+		s.registerNamespace(s.namespace, 1, namespacepb.ArchivalStatus_Disabled, "", namespacepb.ArchivalStatus_Disabled, ""))
 
 	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.foreignNamespace, 1, namespacepb.ArchivalStatusDisabled, "", namespacepb.ArchivalStatusDisabled, ""))
+		s.registerNamespace(s.foreignNamespace, 1, namespacepb.ArchivalStatus_Disabled, "", namespacepb.ArchivalStatus_Disabled, ""))
 
 	s.Require().NoError(s.registerArchivalNamespace())
 
@@ -215,9 +215,9 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 		},
 		Config: &persistence.NamespaceConfig{
 			Retention:                0,
-			HistoryArchivalStatus:    namespacepb.ArchivalStatusEnabled,
+			HistoryArchivalStatus:    namespacepb.ArchivalStatus_Enabled,
 			HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
-			VisibilityArchivalStatus: namespacepb.ArchivalStatusEnabled,
+			VisibilityArchivalStatus: namespacepb.ArchivalStatus_Enabled,
 			VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
 			BadBinaries:              namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		},

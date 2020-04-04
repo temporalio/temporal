@@ -139,7 +139,7 @@ func (r *nDCWorkflowImpl) revive() error {
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
 		state,
-		executionpb.WorkflowExecutionStatusRunning,
+		executionpb.WorkflowExecutionStatus_Running,
 	)
 }
 
@@ -227,7 +227,7 @@ func (r *nDCWorkflowImpl) failDecision(
 	if _, err := r.mutableState.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
-		eventpb.DecisionTaskFailedCauseFailoverCloseDecision,
+		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
 		nil,
 		identityHistoryService,
 		"",
@@ -271,7 +271,7 @@ func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
 
 	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateStatus(
 		persistence.WorkflowStateZombie,
-		executionpb.WorkflowExecutionStatusRunning,
+		executionpb.WorkflowExecutionStatus_Running,
 	)
 }
 

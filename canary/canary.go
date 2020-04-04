@@ -177,14 +177,14 @@ func (c *canaryImpl) createNamespace() error {
 	name := c.canaryNamespace
 	desc := "Namespace for running cadence canary workflows"
 	owner := "canary"
-	return c.canaryClient.createNamespace(name, desc, owner, namespacepb.ArchivalStatusDisabled)
+	return c.canaryClient.createNamespace(name, desc, owner, namespacepb.ArchivalStatus_Disabled)
 }
 
 func (c *canaryImpl) createArchivalNamespace() error {
 	name := archivalNamespace
 	desc := "Namespace used by cadence canary workflows to verify archival"
 	owner := "canary"
-	archivalStatus := namespacepb.ArchivalStatusEnabled
+	archivalStatus := namespacepb.ArchivalStatus_Enabled
 	return c.archivalClient.createNamespace(name, desc, owner, archivalStatus)
 }
 

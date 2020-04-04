@@ -155,7 +155,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -170,7 +170,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -226,7 +226,7 @@ GetHistoryLoop:
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
-		if lastEvent.EventType != eventpb.EventTypeWorkflowExecutionTerminated {
+		if lastEvent.EventType != eventpb.EventType_WorkflowExecutionTerminated {
 			s.Logger.Warn("Execution not terminated yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
@@ -308,7 +308,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -324,7 +324,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 
 		workflowComplete = true
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -407,7 +407,7 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 		if decisionCount < 2 {
 			decisionCount++
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeRecordMarker,
+				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "test-marker",
 				}},
@@ -415,7 +415,7 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 		}
 
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -449,10 +449,10 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 	s.Equal(int64(3), newTask.DecisionTask.GetPreviousStartedEventId())
 	s.Equal(int64(7), newTask.DecisionTask.GetStartedEventId())
 	s.Equal(4, len(newTask.DecisionTask.History.Events))
-	s.Equal(eventpb.EventTypeDecisionTaskCompleted, newTask.DecisionTask.History.Events[0].GetEventType())
-	s.Equal(eventpb.EventTypeMarkerRecorded, newTask.DecisionTask.History.Events[1].GetEventType())
-	s.Equal(eventpb.EventTypeDecisionTaskScheduled, newTask.DecisionTask.History.Events[2].GetEventType())
-	s.Equal(eventpb.EventTypeDecisionTaskStarted, newTask.DecisionTask.History.Events[3].GetEventType())
+	s.Equal(eventpb.EventType_DecisionTaskCompleted, newTask.DecisionTask.History.Events[0].GetEventType())
+	s.Equal(eventpb.EventType_MarkerRecorded, newTask.DecisionTask.History.Events[1].GetEventType())
+	s.Equal(eventpb.EventType_DecisionTaskScheduled, newTask.DecisionTask.History.Events[2].GetEventType())
+	s.Equal(eventpb.EventType_DecisionTaskStarted, newTask.DecisionTask.History.Events[3].GetEventType())
 }
 
 func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
@@ -491,7 +491,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -509,7 +509,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 
 		workflowComplete = true
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -617,7 +617,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		if attemptCount == maximumAttempts {
 			return nil, []*decisionpb.Decision{
 				{
-					DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+					DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 					Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 						Result: []byte("succeed-after-retry"),
 					}},
@@ -625,7 +625,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		}
 		return nil, []*decisionpb.Decision{
 			{
-				DecisionType: decisionpb.DecisionTypeFailWorkflowExecution,
+				DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
 					Reason:  "retryable-error",
 					Details: nil,
@@ -655,9 +655,9 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		s.True(err == nil, err)
 		events := s.getHistory(s.namespace, executions[i])
 		if i == maximumAttempts-1 {
-			s.Equal(eventpb.EventTypeWorkflowExecutionCompleted, events[len(events)-1].GetEventType())
+			s.Equal(eventpb.EventType_WorkflowExecutionCompleted, events[len(events)-1].GetEventType())
 		} else {
-			s.Equal(eventpb.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+			s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 		}
 		s.Equal(int32(i), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
@@ -692,7 +692,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 			if attemptCount == attempts {
 				return nil, []*decisionpb.Decision{
 					{
-						DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+						DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 						Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 							Result: []byte("succeed-after-retry"),
 						}},
@@ -700,7 +700,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 			}
 			return nil, []*decisionpb.Decision{
 				{
-					DecisionType: decisionpb.DecisionTypeFailWorkflowExecution,
+					DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 					Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
 						//Reason:  "retryable-error",
 						Reason:  errorReason,
@@ -753,19 +753,19 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
 	events := s.getHistory(s.namespace, executions[0])
-	s.Equal(eventpb.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
 	events = s.getHistory(s.namespace, executions[1])
-	s.Equal(eventpb.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
 	events = s.getHistory(s.namespace, executions[2])
-	s.Equal(eventpb.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionFailed, events[len(events)-1].GetEventType())
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// Fail error reason
@@ -809,7 +809,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
 	events = s.getHistory(s.namespace, executions[0])
-	s.Equal(eventpb.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionFailed, events[len(events)-1].GetEventType())
 	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
@@ -864,7 +864,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		if attemptCount == 2 {
 			return nil, []*decisionpb.Decision{
 				{
-					DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+					DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 					Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 						Result: []byte("cron-test-result"),
 					}},
@@ -872,7 +872,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		}
 		return nil, []*decisionpb.Decision{
 			{
-				DecisionType: decisionpb.DecisionTypeFailWorkflowExecution,
+				DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
 					Reason:  "cron-test-error",
 					Details: nil,
@@ -936,9 +936,9 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.NoError(terminateErr)
 	events := s.getHistory(s.namespace, executions[0])
 	lastEvent := events[len(events)-1]
-	s.Equal(eventpb.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
-	s.Equal(commonpb.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
+	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
 	s.Equal("cron-test-error", attributes.GetFailureReason())
 	s.Equal(0, len(attributes.GetLastCompletionResult()))
 	s.Equal(memo, attributes.Memo)
@@ -946,9 +946,9 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	events = s.getHistory(s.namespace, executions[1])
 	lastEvent = events[len(events)-1]
-	s.Equal(eventpb.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
-	s.Equal(commonpb.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
+	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
 	s.Equal("", attributes.GetFailureReason())
 	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
 	s.Equal(memo, attributes.Memo)
@@ -956,9 +956,9 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	events = s.getHistory(s.namespace, executions[2])
 	lastEvent = events[len(events)-1]
-	s.Equal(eventpb.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
-	s.Equal(commonpb.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
+	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
 	s.Equal("cron-test-error", attributes.GetFailureReason())
 	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
 	s.Equal(memo, attributes.Memo)
@@ -1058,7 +1058,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 		executions = append(executions, execution)
 		return nil, []*decisionpb.Decision{
 			{
-				DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 
 				Attributes: &decisionpb.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &decisionpb.StartTimerDecisionAttributes{
 					TimerId:                   "timer-id",
@@ -1085,10 +1085,10 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	// check when workflow timeout, continueAsNew event contains expected fields
 	events := s.getHistory(s.namespace, executions[0])
 	lastEvent := events[len(events)-1]
-	s.Equal(eventpb.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
 	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
-	s.Equal(commonpb.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
-	s.Equal("temporalInternal:Timeout TimeoutTypeStartToClose", attributes.GetFailureReason())
+	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
+	s.Equal("temporalInternal:Timeout StartToClose", attributes.GetFailureReason())
 	s.Equal(memo, attributes.Memo)
 	s.Equal(searchAttr, attributes.SearchAttributes)
 
@@ -1098,7 +1098,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	// check new run contains expected fields
 	events = s.getHistory(s.namespace, executions[1])
 	firstEvent := events[0]
-	s.Equal(eventpb.EventTypeWorkflowExecutionStarted, firstEvent.GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionStarted, firstEvent.GetEventType())
 	startAttributes := firstEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(memo, startAttributes.Memo)
 	s.Equal(searchAttr, startAttributes.SearchAttributes)
@@ -1146,7 +1146,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, timerCounter))
 			return []byte(strconv.Itoa(int(timerCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeStartTimer,
+				DecisionType: decisionpb.DecisionType_StartTimer,
 				Attributes: &decisionpb.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &decisionpb.StartTimerDecisionAttributes{
 					TimerId:                   fmt.Sprintf("timer-id-%d", timerCounter),
 					StartToFireTimeoutSeconds: 1,
@@ -1156,7 +1156,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 
 		workflowComplete = true
 		return []byte(strconv.Itoa(int(timerCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1223,7 +1223,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 
 		// Count signals
 		for _, event := range h.Events[previousStartedEventID:] {
-			if event.GetEventType() == eventpb.EventTypeWorkflowExecutionSignaled {
+			if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 				signalCount++
 			}
 		}
@@ -1248,7 +1248,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1329,7 +1329,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 				})
 			s.NoError(err)
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: "test-activity-type"},
@@ -1343,7 +1343,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 			}}, nil
 		} else if previousStartedEventID > 0 && signalEvent == nil {
 			for _, event := range history.Events[previousStartedEventID:] {
-				if event.GetEventType() == eventpb.EventTypeWorkflowExecutionSignaled {
+				if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 					signalEvent = event
 				}
 			}
@@ -1351,7 +1351,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1385,9 +1385,9 @@ func (s *integrationSuite) TestBufferedEvents() {
 	s.NoError(err)
 	s.NotNil(histResp.History.Events)
 	s.True(len(histResp.History.Events) >= 6)
-	s.Equal(histResp.History.Events[3].GetEventType(), eventpb.EventTypeDecisionTaskCompleted)
-	s.Equal(histResp.History.Events[4].GetEventType(), eventpb.EventTypeActivityTaskScheduled)
-	s.Equal(histResp.History.Events[5].GetEventType(), eventpb.EventTypeWorkflowExecutionSignaled)
+	s.Equal(histResp.History.Events[3].GetEventType(), eventpb.EventType_DecisionTaskCompleted)
+	s.Equal(histResp.History.Events[4].GetEventType(), eventpb.EventType_ActivityTaskScheduled)
+	s.Equal(histResp.History.Events[5].GetEventType(), eventpb.EventType_WorkflowExecutionSignaled)
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
@@ -1448,7 +1448,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 			s.NoError(err)
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: "test-activity-type"},
@@ -1464,7 +1464,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1494,7 +1494,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.NoError(err)
-	s.Equal(executionpb.WorkflowExecutionStatusRunning, dweResponse.WorkflowExecutionInfo.GetStatus())
+	s.Equal(executionpb.WorkflowExecutionStatus_Running, dweResponse.WorkflowExecutionInfo.GetStatus())
 	s.Equal(int64(5), dweResponse.WorkflowExecutionInfo.HistoryLength) // DecisionStarted, DecisionCompleted, ActivityScheduled
 	s.Equal(1, len(dweResponse.PendingActivities))
 	s.Equal("test-activity-type", dweResponse.PendingActivities[0].ActivityType.GetName())
@@ -1505,7 +1505,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.NoError(err)
-	s.Equal(executionpb.WorkflowExecutionStatusRunning, dweResponse.WorkflowExecutionInfo.GetStatus())
+	s.Equal(executionpb.WorkflowExecutionStatus_Running, dweResponse.WorkflowExecutionInfo.GetStatus())
 	s.Equal(int64(8), dweResponse.WorkflowExecutionInfo.HistoryLength) // ActivityTaskStarted, ActivityTaskCompleted, DecisionTaskScheduled
 	s.Equal(0, len(dweResponse.PendingActivities))
 
@@ -1516,7 +1516,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.NoError(err)
-	s.Equal(executionpb.WorkflowExecutionStatusCompleted, dweResponse.WorkflowExecutionInfo.GetStatus())
+	s.Equal(executionpb.WorkflowExecutionStatus_Completed, dweResponse.WorkflowExecutionInfo.GetStatus())
 	s.Equal(int64(11), dweResponse.WorkflowExecutionInfo.HistoryLength) // DecisionStarted, DecisionCompleted, WorkflowCompleted
 }
 
@@ -1549,7 +1549,7 @@ func (s *integrationSuite) TestVisibility() {
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		return []byte{}, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -1572,7 +1572,7 @@ func (s *integrationSuite) TestVisibility() {
 
 	// wait until the start workflow is done
 	var nextToken []byte
-	historyEventFilterType := filterpb.HistoryEventFilterTypeCloseEvent
+	historyEventFilterType := filterpb.HistoryEventFilterType_CloseEvent
 	for {
 		historyResponse, historyErr := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: startRequest.Namespace,
@@ -1721,7 +1721,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 				childExecutionStarted = true
 
 				return nil, []*decisionpb.Decision{{
-					DecisionType: decisionpb.DecisionTypeStartChildWorkflowExecution,
+					DecisionType: decisionpb.DecisionType_StartChildWorkflowExecution,
 					Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 						WorkflowId:                          childID,
 						WorkflowType:                        childWorkflowType,
@@ -1737,15 +1737,15 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 				}}, nil
 			} else if previousStartedEventID > 0 {
 				for _, event := range history.Events[previousStartedEventID:] {
-					if event.GetEventType() == eventpb.EventTypeChildWorkflowExecutionStarted {
+					if event.GetEventType() == eventpb.EventType_ChildWorkflowExecutionStarted {
 						startedEvent = event
 						return nil, []*decisionpb.Decision{}, nil
 					}
 
-					if event.GetEventType() == eventpb.EventTypeChildWorkflowExecutionCompleted {
+					if event.GetEventType() == eventpb.EventType_ChildWorkflowExecutionCompleted {
 						completedEvent = event
 						return nil, []*decisionpb.Decision{{
-							DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+							DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 							Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 								Result: []byte("Done"),
 							}},
@@ -1769,7 +1769,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		s.Logger.Info("Processing decision task for Child ", tag.WorkflowID(execution.WorkflowId))
 		childComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Child Done"),
 			}},
@@ -1813,7 +1813,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.NotNil(startedEvent)
 	s.True(childComplete)
 	s.NotNil(childStartedEvent)
-	s.Equal(eventpb.EventTypeWorkflowExecutionStarted, childStartedEvent.GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionStarted, childStartedEvent.GetEventType())
 	s.Equal(s.namespace, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetParentWorkflowNamespace())
 	s.Equal(parentID, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().ParentWorkflowExecution.GetWorkflowId())
 	s.Equal(we.GetRunId(), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().ParentWorkflowExecution.GetRunId())
@@ -1886,7 +1886,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 			childExecutionStarted = true
 			startChildWorkflowTS = time.Now()
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeStartChildWorkflowExecution,
+				DecisionType: decisionpb.DecisionType_StartChildWorkflowExecution,
 				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 					WorkflowId:                          childID,
 					WorkflowType:                        childWorkflowType,
@@ -1900,10 +1900,10 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 			}}, nil
 		}
 		for _, event := range history.Events[previousStartedEventID:] {
-			if event.GetEventType() == eventpb.EventTypeChildWorkflowExecutionTerminated {
+			if event.GetEventType() == eventpb.EventType_ChildWorkflowExecutionTerminated {
 				terminatedEvent = event
 				return nil, []*decisionpb.Decision{{
-					DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+					DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 					Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 						Result: []byte("Done"),
 					}},
@@ -1919,7 +1919,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 
 		s.Logger.Info("Processing decision task for Child ", tag.WorkflowID(execution.WorkflowId))
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes:   &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{}}}}, nil
 	}
 
@@ -2077,14 +2077,14 @@ GetHistoryLoop:
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
-		if lastEvent.GetEventType() != eventpb.EventTypeWorkflowExecutionTimedOut {
+		if lastEvent.GetEventType() != eventpb.EventType_WorkflowExecutionTimedOut {
 			s.Logger.Warn("Execution not timedout yet")
 			time.Sleep(200 * time.Millisecond)
 			continue GetHistoryLoop
 		}
 
 		timeoutEventAttributes := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		s.Equal(eventpb.TimeoutTypeStartToClose, timeoutEventAttributes.TimeoutType)
+		s.Equal(eventpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
 		workflowComplete = true
 		break GetHistoryLoop
 	}
@@ -2157,7 +2157,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		// Count signals
 		for _, event := range history.Events[previousStartedEventID:] {
-			if event.GetEventType() == eventpb.EventTypeWorkflowExecutionSignaled {
+			if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 				signalCount++
 			}
 		}
@@ -2180,7 +2180,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -2203,10 +2203,10 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		s.Logger.Warn(fmt.Sprintf("PrevStarted: %v, StartedEventID: %v, Size: %v", previousStartedEventID, startedEventID,
 			len(history.Events)))
 		lastDecisionEvent := history.Events[startedEventID-1]
-		s.Equal(eventpb.EventTypeDecisionTaskStarted, lastDecisionEvent.GetEventType())
+		s.Equal(eventpb.EventType_DecisionTaskStarted, lastDecisionEvent.GetEventType())
 		lastDecisionTimestamp = lastDecisionEvent.GetTimestamp()
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -2292,14 +2292,14 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	var lastDecisionStartedEvent *eventpb.HistoryEvent
 	lastIdx := 0
 	for i, e := range events {
-		if e.GetEventType() == eventpb.EventTypeDecisionTaskStarted {
+		if e.GetEventType() == eventpb.EventType_DecisionTaskStarted {
 			lastDecisionStartedEvent = e
 			lastIdx = i
 		}
 		lastEvent = e
 	}
 	s.NotNil(lastEvent)
-	s.Equal(eventpb.EventTypeWorkflowExecutionCompleted, lastEvent.GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionCompleted, lastEvent.GetEventType())
 	s.Logger.Info(fmt.Sprintf("Last Decision Time: %v, Last Decision History Timestamp: %v, Complete Timestamp: %v",
 		time.Unix(0, lastDecisionTimestamp), time.Unix(0, lastDecisionStartedEvent.GetTimestamp()),
 		time.Unix(0, lastEvent.GetTimestamp())))
@@ -2309,8 +2309,8 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	s.Equal(2, len(events)-lastIdx-1)
 	decisionCompletedEvent := events[lastIdx+1]
 	workflowCompletedEvent := events[lastIdx+2]
-	s.Equal(eventpb.EventTypeDecisionTaskCompleted, decisionCompletedEvent.GetEventType())
-	s.Equal(eventpb.EventTypeWorkflowExecutionCompleted, workflowCompletedEvent.GetEventType())
+	s.Equal(eventpb.EventType_DecisionTaskCompleted, decisionCompletedEvent.GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionCompleted, workflowCompletedEvent.GetEventType())
 }
 
 func (s *integrationSuite) TestDescribeTaskList() {
@@ -2351,7 +2351,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -2366,7 +2366,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 		}
 
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -2404,16 +2404,16 @@ func (s *integrationSuite) TestDescribeTaskList() {
 	before := time.Now()
 
 	// when no one polling on the tasklist (activity or decision), there shall be no poller information
-	pollerInfos := testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListTypeActivity)
+	pollerInfos := testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListType_Activity)
 	s.Empty(pollerInfos)
-	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListTypeDecision)
+	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListType_Decision)
 	s.Empty(pollerInfos)
 
 	_, errDecision := poller.PollAndProcessDecisionTask(false, false)
 	s.NoError(errDecision)
-	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListTypeActivity)
+	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListType_Activity)
 	s.Empty(pollerInfos)
-	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListTypeDecision)
+	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListType_Decision)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
@@ -2421,12 +2421,12 @@ func (s *integrationSuite) TestDescribeTaskList() {
 
 	errActivity := poller.PollAndProcessActivityTask(false)
 	s.NoError(errActivity)
-	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListTypeActivity)
+	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListType_Activity)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
-	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListTypeDecision)
+	pollerInfos = testDescribeTaskList(s.namespace, &tasklistpb.TaskList{Name: tl}, tasklistpb.TaskListType_Decision)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
@@ -2475,14 +2475,14 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 
 		// Count signals
 		for _, event := range history.Events[previousStartedEventID:] {
-			if event.GetEventType() == eventpb.EventTypeWorkflowExecutionSignaled {
+			if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 				signalCount++
 			}
 		}
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -2569,7 +2569,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 			s.NoError(err)
 
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeContinueAsNewWorkflowExecution,
+				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
 					TaskList:                            &tasklistpb.TaskList{Name: tl},
@@ -2582,7 +2582,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -2648,7 +2648,7 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 		if isFirst {
 			isFirst = false
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeRecordMarker,
+				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "test-marker",
 				}},
@@ -2656,7 +2656,7 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 		}
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes:   &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{}}}}, nil
 	}
 
@@ -2691,8 +2691,8 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 	for i := 0; i < 3; i++ {
 		events := s.getHistory(s.namespace, workflowExecution)
 		if len(events) >= 8 {
-			s.Equal(eventpb.EventTypeDecisionTaskTimedOut, events[7].GetEventType())
-			s.Equal(eventpb.TimeoutTypeStartToClose, events[7].GetDecisionTaskTimedOutEventAttributes().GetTimeoutType())
+			s.Equal(eventpb.EventType_DecisionTaskTimedOut, events[7].GetEventType())
+			s.Equal(eventpb.TimeoutType_StartToClose, events[7].GetDecisionTaskTimedOutEventAttributes().GetTimeoutType())
 			decisionTaskTimeout = true
 			break
 		}
@@ -2748,7 +2748,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 			createUserTimer = true
 
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeStartTimer,
+				DecisionType: decisionpb.DecisionType_StartTimer,
 				Attributes: &decisionpb.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &decisionpb.StartTimerDecisionAttributes{
 					TimerId:                   "timer-id-1",
 					StartToFireTimeoutSeconds: 5,
@@ -2758,14 +2758,14 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 
 		// Count signals
 		for _, event := range h.Events[previousStartedEventID:] {
-			if event.GetEventType() == eventpb.EventTypeWorkflowExecutionSignaled {
+			if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 				signalCount++
 			}
 		}
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -2863,7 +2863,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 			localActivityDone = true
 
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeRecordMarker,
+				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "local activity marker",
 					Details:    []byte("local activity data"),
@@ -2889,7 +2889,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		}
 
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -2927,8 +2927,8 @@ WaitForStickyTimeoutLoop:
 	for i := 0; i < 10; i++ {
 		events := s.getHistory(s.namespace, workflowExecution)
 		for _, event := range events {
-			if event.GetEventType() == eventpb.EventTypeDecisionTaskTimedOut {
-				s.Equal(eventpb.TimeoutTypeScheduleToStart, event.GetDecisionTaskTimedOutEventAttributes().GetTimeoutType())
+			if event.GetEventType() == eventpb.EventType_DecisionTaskTimedOut {
+				s.Equal(eventpb.TimeoutType_ScheduleToStart, event.GetDecisionTaskTimedOutEventAttributes().GetTimeoutType())
 				stickyTimeout = true
 				break WaitForStickyTimeoutLoop
 			}
@@ -2962,7 +2962,7 @@ WaitForStickyTimeoutLoop:
 	decisionTaskFailed := false
 	events := s.getHistory(s.namespace, workflowExecution)
 	for _, event := range events {
-		if event.GetEventType() == eventpb.EventTypeDecisionTaskFailed {
+		if event.GetEventType() == eventpb.EventType_DecisionTaskFailed {
 			decisionTaskFailed = true
 			break
 		}
@@ -2978,9 +2978,9 @@ WaitForStickyTimeoutLoop:
 	events = s.getHistory(s.namespace, workflowExecution)
 	for _, event := range events {
 		switch event.GetEventType() {
-		case eventpb.EventTypeDecisionTaskFailed:
+		case eventpb.EventType_DecisionTaskFailed:
 			failedDecisions++
-		case eventpb.EventTypeWorkflowExecutionCompleted:
+		case eventpb.EventType_WorkflowExecutionCompleted:
 			workflowComplete = true
 		}
 	}
@@ -3031,7 +3031,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 			localActivityDone = true
 
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeRecordMarker,
+				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "local activity marker",
 					Details:    []byte("local activity data"),
@@ -3045,7 +3045,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 		}
 
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -3089,8 +3089,8 @@ WaitForStickyTimeoutLoop:
 	for i := 0; i < 10; i++ {
 		events := s.getHistory(s.namespace, workflowExecution)
 		for _, event := range events {
-			if event.GetEventType() == eventpb.EventTypeDecisionTaskTimedOut {
-				s.Equal(eventpb.TimeoutTypeScheduleToStart, event.GetDecisionTaskTimedOutEventAttributes().GetTimeoutType())
+			if event.GetEventType() == eventpb.EventType_DecisionTaskTimedOut {
+				s.Equal(eventpb.TimeoutType_ScheduleToStart, event.GetDecisionTaskTimedOutEventAttributes().GetTimeoutType())
 				stickyTimeout = true
 				break WaitForStickyTimeoutLoop
 			}
@@ -3124,7 +3124,7 @@ WaitForStickyTimeoutLoop:
 	decisionTaskFailed := false
 	events := s.getHistory(s.namespace, workflowExecution)
 	for _, event := range events {
-		if event.GetEventType() == eventpb.EventTypeDecisionTaskFailed {
+		if event.GetEventType() == eventpb.EventType_DecisionTaskFailed {
 			decisionTaskFailed = true
 			break
 		}
@@ -3140,9 +3140,9 @@ WaitForStickyTimeoutLoop:
 	events = s.getHistory(s.namespace, workflowExecution)
 	for _, event := range events {
 		switch event.GetEventType() {
-		case eventpb.EventTypeDecisionTaskFailed:
+		case eventpb.EventType_DecisionTaskFailed:
 			failedDecisions++
-		case eventpb.EventTypeWorkflowExecutionCompleted:
+		case eventpb.EventType_WorkflowExecutionCompleted:
 			workflowComplete = true
 		}
 	}
@@ -3190,13 +3190,13 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 		if !firstDecision {
 			firstDecision = true
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeRecordMarker,
+				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "some random marker name",
 					Details:    []byte("some random marker details"),
 				}},
 			}, {
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "Activity-1",
 					ActivityType:                  &commonpb.ActivityType{Name: "ActivityType"},
@@ -3214,7 +3214,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 		if !secondDecision {
 			secondDecision = true
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeRecordMarker,
+				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "some random marker name",
 					Details:    []byte("some random marker details"),
@@ -3224,7 +3224,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -3285,11 +3285,11 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	var scheduleEvent, startedEvent, completedEvent *eventpb.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
-		case eventpb.EventTypeActivityTaskScheduled:
+		case eventpb.EventType_ActivityTaskScheduled:
 			scheduleEvent = event
-		case eventpb.EventTypeActivityTaskStarted:
+		case eventpb.EventType_ActivityTaskStarted:
 			startedEvent = event
-		case eventpb.EventTypeActivityTaskCompleted:
+		case eventpb.EventType_ActivityTaskCompleted:
 			completedEvent = event
 		}
 	}
@@ -3414,7 +3414,7 @@ func (s *integrationSuite) TestCancelTimer() {
 		if !timerScheduled {
 			timerScheduled = true
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeStartTimer,
+				DecisionType: decisionpb.DecisionType_StartTimer,
 				Attributes: &decisionpb.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &decisionpb.StartTimerDecisionAttributes{
 					TimerId:                   fmt.Sprintf("%v", timerID),
 					StartToFireTimeoutSeconds: timer,
@@ -3430,9 +3430,9 @@ func (s *integrationSuite) TestCancelTimer() {
 		s.NoError(err)
 		for _, event := range resp.History.Events {
 			switch event.GetEventType() {
-			case eventpb.EventTypeWorkflowExecutionSignaled:
+			case eventpb.EventType_WorkflowExecutionSignaled:
 				signalDelivered = true
-			case eventpb.EventTypeTimerCanceled:
+			case eventpb.EventType_TimerCanceled:
 				timerCancelled = true
 			}
 		}
@@ -3443,7 +3443,7 @@ func (s *integrationSuite) TestCancelTimer() {
 
 		if !timerCancelled {
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeCancelTimer,
+				DecisionType: decisionpb.DecisionType_CancelTimer,
 				Attributes: &decisionpb.Decision_CancelTimerDecisionAttributes{CancelTimerDecisionAttributes: &decisionpb.CancelTimerDecisionAttributes{
 					TimerId: fmt.Sprintf("%v", timerID),
 				}},
@@ -3452,7 +3452,7 @@ func (s *integrationSuite) TestCancelTimer() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -3498,11 +3498,11 @@ func (s *integrationSuite) TestCancelTimer() {
 	s.NoError(err)
 	for _, event := range resp.History.Events {
 		switch event.GetEventType() {
-		case eventpb.EventTypeWorkflowExecutionSignaled:
+		case eventpb.EventType_WorkflowExecutionSignaled:
 			signalDelivered = true
-		case eventpb.EventTypeTimerCanceled:
+		case eventpb.EventType_TimerCanceled:
 			timerCancelled = true
-		case eventpb.EventTypeTimerFired:
+		case eventpb.EventType_TimerFired:
 			s.Fail("timer got fired")
 		}
 	}
@@ -3545,7 +3545,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		if !timerScheduled {
 			timerScheduled = true
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeStartTimer,
+				DecisionType: decisionpb.DecisionType_StartTimer,
 				Attributes: &decisionpb.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &decisionpb.StartTimerDecisionAttributes{
 					TimerId:                   fmt.Sprintf("%v", timerID),
 					StartToFireTimeoutSeconds: timer,
@@ -3561,9 +3561,9 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		s.NoError(err)
 		for _, event := range resp.History.Events {
 			switch event.GetEventType() {
-			case eventpb.EventTypeWorkflowExecutionSignaled:
+			case eventpb.EventType_WorkflowExecutionSignaled:
 				signalDelivered = true
-			case eventpb.EventTypeTimerCanceled:
+			case eventpb.EventType_TimerCanceled:
 				timerCancelled = true
 			}
 		}
@@ -3575,7 +3575,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		if !timerCancelled {
 			time.Sleep(time.Duration(2*timer) * time.Second)
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeCancelTimer,
+				DecisionType: decisionpb.DecisionType_CancelTimer,
 				Attributes: &decisionpb.Decision_CancelTimerDecisionAttributes{CancelTimerDecisionAttributes: &decisionpb.CancelTimerDecisionAttributes{
 					TimerId: fmt.Sprintf("%v", timerID),
 				}},
@@ -3584,7 +3584,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 
 		workflowComplete = true
 		return nil, []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -3630,11 +3630,11 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	s.NoError(err)
 	for _, event := range resp.History.Events {
 		switch event.GetEventType() {
-		case eventpb.EventTypeWorkflowExecutionSignaled:
+		case eventpb.EventType_WorkflowExecutionSignaled:
 			signalDelivered = true
-		case eventpb.EventTypeTimerCanceled:
+		case eventpb.EventType_TimerCanceled:
 			timerCancelled = true
-		case eventpb.EventTypeTimerFired:
+		case eventpb.EventType_TimerFired:
 			s.Fail("timer got fired")
 		}
 	}
@@ -3652,7 +3652,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	dtHandler := func(execution *executionpb.WorkflowExecution, workflowType *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		return []byte(strconv.Itoa(1)), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -3711,7 +3711,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	s.Nil(historyErr)
 	history := historyResponse.History
 	firstEvent := history.Events[0]
-	s.Equal(eventpb.EventTypeWorkflowExecutionStarted, firstEvent.GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionStarted, firstEvent.GetEventType())
 	startdEventAttributes := firstEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(memo, startdEventAttributes.Memo)
 

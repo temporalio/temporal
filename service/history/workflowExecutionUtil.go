@@ -151,7 +151,7 @@ func retryWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			eventpb.DecisionTaskFailedCauseForceCloseDecision,
+			eventpb.DecisionTaskFailedCause_ForceCloseDecision,
 		); err != nil {
 			return nil, err
 		}
@@ -178,7 +178,7 @@ func timeoutWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			eventpb.DecisionTaskFailedCauseForceCloseDecision,
+			eventpb.DecisionTaskFailedCause_ForceCloseDecision,
 		); err != nil {
 			return err
 		}
@@ -202,7 +202,7 @@ func terminateWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			eventpb.DecisionTaskFailedCauseForceCloseDecision,
+			eventpb.DecisionTaskFailedCause_ForceCloseDecision,
 		); err != nil {
 			return err
 		}

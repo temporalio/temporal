@@ -228,7 +228,7 @@ func (s *cliAppSuite) TestNamespaceDescribe_Failed() {
 }
 
 var (
-	eventType = eventpb.EventTypeWorkflowExecutionStarted
+	eventType = eventpb.EventType_WorkflowExecutionStarted
 
 	getWorkflowExecutionHistoryResponse = &workflowservice.GetWorkflowExecutionHistoryResponse{
 		History: &eventpb.History{
@@ -393,7 +393,7 @@ func (s *cliAppSuite) TestQueryWorkflow_Failed() {
 }
 
 var (
-	status = executionpb.WorkflowExecutionStatusCompleted
+	status = executionpb.WorkflowExecutionStatus_Completed
 
 	listClosedWorkflowExecutionsResponse = &workflowservice.ListClosedWorkflowExecutionsResponse{
 		Executions: []*executionpb.WorkflowExecutionInfo{
@@ -710,16 +710,16 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 		"TestKey": []byte("testValue"),
 	}
 	execution := &executionpb.WorkflowExecutionInfo{
-		Status: executionpb.WorkflowExecutionStatusRunning,
+		Status: executionpb.WorkflowExecutionStatus_Running,
 		Memo:   &commonpb.Memo{Fields: fields},
 	}
-	s.Equal("{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
+	s.Equal("{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
 
 	fields["TestKey2"] = []byte(`anotherTestValue`)
 	execution.Memo = &commonpb.Memo{Fields: fields}
 	got := anyToString(execution, true, 0)
-	expected := got == "{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
-		got == "{Status:WorkflowExecutionStatusRunning, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
+	expected := got == "{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||
+		got == "{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue, TestKey2:anotherTestValue}}}"
 	s.True(expected)
 }
 
@@ -730,7 +730,7 @@ func (s *cliAppSuite) TestIsAttributeName() {
 
 func (s *cliAppSuite) TestGetWorkflowIdReusePolicy() {
 	res := getWorkflowIDReusePolicy(2)
-	s.Equal(res.String(), commonpb.WorkflowIdReusePolicyRejectDuplicate.String())
+	s.Equal(res.String(), commonpb.WorkflowIdReusePolicy_RejectDuplicate.String())
 }
 
 func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_ExceedRange() {

@@ -210,7 +210,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 	_, err = resetMutableState.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
-		decision.StartedID, eventpb.DecisionTaskFailedCauseResetWorkflow,
+		decision.StartedID, eventpb.DecisionTaskFailedCause_ResetWorkflow,
 		nil,
 		identityHistoryService,
 		resetReason,
@@ -536,7 +536,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 	if len(lastEvents) > 0 {
 		lastEvent := lastEvents[len(lastEvents)-1]
-		if lastEvent.GetEventType() == eventpb.EventTypeWorkflowExecutionContinuedAsNew {
+		if lastEvent.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
 			nextRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 		}
 	}
@@ -550,7 +550,7 @@ func (r *workflowResetterImpl) reapplyEvents(
 
 	for _, event := range events {
 		switch event.GetEventType() {
-		case eventpb.EventTypeWorkflowExecutionSignaled:
+		case eventpb.EventType_WorkflowExecutionSignaled:
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),

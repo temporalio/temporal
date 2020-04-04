@@ -498,9 +498,9 @@ func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *ma
 
 		workerResponse := result.workerResponse
 		switch workerResponse.GetCompletedRequest().GetCompletedType() {
-		case querypb.QueryTaskCompletedTypeCompleted:
+		case querypb.QueryResultType_Answered:
 			return &matchingservice.QueryWorkflowResponse{QueryResult: workerResponse.GetCompletedRequest().GetQueryResult()}, nil
-		case querypb.QueryTaskCompletedTypeFailed:
+		case querypb.QueryResultType_Failed:
 			return nil, serviceerror.NewQueryFailed(workerResponse.GetCompletedRequest().GetErrorMessage())
 		default:
 			return nil, serviceerror.NewInternal("unknown query completed type")
@@ -550,7 +550,7 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request 
 func (e *matchingEngineImpl) DescribeTaskList(ctx context.Context, request *matchingservice.DescribeTaskListRequest) (*matchingservice.DescribeTaskListResponse, error) {
 	namespaceID := request.GetNamespaceId()
 	taskListType := persistence.TaskListTypeDecision
-	if request.DescRequest.GetTaskListType() == tasklistpb.TaskListTypeActivity {
+	if request.DescRequest.GetTaskListType() == tasklistpb.TaskListType_Activity {
 		taskListType = persistence.TaskListTypeActivity
 	}
 	taskListName := request.DescRequest.TaskList.GetName()

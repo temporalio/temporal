@@ -102,14 +102,14 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 		Namespace:        testNamespace,
 		Execution:        testWorkflowExecution,
 		WorkflowTypeName: testWorkflowTypeName,
-		Status:           executionpb.WorkflowExecutionStatusCompleted,
+		Status:           executionpb.WorkflowExecutionStatus_Completed,
 	}
 	request2 := &p.RecordWorkflowExecutionClosedRequest{
 		NamespaceID:      testNamespaceUUID,
 		Namespace:        testNamespace,
 		Execution:        testWorkflowExecution,
 		WorkflowTypeName: testWorkflowTypeName,
-		Status:           executionpb.WorkflowExecutionStatusFailed,
+		Status:           executionpb.WorkflowExecutionStatus_Failed,
 	}
 
 	s.persistence.On("RecordWorkflowExecutionClosed", request).Return(nil).Once()
@@ -249,7 +249,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByStatus() {
 	}
 	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: req,
-		Status:                        executionpb.WorkflowExecutionStatusFailed,
+		Status:                        executionpb.WorkflowExecutionStatus_Failed,
 	}
 	s.persistence.On("ListClosedWorkflowExecutionsByStatus", request).Return(nil, nil).Once()
 	_, err := s.client.ListClosedWorkflowExecutionsByStatus(request)

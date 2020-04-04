@@ -264,7 +264,7 @@ func (p *visibilitySamplingClient) GetName() string {
 
 func getRequestPriority(request *RecordWorkflowExecutionClosedRequest) int {
 	priority := 0
-	if request.Status == executionpb.WorkflowExecutionStatusCompleted {
+	if request.Status == executionpb.WorkflowExecutionStatus_Completed {
 		priority = 1 // low priority for completed workflows
 	}
 	return priority

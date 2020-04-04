@@ -136,7 +136,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 	if state != persistence.WorkflowStateZombie {
 		if err := m.msb.UpdateWorkflowStateStatus(
 			persistence.WorkflowStateRunning,
-			executionpb.WorkflowExecutionStatusRunning,
+			executionpb.WorkflowExecutionStatus_Running,
 		); err != nil {
 			return nil, err
 		}
@@ -252,7 +252,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskTimedOutEvent
 ) error {
 	incrementAttempt := true
 	// Do not increment decision attempt in the case of sticky timeout to prevent creating next decision as transient
-	if timeoutType == eventpb.TimeoutTypeScheduleToStart {
+	if timeoutType == eventpb.TimeoutType_ScheduleToStart {
 		incrementAttempt = false
 	}
 	m.FailDecision(incrementAttempt)
@@ -275,9 +275,9 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduleToStartTime
 	// Clear stickiness whenever decision fails
 	m.msb.ClearStickyness()
 
-	event := m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, 0, eventpb.TimeoutTypeScheduleToStart)
+	event := m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, 0, eventpb.TimeoutType_ScheduleToStart)
 
-	if err := m.ReplicateDecisionTaskTimedOutEvent(eventpb.TimeoutTypeScheduleToStart); err != nil {
+	if err := m.ReplicateDecisionTaskTimedOutEvent(eventpb.TimeoutType_ScheduleToStart); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -534,8 +534,8 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 	}
 
 	// always clear decision attempt for reset
-	if cause == eventpb.DecisionTaskFailedCauseResetWorkflow ||
-		cause == eventpb.DecisionTaskFailedCauseFailoverCloseDecision {
+	if cause == eventpb.DecisionTaskFailedCause_ResetWorkflow ||
+		cause == eventpb.DecisionTaskFailedCause_FailoverCloseDecision {
 		m.msb.executionInfo.DecisionAttempt = 0
 	}
 	return event, nil
@@ -559,10 +559,10 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskTimedOutEvent(
 	var event *eventpb.HistoryEvent
 	// Avoid creating new history events when decisions are continuously timing out
 	if dt.Attempt == 0 {
-		event = m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, eventpb.TimeoutTypeStartToClose)
+		event = m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, eventpb.TimeoutType_StartToClose)
 	}
 
-	if err := m.ReplicateDecisionTaskTimedOutEvent(eventpb.TimeoutTypeStartToClose); err != nil {
+	if err := m.ReplicateDecisionTaskTimedOutEvent(eventpb.TimeoutType_StartToClose); err != nil {
 		return nil, err
 	}
 	return event, nil

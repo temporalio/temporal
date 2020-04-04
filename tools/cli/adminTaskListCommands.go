@@ -37,9 +37,9 @@ func AdminDescribeTaskList(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	taskList := getRequiredOption(c, FlagTaskList)
-	taskListType := tasklistpb.TaskListTypeDecision
+	taskListType := tasklistpb.TaskListType_Decision
 	if strings.ToLower(c.String(FlagTaskListType)) == "activity" {
-		taskListType = tasklistpb.TaskListTypeActivity
+		taskListType = tasklistpb.TaskListType_Activity
 	}
 
 	ctx, cancel := newContext(c)
@@ -91,7 +91,7 @@ func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType tasklistpb.T
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	if taskListType == tasklistpb.TaskListTypeActivity {
+	if taskListType == tasklistpb.TaskListType_Activity {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
 		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})

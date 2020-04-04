@@ -71,7 +71,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
-					ResultType: querypb.QueryResultTypeAnswered,
+					ResultType: querypb.QueryResultType_Answered,
 				},
 			},
 			expectErr: true,
@@ -80,7 +80,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
-					ResultType:   querypb.QueryResultTypeAnswered,
+					ResultType:   querypb.QueryResultType_Answered,
 					Answer:       []byte{1, 2, 3},
 					ErrorMessage: "err",
 				},
@@ -91,7 +91,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
-					ResultType: querypb.QueryResultTypeFailed,
+					ResultType: querypb.QueryResultType_Failed,
 					Answer:     []byte{1, 2, 3},
 				},
 			},
@@ -101,7 +101,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
-					ResultType:   querypb.QueryResultTypeFailed,
+					ResultType:   querypb.QueryResultType_Failed,
 					ErrorMessage: "err",
 				},
 			},
@@ -111,7 +111,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
-					ResultType: querypb.QueryResultTypeAnswered,
+					ResultType: querypb.QueryResultType_Answered,
 					Answer:     []byte{1, 2, 3},
 				},
 			},
@@ -181,7 +181,7 @@ func (s *QuerySuite) TestTerminationState_Completed() {
 	answeredTerminationState := &queryTerminationState{
 		queryTerminationType: queryTerminationTypeCompleted,
 		queryResult: &querypb.WorkflowQueryResult{
-			ResultType: querypb.QueryResultTypeAnswered,
+			ResultType: querypb.QueryResultType_Answered,
 			Answer:     []byte{1, 2, 3},
 		},
 	}

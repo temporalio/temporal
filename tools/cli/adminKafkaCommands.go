@@ -538,7 +538,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 			events := batch.Events
 			firstEvent := events[0]
 			lastEvent := events[len(events)-1]
-			if lastEvent.GetEventType() == eventpb.EventTypeWorkflowExecutionContinuedAsNew {
+			if lastEvent.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
 				continueAsNew = true
 				newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{

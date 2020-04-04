@@ -72,7 +72,7 @@ var (
 	testWorkflowType = "test-wf-type"
 	testWorkflowID   = "test-wid"
 	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
-	testStatus       = executionpb.WorkflowExecutionStatusFailed
+	testStatus       = executionpb.WorkflowExecutionStatus_Failed
 
 	testRequest = &p.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceID,
@@ -153,7 +153,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 		Memo: &serialization.DataBlob{},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
-		s.Equal(indexergenpb.MessageTypeIndex, input.GetMessageType())
+		s.Equal(indexergenpb.MessageType_Index, input.GetMessageType())
 		_, ok := input.Fields[es.Memo]
 		s.False(ok)
 		_, ok = input.Fields[es.Encoding]
@@ -177,7 +177,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	memoBytes := []byte(`test bytes`)
 	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeProto3)
 	request.CloseTimestamp = int64(999)
-	request.Status = executionpb.WorkflowExecutionStatusTerminated
+	request.Status = executionpb.WorkflowExecutionStatus_Terminated
 	request.HistoryLength = int64(20)
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
 		fields := input.Fields
@@ -205,7 +205,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 		Memo: &serialization.DataBlob{},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexergenpb.Message) bool {
-		s.Equal(indexergenpb.MessageTypeIndex, input.GetMessageType())
+		s.Equal(indexergenpb.MessageType_Index, input.GetMessageType())
 		_, ok := input.Fields[es.Memo]
 		s.False(ok)
 		_, ok = input.Fields[es.Encoding]
@@ -651,7 +651,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	s.Equal("TestWorkflowExecute", info.TypeName)
 	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
 	s.Equal(int64(1547596872817380000), info.CloseTime.UnixNano())
-	s.Equal(executionpb.WorkflowExecutionStatusCompleted, *info.Status)
+	s.Equal(executionpb.WorkflowExecutionStatus_Completed, *info.Status)
 	s.Equal(int64(29), info.HistoryLength)
 
 	// test for error case
@@ -1025,8 +1025,8 @@ func (s *ESVisibilitySuite) TestProcessAllValuesForKey() {
 }
 
 func (s *ESVisibilitySuite) TestGetFieldType() {
-	s.Equal(commonpb.IndexedValueTypeInt, s.visibilityStore.getFieldType("StartTime"))
-	s.Equal(commonpb.IndexedValueTypeDatetime, s.visibilityStore.getFieldType("Attr.CustomDatetimeField"))
+	s.Equal(commonpb.IndexedValueType_Int, s.visibilityStore.getFieldType("StartTime"))
+	s.Equal(commonpb.IndexedValueType_Datetime, s.visibilityStore.getFieldType("Attr.CustomDatetimeField"))
 }
 
 func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {

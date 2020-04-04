@@ -68,7 +68,7 @@ func (t *ForwarderTestSuite) SetupTest() {
 	}
 	t.taskList = newTestTaskListID("fwdr", "tl0", persistence.TaskListTypeDecision)
 	scope := func() metrics.Scope { return metrics.NoopScope(metrics.Matching) }
-	t.fwdr = newForwarder(t.cfg, t.taskList, tasklistpb.TaskListKindNormal, t.client, scope)
+	t.fwdr = newForwarder(t.cfg, t.taskList, tasklistpb.TaskListKind_Normal, t.client, scope)
 }
 
 func (t *ForwarderTestSuite) TearDownTest() {
@@ -76,11 +76,11 @@ func (t *ForwarderTestSuite) TearDownTest() {
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskError() {
-	task := newInternalTask(&persistenceblobs.AllocatedTaskInfo{}, nil, commongenpb.TaskSourceHistory, "", false)
+	task := newInternalTask(&persistenceblobs.AllocatedTaskInfo{}, nil, commongenpb.TaskSource_History, "", false)
 	t.Equal(errNoParent, t.fwdr.ForwardTask(context.Background(), task))
 
 	t.usingTasklistPartition(persistence.TaskListTypeActivity)
-	t.fwdr.taskListKind = tasklistpb.TaskListKindSticky
+	t.fwdr.taskListKind = tasklistpb.TaskListKind_Sticky
 	t.Equal(errTaskListKind, t.fwdr.ForwardTask(context.Background(), task))
 }
 
@@ -95,7 +95,7 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 	).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTask(taskInfo, nil, commongenpb.TaskSourceHistory, "", false)
+	task := newInternalTask(taskInfo, nil, commongenpb.TaskSource_History, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
@@ -122,7 +122,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTask(taskInfo, nil, commongenpb.TaskSourceHistory, "", false)
+	task := newInternalTask(taskInfo, nil, commongenpb.TaskSource_History, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
@@ -142,7 +142,7 @@ func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
 	rps := 2
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(rps)
 	taskInfo := randomTaskInfo()
-	task := newInternalTask(taskInfo, nil, commongenpb.TaskSourceHistory, "", false)
+	task := newInternalTask(taskInfo, nil, commongenpb.TaskSource_History, "", false)
 	for i := 0; i < rps; i++ {
 		t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	}
@@ -155,7 +155,7 @@ func (t *ForwarderTestSuite) TestForwardQueryTaskError() {
 	t.Equal(errNoParent, err)
 
 	t.usingTasklistPartition(persistence.TaskListTypeDecision)
-	t.fwdr.taskListKind = tasklistpb.TaskListKindSticky
+	t.fwdr.taskListKind = tasklistpb.TaskListKind_Sticky
 	_, err = t.fwdr.ForwardQueryTask(context.Background(), task)
 	t.Equal(errTaskListKind, err)
 }
@@ -198,7 +198,7 @@ func (t *ForwarderTestSuite) TestForwardPollError() {
 	t.Equal(errNoParent, err)
 
 	t.usingTasklistPartition(persistence.TaskListTypeActivity)
-	t.fwdr.taskListKind = tasklistpb.TaskListKindSticky
+	t.fwdr.taskListKind = tasklistpb.TaskListKind_Sticky
 	_, err = t.fwdr.ForwardPoll(context.Background())
 	t.Equal(errTaskListKind, err)
 

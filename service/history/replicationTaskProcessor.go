@@ -417,7 +417,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 	replicationTask *replicationgenpb.ReplicationTask,
 ) (*persistence.PutReplicationTaskToDLQRequest, error) {
 	switch replicationTask.TaskType {
-	case replicationgenpb.ReplicationTaskTypeSyncActivity:
+	case replicationgenpb.ReplicationTaskType_SyncActivityTask:
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
@@ -431,7 +431,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 			},
 		}, nil
 
-	case replicationgenpb.ReplicationTaskTypeHistory:
+	case replicationgenpb.ReplicationTaskType_HistoryTask:
 		taskAttributes := replicationTask.GetHistoryTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
@@ -448,7 +448,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				ResetWorkflow:       taskAttributes.GetResetWorkflow(),
 			},
 		}, nil
-	case replicationgenpb.ReplicationTaskTypeHistoryV2:
+	case replicationgenpb.ReplicationTaskType_HistoryV2Task:
 		taskAttributes := replicationTask.GetHistoryTaskV2Attributes()
 
 		eventsDataBlob := persistence.NewDataBlobFromProto(taskAttributes.GetEvents())

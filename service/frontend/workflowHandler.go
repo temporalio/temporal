@@ -465,7 +465,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		if err != nil {
 			return nil, "", 0, 0, false, err
 		}
-		isWorkflowRunning := response.GetWorkflowStatus() == executionpb.WorkflowExecutionStatusRunning
+		isWorkflowRunning := response.GetWorkflowStatus() == executionpb.WorkflowExecutionStatus_Running
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
@@ -476,7 +476,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	}
 
 	isLongPoll := request.GetWaitForNewEvent()
-	isCloseEventOnly := request.GetHistoryEventFilterType() == filterpb.HistoryEventFilterTypeCloseEvent
+	isCloseEventOnly := request.GetHistoryEventFilterType() == filterpb.HistoryEventFilterType_CloseEvent
 	execution := request.Execution
 	var continuationToken *tokengenpb.HistoryContinuation
 
@@ -2368,7 +2368,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, wh.error(err, scope)
 	}
 
-	if entry.GetConfig().VisibilityArchivalStatus != namespacepb.ArchivalStatusEnabled {
+	if entry.GetConfig().VisibilityArchivalStatus != namespacepb.ArchivalStatus_Enabled {
 		return nil, wh.error(errNamespaceIsNotConfiguredForVisibilityArchival, scope)
 	}
 
@@ -2589,7 +2589,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 	); err != nil {
 		request = &workflowservice.RespondQueryTaskCompletedRequest{
 			TaskToken:     request.TaskToken,
-			CompletedType: querypb.QueryTaskCompletedTypeFailed,
+			CompletedType: querypb.QueryResultType_Failed,
 			QueryResult:   nil,
 			ErrorMessage:  err.Error(),
 		}
@@ -2890,7 +2890,7 @@ func (wh *WorkflowHandler) PollForWorkflowExecutionRawHistory(ctx context.Contex
 		if err != nil {
 			return nil, "", 0, 0, false, err
 		}
-		isWorkflowRunning := response.GetWorkflowStatus() == executionpb.WorkflowExecutionStatusRunning
+		isWorkflowRunning := response.GetWorkflowStatus() == executionpb.WorkflowExecutionStatus_Running
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
@@ -2900,7 +2900,7 @@ func (wh *WorkflowHandler) PollForWorkflowExecutionRawHistory(ctx context.Contex
 			nil
 	}
 
-	isCloseEventOnly := request.GetHistoryEventFilterType() == filterpb.HistoryEventFilterTypeCloseEvent
+	isCloseEventOnly := request.GetHistoryEventFilterType() == filterpb.HistoryEventFilterType_CloseEvent
 	execution := request.Execution
 	token := &tokengenpb.HistoryContinuation{}
 
@@ -3250,9 +3250,9 @@ func (wh *WorkflowHandler) getRawHistory(
 	for _, data := range resp.HistoryEventBlobs {
 		switch data.Encoding {
 		case common.EncodingTypeJSON:
-			encoding = commonpb.EncodingTypeJSON
+			encoding = commonpb.EncodingType_JSON
 		case common.EncodingTypeProto3:
-			encoding = commonpb.EncodingTypeProto3
+			encoding = commonpb.EncodingType_Proto3
 		default:
 			panic(fmt.Sprintf("Invalid encoding type for raw history, encoding type: %s", data.Encoding))
 		}
@@ -3277,7 +3277,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			return nil, nil, err
 		}
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingTypeProto3,
+			EncodingType: commonpb.EncodingType_Proto3,
 			Data:         blob.Data,
 		})
 
@@ -3286,7 +3286,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			return nil, nil, err
 		}
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: commonpb.EncodingTypeProto3,
+			EncodingType: commonpb.EncodingType_Proto3,
 			Data:         blob.Data,
 		})
 	}

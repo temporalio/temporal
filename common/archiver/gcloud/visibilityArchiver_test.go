@@ -44,7 +44,7 @@ import (
 
 const (
 	testWorkflowTypeName    = "test-workflow-type"
-	exampleVisibilityRecord = `{"namespaceId":"test-namespace-id","namespace":"test-namespace","workflowId":"test-workflow-id","runId":"test-run-id","workflowTypeName":"test-workflow-type","startTimestamp":1580896574804475000,"executionTimestamp":0,"closeTimestamp":1580896575946478000,"status":"WorkflowExecutionStatusCompleted","historyLength":36,"memo":null,"searchAttributes":{},"historyArchivalURI":"gs://my-bucket-cad/temporal_archival/development"}`
+	exampleVisibilityRecord = `{"namespaceId":"test-namespace-id","namespace":"test-namespace","workflowId":"test-workflow-id","runId":"test-run-id","workflowTypeName":"test-workflow-type","startTimestamp":1580896574804475000,"executionTimestamp":0,"closeTimestamp":1580896575946478000,"status":"Completed","historyLength":36,"memo":null,"searchAttributes":{},"historyArchivalURI":"gs://my-bucket-cad/temporal_archival/development"}`
 )
 
 func (s *visibilityArchiverSuite) SetupTest() {
@@ -63,7 +63,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1580896574804475000,
 			CloseTimestamp:   1580896575946478000,
-			Status:           executionpb.WorkflowExecutionStatusCompleted,
+			Status:           executionpb.WorkflowExecutionStatus_Completed,
 			HistoryLength:    36,
 		},
 	}
@@ -186,7 +186,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             executionpb.WorkflowExecutionStatusFailed,
+		Status:             executionpb.WorkflowExecutionStatus_Failed,
 		HistoryLength:      int64(101),
 	}
 

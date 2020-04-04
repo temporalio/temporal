@@ -121,10 +121,10 @@ func (q *queryImpl) validateTerminationState(
 			return errTerminationStateInvalid
 		}
 		queryResult := terminationState.queryResult
-		validAnswered := queryResult.GetResultType() == querypb.QueryResultTypeAnswered &&
+		validAnswered := queryResult.GetResultType() == querypb.QueryResultType_Answered &&
 			queryResult.Answer != nil &&
 			queryResult.GetErrorMessage() == ""
-		validFailed := queryResult.GetResultType() == querypb.QueryResultTypeFailed &&
+		validFailed := queryResult.GetResultType() == querypb.QueryResultType_Failed &&
 			queryResult.Answer == nil &&
 			queryResult.GetErrorMessage() != ""
 		if !validAnswered && !validFailed {

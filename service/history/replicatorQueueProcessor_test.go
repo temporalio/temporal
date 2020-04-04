@@ -342,7 +342,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	), nil).AnyTimes()
 
 	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskTypeSyncActivity,
+		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
@@ -454,7 +454,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		nil,
 	), nil).AnyTimes()
 	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
-		TaskType: replicationgenpb.ReplicationTaskTypeSyncActivity,
+		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
@@ -499,7 +499,7 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 		HistoryEvents: []*eventpb.HistoryEvent{
 			{
 				EventId: int64(1),
-				// EventType:  eventpb.EventTypeWorkflowExecutionStarted,
+				// EventType:  eventpb.EventType_WorkflowExecutionStarted,
 				// Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 			},
 		},

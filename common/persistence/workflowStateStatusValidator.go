@@ -37,13 +37,13 @@ var (
 	}
 
 	validWorkflowStatuses = map[executionpb.WorkflowExecutionStatus]struct{}{
-		executionpb.WorkflowExecutionStatusRunning:        {},
-		executionpb.WorkflowExecutionStatusCompleted:      {},
-		executionpb.WorkflowExecutionStatusFailed:         {},
-		executionpb.WorkflowExecutionStatusCanceled:       {},
-		executionpb.WorkflowExecutionStatusTerminated:     {},
-		executionpb.WorkflowExecutionStatusContinuedAsNew: {},
-		executionpb.WorkflowExecutionStatusTimedOut:       {},
+		executionpb.WorkflowExecutionStatus_Running:        {},
+		executionpb.WorkflowExecutionStatus_Completed:      {},
+		executionpb.WorkflowExecutionStatus_Failed:         {},
+		executionpb.WorkflowExecutionStatus_Canceled:       {},
+		executionpb.WorkflowExecutionStatus_Terminated:     {},
+		executionpb.WorkflowExecutionStatus_ContinuedAsNew: {},
+		executionpb.WorkflowExecutionStatus_TimedOut:       {},
 	}
 )
 
@@ -61,7 +61,7 @@ func ValidateCreateWorkflowStateStatus(
 	}
 
 	// validate workflow state & close status
-	if state == WorkflowStateCompleted || status != executionpb.WorkflowExecutionStatusRunning {
+	if state == WorkflowStateCompleted || status != executionpb.WorkflowExecutionStatus_Running {
 		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or close status: %v", state, status))
 	}
 	return nil
@@ -81,17 +81,17 @@ func ValidateUpdateWorkflowStateStatus(
 	}
 
 	// validate workflow state & close status
-	if status == executionpb.WorkflowExecutionStatusRunning {
+	if status == executionpb.WorkflowExecutionStatus_Running {
 		if state == WorkflowStateCompleted {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	} else {
-		// executionpb.WorkflowExecutionStatusCompleted
-		// executionpb.WorkflowExecutionStatusFailed
-		// executionpb.WorkflowExecutionStatusCanceled
-		// executionpb.WorkflowExecutionStatusTerminated
-		// executionpb.WorkflowExecutionStatusContinuedAsNew
-		// executionpb.WorkflowExecutionStatusTimedOut
+		// executionpb.WorkflowExecutionStatus_Completed
+		// executionpb.WorkflowExecutionStatus_Failed
+		// executionpb.WorkflowExecutionStatus_Canceled
+		// executionpb.WorkflowExecutionStatus_Terminated
+		// executionpb.WorkflowExecutionStatus_ContinuedAsNew
+		// executionpb.WorkflowExecutionStatus_TimedOut
 		if state != WorkflowStateCompleted {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}

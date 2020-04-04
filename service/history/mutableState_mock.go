@@ -505,7 +505,7 @@ func (mr *MockmutableStateMockRecorder) AddRequestCancelActivityTaskFailedEvent(
 }
 
 // AddRequestCancelExternalWorkflowExecutionFailedEvent mocks base method.
-func (m *MockmutableState) AddRequestCancelExternalWorkflowExecutionFailedEvent(arg0, arg1 int64, arg2, arg3, arg4 string, arg5 event.CancelExternalWorkflowExecutionFailedCause) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddRequestCancelExternalWorkflowExecutionFailedEvent(arg0, arg1 int64, arg2, arg3, arg4 string, arg5 event.WorkflowExecutionFailedCause) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddRequestCancelExternalWorkflowExecutionFailedEvent", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -536,7 +536,7 @@ func (mr *MockmutableStateMockRecorder) AddRequestCancelExternalWorkflowExecutio
 }
 
 // AddSignalExternalWorkflowExecutionFailedEvent mocks base method.
-func (m *MockmutableState) AddSignalExternalWorkflowExecutionFailedEvent(arg0, arg1 int64, arg2, arg3, arg4 string, arg5 []uint8, arg6 event.SignalExternalWorkflowExecutionFailedCause) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddSignalExternalWorkflowExecutionFailedEvent(arg0, arg1 int64, arg2, arg3, arg4 string, arg5 []uint8, arg6 event.WorkflowExecutionFailedCause) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddSignalExternalWorkflowExecutionFailedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -579,7 +579,7 @@ func (mr *MockmutableStateMockRecorder) AddSignalRequested(requestID interface{}
 }
 
 // AddStartChildWorkflowExecutionFailedEvent mocks base method.
-func (m *MockmutableState) AddStartChildWorkflowExecutionFailedEvent(arg0 int64, arg1 event.ChildWorkflowExecutionFailedCause, arg2 *event.StartChildWorkflowExecutionInitiatedEventAttributes) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddStartChildWorkflowExecutionFailedEvent(arg0 int64, arg1 event.WorkflowExecutionFailedCause, arg2 *event.StartChildWorkflowExecutionInitiatedEventAttributes) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddStartChildWorkflowExecutionFailedEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*event.HistoryEvent)

@@ -54,24 +54,24 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	case WorkflowStateCreated:
 		switch state {
 		case WorkflowStateCreated:
-			if status != executionpb.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateRunning:
-			if status != executionpb.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if status != executionpb.WorkflowExecutionStatusTerminated &&
-				status != executionpb.WorkflowExecutionStatusTimedOut &&
-				status != executionpb.WorkflowExecutionStatusContinuedAsNew {
+			if status != executionpb.WorkflowExecutionStatus_Terminated &&
+				status != executionpb.WorkflowExecutionStatus_TimedOut &&
+				status != executionpb.WorkflowExecutionStatus_ContinuedAsNew {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if status != executionpb.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
@@ -84,17 +84,17 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		case WorkflowStateRunning:
-			if status != executionpb.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if status == executionpb.WorkflowExecutionStatusRunning {
+			if status == executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if status != executionpb.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
@@ -123,22 +123,22 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	case WorkflowStateZombie:
 		switch state {
 		case WorkflowStateCreated:
-			if status != executionpb.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateRunning:
-			if status != executionpb.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if status == executionpb.WorkflowExecutionStatusRunning {
+			if status == executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if status == executionpb.WorkflowExecutionStatusRunning {
+			if status == executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 

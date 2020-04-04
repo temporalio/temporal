@@ -108,7 +108,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionTypeScheduleActivityTask,
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
@@ -123,7 +123,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
-			DecisionType: decisionpb.DecisionTypeCompleteWorkflowExecution,
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
@@ -173,7 +173,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	s.NoError(err)
 	history := historyResponse.History
 	lastEvent := history.Events[len(history.Events)-1]
-	s.Equal(eventpb.EventTypeWorkflowExecutionFailed, lastEvent.GetEventType())
+	s.Equal(eventpb.EventType_WorkflowExecutionFailed, lastEvent.GetEventType())
 	failedEventAttributes := lastEvent.GetWorkflowExecutionFailedEventAttributes()
 	s.Equal(common.FailureReasonSizeExceedsLimit, failedEventAttributes.GetReason())
 

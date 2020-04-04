@@ -245,15 +245,15 @@ func convertStatusStr(statusStr string) (executionpb.WorkflowExecutionStatus, er
 	statusStr = strings.ToLower(statusStr)
 	switch statusStr {
 	case "completed":
-		return executionpb.WorkflowExecutionStatusCompleted, nil
+		return executionpb.WorkflowExecutionStatus_Completed, nil
 	case "failed":
-		return executionpb.WorkflowExecutionStatusFailed, nil
+		return executionpb.WorkflowExecutionStatus_Failed, nil
 	case "canceled":
-		return executionpb.WorkflowExecutionStatusCanceled, nil
+		return executionpb.WorkflowExecutionStatus_Canceled, nil
 	case "continuedasnew":
-		return executionpb.WorkflowExecutionStatusContinuedAsNew, nil
+		return executionpb.WorkflowExecutionStatus_ContinuedAsNew, nil
 	case "timedout":
-		return executionpb.WorkflowExecutionStatusTimedOut, nil
+		return executionpb.WorkflowExecutionStatus_TimedOut, nil
 	default:
 		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)
 	}

@@ -624,7 +624,7 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 		obj.Visit(func(k []byte, v *fastjson.Value) { // visit is only way to get object key in fastjson
 			sortField = string(k)
 		})
-		if v.getFieldType(sortField) == commonpb.IndexedValueTypeString {
+		if v.getFieldType(sortField) == commonpb.IndexedValueType_String {
 			return "", errors.New("not able to sort by IndexedValueTypeString field, use IndexedValueTypeKeyword field")
 		}
 		// add RunID as tie-breaker
@@ -654,7 +654,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 	var sortVal interface{}
 	var err error
 	switch v.getFieldType(sortField) {
-	case commonpb.IndexedValueTypeInt, commonpb.IndexedValueTypeDatetime, commonpb.IndexedValueTypeBool:
+	case commonpb.IndexedValueType_Int, commonpb.IndexedValueType_Datetime, commonpb.IndexedValueType_Bool:
 		sortVal, err = token.SortValue.(json.Number).Int64()
 		if err != nil {
 			err, ok := err.(*strconv.NumError) // field not present, ES will return big int +-9223372036854776000
@@ -667,7 +667,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 				sortVal = math.MaxInt64
 			}
 		}
-	case commonpb.IndexedValueTypeDouble:
+	case commonpb.IndexedValueType_Double:
 		switch token.SortValue.(type) {
 		case json.Number:
 			sortVal, err = token.SortValue.(json.Number).Float64()
@@ -677,7 +677,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 		case string: // field not present, ES will return "-Infinity" or "Infinity"
 			sortVal = fmt.Sprintf(`"%s"`, token.SortValue.(string))
 		}
-	case commonpb.IndexedValueTypeKeyword:
+	case commonpb.IndexedValueType_Keyword:
 		if token.SortValue != nil {
 			sortVal = fmt.Sprintf(`"%s"`, token.SortValue.(string))
 		} else { // field not present, ES will return null (so token.SortValue is nil)
@@ -888,7 +888,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType,
 	searchAttributes map[string][]byte) *indexergenpb.Message {
 
-	msgType := indexergenpb.MessageTypeIndex
+	msgType := indexergenpb.MessageType_Index
 	fields := map[string]*indexergenpb.Field{
 		es.WorkflowType:  {Type: es.FieldTypeString, StringData: workflowTypeName},
 		es.StartTime:     {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
@@ -918,7 +918,7 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 	historyLength int64, taskID int64, memo []byte, encoding common.EncodingType,
 	searchAttributes map[string][]byte) *indexergenpb.Message {
 
-	msgType := indexergenpb.MessageTypeIndex
+	msgType := indexergenpb.MessageType_Index
 	fields := map[string]*indexergenpb.Field{
 		es.WorkflowType:    {Type: es.FieldTypeString, StringData: workflowTypeName},
 		es.StartTime:       {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
@@ -947,7 +947,7 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 }
 
 func getVisibilityMessageForDeletion(namespaceID, workflowID, runID string, docVersion int64) *indexergenpb.Message {
-	msgType := indexergenpb.MessageTypeDelete
+	msgType := indexergenpb.MessageType_Delete
 	msg := &indexergenpb.Message{
 		MessageType: msgType,
 		NamespaceId: namespaceID,

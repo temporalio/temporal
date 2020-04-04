@@ -50,7 +50,7 @@ type cadenceClient struct {
 func (client *cadenceClient) createNamespace(name string, desc string, owner string, archivalStatus namespacepb.ArchivalStatus) error {
 	emitMetric := true
 	retention := int32(workflowRetentionDays)
-	if archivalStatus == namespacepb.ArchivalStatusEnabled {
+	if archivalStatus == namespacepb.ArchivalStatus_Enabled {
 		retention = int32(0)
 	}
 	req := &workflowservice.RegisterNamespaceRequest{

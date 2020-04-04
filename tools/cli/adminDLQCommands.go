@@ -161,13 +161,13 @@ func AdminMergeDLQMessages(c *cli.Context) {
 func toQueueType(dlqType string) commongenpb.DLQType {
 	switch dlqType {
 	case "namespace":
-		return commongenpb.DLQTypeNamespace
+		return commongenpb.DLQType_Namespace
 	case "history":
-		return commongenpb.DLQTypeReplication
+		return commongenpb.DLQType_Replication
 	default:
 		ErrorAndExit("The queue type is not supported.", fmt.Errorf("the queue type is not supported. Type: %v", dlqType))
 	}
-	return commongenpb.DLQTypeNamespace
+	return commongenpb.DLQType_Namespace
 }
 
 func confirmOrExit(message string) {

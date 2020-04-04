@@ -450,7 +450,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
 		CloseTimestamp:   time.Now().UnixNano(),
-		Status:           executionpb.WorkflowExecutionStatusCompleted,
+		Status:           executionpb.WorkflowExecutionStatus_Completed,
 	})
 	s.Nil(err2)
 
@@ -459,7 +459,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 		Execution:        workflowExecution2,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           executionpb.WorkflowExecutionStatusFailed,
+		Status:           executionpb.WorkflowExecutionStatus_Failed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -474,7 +474,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 			EarliestStartTime: startTime,
 			LatestStartTime:   startTime,
 		},
-		Status: executionpb.WorkflowExecutionStatusFailed,
+		Status: executionpb.WorkflowExecutionStatus_Failed,
 	})
 	s.Nil(err4)
 	s.Equal(1, len(resp.Executions))
@@ -513,7 +513,7 @@ func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           executionpb.WorkflowExecutionStatusFailed,
+		Status:           executionpb.WorkflowExecutionStatus_Failed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -550,7 +550,7 @@ func (s *VisibilityPersistenceSuite) TestClosedWithoutStarted() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   time.Now().Add(time.Second * -5).UnixNano(),
-		Status:           executionpb.WorkflowExecutionStatusFailed,
+		Status:           executionpb.WorkflowExecutionStatus_Failed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -580,7 +580,7 @@ func (s *VisibilityPersistenceSuite) TestMultipleUpserts() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           executionpb.WorkflowExecutionStatusFailed,
+		Status:           executionpb.WorkflowExecutionStatus_Failed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -634,7 +634,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
 			StartTimestamp:   startTime,
-			Status:           executionpb.WorkflowExecutionStatusFailed,
+			Status:           executionpb.WorkflowExecutionStatus_Failed,
 			CloseTimestamp:   time.Now().UnixNano(),
 			HistoryLength:    3,
 		}
@@ -733,7 +733,7 @@ func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().GetValue()))
 	s.Nil(resp.CloseTime)
-	s.Equal(resp.Status, executionpb.WorkflowExecutionStatusUnknown)
+	s.Equal(resp.Status, executionpb.WorkflowExecutionStatus_Unknown)
 	s.Zero(resp.HistoryLength)
 }
 

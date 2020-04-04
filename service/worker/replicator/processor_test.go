@@ -159,11 +159,11 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_BadEncoding() {
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Namespace_Success() {
 	replicationAttr := &replicationgenpb.NamespaceTaskAttributes{
-		NamespaceOperation: replicationgenpb.NamespaceOperationUpdate,
+		NamespaceOperation: replicationgenpb.NamespaceOperation_Update,
 		Id:                 "some random namespace ID",
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskTypeNamespace,
+		TaskType:   replicationgenpb.ReplicationTaskType_NamespaceTask,
 		Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{NamespaceTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
@@ -177,11 +177,11 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Namespace_Success
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Namespace_FailedThenSuccess() {
 	replicationAttr := &replicationgenpb.NamespaceTaskAttributes{
-		NamespaceOperation: replicationgenpb.NamespaceOperationUpdate,
+		NamespaceOperation: replicationgenpb.NamespaceOperation_Update,
 		Id:                 "some random namespace ID",
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskTypeNamespace,
+		TaskType:   replicationgenpb.ReplicationTaskType_NamespaceTask,
 		Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{NamespaceTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
@@ -201,7 +201,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 		Timestamp:     time.Now().UnixNano(),
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskTypeSyncShardStatus,
+		TaskType:   replicationgenpb.ReplicationTaskType_SyncShardStatusTask,
 		Attributes: &replicationgenpb.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
@@ -227,7 +227,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 		Timestamp:     time.Now().Add(-2 * dropSyncShardTaskTimeThreshold).UnixNano(),
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskTypeSyncShardStatus,
+		TaskType:   replicationgenpb.ReplicationTaskType_SyncShardStatusTask,
 		Attributes: &replicationgenpb.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
@@ -245,7 +245,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedT
 		Timestamp:     time.Now().UnixNano(),
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskTypeSyncShardStatus,
+		TaskType:   replicationgenpb.ReplicationTaskType_SyncShardStatusTask,
 		Attributes: &replicationgenpb.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
@@ -280,7 +280,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Succ
 		Attempt:           1048576,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskTypeSyncActivity,
+		TaskType:   replicationgenpb.ReplicationTaskType_SyncActivityTask,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
@@ -306,7 +306,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Fail
 		Attempt:           1048576,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskTypeSyncActivity,
+		TaskType:   replicationgenpb.ReplicationTaskType_SyncActivityTask,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
@@ -335,7 +335,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success()
 		ResetWorkflow: true,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskTypeHistory,
+		TaskType:   replicationgenpb.ReplicationTaskType_HistoryTask,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
@@ -363,7 +363,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThe
 		ResetWorkflow: true,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskTypeHistory,
+		TaskType:   replicationgenpb.ReplicationTaskType_HistoryTask,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
@@ -385,7 +385,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_S
 		NextEventId:    1015,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskTypeHistoryMetadata,
+		TaskType:   replicationgenpb.ReplicationTaskType_HistoryMetadataTask,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
@@ -406,7 +406,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_F
 		NextEventId:    1015,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
-		TaskType:   replicationgenpb.ReplicationTaskTypeHistoryMetadata,
+		TaskType:   replicationgenpb.ReplicationTaskType_HistoryMetadataTask,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()

@@ -194,7 +194,7 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexergenpb.Message, kafkaMsg
 	var keyToKafkaMsg string
 	var req elastic.BulkableRequest
 	switch indexMsg.GetMessageType() {
-	case indexergenpb.MessageTypeIndex:
+	case indexergenpb.MessageType_Index:
 		keyToKafkaMsg = fmt.Sprintf("%v-%v", kafkaMsg.Partition(), kafkaMsg.Offset())
 		doc := p.generateESDoc(indexMsg, keyToKafkaMsg)
 		req = elastic.NewBulkIndexRequest().
@@ -204,7 +204,7 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexergenpb.Message, kafkaMsg
 			VersionType(versionTypeExternal).
 			Version(indexMsg.GetVersion()).
 			Doc(doc)
-	case indexergenpb.MessageTypeDelete:
+	case indexergenpb.MessageType_Delete:
 		keyToKafkaMsg = docID
 		req = elastic.NewBulkDeleteRequest().
 			Index(p.esIndexName).
@@ -249,13 +249,13 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexergenpb.Field) 
 		}
 
 		switch v.GetType() {
-		case indexergenpb.FieldTypeString:
+		case indexergenpb.FieldType_String:
 			doc[k] = v.GetStringData()
-		case indexergenpb.FieldTypeInt:
+		case indexergenpb.FieldType_Int:
 			doc[k] = v.GetIntData()
-		case indexergenpb.FieldTypeBool:
+		case indexergenpb.FieldType_Bool:
 			doc[k] = v.GetBoolData()
-		case indexergenpb.FieldTypeBinary:
+		case indexergenpb.FieldType_Binary:
 			if k == definition.Memo {
 				doc[k] = v.GetBinaryData()
 			} else { // custom search attributes

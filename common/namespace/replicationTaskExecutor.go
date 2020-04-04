@@ -88,9 +88,9 @@ func (h *namespaceReplicationTaskExecutorImpl) Execute(task *replicationgenpb.Na
 	}
 
 	switch task.GetNamespaceOperation() {
-	case replicationgenpb.NamespaceOperationCreate:
+	case replicationgenpb.NamespaceOperation_Create:
 		return h.handleNamespaceCreationReplicationTask(task)
-	case replicationgenpb.NamespaceOperationUpdate:
+	case replicationgenpb.NamespaceOperation_Update:
 		return h.handleNamespaceUpdateReplicationTask(task)
 	default:
 		return ErrInvalidNamespaceOperation
@@ -287,9 +287,9 @@ func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFr
 
 func (h *namespaceReplicationTaskExecutorImpl) convertNamespaceStatusFromProto(input namespacepb.NamespaceStatus) (int, error) {
 	switch input {
-	case namespacepb.NamespaceStatusRegistered:
+	case namespacepb.NamespaceStatus_Registered:
 		return persistence.NamespaceStatusRegistered, nil
-	case namespacepb.NamespaceStatusDeprecated:
+	case namespacepb.NamespaceStatus_Deprecated:
 		return persistence.NamespaceStatusDeprecated, nil
 	default:
 		return 0, ErrInvalidNamespaceStatus

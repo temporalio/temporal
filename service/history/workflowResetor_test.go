@@ -273,7 +273,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   1,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionStarted,
+						EventType: eventpb.EventType_WorkflowExecutionStarted,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
@@ -287,7 +287,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   2,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -300,7 +300,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   3,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 2,
 						}},
@@ -312,7 +312,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   4,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 2,
 							StartedEventId:   3,
@@ -321,7 +321,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   5,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeMarkerRecorded,
+						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
 							Details:                      []byte("details"),
@@ -331,7 +331,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   6,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted1,
 							ActivityType: &commonpb.ActivityType{
@@ -348,7 +348,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   7,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
 							StartToFireTimeoutSeconds:    2,
@@ -362,7 +362,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   8,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 6,
 						}},
@@ -374,7 +374,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   9,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 6,
 							StartedEventId:   8,
@@ -383,7 +383,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   10,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -396,7 +396,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   11,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 10,
 						}},
@@ -408,7 +408,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   12,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 10,
 							StartedEventId:   11,
@@ -421,7 +421,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   13,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeTimerFired,
+						EventType: eventpb.EventType_TimerFired,
 						Attributes: &eventpb.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &eventpb.TimerFiredEventAttributes{
 							TimerId: timerFiredID,
 						}},
@@ -429,7 +429,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   14,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -442,7 +442,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   15,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 14,
 						}},
@@ -454,7 +454,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   16,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 14,
 							StartedEventId:   15,
@@ -463,7 +463,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   17,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDStarted1,
 							ActivityType: &commonpb.ActivityType{
@@ -487,7 +487,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   18,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDNotStarted,
 							ActivityType: &commonpb.ActivityType{
@@ -504,7 +504,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   19,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
 							StartToFireTimeoutSeconds:    4,
@@ -514,7 +514,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   20,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
 							StartToFireTimeoutSeconds:    8,
@@ -524,7 +524,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   21,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted2,
 							ActivityType: &commonpb.ActivityType{
@@ -541,7 +541,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   22,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDStarted2,
 							ActivityType: &commonpb.ActivityType{
@@ -562,7 +562,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   23,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 21,
 						}},
@@ -574,7 +574,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   24,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 17,
 						}},
@@ -586,7 +586,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   25,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 22,
 						}},
@@ -598,7 +598,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   26,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 21,
 							StartedEventId:   23,
@@ -607,7 +607,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   27,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -620,7 +620,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   28,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 27,
 						}},
@@ -633,7 +633,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   29,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 27,
 							StartedEventId:   28,
@@ -642,7 +642,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   30,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerAfterReset,
 							StartToFireTimeoutSeconds:    4,
@@ -656,7 +656,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   31,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 18,
 						}},
@@ -668,7 +668,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   32,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName1,
 						}},
@@ -680,7 +680,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					{
 						EventId:   33,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName2,
 						}},
@@ -737,12 +737,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.Equal(newBranchToken, appendReq.BranchToken)
 	s.Equal(false, appendReq.IsNewBranch)
 	s.Equal(6, len(appendReq.Events))
-	s.Equal(eventpb.EventTypeDecisionTaskFailed, eventpb.EventType(appendReq.Events[0].GetEventType()))
-	s.Equal(eventpb.EventTypeActivityTaskFailed, eventpb.EventType(appendReq.Events[1].GetEventType()))
-	s.Equal(eventpb.EventTypeActivityTaskFailed, eventpb.EventType(appendReq.Events[2].GetEventType()))
-	s.Equal(eventpb.EventTypeWorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[3].GetEventType()))
-	s.Equal(eventpb.EventTypeWorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[4].GetEventType()))
-	s.Equal(eventpb.EventTypeDecisionTaskScheduled, eventpb.EventType(appendReq.Events[5].GetEventType()))
+	s.Equal(eventpb.EventType_DecisionTaskFailed, eventpb.EventType(appendReq.Events[0].GetEventType()))
+	s.Equal(eventpb.EventType_ActivityTaskFailed, eventpb.EventType(appendReq.Events[1].GetEventType()))
+	s.Equal(eventpb.EventType_ActivityTaskFailed, eventpb.EventType(appendReq.Events[2].GetEventType()))
+	s.Equal(eventpb.EventType_WorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[3].GetEventType()))
+	s.Equal(eventpb.EventType_WorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[4].GetEventType()))
+	s.Equal(eventpb.EventType_DecisionTaskScheduled, eventpb.EventType(appendReq.Events[5].GetEventType()))
 
 	s.Equal(int64(29), appendReq.Events[0].GetEventId())
 	s.Equal(int64(30), appendReq.Events[1].GetEventId())
@@ -762,7 +762,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
 	compareCurrExeInfo.State = persistence.WorkflowStateCompleted
-	compareCurrExeInfo.Status = executionpb.WorkflowExecutionStatusTerminated
+	compareCurrExeInfo.Status = executionpb.WorkflowExecutionStatus_Terminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.CompletionEventBatchID = 1
 	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
@@ -952,7 +952,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   1,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionStarted,
+						EventType: eventpb.EventType_WorkflowExecutionStarted,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
@@ -966,7 +966,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   2,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -979,7 +979,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   3,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 2,
 						}},
@@ -991,7 +991,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   4,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 2,
 							StartedEventId:   3,
@@ -1000,7 +1000,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   5,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeMarkerRecorded,
+						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
 							Details:                      []byte("details"),
@@ -1010,7 +1010,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   6,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted1,
 							ActivityType: &commonpb.ActivityType{
@@ -1027,7 +1027,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   7,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
 							StartToFireTimeoutSeconds:    2,
@@ -1041,7 +1041,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   8,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 6,
 						}},
@@ -1053,7 +1053,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   9,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 6,
 							StartedEventId:   8,
@@ -1062,7 +1062,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   10,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -1075,7 +1075,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   11,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 10,
 						}},
@@ -1087,7 +1087,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   12,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 10,
 							StartedEventId:   11,
@@ -1100,7 +1100,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   13,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeTimerFired,
+						EventType: eventpb.EventType_TimerFired,
 						Attributes: &eventpb.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &eventpb.TimerFiredEventAttributes{
 							TimerId: timerFiredID,
 						}},
@@ -1108,7 +1108,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   14,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -1121,7 +1121,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   15,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 14,
 						}},
@@ -1133,7 +1133,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   16,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 14,
 							StartedEventId:   15,
@@ -1142,7 +1142,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   17,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDStartedRetry,
 							ActivityType: &commonpb.ActivityType{
@@ -1166,7 +1166,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   18,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDNotStarted,
 							ActivityType: &commonpb.ActivityType{
@@ -1183,7 +1183,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   19,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
 							StartToFireTimeoutSeconds:    4,
@@ -1193,7 +1193,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   20,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
 							StartToFireTimeoutSeconds:    8,
@@ -1203,7 +1203,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   21,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted2,
 							ActivityType: &commonpb.ActivityType{
@@ -1220,7 +1220,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   22,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDStartedNoRetry,
 							ActivityType: &commonpb.ActivityType{
@@ -1237,7 +1237,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   23,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeRequestCancelExternalWorkflowExecutionInitiated,
+						EventType: eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated,
 						Attributes: &eventpb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 							Namespace:                    "any-namespace",
 							WorkflowExecution:            cancelWE,
@@ -1252,7 +1252,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   24,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 21,
 						}},
@@ -1264,7 +1264,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   25,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 17,
 						}},
@@ -1276,7 +1276,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   26,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 22,
 						}},
@@ -1288,7 +1288,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   27,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 21,
 							StartedEventId:   24,
@@ -1297,7 +1297,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   28,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -1310,7 +1310,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   29,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 28,
 						}},
@@ -1323,7 +1323,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   30,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 28,
 							StartedEventId:   29,
@@ -1332,7 +1332,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   31,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerAfterReset,
 							StartToFireTimeoutSeconds:    4,
@@ -1346,7 +1346,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   32,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 18,
 						}},
@@ -1358,7 +1358,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   33,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName1,
 						}},
@@ -1370,7 +1370,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					{
 						EventId:   34,
 						Version:   common.EmptyVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName2,
 						}},
@@ -1550,7 +1550,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   1,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionStarted,
+						EventType: eventpb.EventType_WorkflowExecutionStarted,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
@@ -1564,7 +1564,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   2,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -1577,7 +1577,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   3,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 2,
 						}},
@@ -1589,7 +1589,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   4,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 2,
 							StartedEventId:   3,
@@ -1598,7 +1598,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   5,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeMarkerRecorded,
+						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
 							Details:                      []byte("details"),
@@ -1608,7 +1608,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   6,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted1,
 							ActivityType: &commonpb.ActivityType{
@@ -1625,7 +1625,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   7,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
 							StartToFireTimeoutSeconds:    2,
@@ -1639,7 +1639,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   8,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 6,
 						}},
@@ -1651,7 +1651,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   9,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 6,
 							StartedEventId:   8,
@@ -1660,7 +1660,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   10,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -1673,7 +1673,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   11,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 10,
 						}},
@@ -1685,7 +1685,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   12,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 10,
 							StartedEventId:   11,
@@ -1698,7 +1698,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   13,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerFired,
+						EventType: eventpb.EventType_TimerFired,
 						Attributes: &eventpb.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &eventpb.TimerFiredEventAttributes{
 							TimerId: timerFiredID,
 						}},
@@ -1706,7 +1706,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   14,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -1719,7 +1719,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   15,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 14,
 						}},
@@ -1731,7 +1731,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   16,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 14,
 							StartedEventId:   15,
@@ -1740,7 +1740,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   17,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDRetry,
 							ActivityType: &commonpb.ActivityType{
@@ -1764,7 +1764,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   18,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDNotStarted,
 							ActivityType: &commonpb.ActivityType{
@@ -1781,7 +1781,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   19,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
 							StartToFireTimeoutSeconds:    4,
@@ -1791,7 +1791,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   20,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
 							StartToFireTimeoutSeconds:    8,
@@ -1801,7 +1801,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   21,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted2,
 							ActivityType: &commonpb.ActivityType{
@@ -1818,7 +1818,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   22,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDStartedNoRetry,
 							ActivityType: &commonpb.ActivityType{
@@ -1835,7 +1835,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   23,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName3,
 						}},
@@ -1847,7 +1847,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   24,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 21,
 						}},
@@ -1859,7 +1859,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   25,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName4,
 						}},
@@ -1871,7 +1871,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   26,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 22,
 						}},
@@ -1883,7 +1883,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   27,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 21,
 							StartedEventId:   24,
@@ -1892,7 +1892,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   28,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -1905,7 +1905,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   29,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 28,
 						}},
@@ -1918,7 +1918,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   30,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 28,
 							StartedEventId:   29,
@@ -1927,7 +1927,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   31,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerAfterReset,
 							StartToFireTimeoutSeconds:    4,
@@ -1941,7 +1941,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   32,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 18,
 						}},
@@ -1953,7 +1953,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   33,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName1,
 						}},
@@ -1965,7 +1965,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					{
 						EventId:   34,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName2,
 						}},
@@ -2023,11 +2023,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(newBranchToken, appendReq.BranchToken)
 	s.Equal(false, appendReq.IsNewBranch)
 	s.Equal(5, len(appendReq.Events))
-	s.Equal(eventpb.EventTypeDecisionTaskFailed, eventpb.EventType(appendReq.Events[0].GetEventType()))
-	s.Equal(eventpb.EventTypeActivityTaskFailed, eventpb.EventType(appendReq.Events[1].GetEventType()))
-	s.Equal(eventpb.EventTypeWorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[2].GetEventType()))
-	s.Equal(eventpb.EventTypeWorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[3].GetEventType()))
-	s.Equal(eventpb.EventTypeDecisionTaskScheduled, eventpb.EventType(appendReq.Events[4].GetEventType()))
+	s.Equal(eventpb.EventType_DecisionTaskFailed, eventpb.EventType(appendReq.Events[0].GetEventType()))
+	s.Equal(eventpb.EventType_ActivityTaskFailed, eventpb.EventType(appendReq.Events[1].GetEventType()))
+	s.Equal(eventpb.EventType_WorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[2].GetEventType()))
+	s.Equal(eventpb.EventType_WorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[3].GetEventType()))
+	s.Equal(eventpb.EventType_DecisionTaskScheduled, eventpb.EventType(appendReq.Events[4].GetEventType()))
 
 	s.Equal(int64(30), appendReq.Events[0].GetEventId())
 	s.Equal(int64(31), appendReq.Events[1].GetEventId())
@@ -2046,7 +2046,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
 	compareCurrExeInfo.State = persistence.WorkflowStateCompleted
-	compareCurrExeInfo.Status = executionpb.WorkflowExecutionStatusTerminated
+	compareCurrExeInfo.Status = executionpb.WorkflowExecutionStatus_Terminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.LastFirstEventID = 1
 	compareCurrExeInfo.CompletionEventBatchID = 1
@@ -2255,7 +2255,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   1,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionStarted,
+						EventType: eventpb.EventType_WorkflowExecutionStarted,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
@@ -2269,7 +2269,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   2,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -2282,7 +2282,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   3,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 2,
 						}},
@@ -2294,7 +2294,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   4,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 2,
 							StartedEventId:   3,
@@ -2303,7 +2303,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   5,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeMarkerRecorded,
+						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
 							Details:                      []byte("details"),
@@ -2313,7 +2313,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   6,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted1,
 							ActivityType: &commonpb.ActivityType{
@@ -2330,7 +2330,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   7,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
 							StartToFireTimeoutSeconds:    2,
@@ -2344,7 +2344,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   8,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 6,
 						}},
@@ -2356,7 +2356,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   9,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 6,
 							StartedEventId:   8,
@@ -2365,7 +2365,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   10,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -2378,7 +2378,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   11,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 10,
 						}},
@@ -2390,7 +2390,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   12,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 10,
 							StartedEventId:   11,
@@ -2403,7 +2403,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   13,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerFired,
+						EventType: eventpb.EventType_TimerFired,
 						Attributes: &eventpb.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &eventpb.TimerFiredEventAttributes{
 							TimerId: timerFiredID,
 						}},
@@ -2411,7 +2411,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   14,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -2424,7 +2424,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   15,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 14,
 						}},
@@ -2436,7 +2436,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   16,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 14,
 							StartedEventId:   15,
@@ -2445,7 +2445,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   17,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDRetry,
 							ActivityType: &commonpb.ActivityType{
@@ -2469,7 +2469,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   18,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDNotStarted,
 							ActivityType: &commonpb.ActivityType{
@@ -2486,7 +2486,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   19,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
 							StartToFireTimeoutSeconds:    4,
@@ -2496,7 +2496,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   20,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
 							StartToFireTimeoutSeconds:    8,
@@ -2506,7 +2506,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   21,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted2,
 							ActivityType: &commonpb.ActivityType{
@@ -2523,7 +2523,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   22,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDStartedNoRetry,
 							ActivityType: &commonpb.ActivityType{
@@ -2540,7 +2540,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   23,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName3,
 						}},
@@ -2552,7 +2552,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   24,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 21,
 						}},
@@ -2564,7 +2564,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   25,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName4,
 						}},
@@ -2576,7 +2576,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   26,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 22,
 						}},
@@ -2588,7 +2588,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   27,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 21,
 							StartedEventId:   24,
@@ -2597,7 +2597,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   28,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -2610,7 +2610,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   29,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 28,
 						}},
@@ -2623,7 +2623,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   30,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 28,
 							StartedEventId:   29,
@@ -2632,7 +2632,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   31,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerAfterReset,
 							StartToFireTimeoutSeconds:    4,
@@ -2646,7 +2646,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   32,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 18,
 						}},
@@ -2658,7 +2658,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   33,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName1,
 						}},
@@ -2670,7 +2670,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					{
 						EventId:   34,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName2,
 						}},
@@ -2857,7 +2857,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   1,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionStarted,
+						EventType: eventpb.EventType_WorkflowExecutionStarted,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
@@ -2871,7 +2871,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   2,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -2884,7 +2884,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   3,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 2,
 						}},
@@ -2896,7 +2896,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   4,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 2,
 							StartedEventId:   3,
@@ -2905,7 +2905,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   5,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeMarkerRecorded,
+						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
 							Details:                      []byte("details"),
@@ -2915,7 +2915,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   6,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted1,
 							ActivityType: &commonpb.ActivityType{
@@ -2932,7 +2932,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   7,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
 							StartToFireTimeoutSeconds:    2,
@@ -2946,7 +2946,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   8,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 6,
 						}},
@@ -2958,7 +2958,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   9,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 6,
 							StartedEventId:   8,
@@ -2967,7 +2967,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   10,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -2980,7 +2980,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   11,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 10,
 						}},
@@ -2992,7 +2992,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   12,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 10,
 							StartedEventId:   11,
@@ -3005,7 +3005,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   13,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerFired,
+						EventType: eventpb.EventType_TimerFired,
 						Attributes: &eventpb.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &eventpb.TimerFiredEventAttributes{
 							TimerId: timerFiredID,
 						}},
@@ -3013,7 +3013,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   14,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -3026,7 +3026,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   15,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 14,
 						}},
@@ -3038,7 +3038,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   16,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 14,
 							StartedEventId:   15,
@@ -3047,7 +3047,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   17,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDRetry,
 							ActivityType: &commonpb.ActivityType{
@@ -3071,7 +3071,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   18,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDNotStarted,
 							ActivityType: &commonpb.ActivityType{
@@ -3088,7 +3088,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   19,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
 							StartToFireTimeoutSeconds:    4,
@@ -3098,7 +3098,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   20,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
 							StartToFireTimeoutSeconds:    8,
@@ -3108,7 +3108,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   21,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted2,
 							ActivityType: &commonpb.ActivityType{
@@ -3125,7 +3125,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   22,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDStartedNoRetry,
 							ActivityType: &commonpb.ActivityType{
@@ -3142,7 +3142,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   23,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName3,
 						}},
@@ -3154,7 +3154,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   24,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 21,
 						}},
@@ -3166,7 +3166,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   25,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName4,
 						}},
@@ -3178,7 +3178,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   26,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 22,
 						}},
@@ -3190,7 +3190,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   27,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 21,
 							StartedEventId:   24,
@@ -3199,7 +3199,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   28,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -3212,7 +3212,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   29,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 28,
 						}},
@@ -3225,7 +3225,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   30,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 28,
 							StartedEventId:   29,
@@ -3234,7 +3234,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   31,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerAfterReset,
 							StartToFireTimeoutSeconds:    4,
@@ -3248,7 +3248,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   32,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 18,
 						}},
@@ -3260,7 +3260,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   33,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName1,
 						}},
@@ -3272,7 +3272,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					{
 						EventId:   34,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName2,
 						}},
@@ -3329,11 +3329,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.Equal(newBranchToken, appendReq.BranchToken)
 	s.Equal(false, appendReq.IsNewBranch)
 	s.Equal(5, len(appendReq.Events))
-	s.Equal(eventpb.EventTypeDecisionTaskFailed, eventpb.EventType(appendReq.Events[0].GetEventType()))
-	s.Equal(eventpb.EventTypeActivityTaskFailed, eventpb.EventType(appendReq.Events[1].GetEventType()))
-	s.Equal(eventpb.EventTypeWorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[2].GetEventType()))
-	s.Equal(eventpb.EventTypeWorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[3].GetEventType()))
-	s.Equal(eventpb.EventTypeDecisionTaskScheduled, eventpb.EventType(appendReq.Events[4].GetEventType()))
+	s.Equal(eventpb.EventType_DecisionTaskFailed, eventpb.EventType(appendReq.Events[0].GetEventType()))
+	s.Equal(eventpb.EventType_ActivityTaskFailed, eventpb.EventType(appendReq.Events[1].GetEventType()))
+	s.Equal(eventpb.EventType_WorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[2].GetEventType()))
+	s.Equal(eventpb.EventType_WorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[3].GetEventType()))
+	s.Equal(eventpb.EventType_DecisionTaskScheduled, eventpb.EventType(appendReq.Events[4].GetEventType()))
 
 	s.Equal(int64(30), appendReq.Events[0].GetEventId())
 	s.Equal(int64(31), appendReq.Events[1].GetEventId())
@@ -3532,7 +3532,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   1,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionStarted,
+						EventType: eventpb.EventType_WorkflowExecutionStarted,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
@@ -3546,7 +3546,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   2,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -3559,7 +3559,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   3,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 2,
 						}},
@@ -3571,7 +3571,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   4,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 2,
 							StartedEventId:   3,
@@ -3580,7 +3580,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   5,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeMarkerRecorded,
+						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
 							Details:                      []byte("details"),
@@ -3590,7 +3590,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   6,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted1,
 							ActivityType: &commonpb.ActivityType{
@@ -3607,7 +3607,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   7,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerFiredID,
 							StartToFireTimeoutSeconds:    2,
@@ -3621,7 +3621,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   8,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 6,
 						}},
@@ -3633,7 +3633,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   9,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 6,
 							StartedEventId:   8,
@@ -3642,7 +3642,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   10,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -3655,7 +3655,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   11,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 10,
 						}},
@@ -3667,7 +3667,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   12,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 10,
 							StartedEventId:   11,
@@ -3680,7 +3680,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   13,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerFired,
+						EventType: eventpb.EventType_TimerFired,
 						Attributes: &eventpb.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &eventpb.TimerFiredEventAttributes{
 							TimerId: timerFiredID,
 						}},
@@ -3688,7 +3688,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   14,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -3701,7 +3701,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   15,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 14,
 						}},
@@ -3713,7 +3713,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   16,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskCompleted,
+						EventType: eventpb.EventType_DecisionTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{
 							ScheduledEventId: 14,
 							StartedEventId:   15,
@@ -3722,7 +3722,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   17,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDRetry,
 							ActivityType: &commonpb.ActivityType{
@@ -3746,7 +3746,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   18,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDNotStarted,
 							ActivityType: &commonpb.ActivityType{
@@ -3763,7 +3763,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   19,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID1,
 							StartToFireTimeoutSeconds:    4,
@@ -3773,7 +3773,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   20,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeTimerStarted,
+						EventType: eventpb.EventType_TimerStarted,
 						Attributes: &eventpb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &eventpb.TimerStartedEventAttributes{
 							TimerId:                      timerUnfiredID2,
 							StartToFireTimeoutSeconds:    8,
@@ -3783,7 +3783,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   21,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDCompleted2,
 							ActivityType: &commonpb.ActivityType{
@@ -3800,7 +3800,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   22,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskScheduled,
+						EventType: eventpb.EventType_ActivityTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{
 							ActivityId: actIDStartedNoRetry,
 							ActivityType: &commonpb.ActivityType{
@@ -3817,7 +3817,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   23,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName3,
 						}},
@@ -3829,7 +3829,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   24,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 21,
 						}},
@@ -3841,7 +3841,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   25,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+						EventType: eventpb.EventType_WorkflowExecutionSignaled,
 						Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 							SignalName: signalName4,
 						}},
@@ -3853,7 +3853,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   26,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskStarted,
+						EventType: eventpb.EventType_ActivityTaskStarted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &eventpb.ActivityTaskStartedEventAttributes{
 							ScheduledEventId: 22,
 						}},
@@ -3865,7 +3865,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   27,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeActivityTaskCompleted,
+						EventType: eventpb.EventType_ActivityTaskCompleted,
 						Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
 							ScheduledEventId: 21,
 							StartedEventId:   24,
@@ -3874,7 +3874,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   28,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskScheduled,
+						EventType: eventpb.EventType_DecisionTaskScheduled,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
 							StartToCloseTimeoutSeconds: 100,
@@ -3887,7 +3887,7 @@ func (s *resetorSuite) TestApplyReset() {
 					{
 						EventId:   29,
 						Version:   beforeResetVersion,
-						EventType: eventpb.EventTypeDecisionTaskStarted,
+						EventType: eventpb.EventType_DecisionTaskStarted,
 						Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{
 							ScheduledEventId: 28,
 						}},
@@ -3926,11 +3926,11 @@ func (s *resetorSuite) TestApplyReset() {
 			{
 				EventId:   30,
 				Version:   afterResetVersion,
-				EventType: eventpb.EventTypeDecisionTaskFailed,
+				EventType: eventpb.EventType_DecisionTaskFailed,
 				Attributes: &eventpb.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &eventpb.DecisionTaskFailedEventAttributes{
 					ScheduledEventId: int64(28),
 					StartedEventId:   int64(29),
-					Cause:            eventpb.DecisionTaskFailedCauseResetWorkflow,
+					Cause:            eventpb.DecisionTaskFailedCause_ResetWorkflow,
 					Details:          nil,
 					Identity:         identityHistoryService,
 					Reason:           "resetWFtest",
@@ -3942,7 +3942,7 @@ func (s *resetorSuite) TestApplyReset() {
 			{
 				EventId:   31,
 				Version:   afterResetVersion,
-				EventType: eventpb.EventTypeActivityTaskFailed,
+				EventType: eventpb.EventType_ActivityTaskFailed,
 				Attributes: &eventpb.HistoryEvent_ActivityTaskFailedEventAttributes{ActivityTaskFailedEventAttributes: &eventpb.ActivityTaskFailedEventAttributes{
 					Reason:           "resetWF",
 					ScheduledEventId: 22,
@@ -3953,7 +3953,7 @@ func (s *resetorSuite) TestApplyReset() {
 			{
 				EventId:   32,
 				Version:   afterResetVersion,
-				EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: signalName1,
 				}},
@@ -3961,7 +3961,7 @@ func (s *resetorSuite) TestApplyReset() {
 			{
 				EventId:   33,
 				Version:   afterResetVersion,
-				EventType: eventpb.EventTypeWorkflowExecutionSignaled,
+				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: signalName2,
 				}},
@@ -3969,7 +3969,7 @@ func (s *resetorSuite) TestApplyReset() {
 			{
 				EventId:   34,
 				Version:   afterResetVersion,
-				EventType: eventpb.EventTypeDecisionTaskScheduled,
+				EventType: eventpb.EventType_DecisionTaskScheduled,
 				Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 					TaskList:                   taskList,
 					StartToCloseTimeoutSeconds: 100,
@@ -4015,11 +4015,11 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(newBranchToken, appendReq.BranchToken)
 	s.Equal(false, appendReq.IsNewBranch)
 	s.Equal(5, len(appendReq.Events))
-	s.Equal(eventpb.EventTypeDecisionTaskFailed, eventpb.EventType(appendReq.Events[0].GetEventType()))
-	s.Equal(eventpb.EventTypeActivityTaskFailed, eventpb.EventType(appendReq.Events[1].GetEventType()))
-	s.Equal(eventpb.EventTypeWorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[2].GetEventType()))
-	s.Equal(eventpb.EventTypeWorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[3].GetEventType()))
-	s.Equal(eventpb.EventTypeDecisionTaskScheduled, eventpb.EventType(appendReq.Events[4].GetEventType()))
+	s.Equal(eventpb.EventType_DecisionTaskFailed, eventpb.EventType(appendReq.Events[0].GetEventType()))
+	s.Equal(eventpb.EventType_ActivityTaskFailed, eventpb.EventType(appendReq.Events[1].GetEventType()))
+	s.Equal(eventpb.EventType_WorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[2].GetEventType()))
+	s.Equal(eventpb.EventType_WorkflowExecutionSignaled, eventpb.EventType(appendReq.Events[3].GetEventType()))
+	s.Equal(eventpb.EventType_DecisionTaskScheduled, eventpb.EventType(appendReq.Events[4].GetEventType()))
 
 	s.Equal(int64(30), appendReq.Events[0].GetEventId())
 	s.Equal(int64(31), appendReq.Events[1].GetEventId())

@@ -625,8 +625,8 @@ type (
 	InternalNamespaceConfig struct {
 		// NOTE: this retention is in days, not in seconds
 		Retention                int32
-		EmitMetric               bool                 // deprecated
-		ArchivalBucket           string               // deprecated
+		EmitMetric               bool                       // deprecated
+		ArchivalBucket           string                     // deprecated
 		ArchivalStatus           namespacepb.ArchivalStatus // deprecated
 		HistoryArchivalStatus    namespacepb.ArchivalStatus
 		HistoryArchivalURI       string
@@ -727,12 +727,12 @@ func FromDataBlob(blob *serialization.DataBlob) ([]byte, string) {
 // NewDataBlobFromProto convert data blob from Proto representation
 func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
 	switch blob.GetEncodingType() {
-	case commonpb.EncodingTypeJSON:
+	case commonpb.EncodingType_JSON:
 		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeJSON,
 			Data:     blob.Data,
 		}
-	case commonpb.EncodingTypeProto3:
+	case commonpb.EncodingType_Proto3:
 		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,
