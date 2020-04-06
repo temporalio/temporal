@@ -34,13 +34,18 @@ setup_cassandra_schema() {
 
 setup_mysql_schema() {
     SCHEMA_DIR=$TEMPORAL_HOME/schema/mysql/v57/temporal/versioned
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD create --db $DBNAME
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $DBNAME setup-schema -v 0.0
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $DBNAME update-schema -d $SCHEMA_DIR
+
+    if [ "$MYSQL_TX_ISOLATION_COMPAT" == "true" ]; then
+        MYSQL_CONNECT_ATTR='--connect-attributes tx_isolation=READ-COMMITTED'
+    fi
+
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR create --db $DBNAME
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR --db $DBNAME setup-schema -v 0.0
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR --db $DBNAME update-schema -d $SCHEMA_DIR
     VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/mysql/v57/visibility/versioned
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD create --db $VISIBILITY_DBNAME
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME setup-schema -v 0.0
-    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR create --db $VISIBILITY_DBNAME
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR --db $VISIBILITY_DBNAME setup-schema -v 0.0
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $MYSQL_CONNECT_ATTR --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 setup_postgres_schema() {
