@@ -23,9 +23,6 @@ syntax = "proto3";
 package common;
 
 option go_package = "github.com/temporalio/temporal/.gen/proto/common";
-option (gogoproto.goproto_enum_prefix_all) = true;
-
-import "gogoproto/gogo.proto";
 
 enum DLQType {
     Replication = 0;
