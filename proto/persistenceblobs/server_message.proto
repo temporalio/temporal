@@ -23,11 +23,12 @@ syntax = "proto3";
 package persistenceblobs;
 option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs";
 
-import "google/protobuf/timestamp.proto";
-import "google/protobuf/wrappers.proto";
-import "replication/replication.proto";
-import "enums/enums.proto";
-import "common/namespace.proto";
+import "protobuf/google/protobuf/timestamp.proto";
+import "protobuf/google/protobuf/wrappers.proto";
+
+import "persistenceblobs/server_enum.proto";
+import "replication/server_message.proto";
+import "execution/enum.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -71,7 +72,6 @@ message ActivityInfo {
     int64 scheduleId = 33;
     bytes lastHeartbeatDetails = 34;
     google.protobuf.Timestamp lastHeartbeatUpdatedTime = 35;
-
 }
 
 message ShardInfo {
@@ -118,7 +118,7 @@ message TimerTaskInfo {
     int64 scheduleAttempt = 7;
     int64 eventId = 8;
     int64 taskId = 9;
-    google.protobuf.Timestamp VisibilityTimestamp = 10;
+    google.protobuf.Timestamp visibilityTimestamp = 10;
 }
 
 message TransferTaskInfo {
@@ -162,7 +162,6 @@ message HistoryTreeInfo {
     // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
     string info = 3;
 }
-
 
 message TimerInfo {
     int64 version = 1;
@@ -219,7 +218,7 @@ message WorkflowExecutionState {
     string createRequestId = 1;
     bytes runId = 2;
     int32 state = 3;
-    enums.WorkflowExecutionStatus status = 4;
+    execution.WorkflowExecutionStatus status = 4;
 }
 
 message WorkflowExecutionInfo {
@@ -285,10 +284,6 @@ message WorkflowExecutionInfo {
 
 message Checksum {
     int32 version = 1;
-    enum ChecksumFlavor {
-        FlavorUnknown = 0;
-        FlavorIEEECRC32OverProto3Binary = 1;
-    }
     ChecksumFlavor flavor = 2;
     bytes value = 3;
 }

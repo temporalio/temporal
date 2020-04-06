@@ -25,7 +25,7 @@ package history
 import (
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -45,13 +45,13 @@ type (
 			firstEventID int64,
 			eventID int64,
 			branchToken []byte,
-		) (*commonproto.HistoryEvent, error)
+		) (*eventpb.HistoryEvent, error)
 		putEvent(
 			namespaceID string,
 			workflowID string,
 			runID string,
 			eventID int64,
-			event *commonproto.HistoryEvent,
+			event *eventpb.HistoryEvent,
 		)
 		deleteEvent(
 			namespaceID string,
@@ -117,7 +117,7 @@ func newEventKey(namespaceID, workflowID, runID string, eventID int64) eventKey 
 }
 
 func (e *eventsCacheImpl) getEvent(namespaceID, workflowID, runID string, firstEventID, eventID int64,
-	branchToken []byte) (*commonproto.HistoryEvent, error) {
+	branchToken []byte) (*eventpb.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetEventScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -125,7 +125,7 @@ func (e *eventsCacheImpl) getEvent(namespaceID, workflowID, runID string, firstE
 	key := newEventKey(namespaceID, workflowID, runID, eventID)
 	// Test hook for disabling cache
 	if !e.disabled {
-		event, cacheHit := e.Cache.Get(key).(*commonproto.HistoryEvent)
+		event, cacheHit := e.Cache.Get(key).(*eventpb.HistoryEvent)
 		if cacheHit {
 			return event, nil
 		}
@@ -148,7 +148,7 @@ func (e *eventsCacheImpl) getEvent(namespaceID, workflowID, runID string, firstE
 	return event, nil
 }
 
-func (e *eventsCacheImpl) putEvent(namespaceID, workflowID, runID string, eventID int64, event *commonproto.HistoryEvent) {
+func (e *eventsCacheImpl) putEvent(namespaceID, workflowID, runID string, eventID int64, event *eventpb.HistoryEvent) {
 	e.metricsClient.IncCounter(metrics.EventsCachePutEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCachePutEventScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -167,7 +167,7 @@ func (e *eventsCacheImpl) deleteEvent(namespaceID, workflowID, runID string, eve
 }
 
 func (e *eventsCacheImpl) getHistoryEventFromStore(namespaceID, workflowID, runID string, firstEventID, eventID int64,
-	branchToken []byte) (*commonproto.HistoryEvent, error) {
+	branchToken []byte) (*eventpb.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetFromStoreScope, metrics.CacheLatency)
 	defer sw.Stop()

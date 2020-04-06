@@ -27,8 +27,8 @@ import (
 	"fmt"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -52,7 +52,7 @@ type (
 	workflowExecutionContext interface {
 		getNamespace() string
 		getNamespaceID() string
-		getExecution() *commonproto.WorkflowExecution
+		getExecution() *executionpb.WorkflowExecution
 
 		loadWorkflowExecution() (mutableState, error)
 		loadExecutionStats() (*persistence.ExecutionStats, error)
@@ -139,7 +139,7 @@ type (
 type (
 	workflowExecutionContextImpl struct {
 		namespaceID       string
-		workflowExecution commonproto.WorkflowExecution
+		workflowExecution executionpb.WorkflowExecution
 		shard             ShardContext
 		engine            Engine
 		executionManager  persistence.ExecutionManager
@@ -162,7 +162,7 @@ var (
 
 func newWorkflowExecutionContext(
 	namespaceID string,
-	execution commonproto.WorkflowExecution,
+	execution executionpb.WorkflowExecution,
 	shard ShardContext,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
@@ -203,7 +203,7 @@ func (c *workflowExecutionContextImpl) getNamespaceID() string {
 	return c.namespaceID
 }
 
-func (c *workflowExecutionContextImpl) getExecution() *commonproto.WorkflowExecution {
+func (c *workflowExecutionContextImpl) getExecution() *executionpb.WorkflowExecution {
 	return &c.workflowExecution
 }
 
@@ -731,7 +731,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
-	if currentWorkflowMutation.ExecutionInfo.Status != enums.WorkflowExecutionStatusContinuedAsNew {
+	if currentWorkflowMutation.ExecutionInfo.Status != executionpb.WorkflowExecutionStatus_ContinuedAsNew {
 		return nil
 	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
 		// update current workflow as zombie & continue as new without new zombie workflow
@@ -780,7 +780,7 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 	namespaceID := workflowEvents.NamespaceID
 	workflowID := workflowEvents.WorkflowID
 	runID := workflowEvents.RunID
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
 	}
@@ -810,7 +810,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 	}
 
 	namespaceID := workflowEvents.NamespaceID
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
 	}
@@ -832,7 +832,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 
 func (c *workflowExecutionContextImpl) appendHistoryV2EventsWithRetry(
 	namespaceID string,
-	execution commonproto.WorkflowExecution,
+	execution executionpb.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
 ) (int64, error) {
 
@@ -1097,7 +1097,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			DeleteSignalInfo:          nil,
 			UpsertSignalRequestedIDs:  []string{},
 			DeleteSignalRequestedID:   "",
-			NewBufferedEvents:         []*commonproto.HistoryEvent{},
+			NewBufferedEvents:         []*eventpb.HistoryEvent{},
 			ClearBufferedEvents:       false,
 
 			TransferTasks:    currTransferTasks,
@@ -1177,7 +1177,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	namespaceID := eventBatches[0].NamespaceID
 	workflowID := eventBatches[0].WorkflowID
 	runID := eventBatches[0].RunID
-	var reapplyEvents []*commonproto.HistoryEvent
+	var reapplyEvents []*eventpb.HistoryEvent
 	for _, events := range eventBatches {
 		if events.NamespaceID != namespaceID ||
 			events.WorkflowID != workflowID {
@@ -1187,7 +1187,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 		for _, e := range events.Events {
 			event := e
 			switch event.GetEventType() {
-			case enums.EventTypeWorkflowExecutionSignaled:
+			case eventpb.EventType_WorkflowExecutionSignaled:
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}
@@ -1198,7 +1198,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 
 	// Reapply events only reapply to the current run.
 	// The run id is only used for reapply event de-duplication
-	execution := &commonproto.WorkflowExecution{
+	execution := &executionpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}

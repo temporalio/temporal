@@ -29,7 +29,8 @@ package history
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/temporal-proto/common"
+	event "go.temporal.io/temporal-proto/event"
+	execution "go.temporal.io/temporal-proto/execution"
 	reflect "reflect"
 )
 
@@ -57,7 +58,7 @@ func (m *MockstateBuilder) EXPECT() *MockstateBuilderMockRecorder {
 }
 
 // applyEvents mocks base method.
-func (m *MockstateBuilder) applyEvents(namespaceID, requestID string, execution common.WorkflowExecution, history, newRunHistory []*common.HistoryEvent, newRunNDC bool) (mutableState, error) {
+func (m *MockstateBuilder) applyEvents(namespaceID, requestID string, execution execution.WorkflowExecution, history, newRunHistory []*event.HistoryEvent, newRunNDC bool) (mutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "applyEvents", namespaceID, requestID, execution, history, newRunHistory, newRunNDC)
 	ret0, _ := ret[0].(mutableState)

@@ -23,7 +23,7 @@ package persistence
 import (
 	"fmt"
 
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -45,7 +45,7 @@ func (e *WorkflowExecutionInfo) SetLastFirstEventID(id int64) {
 // UpdateWorkflowStateStatus update the workflow state
 func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 ) error {
 
 	switch e.State {
@@ -54,24 +54,24 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	case WorkflowStateCreated:
 		switch state {
 		case WorkflowStateCreated:
-			if status != enums.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateRunning:
-			if status != enums.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if status != enums.WorkflowExecutionStatusTerminated &&
-				status != enums.WorkflowExecutionStatusTimedOut &&
-				status != enums.WorkflowExecutionStatusContinuedAsNew {
+			if status != executionpb.WorkflowExecutionStatus_Terminated &&
+				status != executionpb.WorkflowExecutionStatus_TimedOut &&
+				status != executionpb.WorkflowExecutionStatus_ContinuedAsNew {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if status != enums.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
@@ -84,17 +84,17 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		case WorkflowStateRunning:
-			if status != enums.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if status == enums.WorkflowExecutionStatusRunning {
+			if status == executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if status != enums.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
@@ -123,22 +123,22 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	case WorkflowStateZombie:
 		switch state {
 		case WorkflowStateCreated:
-			if status != enums.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateRunning:
-			if status != enums.WorkflowExecutionStatusRunning {
+			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateCompleted:
-			if status == enums.WorkflowExecutionStatusRunning {
+			if status == executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case WorkflowStateZombie:
-			if status == enums.WorkflowExecutionStatusRunning {
+			if status == executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
@@ -159,7 +159,7 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 func (e *WorkflowExecutionInfo) createInvalidStateTransitionErr(
 	currentState int,
 	targetState int,
-	targetStatus enums.WorkflowExecutionStatus,
+	targetStatus executionpb.WorkflowExecutionStatus,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(invalidStateTransitionMsg, currentState, targetState, targetStatus))
 }

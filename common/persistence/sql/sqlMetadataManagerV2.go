@@ -155,10 +155,10 @@ func (m *sqlMetadataManagerV2) namespaceRowToGetNamespaceResponse(row *sqlplugin
 func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpdateNamespaceRequest) error {
 	return m.txExecute("UpdateNamespace", func(tx sqlplugin.Tx) error {
 		result, err := tx.UpdateNamespace(&sqlplugin.NamespaceRow{
-			Name:         request.Name,
-			ID:           request.Id,
-			Data:         request.Namespace.Data,
-			DataEncoding: request.Namespace.Encoding.String(),
+			Name:                request.Name,
+			ID:                  request.Id,
+			Data:                request.Namespace.Data,
+			DataEncoding:        request.Namespace.Encoding.String(),
 			NotificationVersion: request.NotificationVersion,
 		})
 		if err != nil {

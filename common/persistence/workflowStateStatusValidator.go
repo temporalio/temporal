@@ -23,7 +23,7 @@ package persistence
 import (
 	"fmt"
 
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -36,21 +36,21 @@ var (
 		WorkflowStateCorrupted: {},
 	}
 
-	validWorkflowStatuses = map[enums.WorkflowExecutionStatus]struct{}{
-		enums.WorkflowExecutionStatusRunning:        {},
-		enums.WorkflowExecutionStatusCompleted:      {},
-		enums.WorkflowExecutionStatusFailed:         {},
-		enums.WorkflowExecutionStatusCanceled:       {},
-		enums.WorkflowExecutionStatusTerminated:     {},
-		enums.WorkflowExecutionStatusContinuedAsNew: {},
-		enums.WorkflowExecutionStatusTimedOut:       {},
+	validWorkflowStatuses = map[executionpb.WorkflowExecutionStatus]struct{}{
+		executionpb.WorkflowExecutionStatus_Running:        {},
+		executionpb.WorkflowExecutionStatus_Completed:      {},
+		executionpb.WorkflowExecutionStatus_Failed:         {},
+		executionpb.WorkflowExecutionStatus_Canceled:       {},
+		executionpb.WorkflowExecutionStatus_Terminated:     {},
+		executionpb.WorkflowExecutionStatus_ContinuedAsNew: {},
+		executionpb.WorkflowExecutionStatus_TimedOut:       {},
 	}
 )
 
 // ValidateCreateWorkflowStateStatus validate workflow state and close status
 func ValidateCreateWorkflowStateStatus(
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 ) error {
 
 	if err := validateWorkflowState(state); err != nil {
@@ -61,7 +61,7 @@ func ValidateCreateWorkflowStateStatus(
 	}
 
 	// validate workflow state & close status
-	if state == WorkflowStateCompleted || status != enums.WorkflowExecutionStatusRunning {
+	if state == WorkflowStateCompleted || status != executionpb.WorkflowExecutionStatus_Running {
 		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or close status: %v", state, status))
 	}
 	return nil
@@ -70,7 +70,7 @@ func ValidateCreateWorkflowStateStatus(
 // ValidateUpdateWorkflowStateStatus validate workflow state and close status
 func ValidateUpdateWorkflowStateStatus(
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 ) error {
 
 	if err := validateWorkflowState(state); err != nil {
@@ -81,17 +81,17 @@ func ValidateUpdateWorkflowStateStatus(
 	}
 
 	// validate workflow state & close status
-	if status == enums.WorkflowExecutionStatusRunning {
+	if status == executionpb.WorkflowExecutionStatus_Running {
 		if state == WorkflowStateCompleted {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	} else {
-		// enums.WorkflowExecutionStatusCompleted
-		// enums.WorkflowExecutionStatusFailed
-		// enums.WorkflowExecutionStatusCanceled
-		// enums.WorkflowExecutionStatusTerminated
-		// enums.WorkflowExecutionStatusContinuedAsNew
-		// enums.WorkflowExecutionStatusTimedOut
+		// executionpb.WorkflowExecutionStatus_Completed
+		// executionpb.WorkflowExecutionStatus_Failed
+		// executionpb.WorkflowExecutionStatus_Canceled
+		// executionpb.WorkflowExecutionStatus_Terminated
+		// executionpb.WorkflowExecutionStatus_ContinuedAsNew
+		// executionpb.WorkflowExecutionStatus_TimedOut
 		if state != WorkflowStateCompleted {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
@@ -113,7 +113,7 @@ func validateWorkflowState(
 
 // validateWorkflowStatus validate workflow close status
 func validateWorkflowStatus(
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 ) error {
 
 	if _, ok := validWorkflowStatuses[status]; !ok {

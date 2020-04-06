@@ -29,12 +29,13 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	replicationpb "go.temporal.io/temporal-proto/replication"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -556,7 +557,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	}
 
 	if isGlobalNamespace {
-		err = d.namespaceReplicator.HandleTransmissionTask(enums.NamespaceOperationUpdate,
+		err = d.namespaceReplicator.HandleTransmissionTask(replicationgenpb.NamespaceOperation_Update,
 			info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 		if err != nil {
 			return nil, err
@@ -629,7 +630,7 @@ func (d *HandlerImpl) createResponse(
 	replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 ) (*commonproto.NamespaceInfo, *commonproto.NamespaceConfiguration, *commonproto.NamespaceReplicationConfiguration) {
 
-	infoResult := &commonproto.NamespaceInfo{
+	infoResult := &namespacepb.NamespaceInfo{
 		Name:        info.Name,
 		Status:      info.Status,
 		Description: info.Description,
@@ -638,7 +639,7 @@ func (d *HandlerImpl) createResponse(
 		Id:          primitives.UUIDString(info.Id),
 	}
 
-	configResult := &commonproto.NamespaceConfiguration{
+	configResult := &namespacepb.NamespaceConfiguration{
 		EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 		WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
 		HistoryArchivalStatus:                  config.HistoryArchivalStatus,
@@ -648,35 +649,27 @@ func (d *HandlerImpl) createResponse(
 		BadBinaries:                            config.BadBinaries,
 	}
 
-	var clusters []*commonproto.ClusterReplicationConfiguration
+	var clusters []*replicationpb.ClusterReplicationConfiguration
 	for _, cluster := range replicationConfig.Clusters {
 		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
 			ClusterName: cluster,
 		})
 	}
-
-	replicationConfigResult := &commonproto.NamespaceReplicationConfiguration{
+	replicationConfigResult := &replicationpb.NamespaceReplicationConfiguration{
 		ActiveClusterName: replicationConfig.ActiveClusterName,
-		Clusters:          clusters,
-	}
-
-	return infoResult, configResult, replicationConfigResult
-}
-
-func (d *HandlerImpl) mergeBadBinaries(
-	old map[string]*commonproto.BadBinaryInfo,
-	new map[string]*commonproto.BadBinaryInfo,
+	old map[string]*namespacepb.BadBinaryInfo,
+	new map[string]*namespacepb.BadBinaryInfo,
 	createTimeNano int64,
-) commonproto.BadBinaries {
+) namespacepb.BadBinaries {
 
 	if old == nil {
-		old = map[string]*commonproto.BadBinaryInfo{}
+		old = map[string]*namespacepb.BadBinaryInfo{}
 	}
 	for k, v := range new {
 		v.CreatedTimeNano = createTimeNano
 		old[k] = v
 	}
-	return commonproto.BadBinaries{
+	return namespacepb.BadBinaries{
 		Binaries: old,
 	}
 }
@@ -696,9 +689,9 @@ func (d *HandlerImpl) mergeNamespaceData(
 }
 
 func (d *HandlerImpl) toArchivalRegisterEvent(
-	status enums.ArchivalStatus,
+	status namespacepb.ArchivalStatus,
 	URI string,
-	defaultStatus enums.ArchivalStatus,
+	defaultStatus namespacepb.ArchivalStatus,
 	defaultURI string,
 ) (*ArchivalEvent, error) {
 
@@ -707,7 +700,7 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 		URI:        URI,
 		defaultURI: defaultURI,
 	}
-	if event.status == enums.ArchivalStatusDefault {
+	if event.status == namespacepb.ArchivalStatus_Default {
 		event.status = defaultStatus
 	}
 	if err := event.validate(); err != nil {
@@ -717,7 +710,7 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 }
 
 func (d *HandlerImpl) toArchivalUpdateEvent(
-	status enums.ArchivalStatus,
+	status namespacepb.ArchivalStatus,
 	URI string,
 	defaultURI string,
 ) (*ArchivalEvent, error) {

@@ -32,14 +32,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/token"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -159,7 +162,7 @@ func (s *engine2Suite) TearDownTest() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	namespaceID := testNamespaceID
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -192,7 +195,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: stickyTl,
 			},
 			Identity: identity,
@@ -210,9 +213,9 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	expectedResponse.StickyExecutionEnabled = false
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt
-	expectedResponse.WorkflowExecutionTaskList = &commonproto.TaskList{
+	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: enums.TaskListKindNormal,
+		Kind: tasklistpb.TaskListKind_Normal,
 	}
 	expectedResponse.BranchToken, _ = msBuilder.GetCurrentBranchToken()
 
@@ -221,13 +224,13 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	s.NotNil(response)
 	expectedResponse.StartedTimestamp = response.StartedTimestamp
 	expectedResponse.ScheduledTimestamp = 0
-	expectedResponse.Queries = make(map[string]*commonproto.WorkflowQuery)
+	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	namespaceID := testNamespaceID
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -261,7 +264,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: stickyTl,
 			},
 			Identity: identity,
@@ -279,9 +282,9 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt
-	expectedResponse.WorkflowExecutionTaskList = &commonproto.TaskList{
+	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: enums.TaskListKindNormal,
+		Kind: tasklistpb.TaskListKind_Normal,
 	}
 	currentBranchTokken, err := msBuilder.GetCurrentBranchToken()
 	s.NoError(err)
@@ -292,13 +295,13 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	s.NotNil(response)
 	expectedResponse.StartedTimestamp = response.StartedTimestamp
 	expectedResponse.ScheduledTimestamp = 0
-	expectedResponse.Queries = make(map[string]*commonproto.WorkflowQuery)
+	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 	namespaceID := testNamespaceID
-	workflowExecution := &commonproto.WorkflowExecution{
+	workflowExecution := &executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -315,7 +318,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: tl,
 			},
 			Identity: identity,
@@ -328,7 +331,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 	namespaceID := testNamespaceID
-	workflowExecution := &commonproto.WorkflowExecution{
+	workflowExecution := &executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -345,7 +348,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: tl,
 			},
 			Identity: identity,
@@ -358,7 +361,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 	namespaceID := testNamespaceID
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -378,7 +381,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: tl,
 			},
 			Identity: identity,
@@ -392,7 +395,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 	namespaceID := testNamespaceID
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -415,7 +418,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: tl,
 			},
 			Identity: identity,
@@ -429,7 +432,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 	namespaceID := testNamespaceID
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -462,7 +465,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: tl,
 			},
 			Identity: identity,
@@ -477,7 +480,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 
 func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 	namespaceID := testNamespaceID
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -506,7 +509,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 		TaskId:            100,
 		RequestId:         requestID,
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: tl,
 			},
 			Identity: identity,
@@ -522,7 +525,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 
 func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 	namespaceID := testNamespaceID
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -551,7 +554,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 		TaskId:            100,
 		RequestId:         requestID,
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: tl,
 			},
 			Identity: identity,
@@ -566,7 +569,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 	namespaceID := testNamespaceID
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -594,7 +597,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: tl,
 			},
 			Identity: identity,
@@ -608,7 +611,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 
 func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 	namespaceID := testNamespaceID
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -632,9 +635,9 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 	loadedMS, err := ctx.loadWorkflowExecution()
 	s.NoError(err)
 	qr := newQueryRegistry()
-	id1, _ := qr.bufferQuery(&commonproto.WorkflowQuery{})
-	id2, _ := qr.bufferQuery(&commonproto.WorkflowQuery{})
-	id3, _ := qr.bufferQuery(&commonproto.WorkflowQuery{})
+	id1, _ := qr.bufferQuery(&querypb.WorkflowQuery{})
+	id2, _ := qr.bufferQuery(&querypb.WorkflowQuery{})
+	id3, _ := qr.bufferQuery(&querypb.WorkflowQuery{})
 	loadedMS.(*mutableStateBuilder).queryRegistry = qr
 	release(nil)
 
@@ -645,7 +648,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: tl,
 			},
 			Identity: identity,
@@ -657,7 +660,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 	s.Equal("wType", response.WorkflowType.Name)
 	s.True(response.PreviousStartedEventId == 0)
 	s.Equal(int64(3), response.StartedEventId)
-	expectedQueryMap := map[string]*commonproto.WorkflowQuery{
+	expectedQueryMap := map[string]*querypb.WorkflowQuery{
 		id1: {},
 		id2: {},
 		id3: {},
@@ -667,7 +670,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 
 func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 	namespaceID := testNamespaceID
-	workflowExecution := &commonproto.WorkflowExecution{
+	workflowExecution := &executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -684,7 +687,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForActivityTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: tl,
 			},
 			Identity: identity,
@@ -700,7 +703,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 
 func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	namespaceID := testNamespaceID
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -737,7 +740,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForActivityTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: tl,
 			},
 			Identity: identity,
@@ -750,7 +753,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 	namespaceID := testNamespaceID
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -771,7 +774,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 	err := s.historyEngine.RequestCancelWorkflowExecution(context.Background(), &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: workflowExecution.WorkflowId,
 				RunId:      workflowExecution.RunId,
 			},
@@ -786,7 +789,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	namespaceID := testNamespaceID
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -804,7 +807,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	err := s.historyEngine.RequestCancelWorkflowExecution(context.Background(), &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: workflowExecution.WorkflowId,
 				RunId:      workflowExecution.RunId,
 			},
@@ -815,7 +818,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *engine2Suite) createExecutionStartedState(we commonproto.WorkflowExecution, tl, identity string,
+func (s *engine2Suite) createExecutionStartedState(we executionpb.WorkflowExecution, tl, identity string,
 	startDecision bool) mutableState {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		s.logger, we.GetRunId())
@@ -835,12 +838,12 @@ func (s *engine2Suite) printHistory(builder mutableState) string {
 
 func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	namespaceID := testNamespaceID
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	taskToken := &token.Task{
+	taskToken := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(we.GetRunId()),
 		ScheduleId: 2,
@@ -856,9 +859,9 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeRecordMarker,
-		Attributes: &commonproto.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &commonproto.RecordMarkerDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_RecordMarker,
+		Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 			MarkerName: markerName,
 			Details:    markerDetails,
 		}},
@@ -906,8 +909,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
@@ -934,7 +937,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		StartRequestID:   requestID,
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		Status:           enums.WorkflowExecutionStatusRunning,
+		Status:           executionpb.WorkflowExecutionStatus_Running,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
 
@@ -943,8 +946,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
@@ -970,7 +973,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		StartRequestID:   "oldRequestID",
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		Status:           enums.WorkflowExecutionStatusRunning,
+		Status:           executionpb.WorkflowExecutionStatus_Running,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
 
@@ -979,8 +982,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
@@ -1002,10 +1005,10 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 	identity := "testIdentity"
 	lastWriteVersion := common.EmptyVersion
 
-	options := []enums.WorkflowIdReusePolicy{
-		enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly,
-		enums.WorkflowIdReusePolicyAllowDuplicate,
-		enums.WorkflowIdReusePolicyRejectDuplicate,
+	options := []commonpb.WorkflowIdReusePolicy{
+		commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly,
+		commonpb.WorkflowIdReusePolicy_AllowDuplicate,
+		commonpb.WorkflowIdReusePolicy_RejectDuplicate,
 	}
 
 	expecedErrs := []bool{true, false, true}
@@ -1021,7 +1024,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		StartRequestID:   "oldRequestID",
 		RunID:            runID,
 		State:            p.WorkflowStateCompleted,
-		Status:           enums.WorkflowExecutionStatusCompleted,
+		Status:           executionpb.WorkflowExecutionStatus_Completed,
 		LastWriteVersion: lastWriteVersion,
 	}).Times(len(expecedErrs))
 
@@ -1042,8 +1045,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				Namespace:                           namespaceID,
 				WorkflowId:                          workflowID,
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskList},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskList},
 				ExecutionStartToCloseTimeoutSeconds: 1,
 				TaskStartToCloseTimeoutSeconds:      2,
 				Identity:                            identity,
@@ -1072,19 +1075,19 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 	identity := "testIdentity"
 	lastWriteVersion := common.EmptyVersion
 
-	options := []enums.WorkflowIdReusePolicy{
-		enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly,
-		enums.WorkflowIdReusePolicyAllowDuplicate,
-		enums.WorkflowIdReusePolicyRejectDuplicate,
+	options := []commonpb.WorkflowIdReusePolicy{
+		commonpb.WorkflowIdReusePolicy_AllowDuplicateFailedOnly,
+		commonpb.WorkflowIdReusePolicy_AllowDuplicate,
+		commonpb.WorkflowIdReusePolicy_RejectDuplicate,
 	}
 
 	expecedErrs := []bool{false, false, true}
 
-	statuses := []enums.WorkflowExecutionStatus{
-		enums.WorkflowExecutionStatusFailed,
-		enums.WorkflowExecutionStatusCanceled,
-		enums.WorkflowExecutionStatusTerminated,
-		enums.WorkflowExecutionStatusTimedOut,
+	statuses := []executionpb.WorkflowExecutionStatus{
+		executionpb.WorkflowExecutionStatus_Failed,
+		executionpb.WorkflowExecutionStatus_Canceled,
+		executionpb.WorkflowExecutionStatus_Terminated,
+		executionpb.WorkflowExecutionStatus_TimedOut,
 	}
 	runIDs := []string{"1", "2", "3", "4"}
 
@@ -1123,8 +1126,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 				StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 					Namespace:                           namespaceID,
 					WorkflowId:                          workflowID,
-					WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-					TaskList:                            &commonproto.TaskList{Name: taskList},
+					WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+					TaskList:                            &tasklistpb.TaskList{Name: taskList},
 					ExecutionStartToCloseTimeoutSeconds: 1,
 					TaskStartToCloseTimeoutSeconds:      2,
 					Identity:                            identity,
@@ -1205,8 +1208,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
@@ -1246,8 +1249,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
@@ -1287,14 +1290,14 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			Input:                               input,
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           requestID,
-			WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicyAllowDuplicate,
+			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                          signalName,
 			SignalInput:                         nil,
 			Control:                             nil,
@@ -1339,14 +1342,14 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			Input:                               input,
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           requestID,
-			WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicyAllowDuplicate,
+			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                          signalName,
 			SignalInput:                         nil,
 			Control:                             nil,
@@ -1369,7 +1372,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 		StartRequestID:   requestID, // use same requestID
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		Status:           enums.WorkflowExecutionStatusRunning,
+		Status:           executionpb.WorkflowExecutionStatus_Running,
 		LastWriteVersion: common.EmptyVersion,
 	}
 
@@ -1399,14 +1402,14 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			Input:                               input,
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           requestID,
-			WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicyAllowDuplicate,
+			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                          signalName,
 			SignalInput:                         nil,
 			Control:                             nil,
@@ -1429,7 +1432,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 		StartRequestID:   "new request ID",
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		Status:           enums.WorkflowExecutionStatusRunning,
+		Status:           executionpb.WorkflowExecutionStatus_Running,
 		LastWriteVersion: common.EmptyVersion,
 	}
 
@@ -1443,7 +1446,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	s.NotNil(err)
 }
 
-func (s *engine2Suite) getBuilder(namespaceID string, we commonproto.WorkflowExecution) mutableState {
+func (s *engine2Suite) getBuilder(namespaceID string, we executionpb.WorkflowExecution) mutableState {
 	weContext, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecutionForBackground(namespaceID, we)
 	if err != nil {
 		return nil

@@ -28,14 +28,17 @@ import (
 
 	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
+	versionpb "go.temporal.io/temporal-proto/version"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	clustergenpb "github.com/temporalio/temporal/.gen/proto/cluster"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/.gen/proto/token"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/definition"
@@ -316,7 +319,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		return nil, errInvalidPageSize
 	}
 
-	var continuationToken *token.HistoryContinuation
+	var continuationToken *tokengenpb.HistoryContinuation
 	// initialize or validate the token
 	// token will be used as a source of truth
 	if request.NextPageToken != nil {
@@ -362,7 +365,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		if nextEventID > response.GetNextEventId() {
 			nextEventID = response.GetNextEventId()
 		}
-		continuationToken = &token.HistoryContinuation{
+		continuationToken = &tokengenpb.HistoryContinuation{
 			RunId:            execution.GetRunId(),
 			BranchToken:      response.CurrentBranchToken,
 			FirstEventId:     firstEventID,
@@ -374,14 +377,14 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 
 	if continuationToken.GetFirstEventId() >= continuationToken.GetNextEventId() {
 		return &adminservice.GetWorkflowExecutionRawHistoryResponse{
-			HistoryBatches:  []*commonproto.DataBlob{},
+			HistoryBatches:  []*commonpb.DataBlob{},
 			ReplicationInfo: continuationToken.ReplicationInfo,
 			NextPageToken:   nil, // no further pagination
 		}, nil
 	}
 
 	// TODO need to deal with transient decision if to be used by client getting history
-	var historyBatches []*commonproto.History
+	var historyBatches []*eventpb.History
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
 	_, historyBatches, continuationToken.PersistenceToken, size, err = history.PaginateHistory(
 		adh.GetHistoryManager(),
@@ -398,7 +401,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &adminservice.GetWorkflowExecutionRawHistoryResponse{
-				HistoryBatches:  []*commonproto.DataBlob{},
+				HistoryBatches:  []*commonpb.DataBlob{},
 				ReplicationInfo: continuationToken.ReplicationInfo,
 				NextPageToken:   nil, // no further pagination
 			}, nil
@@ -411,14 +414,14 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 	adh.GetMetricsClient().RecordTimer(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.HistorySize, time.Duration(size))
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
-	var blobs []*commonproto.DataBlob
+	var blobs []*commonpb.DataBlob
 	for _, historyBatch := range historyBatches {
 		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(historyBatch.Events, common.EncodingTypeProto3)
 		if err != nil {
 			return nil, err
 		}
-		blobs = append(blobs, &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeProto3,
+		blobs = append(blobs, &commonpb.DataBlob{
+			EncodingType: commonpb.EncodingType_Proto3,
 			Data:         blob.Data,
 		})
 	}
@@ -458,7 +461,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	scope = scope.Tagged(metrics.NamespaceTag(request.GetNamespace()))
 
 	execution := request.Execution
-	var pageToken *token.RawHistoryContinuation
+	var pageToken *tokengenpb.RawHistoryContinuation
 	var targetVersionHistory *persistence.VersionHistory
 	if request.NextPageToken == nil {
 		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
@@ -509,7 +512,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	if pageToken.GetStartEventId()+1 == pageToken.GetEndEventId() {
 		// API is exclusive-exclusive. Return empty response here.
 		return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
-			HistoryBatches: []*commonproto.DataBlob{},
+			HistoryBatches: []*commonpb.DataBlob{},
 			NextPageToken:  nil, // no further pagination
 			VersionHistory: targetVersionHistory.ToProto(),
 		}, nil
@@ -534,7 +537,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
-				HistoryBatches: []*commonproto.DataBlob{},
+				HistoryBatches: []*commonpb.DataBlob{},
 				NextPageToken:  nil, // no further pagination
 				VersionHistory: targetVersionHistory.ToProto(),
 			}, nil
@@ -550,7 +553,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
 	rawBlobs := rawHistoryResponse.HistoryEventBlobs
-	var blobs []*commonproto.DataBlob
+	var blobs []*commonpb.DataBlob
 	for _, blob := range rawBlobs {
 		blobs = append(blobs, blob.ToProto())
 	}
@@ -578,14 +581,14 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
 	defer sw.Stop()
 
-	membershipInfo := &commonproto.MembershipInfo{}
+	membershipInfo := &clustergenpb.MembershipInfo{}
 	if monitor := adh.GetMembershipMonitor(); monitor != nil {
 		currentHost, err := monitor.WhoAmI()
 		if err != nil {
 			return nil, adh.error(err, scope)
 		}
 
-		membershipInfo.CurrentHost = &commonproto.HostInfo{
+		membershipInfo.CurrentHost = &clustergenpb.HostInfo{
 			Identity: currentHost.Identity(),
 		}
 
@@ -596,21 +599,21 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 
 		membershipInfo.ReachableMembers = members
 
-		var rings []*commonproto.RingInfo
+		var rings []*clustergenpb.RingInfo
 		for _, role := range []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName, common.WorkerServiceName} {
 			resolver, err := monitor.GetResolver(role)
 			if err != nil {
 				return nil, adh.error(err, scope)
 			}
 
-			var servers []*commonproto.HostInfo
+			var servers []*clustergenpb.HostInfo
 			for _, server := range resolver.Members() {
-				servers = append(servers, &commonproto.HostInfo{
+				servers = append(servers, &clustergenpb.HostInfo{
 					Identity: server.Identity(),
 				})
 			}
 
-			rings = append(rings, &commonproto.RingInfo{
+			rings = append(rings, &clustergenpb.RingInfo{
 				Role:        role,
 				MemberCount: int32(resolver.MemberCount()),
 				Members:     servers,
@@ -620,7 +623,7 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 	}
 
 	return &adminservice.DescribeClusterResponse{
-		SupportedClientVersions: &commonproto.SupportedClientVersions{
+		SupportedClientVersions: &versionpb.SupportedClientVersions{
 			GoSdk:   headers.SupportedGoSDKVersion,
 			JavaSdk: headers.SupportedJavaSDKVersion,
 		},
@@ -693,7 +696,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 	}
 
 	return &adminservice.GetNamespaceReplicationMessagesResponse{
-		Messages: &replication.ReplicationMessages{
+		Messages: &replicationgenpb.ReplicationMessages{
 			ReplicationTasks:       replicationTasks,
 			LastRetrievedMessageId: int64(lastMessageID),
 		},
@@ -779,11 +782,11 @@ func (adh *AdminHandler) ReadDLQMessages(
 		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
-	var tasks []*replication.ReplicationTask
+	var tasks []*replicationgenpb.ReplicationTask
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case enums.DLQTypeReplication:
+	case commongenpb.DLQType_Replication:
 		resp, err := adh.GetHistoryClient().ReadDLQMessages(ctx, &historyservice.ReadDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -802,7 +805,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 			ReplicationTasks: resp.GetReplicationTasks(),
 			NextPageToken:    resp.GetNextPageToken(),
 		}, err
-	case enums.DLQTypeNamespace:
+	case commongenpb.DLQType_Namespace:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -850,7 +853,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 
 	var op func() error
 	switch request.GetType() {
-	case enums.DLQTypeReplication:
+	case commongenpb.DLQType_Replication:
 		resp, err := adh.GetHistoryClient().PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -863,7 +866,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		}
 
 		return &adminservice.PurgeDLQMessagesResponse{}, err
-	case enums.DLQTypeNamespace:
+	case commongenpb.DLQType_Namespace:
 		op = func() error {
 			select {
 			case <-ctx.Done():
@@ -904,7 +907,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	var token []byte
 	var op func() error
 	switch request.GetType() {
-	case enums.DLQTypeReplication:
+	case commongenpb.DLQType_Replication:
 		resp, err := adh.GetHistoryClient().MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
@@ -920,7 +923,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 		return &adminservice.MergeDLQMessagesResponse{
 			NextPageToken: request.GetNextPageToken(),
 		}, nil
-	case enums.DLQTypeNamespace:
+	case commongenpb.DLQType_Namespace:
 
 		op = func() error {
 			select {
@@ -1135,19 +1138,19 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	return err
 }
 
-func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType enums.IndexedValueType) string {
+func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType commonpb.IndexedValueType) string {
 	switch valueType {
-	case enums.IndexedValueTypeString:
+	case commonpb.IndexedValueType_String:
 		return "text"
-	case enums.IndexedValueTypeKeyword:
+	case commonpb.IndexedValueType_Keyword:
 		return "keyword"
-	case enums.IndexedValueTypeInt:
+	case commonpb.IndexedValueType_Int:
 		return "long"
-	case enums.IndexedValueTypeDouble:
+	case commonpb.IndexedValueType_Double:
 		return "double"
-	case enums.IndexedValueTypeBool:
+	case commonpb.IndexedValueType_Bool:
 		return "boolean"
-	case enums.IndexedValueTypeDatetime:
+	case commonpb.IndexedValueType_Datetime:
 		return "date"
 	default:
 		return ""

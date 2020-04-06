@@ -31,7 +31,7 @@ import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
 	persistence "github.com/temporalio/temporal/common/persistence"
-	common "go.temporal.io/temporal-proto/common"
+	execution "go.temporal.io/temporal-proto/execution"
 	reflect "reflect"
 	time "time"
 )
@@ -88,10 +88,10 @@ func (mr *MockworkflowExecutionContextMockRecorder) getNamespaceID() *gomock.Cal
 }
 
 // getExecution mocks base method.
-func (m *MockworkflowExecutionContext) getExecution() *common.WorkflowExecution {
+func (m *MockworkflowExecutionContext) getExecution() *execution.WorkflowExecution {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getExecution")
-	ret0, _ := ret[0].(*common.WorkflowExecution)
+	ret0, _ := ret[0].(*execution.WorkflowExecution)
 	return ret0
 }
 

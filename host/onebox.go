@@ -29,7 +29,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
-	"go.temporal.io/temporal-proto/enums"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"

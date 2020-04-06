@@ -22,11 +22,11 @@ package namespace
 
 import (
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	replicationpb "go.temporal.io/temporal-proto/replication"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
@@ -88,7 +88,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 			VisibilityArchivalURI:                  config.VisibilityArchivalURI,
 			BadBinaries:                            config.BadBinaries,
 		},
-		ReplicationConfig: &commonproto.NamespaceReplicationConfiguration{
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
 			ActiveClusterName: replicationConfig.ActiveClusterName,
 			Clusters:          namespaceReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 		},
@@ -97,9 +97,9 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 	}
 
 	return namespaceReplicator.replicationMessageSink.Publish(
-		&replication.ReplicationTask{
+		&replicationgenpb.ReplicationTask{
 			TaskType: taskType,
-			Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
+			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
 				NamespaceTaskAttributes: task,
 			},
 		})
@@ -115,15 +115,15 @@ func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationCon
 	return output
 }
 
-func (namespaceReplicator *namespaceReplicatorImpl) convertNamespaceStatusToProto(input int) (enums.NamespaceStatus, error) {
+func (namespaceReplicator *namespaceReplicatorImpl) convertNamespaceStatusToProto(input int) (namespacepb.NamespaceStatus, error) {
 	switch input {
 	case persistence.NamespaceStatusRegistered:
-		output := enums.NamespaceStatusRegistered
+		output := namespacepb.NamespaceStatus_Registered
 		return output, nil
 	case persistence.NamespaceStatusDeprecated:
-		output := enums.NamespaceStatusDeprecated
+		output := namespacepb.NamespaceStatus_Deprecated
 		return output, nil
 	default:
-		return enums.NamespaceStatusRegistered, ErrInvalidNamespaceStatus
+		return namespacepb.NamespaceStatus_Registered, ErrInvalidNamespaceStatus
 	}
 }

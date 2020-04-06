@@ -28,8 +28,9 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -277,7 +278,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	// Note that we need to ensure DecisionTaskFailed event is appended right after DecisionTaskStarted event
 	decision, _ := newMutableState.GetInFlightDecision()
 
-	_, err := newMutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, enums.DecisionTaskFailedCauseResetWorkflow, nil,
+	_, err := newMutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, eventpb.DecisionTaskFailedCause_ResetWorkflow, nil,
 		identityHistoryService, resetReason, "", baseRunID, newRunID, forkEventVersion)
 	if err != nil {
 		retError = serviceerror.NewInternal("Failed to add decision failed event.")
@@ -460,7 +461,7 @@ func (w *workflowResetorImpl) generateReplicationTasksForReset(
 // replay signals in the base run, and also signals in all the runs along the chain of contineAsNew
 func (w *workflowResetorImpl) replayReceivedSignals(
 	ctx context.Context,
-	receivedSignals []*commonproto.HistoryEvent,
+	receivedSignals []*eventpb.HistoryEvent,
 	continueRunID string,
 	newMutableState, currMutableState mutableState,
 ) error {
@@ -481,7 +482,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 		if continueRunID == currMutableState.GetExecutionInfo().RunID {
 			continueMutableState = currMutableState
 		} else {
-			continueExe := commonproto.WorkflowExecution{
+			continueExe := executionpb.WorkflowExecution{
 				WorkflowId: newMutableState.GetExecutionInfo().WorkflowID,
 				RunId:      continueRunID,
 			}
@@ -521,7 +522,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 			for _, batch := range readResp.History {
 				for _, event := range batch.Events {
 					e := event
-					if e.GetEventType() == enums.EventTypeWorkflowExecutionSignaled {
+					if e.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 						sigReq := &workflowservice.SignalWorkflowExecutionRequest{
 							SignalName: e.GetWorkflowExecutionSignaledEventAttributes().SignalName,
 							Identity:   e.GetWorkflowExecutionSignaledEventAttributes().Identity,
@@ -529,7 +530,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 						}
 						newMutableState.AddWorkflowExecutionSignaled( //nolint:errcheck
 							sigReq.GetSignalName(), sigReq.GetInput(), sigReq.GetIdentity())
-					} else if e.GetEventType() == enums.EventTypeWorkflowExecutionContinuedAsNew {
+					} else if e.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
 						attr := e.GetWorkflowExecutionContinuedAsNewEventAttributes()
 						continueRunID = attr.GetNewExecutionRunId()
 					}
@@ -612,9 +613,9 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 	requestID string,
 	prevMutableState mutableState,
 	newRunID string,
-) (forkEventVersion, wfTimeoutSecs int64, receivedSignalsAfterReset []*commonproto.HistoryEvent, continueRunID string, sBuilder stateBuilder, newHistorySize int64, retError error) {
+) (forkEventVersion, wfTimeoutSecs int64, receivedSignalsAfterReset []*eventpb.HistoryEvent, continueRunID string, sBuilder stateBuilder, newHistorySize int64, retError error) {
 
-	prevExecution := commonproto.WorkflowExecution{
+	prevExecution := executionpb.WorkflowExecution{
 		WorkflowId: prevMutableState.GetExecutionInfo().WorkflowID,
 		RunId:      prevMutableState.GetExecutionInfo().RunID,
 	}
@@ -635,7 +636,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 		ShardID:       &shardId,
 	}
 	var resetMutableState *mutableStateBuilder
-	var lastBatch []*commonproto.HistoryEvent
+	var lastBatch []*eventpb.HistoryEvent
 
 	for {
 		var readResp *persistence.ReadHistoryBranchByBatchResponse
@@ -652,10 +653,10 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 			// for saving received signals only
 			if firstEvent.GetEventId() >= decisionFinishEventID {
 				for _, e := range history {
-					if e.GetEventType() == enums.EventTypeWorkflowExecutionSignaled {
+					if e.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 						receivedSignalsAfterReset = append(receivedSignalsAfterReset, e)
 					}
-					if e.GetEventType() == enums.EventTypeWorkflowExecutionContinuedAsNew {
+					if e.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
 						attr := e.GetWorkflowExecutionContinuedAsNewEventAttributes()
 						continueRunID = attr.GetNewExecutionRunId()
 					}
@@ -665,8 +666,8 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 
 			lastBatch = history
 			if firstEvent.GetEventId() == common.FirstEventID {
-				if firstEvent.GetEventType() != enums.EventTypeWorkflowExecutionStarted {
-					retError = serviceerror.NewInternal(fmt.Sprintf("first event type is not EventTypeWorkflowExecutionStarted: %v", firstEvent.GetEventType()))
+				if firstEvent.GetEventType() != eventpb.EventType_WorkflowExecutionStarted {
+					retError = serviceerror.NewInternal(fmt.Sprintf("first event type is not WorkflowExecutionStarted: %v", firstEvent.GetEventType()))
 					return
 				}
 				wfTimeoutSecs = int64(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetExecutionStartToCloseTimeoutSeconds())
@@ -699,7 +700,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 			}
 
 			// avoid replay this event in stateBuilder which will run into NPE if WF doesn't enable XDC
-			if lastEvent.GetEventType() == enums.EventTypeWorkflowExecutionContinuedAsNew {
+			if lastEvent.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
 				retError = serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, cannot replay history to continueAsNew"))
 				return
 			}
@@ -732,27 +733,27 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 	return
 }
 
-func validateLastBatchOfReset(lastBatch []*commonproto.HistoryEvent, decisionFinishEventID int64) error {
+func validateLastBatchOfReset(lastBatch []*eventpb.HistoryEvent, decisionFinishEventID int64) error {
 	firstEvent := lastBatch[0]
 	lastEvent := lastBatch[len(lastBatch)-1]
 	if decisionFinishEventID != lastEvent.GetEventId()+1 {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, it must be DecisionTaskStarted + 1: %v", lastEvent.GetEventId()))
 	}
 
-	if lastEvent.GetEventType() != enums.EventTypeDecisionTaskStarted {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, previous batch doesn't include EventTypeDecisionTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()))
+	if lastEvent.GetEventType() != eventpb.EventType_DecisionTaskStarted {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, previous batch doesn't include DecisionTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()))
 	}
 
 	return nil
 }
 
-func validateResetReplicationTask(request *historyservice.ReplicateEventsRequest) (*commonproto.DecisionTaskFailedEventAttributes, error) {
+func validateResetReplicationTask(request *historyservice.ReplicateEventsRequest) (*eventpb.DecisionTaskFailedEventAttributes, error) {
 	historyAfterReset := request.History.Events
-	if len(historyAfterReset) == 0 || historyAfterReset[0].GetEventType() != enums.EventTypeDecisionTaskFailed {
+	if len(historyAfterReset) == 0 || historyAfterReset[0].GetEventType() != eventpb.EventType_DecisionTaskFailed {
 		return nil, errUnknownReplicationTask
 	}
 	firstEvent := historyAfterReset[0]
-	if firstEvent.GetDecisionTaskFailedEventAttributes().GetCause() != enums.DecisionTaskFailedCauseResetWorkflow {
+	if firstEvent.GetDecisionTaskFailedEventAttributes().GetCause() != eventpb.DecisionTaskFailedCause_ResetWorkflow {
 		return nil, errUnknownReplicationTask
 	}
 	attr := firstEvent.GetDecisionTaskFailedEventAttributes()
@@ -779,7 +780,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 	if retError != nil {
 		return retError
 	}
-	baseExecution := commonproto.WorkflowExecution{
+	baseExecution := executionpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      resetAttr.GetBaseRunId(),
 	}
@@ -803,7 +804,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		currContext = baseContext
 	} else {
 		var currRelease releaseWorkflowExecutionFunc
-		currExecution := commonproto.WorkflowExecution{
+		currExecution := executionpb.WorkflowExecution{
 			WorkflowId: baseExecution.WorkflowId,
 			RunId:      currentRunID,
 		}
@@ -874,8 +875,8 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 // TODO: @shreyassrivatsan reduce number of return parameters from this method
 func (w *workflowResetorImpl) replicateResetEvent(
 	baseMutableState mutableState,
-	baseExecution *commonproto.WorkflowExecution,
-	newRunHistory []*commonproto.HistoryEvent,
+	baseExecution *executionpb.WorkflowExecution,
+	newRunHistory []*eventpb.HistoryEvent,
 	forkEventVersion int64,
 ) (newMsBuilder mutableState, newHistorySize int64, transferTasks, timerTasks []persistence.Task, retError error) {
 	namespaceID := baseMutableState.GetExecutionInfo().NamespaceID
@@ -896,7 +897,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 
 	// replay old history from beginning of the baseRun upto decisionFinishEventID(exclusive)
 	var nextPageToken []byte
-	var lastEvent *commonproto.HistoryEvent
+	var lastEvent *eventpb.HistoryEvent
 	baseBranchToken, err := baseMutableState.GetCurrentBranchToken()
 	if err != nil {
 		return nil, 0, nil, nil, err
@@ -1028,9 +1029,9 @@ func (w *workflowResetorImpl) replicateResetEvent(
 // FindAutoResetPoint returns the auto reset point
 func FindAutoResetPoint(
 	timeSource clock.TimeSource,
-	badBinaries *commonproto.BadBinaries,
-	autoResetPoints *commonproto.ResetPoints,
-) (string, *commonproto.ResetPointInfo) {
+	badBinaries *namespacepb.BadBinaries,
+	autoResetPoints *executionpb.ResetPoints,
+) (string, *executionpb.ResetPointInfo) {
 	if badBinaries == nil || badBinaries.Binaries == nil || autoResetPoints == nil || autoResetPoints.Points == nil {
 		return "", nil
 	}

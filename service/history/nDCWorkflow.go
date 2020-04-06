@@ -26,7 +26,8 @@ import (
 	"context"
 	"fmt"
 
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/cache"
@@ -138,7 +139,7 @@ func (r *nDCWorkflowImpl) revive() error {
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
 		state,
-		enums.WorkflowExecutionStatusRunning,
+		executionpb.WorkflowExecutionStatus_Running,
 	)
 }
 
@@ -226,7 +227,7 @@ func (r *nDCWorkflowImpl) failDecision(
 	if _, err := r.mutableState.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
-		enums.DecisionTaskFailedCauseFailoverCloseDecision,
+		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
 		nil,
 		identityHistoryService,
 		"",
@@ -270,7 +271,7 @@ func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
 
 	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateStatus(
 		persistence.WorkflowStateZombie,
-		enums.WorkflowExecutionStatusRunning,
+		executionpb.WorkflowExecutionStatus_Running,
 	)
 }
 

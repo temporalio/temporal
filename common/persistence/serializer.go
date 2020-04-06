@@ -25,8 +25,12 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 
+	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
@@ -39,28 +43,28 @@ type (
 	// It will only be used inside persistence, so that serialize/deserialize is transparent for application
 	PayloadSerializer interface {
 		// serialize/deserialize history events
-		SerializeBatchEvents(batch []*commonproto.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeBatchEvents(data *serialization.DataBlob) ([]*commonproto.HistoryEvent, error)
+		SerializeBatchEvents(batch []*eventpb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeBatchEvents(data *serialization.DataBlob) ([]*eventpb.HistoryEvent, error)
 
 		// serialize/deserialize a single history event
-		SerializeEvent(event *commonproto.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeEvent(data *serialization.DataBlob) (*commonproto.HistoryEvent, error)
+		SerializeEvent(event *eventpb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeEvent(data *serialization.DataBlob) (*eventpb.HistoryEvent, error)
 
 		// serialize/deserialize visibility memo fields
-		SerializeVisibilityMemo(memo *commonproto.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeVisibilityMemo(data *serialization.DataBlob) (*commonproto.Memo, error)
+		SerializeVisibilityMemo(memo *commonpb.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeVisibilityMemo(data *serialization.DataBlob) (*commonpb.Memo, error)
 
 		// serialize/deserialize reset points
-		SerializeResetPoints(event *commonproto.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeResetPoints(data *serialization.DataBlob) (*commonproto.ResetPoints, error)
+		SerializeResetPoints(event *executionpb.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeResetPoints(data *serialization.DataBlob) (*executionpb.ResetPoints, error)
 
 		// serialize/deserialize bad binaries
-		SerializeBadBinaries(event *commonproto.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeBadBinaries(data *serialization.DataBlob) (*commonproto.BadBinaries, error)
+		SerializeBadBinaries(event *namespacepb.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeBadBinaries(data *serialization.DataBlob) (*namespacepb.BadBinaries, error)
 
 		// serialize/deserialize version histories
-		SerializeVersionHistories(histories *commonproto.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeVersionHistories(data *serialization.DataBlob) (*commonproto.VersionHistories, error)
+		SerializeVersionHistories(histories *eventgenpb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeVersionHistories(data *serialization.DataBlob) (*eventgenpb.VersionHistories, error)
 
 		// serialize/deserialize immutable cluster metadata
 		SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error)
@@ -90,11 +94,11 @@ func NewPayloadSerializer() PayloadSerializer {
 	return &serializerImpl{}
 }
 
-func (t *serializerImpl) SerializeBatchEvents(events []*commonproto.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
-	return t.serialize(&commonproto.History{Events: events}, encodingType)
+func (t *serializerImpl) SerializeBatchEvents(events []*eventpb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+	return t.serialize(&eventpb.History{Events: events}, encodingType)
 }
 
-func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([]*commonproto.HistoryEvent, error) {
+func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([]*eventpb.HistoryEvent, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -102,7 +106,7 @@ func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([
 		return nil, nil
 	}
 
-	events := &commonproto.History{}
+	events := &eventpb.History{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
@@ -120,14 +124,14 @@ func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([
 	return events.Events, nil
 }
 
-func (t *serializerImpl) SerializeEvent(event *commonproto.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeEvent(event *eventpb.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if event == nil {
 		return nil, nil
 	}
 	return t.serialize(event, encodingType)
 }
 
-func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*commonproto.HistoryEvent, error) {
+func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*eventpb.HistoryEvent, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -135,7 +139,7 @@ func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*common
 		return nil, nil
 	}
 
-	event := &commonproto.HistoryEvent{}
+	event := &eventpb.HistoryEvent{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
@@ -155,22 +159,22 @@ func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*common
 	return event, err
 }
 
-func (t *serializerImpl) SerializeResetPoints(rp *commonproto.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeResetPoints(rp *executionpb.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if rp == nil {
-		rp = &commonproto.ResetPoints{}
+		rp = &executionpb.ResetPoints{}
 	}
 	return t.serialize(rp, encodingType)
 }
 
-func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*commonproto.ResetPoints, error) {
+func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*executionpb.ResetPoints, error) {
 	if data == nil {
-		return &commonproto.ResetPoints{}, nil
+		return &executionpb.ResetPoints{}, nil
 	}
 	if len(data.Data) == 0 {
-		return &commonproto.ResetPoints{}, nil
+		return &executionpb.ResetPoints{}, nil
 	}
 
-	memo := &commonproto.ResetPoints{}
+	memo := &executionpb.ResetPoints{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
@@ -190,22 +194,22 @@ func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeBadBinaries(bb *commonproto.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeBadBinaries(bb *namespacepb.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if bb == nil {
-		bb = &commonproto.BadBinaries{}
+		bb = &namespacepb.BadBinaries{}
 	}
 	return t.serialize(bb, encodingType)
 }
 
-func (t *serializerImpl) DeserializeBadBinaries(data *serialization.DataBlob) (*commonproto.BadBinaries, error) {
+func (t *serializerImpl) DeserializeBadBinaries(data *serialization.DataBlob) (*namespacepb.BadBinaries, error) {
 	if data == nil {
-		return &commonproto.BadBinaries{}, nil
+		return &namespacepb.BadBinaries{}, nil
 	}
 	if len(data.Data) == 0 {
-		return &commonproto.BadBinaries{}, nil
+		return &namespacepb.BadBinaries{}, nil
 	}
 
-	memo := &commonproto.BadBinaries{}
+	memo := &namespacepb.BadBinaries{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
@@ -225,7 +229,7 @@ func (t *serializerImpl) DeserializeBadBinaries(data *serialization.DataBlob) (*
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeVisibilityMemo(memo *commonproto.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeVisibilityMemo(memo *commonpb.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if memo == nil {
 		// Return nil here to be consistent with Event
 		// This check is not duplicate as check in following serialize
@@ -234,15 +238,15 @@ func (t *serializerImpl) SerializeVisibilityMemo(memo *commonproto.Memo, encodin
 	return t.serialize(memo, encodingType)
 }
 
-func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob) (*commonproto.Memo, error) {
+func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob) (*commonpb.Memo, error) {
 	if data == nil {
-		return &commonproto.Memo{}, nil
+		return &commonpb.Memo{}, nil
 	}
 	if len(data.Data) == 0 {
-		return &commonproto.Memo{}, nil
+		return &commonpb.Memo{}, nil
 	}
 
-	memo := &commonproto.Memo{}
+	memo := &commonpb.Memo{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:
@@ -262,22 +266,22 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob)
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeVersionHistories(histories *commonproto.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeVersionHistories(histories *eventgenpb.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if histories == nil {
 		return nil, nil
 	}
 	return t.serialize(histories, encodingType)
 }
 
-func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlob) (*commonproto.VersionHistories, error) {
+func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlob) (*eventgenpb.VersionHistories, error) {
 	if data == nil {
-		return &commonproto.VersionHistories{}, nil
+		return &eventgenpb.VersionHistories{}, nil
 	}
 	if len(data.Data) == 0 {
-		return &commonproto.VersionHistories{}, nil
+		return &eventgenpb.VersionHistories{}, nil
 	}
 
-	memo := &commonproto.VersionHistories{}
+	memo := &eventgenpb.VersionHistories{}
 	var err error
 	switch data.Encoding {
 	case common.EncodingTypeJSON:

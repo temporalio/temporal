@@ -30,8 +30,10 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
@@ -39,8 +41,9 @@ import (
 	"github.com/temporalio/temporal/common/codec"
 )
 
-func encode(v interface{}) ([]byte, error) {
-	return json.Marshal(v)
+func encode(message proto.Message) ([]byte, error) {
+	encoder := codec.NewJSONPBEncoder()
+	return encoder.Encode(message)
 }
 
 func constructHistoryFilename(namespaceID, workflowID, runID string, version int64) string {
@@ -149,13 +152,13 @@ func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error
 	return token, err
 }
 
-func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *commonproto.WorkflowExecutionInfo {
-	return &commonproto.WorkflowExecutionInfo{
-		Execution: &commonproto.WorkflowExecution{
+func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *executionpb.WorkflowExecutionInfo {
+	return &executionpb.WorkflowExecutionInfo{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
 			RunId:      record.GetRunId(),
 		},
-		Type: &commonproto.WorkflowType{
+		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
 		StartTime:     &types.Int64Value{Value: record.StartTimestamp},
@@ -164,7 +167,7 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *com
 		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,
-		SearchAttributes: &commonproto.SearchAttributes{
+		SearchAttributes: &commonpb.SearchAttributes{
 			IndexedFields: archiver.ConvertSearchAttrToBytes(record.SearchAttributes),
 		},
 	}

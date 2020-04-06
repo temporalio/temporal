@@ -23,8 +23,8 @@ package history
 import (
 	"context"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -97,7 +97,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 	clusterConfiguredForHistoryArchival := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	namespaceConfiguredForHistoryArchival := namespaceCacheEntry.GetConfig().HistoryArchivalStatus == enums.ArchivalStatusEnabled
+	namespaceConfiguredForHistoryArchival := namespaceCacheEntry.GetConfig().HistoryArchivalStatus == namespacepb.ArchivalStatus_Enabled
 	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
 
 	// TODO: @ycyang once archival backfill is in place cluster:paused && namespace:enabled should be a nop rather than a delete
@@ -270,9 +270,9 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 
 func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TimerTaskInfo,
-) (string, commonproto.WorkflowExecution) {
+) (string, executionpb.WorkflowExecution) {
 
-	return primitives.UUIDString(task.GetNamespaceId()), commonproto.WorkflowExecution{
+	return primitives.UUIDString(task.GetNamespaceId()), executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      primitives.UUIDString(task.GetRunId()),
 	}

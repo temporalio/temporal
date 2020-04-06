@@ -26,8 +26,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -49,14 +48,14 @@ type (
 	query interface {
 		getQueryID() string
 		getQueryTermCh() <-chan struct{}
-		getQueryInput() *commonproto.WorkflowQuery
+		getQueryInput() *querypb.WorkflowQuery
 		getTerminationState() (*queryTerminationState, error)
 		setTerminationState(*queryTerminationState) error
 	}
 
 	queryImpl struct {
 		id         string
-		queryInput *commonproto.WorkflowQuery
+		queryInput *querypb.WorkflowQuery
 		termCh     chan struct{}
 
 		terminationState atomic.Value
@@ -64,12 +63,12 @@ type (
 
 	queryTerminationState struct {
 		queryTerminationType queryTerminationType
-		queryResult          *commonproto.WorkflowQueryResult
+		queryResult          *querypb.WorkflowQueryResult
 		failure              error
 	}
 )
 
-func newQuery(queryInput *commonproto.WorkflowQuery) query {
+func newQuery(queryInput *querypb.WorkflowQuery) query {
 	return &queryImpl{
 		id:         uuid.New(),
 		queryInput: queryInput,
@@ -85,7 +84,7 @@ func (q *queryImpl) getQueryTermCh() <-chan struct{} {
 	return q.termCh
 }
 
-func (q *queryImpl) getQueryInput() *commonproto.WorkflowQuery {
+func (q *queryImpl) getQueryInput() *querypb.WorkflowQuery {
 	return q.queryInput
 }
 
@@ -122,10 +121,10 @@ func (q *queryImpl) validateTerminationState(
 			return errTerminationStateInvalid
 		}
 		queryResult := terminationState.queryResult
-		validAnswered := queryResult.GetResultType() == enums.QueryResultTypeAnswered &&
+		validAnswered := queryResult.GetResultType() == querypb.QueryResultType_Answered &&
 			queryResult.Answer != nil &&
 			queryResult.GetErrorMessage() == ""
-		validFailed := queryResult.GetResultType() == enums.QueryResultTypeFailed &&
+		validFailed := queryResult.GetResultType() == querypb.QueryResultType_Failed &&
 			queryResult.Answer == nil &&
 			queryResult.GetErrorMessage() != ""
 		if !validAnswered && !validFailed {

@@ -31,7 +31,8 @@ import (
 	"strings"
 
 	"github.com/dgryski/go-farm"
-	commonproto "go.temporal.io/temporal-proto/common"
+	"github.com/gogo/protobuf/proto"
+	eventpb "go.temporal.io/temporal-proto/event"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
@@ -141,8 +142,14 @@ func listFilesByPrefix(dirPath string, prefix string) ([]string, error) {
 
 // encoding & decoding util
 
-func encode(v interface{}) ([]byte, error) {
-	return json.Marshal(v)
+func encode(message proto.Message) ([]byte, error) {
+	encoder := codec.NewJSONPBEncoder()
+	return encoder.Encode(message)
+}
+
+func encodeHistories(histories []*eventpb.History) ([]byte, error) {
+	encoder := codec.NewJSONPBEncoder()
+	return encoder.EncodeHistories(histories)
 }
 
 func decodeVisibilityRecord(data []byte) (*archiverproto.ArchiveVisibilityRequest, error) {
@@ -224,7 +231,7 @@ func extractCloseFailoverVersion(filename string) (int64, error) {
 	return strconv.ParseInt(filenameParts[1], 10, 64)
 }
 
-func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*commonproto.History, isLast bool) bool {
+func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*eventpb.History, isLast bool) bool {
 	lastBatch := historyBatches[len(historyBatches)-1].Events
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()

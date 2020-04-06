@@ -27,10 +27,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/archiver"
+	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
@@ -70,7 +70,7 @@ type (
 )
 
 func (e *testSizeEstimator) EstimateSize(v interface{}) (int, error) {
-	historyBatch, ok := v.(*commonproto.History)
+	historyBatch, ok := v.(*eventpb.History)
 	if !ok {
 		return -1, errors.New("test size estimator only estimate the size of history batches")
 	}
@@ -102,7 +102,7 @@ func (s *HistoryIteratorSuite) TestReadHistory_Failed_EventsV2() {
 func (s *HistoryIteratorSuite) TestReadHistory_Success_EventsV2() {
 	mockHistoryV2Manager := &mocks.HistoryV2Manager{}
 	resp := persistence.ReadHistoryBranchByBatchResponse{
-		History:       []*commonproto.History{},
+		History:       []*eventpb.History{},
 		NextPageToken: []byte{},
 	}
 	mockHistoryV2Manager.On("ReadHistoryBranchByBatch", mock.Anything).Return(&resp, nil)
@@ -351,7 +351,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &archiver.HistoryBlobHeader{
+	expectedHeader := &archivergenpb.HistoryBlobHeader{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
 		WorkflowId:           testWorkflowID,
@@ -413,7 +413,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &archiver.HistoryBlobHeader{
+	expectedHeader := &archivergenpb.HistoryBlobHeader{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
 		WorkflowId:           testWorkflowID,
@@ -464,7 +464,7 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		blob, err := itr.Next()
 		s.NoError(err)
 		s.NotNil(blob)
-		expectedHeader := &archiver.HistoryBlobHeader{
+		expectedHeader := &archivergenpb.HistoryBlobHeader{
 			Namespace:            testNamespace,
 			NamespaceId:          testNamespaceID,
 			WorkflowId:           testWorkflowID,
@@ -660,13 +660,13 @@ func (s *HistoryIteratorSuite) assertStateMatches(expected historyIteratorState,
 	s.Equal(expected.FinishedIteration, itr.FinishedIteration)
 }
 
-func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page page, firstEventID int64) []*commonproto.History {
-	var batches []*commonproto.History
+func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page page, firstEventID int64) []*eventpb.History {
+	var batches []*eventpb.History
 	eventsID := firstEventID
 	for batchIdx, numEvents := range batchInfo[page.firstbatchIdx : page.firstbatchIdx+page.numBatches] {
-		var events []*commonproto.HistoryEvent
+		var events []*eventpb.HistoryEvent
 		for i := 0; i < numEvents; i++ {
-			event := &commonproto.HistoryEvent{
+			event := &eventpb.HistoryEvent{
 				EventId: eventsID,
 				Version: page.firstEventFailoverVersion,
 			}
@@ -676,7 +676,7 @@ func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page pag
 			}
 			events = append(events, event)
 		}
-		batches = append(batches, &commonproto.History{
+		batches = append(batches, &eventpb.History{
 			Events: events,
 		})
 	}

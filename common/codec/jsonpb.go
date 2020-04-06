@@ -26,7 +26,7 @@ import (
 
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 )
 
 type (
@@ -68,26 +68,26 @@ func (e *JSONPBEncoder) Decode(data []byte, pb proto.Message) error {
 }
 
 // Encode HistoryEvent slice to bytes.
-func (e *JSONPBEncoder) EncodeHistoryEvents(historyEvents []*commonproto.HistoryEvent) ([]byte, error) {
+func (e *JSONPBEncoder) EncodeHistoryEvents(historyEvents []*eventpb.HistoryEvent) ([]byte, error) {
 	return e.encodeSlice(
 		len(historyEvents),
 		func(i int) proto.Message { return historyEvents[i] })
 }
 
 // Encode History slice to bytes.
-func (e *JSONPBEncoder) EncodeHistories(histories []*commonproto.History) ([]byte, error) {
+func (e *JSONPBEncoder) EncodeHistories(histories []*eventpb.History) ([]byte, error) {
 	return e.encodeSlice(
 		len(histories),
 		func(i int) proto.Message { return histories[i] })
 }
 
 // Decode HistoryEvent slice from bytes.
-func (e *JSONPBEncoder) DecodeHistoryEvents(data []byte) ([]*commonproto.HistoryEvent, error) {
-	var historyEvents []*commonproto.HistoryEvent
+func (e *JSONPBEncoder) DecodeHistoryEvents(data []byte) ([]*eventpb.HistoryEvent, error) {
+	var historyEvents []*eventpb.HistoryEvent
 	err := e.decodeSlice(
 		data,
 		func() proto.Message {
-			historyEvent := &commonproto.HistoryEvent{}
+			historyEvent := &eventpb.HistoryEvent{}
 			historyEvents = append(historyEvents, historyEvent)
 			return historyEvent
 		})
@@ -95,12 +95,12 @@ func (e *JSONPBEncoder) DecodeHistoryEvents(data []byte) ([]*commonproto.History
 }
 
 // Decode History slice from bytes.
-func (e *JSONPBEncoder) DecodeHistories(data []byte) ([]*commonproto.History, error) {
-	var histories []*commonproto.History
+func (e *JSONPBEncoder) DecodeHistories(data []byte) ([]*eventpb.History, error) {
+	var histories []*eventpb.History
 	err := e.decodeSlice(
 		data,
 		func() proto.Message {
-			history := &commonproto.History{}
+			history := &eventpb.History{}
 			histories = append(histories, history)
 			return history
 		})

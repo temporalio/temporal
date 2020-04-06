@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Temporal Technologies, Inc.
+// Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,24 +20,45 @@
 
 syntax = "proto3";
 
-package indexer;
-option go_package = "github.com/temporalio/temporal/.gen/proto/indexer";
+package replication;
 
-import "enums/enums.proto";
+option go_package = "github.com/temporalio/temporal/.gen/proto/archiver";
 
-message Field {
-    enums.FieldType type = 1;
-    string stringData = 2;
-    int64 intData = 3;
-    bool boolData = 4;
-    bytes binaryData = 5;
-}
+import "common/message.proto";
+import "event/message.proto";
+import "execution/enum.proto";
 
-message Message {
-    enums.MessageType messageType = 1;
+message HistoryBlobHeader {
+    string namespace = 1;
     string namespaceId = 2;
     string workflowId = 3;
     string runId = 4;
-    int64 version = 5;
-    map<string, Field> fields = 6;
+    bool isLast = 5;
+    int64 firstFailoverVersion = 6;
+    int64 lastFailoverVersion = 7;
+    int64 firstEventId = 8;
+    int64 lastEventId = 9;
+    int64 eventCount = 10;
+}
+
+message HistoryBlob  {
+    HistoryBlobHeader header = 1;
+    repeated event.History body = 2;
+}
+
+// ArchiveVisibilityRequest is request to Archive single workflow visibility record
+message ArchiveVisibilityRequest {
+    string namespaceId = 1;
+    string namespace = 2;
+    string workflowId = 3;
+    string runId = 4;
+    string workflowTypeName = 5;
+    int64 startTimestamp = 6;
+    int64 executionTimestamp = 7;
+    int64 closeTimestamp = 8;
+    execution.WorkflowExecutionStatus status = 9;
+    int64 historyLength = 10;
+    common.Memo memo = 11;
+    map<string, string> searchAttributes = 12;
+    string historyArchivalURI = 13;
 }

@@ -26,8 +26,8 @@ import (
 	"context"
 	"fmt"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -56,7 +56,7 @@ type (
 			resetRequestID string,
 			currentWorkflow nDCWorkflow,
 			resetReason string,
-			additionalReapplyEvents []*commonproto.HistoryEvent,
+			additionalReapplyEvents []*eventpb.HistoryEvent,
 		) error
 	}
 
@@ -106,7 +106,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 	resetRequestID string,
 	currentWorkflow nDCWorkflow,
 	resetReason string,
-	additionalReapplyEvents []*commonproto.HistoryEvent,
+	additionalReapplyEvents []*eventpb.HistoryEvent,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(namespaceID)
@@ -168,7 +168,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetRequestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
-	additionalReapplyEvents []*commonproto.HistoryEvent,
+	additionalReapplyEvents []*eventpb.HistoryEvent,
 ) (nDCWorkflow, error) {
 
 	resetWorkflow, err := r.replayResetWorkflow(
@@ -210,7 +210,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 	_, err = resetMutableState.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
-		decision.StartedID, enums.DecisionTaskFailedCauseResetWorkflow,
+		decision.StartedID, eventpb.DecisionTaskFailedCause_ResetWorkflow,
 		nil,
 		identityHistoryService,
 		resetReason,
@@ -320,7 +320,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 
 	resetContext := newWorkflowExecutionContext(
 		namespaceID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      resetRunID,
 		},
@@ -460,7 +460,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		context, release, err := r.historyCache.getOrCreateWorkflowExecution(
 			ctx,
 			namespaceID,
-			commonproto.WorkflowExecution{
+			executionpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -521,14 +521,14 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	))
 
 	var nextRunID string
-	var lastEvents []*commonproto.HistoryEvent
+	var lastEvents []*eventpb.HistoryEvent
 
 	for iter.HasNext() {
 		batch, err := iter.Next()
 		if err != nil {
 			return "", err
 		}
-		lastEvents = batch.(*commonproto.History).Events
+		lastEvents = batch.(*eventpb.History).Events
 		if err := r.reapplyEvents(mutableState, lastEvents); err != nil {
 			return "", err
 		}
@@ -536,7 +536,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 	if len(lastEvents) > 0 {
 		lastEvent := lastEvents[len(lastEvents)-1]
-		if lastEvent.GetEventType() == enums.EventTypeWorkflowExecutionContinuedAsNew {
+		if lastEvent.GetEventType() == eventpb.EventType_WorkflowExecutionContinuedAsNew {
 			nextRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 		}
 	}
@@ -545,12 +545,12 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 func (r *workflowResetterImpl) reapplyEvents(
 	mutableState mutableState,
-	events []*commonproto.HistoryEvent,
+	events []*eventpb.HistoryEvent,
 ) error {
 
 	for _, event := range events {
 		switch event.GetEventType() {
-		case enums.EventTypeWorkflowExecutionSignaled:
+		case eventpb.EventType_WorkflowExecutionSignaled:
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),

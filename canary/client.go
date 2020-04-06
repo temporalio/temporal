@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/opentracing/opentracing-go"
-	"go.temporal.io/temporal-proto/enums"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
@@ -47,10 +47,10 @@ type cadenceClient struct {
 
 // createNamespace creates a cadence namespace with the given name and description
 // if the namespace already exist, this method silently returns success
-func (client *cadenceClient) createNamespace(name string, desc string, owner string, archivalStatus enums.ArchivalStatus) error {
+func (client *cadenceClient) createNamespace(name string, desc string, owner string, archivalStatus namespacepb.ArchivalStatus) error {
 	emitMetric := true
 	retention := int32(workflowRetentionDays)
-	if archivalStatus == enums.ArchivalStatusEnabled {
+	if archivalStatus == namespacepb.ArchivalStatus_Enabled {
 		retention = int32(0)
 	}
 	req := &workflowservice.RegisterNamespaceRequest{

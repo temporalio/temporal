@@ -24,11 +24,11 @@ import (
 	"context"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/definition"
@@ -95,7 +95,7 @@ const (
 )
 
 func newActivityReplicationTask(
-	replicationTask *replication.ReplicationTask,
+	replicationTask *replicationgenpb.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,
@@ -153,7 +153,7 @@ func newActivityReplicationTask(
 }
 
 func newHistoryReplicationTask(
-	replicationTask *replication.ReplicationTask,
+	replicationTask *replicationgenpb.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
@@ -191,7 +191,7 @@ func newHistoryReplicationTask(
 		req: &historyservice.ReplicateEventsRequest{
 			SourceCluster: sourceCluster,
 			NamespaceId:   attr.NamespaceId,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,
 			},
@@ -210,7 +210,7 @@ func newHistoryReplicationTask(
 }
 
 func newHistoryMetadataReplicationTask(
-	replicationTask *replication.ReplicationTask,
+	replicationTask *replicationgenpb.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
@@ -252,7 +252,7 @@ func newHistoryMetadataReplicationTask(
 }
 
 func newHistoryReplicationV2Task(
-	replicationTask *replication.ReplicationTask,
+	replicationTask *replicationgenpb.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,
@@ -286,7 +286,7 @@ func newHistoryReplicationV2Task(
 		},
 		req: &historyservice.ReplicateEventsV2Request{
 			NamespaceId: attr.NamespaceId,
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,
 			},

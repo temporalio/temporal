@@ -24,9 +24,12 @@ import (
 	"context"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	m "github.com/temporalio/temporal/.gen/proto/matchingservice"
 
@@ -79,9 +82,9 @@ func newTransferQueueTaskExecutorBase(
 
 func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TransferTaskInfo,
-) (string, commonproto.WorkflowExecution) {
+) (string, executionpb.WorkflowExecution) {
 
-	return primitives.UUIDString(task.GetNamespaceId()), commonproto.WorkflowExecution{
+	return primitives.UUIDString(task.GetNamespaceId()), executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      primitives.UUIDString(task.GetRunId()),
 	}
@@ -102,11 +105,11 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	_, err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
 		NamespaceId:       primitives.UUIDString(task.GetTargetNamespaceId()),
 		SourceNamespaceId: primitives.UUIDString(task.GetNamespaceId()),
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      primitives.UUIDString(task.GetRunId()),
 		},
-		TaskList:                      &commonproto.TaskList{Name: task.TaskList},
+		TaskList:                      &tasklistpb.TaskList{Name: task.TaskList},
 		ScheduleId:                    task.GetScheduleId(),
 		ScheduleToStartTimeoutSeconds: activityScheduleToStartTimeout,
 	})
@@ -116,7 +119,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 
 func (t *transferQueueTaskExecutorBase) pushDecision(
 	task *persistenceblobs.TransferTaskInfo,
-	tasklist *commonproto.TaskList,
+	tasklist *tasklistpb.TaskList,
 	decisionScheduleToStartTimeout int32,
 ) error {
 
@@ -129,7 +132,7 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 
 	_, err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
 		NamespaceId: primitives.UUIDString(task.GetNamespaceId()),
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      primitives.UUIDString(task.GetRunId()),
 		},
@@ -149,7 +152,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	executionTimeUnixNano int64,
 	workflowTimeout int32,
 	taskID int64,
-	visibilityMemo *commonproto.Memo,
+	visibilityMemo *commonpb.Memo,
 	searchAttributes map[string][]byte,
 ) error {
 
@@ -171,7 +174,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace,
-		Execution: commonproto.WorkflowExecution{
+		Execution: executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -196,7 +199,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	executionTimeUnixNano int64,
 	workflowTimeout int32,
 	taskID int64,
-	visibilityMemo *commonproto.Memo,
+	visibilityMemo *commonpb.Memo,
 	searchAttributes map[string][]byte,
 ) error {
 
@@ -213,7 +216,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	request := &persistence.UpsertWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace,
-		Execution: commonproto.WorkflowExecution{
+		Execution: executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -237,10 +240,10 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	startTimeUnixNano int64,
 	executionTimeUnixNano int64,
 	endTimeUnixNano int64,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 	historyLength int64,
 	taskID int64,
-	visibilityMemo *commonproto.Memo,
+	visibilityMemo *commonpb.Memo,
 	searchAttributes map[string][]byte,
 ) error {
 
@@ -266,7 +269,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		}
 
 		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalStatus == enums.ArchivalStatusEnabled
+		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalStatus == namespacepb.ArchivalStatus_Enabled
 		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 	}
 
@@ -274,7 +277,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			NamespaceID: namespaceID,
 			Namespace:   namespace,
-			Execution: commonproto.WorkflowExecution{
+			Execution: executionpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -325,7 +328,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 // Argument startEvent is to save additional call of msBuilder.GetStartEvent
 func getWorkflowExecutionTimestamp(
 	msBuilder mutableState,
-	startEvent *commonproto.HistoryEvent,
+	startEvent *eventpb.HistoryEvent,
 ) time.Time {
 	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
 	// comparison between two field, we need a value to differentiate them from cron workflows
@@ -344,12 +347,12 @@ func getWorkflowExecutionTimestamp(
 
 func getWorkflowMemo(
 	memo map[string][]byte,
-) *commonproto.Memo {
+) *commonpb.Memo {
 
 	if memo == nil {
 		return nil
 	}
-	return &commonproto.Memo{Fields: memo}
+	return &commonpb.Memo{Fields: memo}
 }
 
 func copySearchAttributes(

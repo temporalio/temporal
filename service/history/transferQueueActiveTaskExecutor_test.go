@@ -30,11 +30,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -215,7 +219,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TearDownTest() {
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -228,8 +232,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -273,7 +277,7 @@ func (s *transferQueueActiveTaskExecutorSuite) GetNamespaceIDBytes() primitives.
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplication() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -286,8 +290,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -330,7 +334,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDecision() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -343,8 +347,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDeci
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -376,7 +380,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDeci
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstDecision() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -389,8 +393,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstD
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -429,7 +433,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstD
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_NonFirstDecision() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -444,8 +448,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_No
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -488,7 +492,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_No
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionNotSticky_MutableStateSticky() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -503,8 +507,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionN
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -547,7 +551,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionN
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplication() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -560,8 +564,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -595,7 +599,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasParent() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -605,7 +609,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	parentNamespaceID := "some random parent namespace ID"
 	parentInitiatedID := int64(3222)
 	parentNamespace := "some random parent namespace Name"
-	parentExecution := &commonproto.WorkflowExecution{
+	parentExecution := &executionpb.WorkflowExecution{
 		WorkflowId: "some random parent workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -616,12 +620,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
-			ParentExecutionInfo: &commonproto.ParentExecutionInfo{
+			ParentExecutionInfo: &executiongenpb.ParentExecutionInfo{
 				NamespaceId: parentNamespaceID,
 				Namespace:   parentNamespace,
 				Execution:   parentExecution,
@@ -668,7 +672,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -681,8 +685,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -721,7 +725,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasFewChildren() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -734,8 +738,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -747,47 +751,47 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := enums.DecisionTypeStartChildWorkflowExecution
-	parentClosePolicy1 := enums.ParentClosePolicyAbandon
-	parentClosePolicy2 := enums.ParentClosePolicyTerminate
-	parentClosePolicy3 := enums.ParentClosePolicyRequestCancel
+	dt := decisionpb.DecisionType_StartChildWorkflowExecution
+	parentClosePolicy1 := commonpb.ParentClosePolicy_Abandon
+	parentClosePolicy2 := commonpb.ParentClosePolicy_Terminate
+	parentClosePolicy3 := commonpb.ParentClosePolicy_RequestCancel
 
 	event, _ = mutableState.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondDecisionTaskCompletedRequest{
 		ExecutionContext: nil,
 		Identity:         "some random identity",
-		Decisions: []*commonproto.Decision{
+		Decisions: []*decisionpb.Decision{
 			{
 				DecisionType: dt,
-				Attributes: &commonproto.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 					WorkflowId: "child workflow1",
-					WorkflowType: &commonproto.WorkflowType{
+					WorkflowType: &commonpb.WorkflowType{
 						Name: "child workflow type",
 					},
-					TaskList:          &commonproto.TaskList{Name: taskListName},
+					TaskList:          &tasklistpb.TaskList{Name: taskListName},
 					Input:             []byte("random input"),
 					ParentClosePolicy: parentClosePolicy1,
 				}},
 			},
 			{
 				DecisionType: dt,
-				Attributes: &commonproto.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 					WorkflowId: "child workflow2",
-					WorkflowType: &commonproto.WorkflowType{
+					WorkflowType: &commonpb.WorkflowType{
 						Name: "child workflow type",
 					},
-					TaskList:          &commonproto.TaskList{Name: taskListName},
+					TaskList:          &tasklistpb.TaskList{Name: taskListName},
 					Input:             []byte("random input"),
 					ParentClosePolicy: parentClosePolicy2,
 				}},
 			},
 			{
 				DecisionType: dt,
-				Attributes: &commonproto.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 					WorkflowId: "child workflow3",
-					WorkflowType: &commonproto.WorkflowType{
+					WorkflowType: &commonpb.WorkflowType{
 						Name: "child workflow type",
 					},
-					TaskList:          &commonproto.TaskList{Name: taskListName},
+					TaskList:          &tasklistpb.TaskList{Name: taskListName},
 					Input:             []byte("random input"),
 					ParentClosePolicy: parentClosePolicy3,
 				}},
@@ -795,32 +799,32 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		},
 	}, defaultHistoryMaxAutoResetPoints)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 		WorkflowId: "child workflow1",
-		WorkflowType: &commonproto.WorkflowType{
+		WorkflowType: &commonpb.WorkflowType{
 			Name: "child workflow type",
 		},
-		TaskList:          &commonproto.TaskList{Name: taskListName},
+		TaskList:          &tasklistpb.TaskList{Name: taskListName},
 		Input:             []byte("random input"),
 		ParentClosePolicy: parentClosePolicy1,
 	})
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 		WorkflowId: "child workflow2",
-		WorkflowType: &commonproto.WorkflowType{
+		WorkflowType: &commonpb.WorkflowType{
 			Name: "child workflow type",
 		},
-		TaskList:          &commonproto.TaskList{Name: taskListName},
+		TaskList:          &tasklistpb.TaskList{Name: taskListName},
 		Input:             []byte("random input"),
 		ParentClosePolicy: parentClosePolicy2,
 	})
 	s.Nil(err)
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 		WorkflowId: "child workflow3",
-		WorkflowType: &commonproto.WorkflowType{
+		WorkflowType: &commonpb.WorkflowType{
 			Name: "child workflow type",
 		},
-		TaskList:          &commonproto.TaskList{Name: taskListName},
+		TaskList:          &tasklistpb.TaskList{Name: taskListName},
 		Input:             []byte("random input"),
 		ParentClosePolicy: parentClosePolicy3,
 	})
@@ -855,7 +859,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasManyChildren() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -868,8 +872,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -881,18 +885,18 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := enums.DecisionTypeStartChildWorkflowExecution
-	parentClosePolicy := enums.ParentClosePolicyTerminate
-	var decisions []*commonproto.Decision
+	dt := decisionpb.DecisionType_StartChildWorkflowExecution
+	parentClosePolicy := commonpb.ParentClosePolicy_Terminate
+	var decisions []*decisionpb.Decision
 	for i := 0; i < 10; i++ {
-		decisions = append(decisions, &commonproto.Decision{
+		decisions = append(decisions, &decisionpb.Decision{
 			DecisionType: dt,
-			Attributes: &commonproto.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+			Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 				WorkflowId: "child workflow" + string(i),
-				WorkflowType: &commonproto.WorkflowType{
+				WorkflowType: &commonpb.WorkflowType{
 					Name: "child workflow type",
 				},
-				TaskList:          &commonproto.TaskList{Name: taskListName},
+				TaskList:          &tasklistpb.TaskList{Name: taskListName},
 				Input:             []byte("random input"),
 				ParentClosePolicy: parentClosePolicy,
 			}},
@@ -906,12 +910,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, defaultHistoryMaxAutoResetPoints)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 			WorkflowId: "child workflow" + string(i),
-			WorkflowType: &commonproto.WorkflowType{
+			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
 			},
-			TaskList:          &commonproto.TaskList{Name: taskListName},
+			TaskList:          &tasklistpb.TaskList{Name: taskListName},
 			Input:             []byte("random input"),
 			ParentClosePolicy: parentClosePolicy,
 		})
@@ -946,7 +950,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasManyAbandonedChildren() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -959,8 +963,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -972,18 +976,18 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 
-	dt := enums.DecisionTypeStartChildWorkflowExecution
-	parentClosePolicy := enums.ParentClosePolicyAbandon
-	var decisions []*commonproto.Decision
+	dt := decisionpb.DecisionType_StartChildWorkflowExecution
+	parentClosePolicy := commonpb.ParentClosePolicy_Abandon
+	var decisions []*decisionpb.Decision
 	for i := 0; i < 10; i++ {
-		decisions = append(decisions, &commonproto.Decision{
+		decisions = append(decisions, &decisionpb.Decision{
 			DecisionType: dt,
-			Attributes: &commonproto.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+			Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 				WorkflowId: "child workflow" + string(i),
-				WorkflowType: &commonproto.WorkflowType{
+				WorkflowType: &commonpb.WorkflowType{
 					Name: "child workflow type",
 				},
-				TaskList:          &commonproto.TaskList{Name: taskListName},
+				TaskList:          &tasklistpb.TaskList{Name: taskListName},
 				Input:             []byte("random input"),
 				ParentClosePolicy: parentClosePolicy,
 			}},
@@ -997,12 +1001,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}, defaultHistoryMaxAutoResetPoints)
 
 	for i := 0; i < 10; i++ {
-		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 			WorkflowId: "child workflow" + string(i),
-			WorkflowType: &commonproto.WorkflowType{
+			WorkflowType: &commonpb.WorkflowType{
 				Name: "child workflow type",
 			},
-			TaskList:          &commonproto.TaskList{Name: taskListName},
+			TaskList:          &tasklistpb.TaskList{Name: taskListName},
 			Input:             []byte("random input"),
 			ParentClosePolicy: parentClosePolicy,
 		})
@@ -1036,14 +1040,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Success() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := commonproto.WorkflowExecution{
+	targetExecution := executionpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1054,8 +1058,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1098,14 +1102,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failure() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := commonproto.WorkflowExecution{
+	targetExecution := executionpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1116,8 +1120,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1160,14 +1164,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplication() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := commonproto.WorkflowExecution{
+	targetExecution := executionpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1178,8 +1182,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1220,14 +1224,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Success() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := commonproto.WorkflowExecution{
+	targetExecution := executionpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1241,8 +1245,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1282,7 +1286,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 
 	s.mockHistoryClient.EXPECT().RemoveSignalMutableState(gomock.Any(), &historyservice.RemoveSignalMutableStateRequest{
 		NamespaceId: primitives.UUID(transferTask.GetTargetNamespaceId()).String(),
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: transferTask.GetTargetWorkflowId(),
 			RunId:      primitives.UUID(transferTask.GetTargetRunId()).String(),
 		},
@@ -1295,14 +1299,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failure() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := commonproto.WorkflowExecution{
+	targetExecution := executionpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1316,8 +1320,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1361,14 +1365,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplication() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	targetExecution := commonproto.WorkflowExecution{
+	targetExecution := executionpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1382,8 +1386,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1425,7 +1429,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1443,8 +1447,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1490,7 +1494,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockHistoryClient.EXPECT().ScheduleDecisionTask(gomock.Any(), &historyservice.ScheduleDecisionTaskRequest{
 		NamespaceId: testChildNamespaceID,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
 			RunId:      childRunID,
 		},
@@ -1503,7 +1507,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Failure() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1520,8 +1524,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1582,7 +1586,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success_Dup() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1600,8 +1604,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1650,7 +1654,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().ScheduleDecisionTask(gomock.Any(), &historyservice.ScheduleDecisionTaskRequest{
 		NamespaceId: testChildNamespaceID,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
 			RunId:      childRunID,
 		},
@@ -1663,14 +1667,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Duplication() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	childExecution := commonproto.WorkflowExecution{
+	childExecution := executionpb.WorkflowExecution{
 		WorkflowId: "some random child workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1683,8 +1687,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1728,7 +1732,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 
 	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), testChildNamespaceID, childExecution.GetWorkflowId(), childExecution.GetRunId(), childWorkflowType)
 	ci.StartedID = event.GetEventId()
-	event = addChildWorkflowExecutionCompletedEvent(mutableState, ci.InitiatedID, &childExecution, &commonproto.WorkflowExecutionCompletedEventAttributes{
+	event = addChildWorkflowExecutionCompletedEvent(mutableState, ci.InitiatedID, &childExecution, &eventpb.WorkflowExecutionCompletedEventAttributes{
 		Result:                       []byte("some random child workflow execution result"),
 		DecisionTaskCompletedEventId: transferTask.GetScheduleId(),
 	})
@@ -1742,7 +1746,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedTask() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1758,8 +1762,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 				CronSchedule:                        cronSchedule,
@@ -1793,7 +1797,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttributes() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1807,8 +1811,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAt
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1860,11 +1864,11 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 	return &matchingservice.AddActivityTaskRequest{
 		NamespaceId:       primitives.UUID(task.GetTargetNamespaceId()).String(),
 		SourceNamespaceId: primitives.UUID(task.GetNamespaceId()).String(),
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      primitives.UUID(task.GetRunId()).String(),
 		},
-		TaskList:                      &commonproto.TaskList{Name: task.TaskList},
+		TaskList:                      &tasklistpb.TaskList{Name: task.TaskList},
 		ScheduleId:                    task.GetScheduleId(),
 		ScheduleToStartTimeoutSeconds: ai.ScheduleToStartTimeout,
 	}
@@ -1875,15 +1879,15 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddDecisionTaskRequest(
 	mutableState mutableState,
 ) *matchingservice.AddDecisionTaskRequest {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      primitives.UUID(task.GetRunId()).String(),
 	}
-	taskList := &commonproto.TaskList{Name: task.TaskList}
+	taskList := &tasklistpb.TaskList{Name: task.TaskList}
 	executionInfo := mutableState.GetExecutionInfo()
 	timeout := executionInfo.WorkflowTimeout
 	if mutableState.GetExecutionInfo().TaskList != task.TaskList {
-		taskList.Kind = enums.TaskListKindSticky
+		taskList.Kind = tasklistpb.TaskListKind_Sticky
 		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
@@ -1898,12 +1902,12 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddDecisionTaskRequest(
 
 func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStartedRequest(
 	namespace string,
-	startEvent *commonproto.HistoryEvent,
+	startEvent *eventpb.HistoryEvent,
 	task *persistenceblobs.TransferTaskInfo,
 	mutableState mutableState,
 	backoffSeconds int32,
 ) *persistence.RecordWorkflowExecutionStartedRequest {
-	execution := &commonproto.WorkflowExecution{
+	execution := &executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      primitives.UUID(task.GetRunId()).String(),
 	}
@@ -1928,11 +1932,11 @@ func (s *transferQueueActiveTaskExecutorSuite) createRequestCancelWorkflowExecut
 	rci *persistenceblobs.RequestCancelInfo,
 ) *historyservice.RequestCancelWorkflowExecutionRequest {
 
-	sourceExecution := commonproto.WorkflowExecution{
+	sourceExecution := executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      primitives.UUID(task.GetRunId()).String(),
 	}
-	targetExecution := commonproto.WorkflowExecution{
+	targetExecution := executionpb.WorkflowExecution{
 		WorkflowId: task.GetTargetWorkflowId(),
 		RunId:      primitives.UUID(task.GetTargetRunId()).String(),
 	}
@@ -1958,11 +1962,11 @@ func (s *transferQueueActiveTaskExecutorSuite) createSignalWorkflowExecutionRequ
 	si *persistenceblobs.SignalInfo,
 ) *historyservice.SignalWorkflowExecutionRequest {
 
-	sourceExecution := commonproto.WorkflowExecution{
+	sourceExecution := executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      primitives.UUID(task.GetRunId()).String(),
 	}
-	targetExecution := commonproto.WorkflowExecution{
+	targetExecution := executionpb.WorkflowExecution{
 		WorkflowId: task.GetTargetWorkflowId(),
 		RunId:      primitives.UUID(task.GetTargetRunId()).String(),
 	}
@@ -1994,7 +1998,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 	event, err := mutableState.GetChildExecutionInitiatedEvent(task.GetScheduleId())
 	s.NoError(err)
 	attributes := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      primitives.UUID(task.GetRunId()).String(),
 	}
@@ -2013,7 +2017,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			RequestId:             ci.CreateRequestID,
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
 		},
-		ParentExecutionInfo: &commonproto.ParentExecutionInfo{
+		ParentExecutionInfo: &executiongenpb.ParentExecutionInfo{
 			NamespaceId: primitives.UUID(task.GetNamespaceId()).String(),
 			Namespace:   testNamespace,
 			Execution:   &execution,
@@ -2025,12 +2029,12 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 
 func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttributesRequest(
 	namespace string,
-	startEvent *commonproto.HistoryEvent,
+	startEvent *eventpb.HistoryEvent,
 	task *persistenceblobs.TransferTaskInfo,
 	mutableState mutableState,
 ) *persistence.UpsertWorkflowExecutionRequest {
 
-	execution := &commonproto.WorkflowExecution{
+	execution := &executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      primitives.UUID(task.GetRunId()).String(),
 	}

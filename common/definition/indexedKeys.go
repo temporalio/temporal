@@ -21,7 +21,7 @@
 package definition
 
 import (
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
 )
 
 // valid indexed fields on ES
@@ -61,14 +61,14 @@ var defaultIndexedKeys = createDefaultIndexedKeys()
 
 func createDefaultIndexedKeys() map[string]interface{} {
 	defaultIndexedKeys := map[string]interface{}{
-		CustomStringField:     enums.IndexedValueTypeString,
-		CustomKeywordField:    enums.IndexedValueTypeKeyword,
-		CustomIntField:        enums.IndexedValueTypeInt,
-		CustomBoolField:       enums.IndexedValueTypeBool,
-		CustomDoubleField:     enums.IndexedValueTypeDouble,
-		CustomDatetimeField:   enums.IndexedValueTypeDatetime,
-		TemporalChangeVersion: enums.IndexedValueTypeKeyword,
-		BinaryChecksums:       enums.IndexedValueTypeKeyword,
+		CustomStringField:     commonpb.IndexedValueType_String,
+		CustomKeywordField:    commonpb.IndexedValueType_Keyword,
+		CustomIntField:        commonpb.IndexedValueType_Int,
+		CustomBoolField:       commonpb.IndexedValueType_Bool,
+		CustomDoubleField:     commonpb.IndexedValueType_Double,
+		CustomDatetimeField:   commonpb.IndexedValueType_Datetime,
+		TemporalChangeVersion: commonpb.IndexedValueType_Keyword,
+		BinaryChecksums:       commonpb.IndexedValueType_Keyword,
 	}
 	for k, v := range systemIndexedKeys {
 		defaultIndexedKeys[k] = v
@@ -83,15 +83,15 @@ func GetDefaultIndexedKeys() map[string]interface{} {
 
 // systemIndexedKeys is Temporal created visibility keys
 var systemIndexedKeys = map[string]interface{}{
-	NamespaceID:     enums.IndexedValueTypeKeyword,
-	WorkflowID:      enums.IndexedValueTypeKeyword,
-	RunID:           enums.IndexedValueTypeKeyword,
-	WorkflowType:    enums.IndexedValueTypeKeyword,
-	StartTime:       enums.IndexedValueTypeInt,
-	ExecutionTime:   enums.IndexedValueTypeInt,
-	CloseTime:       enums.IndexedValueTypeInt,
-	ExecutionStatus: enums.IndexedValueTypeInt,
-	HistoryLength:   enums.IndexedValueTypeInt,
+	NamespaceID:     commonpb.IndexedValueType_Keyword,
+	WorkflowID:      commonpb.IndexedValueType_Keyword,
+	RunID:           commonpb.IndexedValueType_Keyword,
+	WorkflowType:    commonpb.IndexedValueType_Keyword,
+	StartTime:       commonpb.IndexedValueType_Int,
+	ExecutionTime:   commonpb.IndexedValueType_Int,
+	CloseTime:       commonpb.IndexedValueType_Int,
+	ExecutionStatus: commonpb.IndexedValueType_Int,
+	HistoryLength:   commonpb.IndexedValueType_Int,
 }
 
 // IsSystemIndexedKey return true is key is system added
