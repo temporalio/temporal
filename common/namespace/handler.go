@@ -199,7 +199,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	info := &persistenceblobs.NamespaceInfo{
 		Id:          uuid.NewRandom(),
 		Name:        registerRequest.GetName(),
-		Status:      enums.NamespaceStatusRegistered,
+		Status:      namespacepb.NamespaceStatus_Registered,
 		Owner:       registerRequest.GetOwnerEmail(),
 		Description: registerRequest.GetDescription(),
 		Data:        registerRequest.Data,
@@ -211,7 +211,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		HistoryArchivalURI:       nextHistoryArchivalState.URI,
 		VisibilityArchivalStatus: nextVisibilityArchivalState.Status,
 		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
-		BadBinaries:              &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
+		BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
 	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
@@ -259,7 +259,7 @@ func (d *HandlerImpl) RegisterNamespace(
 
 	if namespaceRequest.IsGlobalNamespace {
 		err = d.namespaceReplicator.HandleTransmissionTask(
-			enums.NamespaceOperationCreate,
+			replicationgenpb.NamespaceOperation_Create,
 			namespaceRequest.Namespace.Info,
 			namespaceRequest.Namespace.Config,
 			namespaceRequest.Namespace.ReplicationConfig,
@@ -331,7 +331,7 @@ func (d *HandlerImpl) DescribeNamespace(
 	// TODO, we should migrate the non global namespace to new table, see #773
 	req := &persistence.GetNamespaceRequest{
 		Name: describeRequest.GetName(),
-		ID:   primitives.UUID(describeRequest.GetId()),
+		ID:   primitives.MustParseUUID(describeRequest.GetId()),
 	}
 	resp, err := d.metadataMgr.GetNamespace(req)
 	if err != nil {
@@ -604,7 +604,7 @@ func (d *HandlerImpl) DeprecateNamespace(
 	}
 
 	getResponse.Namespace.ConfigVersion = getResponse.Namespace.ConfigVersion + 1
-	getResponse.Namespace.Info.Status = enums.NamespaceStatusDeprecated
+	getResponse.Namespace.Info.Status = namespacepb.NamespaceStatus_Deprecated
 	updateReq := &persistence.UpdateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info:                        getResponse.Namespace.Info,
@@ -628,7 +628,7 @@ func (d *HandlerImpl) createResponse(
 	info *persistenceblobs.NamespaceInfo,
 	config *persistenceblobs.NamespaceConfig,
 	replicationConfig *persistenceblobs.NamespaceReplicationConfig,
-) (*commonproto.NamespaceInfo, *commonproto.NamespaceConfiguration, *commonproto.NamespaceReplicationConfiguration) {
+) (*namespacepb.NamespaceInfo, *namespacepb.NamespaceConfiguration, *replicationpb.NamespaceReplicationConfiguration) {
 
 	infoResult := &namespacepb.NamespaceInfo{
 		Name:        info.Name,
@@ -651,12 +651,19 @@ func (d *HandlerImpl) createResponse(
 
 	var clusters []*replicationpb.ClusterReplicationConfiguration
 	for _, cluster := range replicationConfig.Clusters {
-		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
+		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
 			ClusterName: cluster,
 		})
 	}
 	replicationConfigResult := &replicationpb.NamespaceReplicationConfiguration{
 		ActiveClusterName: replicationConfig.ActiveClusterName,
+		Clusters: clusters,
+	}
+
+	return infoResult, configResult, replicationConfigResult
+}
+
+func (d *HandlerImpl) mergeBadBinaries(
 	old map[string]*namespacepb.BadBinaryInfo,
 	new map[string]*namespacepb.BadBinaryInfo,
 	createTimeNano int64,

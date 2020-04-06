@@ -92,7 +92,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*commonproto.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: clusterActive,
 		},
@@ -161,7 +161,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*commonproto.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: clusterActive,
 		},
@@ -207,7 +207,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	s.NotNil(resp)
 	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(enums.NamespaceStatusRegistered, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(data, resp.Namespace.Info.Data)
@@ -247,7 +247,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	configVersion := int64(12)
 	failoverVersion := int64(59)
 	namespaceData := map[string]string{"k1": "v1", "k2": "v2"}
-	clusters := []*commonproto.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: clusterActive,
 		},
@@ -293,7 +293,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.NotNil(resp)
 	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(enums.NamespaceStatusRegistered, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(namespaceData, resp.Namespace.Info.Data)
@@ -329,7 +329,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*commonproto.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: clusterActive,
 		},
@@ -383,7 +383,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := configVersion + 1
 	updateFailoverVersion := failoverVersion + 1
-	updateClusters := []*commonproto.ClusterReplicationConfiguration{
+	updateClusters := []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: updateClusterActive,
 		},
@@ -426,7 +426,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.NotNil(resp)
 	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(enums.NamespaceStatusDeprecated, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NamespaceStatus_Deprecated, resp.Namespace.Info.Status)
 	s.Equal(updateDescription, resp.Namespace.Info.Description)
 	s.Equal(updateOwnerEmail, resp.Namespace.Info.Owner)
 	s.Equal(updatedData, resp.Namespace.Info.Data)
@@ -462,7 +462,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*commonproto.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: clusterActive,
 		},
@@ -516,7 +516,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := configVersion + 1
 	updateFailoverVersion := failoverVersion - 1
-	updateClusters := []*commonproto.ClusterReplicationConfiguration{
+	updateClusters := []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: updateClusterActive,
 		},
@@ -559,7 +559,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.NotNil(resp)
 	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(enums.NamespaceStatusDeprecated, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NamespaceStatus_Deprecated, resp.Namespace.Info.Status)
 	s.Equal(updateDescription, resp.Namespace.Info.Description)
 	s.Equal(updateOwnerEmail, resp.Namespace.Info.Owner)
 	s.Equal(updateData, resp.Namespace.Info.Data)
@@ -595,7 +595,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*commonproto.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: clusterActive,
 		},
@@ -645,7 +645,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := configVersion - 1
 	updateFailoverVersion := failoverVersion + 1
-	updateClusters := []*commonproto.ClusterReplicationConfiguration{
+	updateClusters := []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: updateClusterActive,
 		},
@@ -688,7 +688,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.NotNil(resp)
 	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(enums.NamespaceStatusRegistered, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(data, resp.Namespace.Info.Data)
@@ -724,7 +724,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*commonproto.ClusterReplicationConfiguration{
+	clusters := []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: clusterActive,
 		},
@@ -776,7 +776,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := configVersion - 1
 	updateFailoverVersion := failoverVersion - 1
-	updateClusters := []*commonproto.ClusterReplicationConfiguration{
+	updateClusters := []*replicationpb.ClusterReplicationConfiguration{
 		{
 			ClusterName: updateClusterActive,
 		},
@@ -816,7 +816,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.NotNil(resp)
 	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
-	s.Equal(enums.NamespaceStatusRegistered, resp.Namespace.Info.Status)
+	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)
 	s.Equal(ownerEmail, resp.Namespace.Info.Owner)
 	s.Equal(data, resp.Namespace.Info.Data)

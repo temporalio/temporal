@@ -213,15 +213,15 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 			Info: &persistenceblobs.NamespaceInfo{
 				Id:     uuid.NewRandom(),
 				Name:   s.archivalNamespace,
-				Status: enums.NamespaceStatusRegistered,
+				Status: namespacepb.NamespaceStatus_Registered,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
 				RetentionDays:                0,
-				HistoryArchivalStatus:    enums.ArchivalStatusEnabled,
+				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Enabled,
 				HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
-				VisibilityArchivalStatus: enums.ArchivalStatusEnabled,
+				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Enabled,
 				VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
-				BadBinaries:              &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
+				BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: currentClusterName,

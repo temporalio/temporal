@@ -29,6 +29,8 @@ import "protobuf/google/protobuf/wrappers.proto";
 import "persistenceblobs/server_enum.proto";
 import "replication/server_message.proto";
 import "execution/enum.proto";
+import "namespace/enum.proto";
+import "namespace/message.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -317,7 +319,7 @@ message NamespaceDetail {
 
 message NamespaceInfo {
     bytes id = 1;
-    enums.NamespaceStatus status = 2;
+    namespace.NamespaceStatus status = 2;
     string name = 3;
     string description = 4;
     string owner = 5;
@@ -334,10 +336,10 @@ message NamespaceConfig {
     bool emitMetric = 2;
     string archivalBucket = 3;
     int32 archivalStatus = 4;
-    common.BadBinaries badBinaries = 16;
-    enums.ArchivalStatus historyArchivalStatus = 18;
+    namespace.BadBinaries badBinaries = 16;
+    namespace.ArchivalStatus historyArchivalStatus = 18;
     string historyArchivalURI = 19;
-    enums.ArchivalStatus visibilityArchivalStatus = 20;
+    namespace.ArchivalStatus visibilityArchivalStatus = 20;
     string visibilityArchivalURI = 21;
 }
 

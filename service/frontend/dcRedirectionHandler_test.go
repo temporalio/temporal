@@ -79,7 +79,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.namespace = "some random namespace name"
-	s.namespaceID = "deadbeef-0123-4567-890a-bcdef0123456"
+	s.namespaceID = "deadbeef-0123-4567-aaaa-bcdef0123456"
 	s.currentClusterName = cluster.TestCurrentClusterName
 	s.alternativeClusterName = cluster.TestAlternativeClusterName
 

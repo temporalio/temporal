@@ -266,9 +266,9 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	data1 := map[string]string{"some random key 1": "some random value 1"}
 	isGlobalNamespace1 := false
 	activeClusterName1 := s.ClusterMetadata.GetCurrentClusterName()
-	var cluster1 []*commonproto.ClusterReplicationConfiguration
+	var cluster1 []*replicationpb.ClusterReplicationConfiguration
 	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
-		cluster1 = append(cluster1, &commonproto.ClusterReplicationConfiguration{
+		cluster1 = append(cluster1, &replicationpb.ClusterReplicationConfiguration{
 			ClusterName: name,
 		})
 	}

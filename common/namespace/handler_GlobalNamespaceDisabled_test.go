@@ -181,9 +181,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 
 func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_AllDefault() {
 	namespace := s.getRandomNamespace()
-	var clusters []*commonproto.ClusterReplicationConfiguration
+	var clusters []*replicationpb.ClusterReplicationConfiguration
 	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
-		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
+		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
 			ClusterName: cluster,
 		})
 	}
@@ -243,9 +243,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := false
 
-	var expectedClusters []*commonproto.ClusterReplicationConfiguration
+	var expectedClusters []*replicationpb.ClusterReplicationConfiguration
 	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
-		expectedClusters = append(expectedClusters, &commonproto.ClusterReplicationConfiguration{
+		expectedClusters = append(expectedClusters, &replicationpb.ClusterReplicationConfiguration{
 			ClusterName: cluster,
 		})
 	}
@@ -303,9 +303,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 	retention := int32(7)
 	emitMetric := true
 	data := map[string]string{"some random key": "some random value"}
-	var clusters []*commonproto.ClusterReplicationConfiguration
+	var clusters []*replicationpb.ClusterReplicationConfiguration
 	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
-		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
+		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
 			ClusterName: cluster,
 		})
 	}
@@ -398,9 +398,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 	}
 	data := map[string]string{"some random key": "some random value"}
 
-	var expectedClusters []*commonproto.ClusterReplicationConfiguration
+	var expectedClusters []*replicationpb.ClusterReplicationConfiguration
 	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
-		expectedClusters = append(expectedClusters, &commonproto.ClusterReplicationConfiguration{
+		expectedClusters = append(expectedClusters, &replicationpb.ClusterReplicationConfiguration{
 			ClusterName: cluster,
 		})
 	}

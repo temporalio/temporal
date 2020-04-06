@@ -39,7 +39,7 @@ import (
 type (
 	// Replicator is the interface which can replicate the namespace
 	Replicator interface {
-		HandleTransmissionTask(namespaceOperation enums.NamespaceOperation, info *persistenceblobs.NamespaceInfo,
+		HandleTransmissionTask(namespaceOperation replicationgenpb.NamespaceOperation, info *persistenceblobs.NamespaceInfo,
 			config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 			configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error
 	}
@@ -59,7 +59,7 @@ func NewNamespaceReplicator(replicationMessageSink messaging.Producer, logger lo
 }
 
 // HandleTransmissionTask handle transmission of the namespace replication task
-func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(namespaceOperation enums.NamespaceOperation,
+func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(namespaceOperation replicationgenpb.NamespaceOperation,
 	info *persistenceblobs.NamespaceInfo, config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 	configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error {
 
@@ -68,49 +68,49 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 		return nil
 	}
 
-	taskType := enums.ReplicationTaskTypeNamespace
-	task := &replication.NamespaceTaskAttributes{
-		NamespaceOperation: namespaceOperation,
-		Id:                 primitives.UUIDString(info.Id),
-		Info: &commonproto.NamespaceInfo{
-			Name:        info.Name,
-			Status:      info.Status,
-			Description: info.Description,
-			OwnerEmail:  info.Owner,
-			Data:        info.Data,
+	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
+	task := &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+		NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
+			NamespaceOperation: namespaceOperation,
+			Id:                 primitives.UUIDString(info.Id),
+			Info: &namespacepb.NamespaceInfo{
+				Name:        info.Name,
+				Status:      info.Status,
+				Description: info.Description,
+				OwnerEmail:  info.Owner,
+				Data:        info.Data,
+			},
+			Config: &namespacepb.NamespaceConfiguration{
+				WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
+				EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
+				HistoryArchivalStatus:                  config.HistoryArchivalStatus,
+				HistoryArchivalURI:                     config.HistoryArchivalURI,
+				VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
+				VisibilityArchivalURI:                  config.VisibilityArchivalURI,
+				BadBinaries:                            config.BadBinaries,
+			},
+			ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+				ActiveClusterName: replicationConfig.ActiveClusterName,
+				Clusters:          namespaceReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
+			},
+			ConfigVersion:   configVersion,
+			FailoverVersion: failoverVersion,
 		},
-		Config: &commonproto.NamespaceConfiguration{
-			WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
-			EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
-			HistoryArchivalStatus:                  config.HistoryArchivalStatus,
-			HistoryArchivalURI:                     config.HistoryArchivalURI,
-			VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
-			VisibilityArchivalURI:                  config.VisibilityArchivalURI,
-			BadBinaries:                            config.BadBinaries,
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
-			ActiveClusterName: replicationConfig.ActiveClusterName,
-			Clusters:          namespaceReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
-		},
-		ConfigVersion:   configVersion,
-		FailoverVersion: failoverVersion,
 	}
 
 	return namespaceReplicator.replicationMessageSink.Publish(
 		&replicationgenpb.ReplicationTask{
 			TaskType: taskType,
-			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
-				NamespaceTaskAttributes: task,
-			},
+			Attributes: task,
 		})
 }
 
 func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationConfigToProto(
 	input []string,
-) []*commonproto.ClusterReplicationConfiguration {
-	output := []*commonproto.ClusterReplicationConfiguration{}
+) []*replicationpb.ClusterReplicationConfiguration {
+	output := []*replicationpb.ClusterReplicationConfiguration{}
 	for _, clusterName := range input {
-		output = append(output, &commonproto.ClusterReplicationConfiguration{ClusterName: clusterName})
+		output = append(output, &replicationpb.ClusterReplicationConfiguration{ClusterName: clusterName})
 	}
 	return output
 }

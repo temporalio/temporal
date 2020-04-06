@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"

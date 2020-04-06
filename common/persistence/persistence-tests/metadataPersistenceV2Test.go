@@ -94,7 +94,7 @@ func (m *MetadataPersistenceSuiteV2) TearDownSuite() {
 func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	id := primitives.UUID(uuid.NewRandom()[:])
 	name := "create-namespace-test-name"
-	status := enums.NamespaceStatusRegistered
+	status := namespacepb.NamespaceStatus_Registered
 	description := "create-namespace-test-description"
 	owner := "create-namespace-test-owner"
 	data := map[string]string{"k1": "v1"}
@@ -193,7 +193,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	id := primitives.UUID(uuid.NewRandom()[:])
 	name := "get-namespace-test-name"
-	status := enums.NamespaceStatusRegistered
+	status := namespacepb.NamespaceStatus_Registered
 	description := "get-namespace-test-description"
 	owner := "get-namespace-test-owner"
 	data := map[string]string{"k1": "v1"}
@@ -215,8 +215,8 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	m.Nil(resp0)
 	m.Error(err0)
 	m.IsType(&serviceerror.NotFound{}, err0)
-	testBinaries := &commonproto.BadBinaries{
-		Binaries: map[string]*commonproto.BadBinaryInfo{
+	testBinaries := &namespacepb.BadBinaries{
+		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
 				Reason:          "test-reason",
 				Operator:        "test-operator",
@@ -321,7 +321,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	id := primitives.UUID(uuid.NewRandom()[:])
 
 	name := "concurrent-create-namespace-test-name"
-	status := enums.NamespaceStatusRegistered
+	status := namespacepb.NamespaceStatus_Registered
 	description := "concurrent-create-namespace-test-description"
 	owner := "create-namespace-test-owner"
 	retention := int32(10)
@@ -425,7 +425,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	id := primitives.UUID(uuid.NewRandom()[:])
 	name := "concurrent-update-namespace-test-name"
-	status := enums.NamespaceStatusRegistered
+	status := namespacepb.NamespaceStatus_Registered
 	description := "update-namespace-test-description"
 	owner := "update-namespace-test-owner"
 	data := map[string]string{"k1": "v1"}
@@ -570,7 +570,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	id := primitives.UUID(uuid.NewRandom()[:])
 	name := "update-namespace-test-name"
-	status := enums.NamespaceStatusRegistered
+	status := namespacepb.NamespaceStatus_Registered
 	description := "update-namespace-test-description"
 	owner := "update-namespace-test-owner"
 	data := map[string]string{"k1": "v1"}
@@ -622,7 +622,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.NoError(err)
 	notificationVersion := metadata.NotificationVersion
 
-	updatedStatus := enums.NamespaceStatusDeprecated
+	updatedStatus := namespacepb.NamespaceStatus_Deprecated
 	updatedDescription := "description-updated"
 	updatedOwner := "owner-updated"
 	//This will overriding the previous key-value pair
@@ -738,7 +738,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	id := primitives.UUID(uuid.NewRandom()[:])
 	name := "delete-namespace-test-name"
-	status := enums.NamespaceStatusRegistered
+	status := namespacepb.NamespaceStatus_Registered
 	description := "delete-namespace-test-description"
 	owner := "delete-namespace-test-owner"
 	data := map[string]string{"k1": "v1"}
@@ -881,7 +881,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 				Info: &persistenceblobs.NamespaceInfo{
 					Id:          uuid.NewRandom(),
 					Name:        "list-namespace-test-name-1",
-					Status:      enums.NamespaceStatusRegistered,
+					Status:      namespacepb.NamespaceStatus_Registered,
 					Description: "list-namespace-test-description-1",
 					Owner:       "list-namespace-test-owner-1",
 					Data:        map[string]string{"k1": "v1"},
@@ -889,9 +889,9 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 				Config: &persistenceblobs.NamespaceConfig{
 					RetentionDays:            109,
 					EmitMetric:               true,
-					HistoryArchivalStatus:    enums.ArchivalStatusEnabled,
+					HistoryArchivalStatus:    namespacepb.ArchivalStatus_Enabled,
 					HistoryArchivalURI:       "test://history/uri",
-					VisibilityArchivalStatus: enums.ArchivalStatusEnabled,
+					VisibilityArchivalStatus: namespacepb.ArchivalStatus_Enabled,
 					VisibilityArchivalURI:    "test://visibility/uri",
 					BadBinaries:              testBinaries1,
 				},
@@ -910,7 +910,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 				Info: &persistenceblobs.NamespaceInfo{
 					Id:          uuid.NewRandom(),
 					Name:        "list-namespace-test-name-2",
-					Status:      enums.NamespaceStatusRegistered,
+					Status:      namespacepb.NamespaceStatus_Registered,
 					Description: "list-namespace-test-description-2",
 					Owner:       "list-namespace-test-owner-2",
 					Data:        map[string]string{"k1": "v2"},
@@ -918,9 +918,9 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 				Config: &persistenceblobs.NamespaceConfig{
 					RetentionDays:            326,
 					EmitMetric:               false,
-					HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
+					HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
 					HistoryArchivalURI:       "",
-					VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
+					VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
 					VisibilityArchivalURI:    "",
 					BadBinaries:              testBinaries2,
 				},

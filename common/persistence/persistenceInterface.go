@@ -34,7 +34,6 @@ import (
 
 	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"

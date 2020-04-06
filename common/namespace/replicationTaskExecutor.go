@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
@@ -277,7 +276,7 @@ func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(
 }
 
 func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFromProto(
-	input []*commonproto.ClusterReplicationConfiguration) []string {
+	input []*replicationpb.ClusterReplicationConfiguration) []string {
 	output := []string{}
 	for _, cluster := range input {
 		clusterName := cluster.GetClusterName()
@@ -286,9 +285,9 @@ func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFr
 	return output
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input enums.NamespaceStatus) (error) {
+func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input namespacepb.NamespaceStatus) (error) {
 	switch input {
-	case enums.NamespaceStatusRegistered, enums.NamespaceStatusDeprecated:
+	case namespacepb.NamespaceStatus_Registered, namespacepb.NamespaceStatus_Deprecated:
 		return nil
 	default:
 		return ErrInvalidNamespaceStatus

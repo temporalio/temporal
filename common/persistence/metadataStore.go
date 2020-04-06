@@ -21,7 +21,6 @@
 package persistence
 
 import (
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
 
@@ -114,7 +113,7 @@ func (m *metadataManagerImpl) ConvertInternalGetResponse(d *InternalGetNamespace
 	}
 
 	if ns.Config.BadBinaries == nil || ns.Config.BadBinaries.Binaries == nil {
-		ns.Config.BadBinaries = &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}}
+		ns.Config.BadBinaries = &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
 	}
 
 	ns.ReplicationConfig.ActiveClusterName = GetOrUseDefaultActiveCluster(m.clusterName, ns.ReplicationConfig.ActiveClusterName)

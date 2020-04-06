@@ -707,13 +707,13 @@ func (c *cadenceImpl) createSystemNamespace() error {
 			Info: &persistenceblobs.NamespaceInfo{
 				Id:          uuid.NewRandom(),
 				Name:        "temporal-system",
-				Status:      enums.NamespaceStatusRegistered,
+				Status:      namespacepb.NamespaceStatus_Registered,
 				Description: "Cadence system namespace",
 			},
 			Config: &persistenceblobs.NamespaceConfig{
 				RetentionDays:                1,
-				HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
-				VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
+				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
+				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{},
 			FailoverVersion:   common.EmptyVersion,
