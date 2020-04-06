@@ -701,8 +701,8 @@ func (s *cliAppSuite) TestAnyToString() {
 	}
 	res := anyToString(event, false, defaultMaxFieldLength)
 	ss, l := tablewriter.WrapString(res, 10)
-	s.Equal(6, len(ss))
-	s.Equal(131, l)
+	s.Equal(7, len(ss))
+	s.Equal(120, l)
 }
 
 func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
