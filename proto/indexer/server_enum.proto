@@ -22,9 +22,6 @@ syntax = "proto3";
 
 package indexer;
 option go_package = "github.com/temporalio/temporal/.gen/proto/indexer";
-option (gogoproto.goproto_enum_prefix_all) = true;
-
-import "gogoproto/gogo.proto";
 
 enum MessageType {
     Index = 0;

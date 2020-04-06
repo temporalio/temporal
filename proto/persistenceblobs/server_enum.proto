@@ -22,9 +22,6 @@ syntax = "proto3";
 
 package persistenceblobs;
 option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs";
-option (gogoproto.goproto_enum_prefix_all) = true;
-
-import "gogoproto/gogo.proto";
 
 enum ChecksumFlavor {
     Unknown = 0;

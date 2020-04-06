@@ -23,8 +23,8 @@ syntax = "proto3";
 package persistenceblobs;
 option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs";
 
-import "protobuf/google/protobuf/timestamp.proto";
-import "protobuf/google/protobuf/wrappers.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 
 import "persistenceblobs/server_enum.proto";
 import "replication/server_message.proto";
