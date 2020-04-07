@@ -220,6 +220,7 @@ var keys = map[Key]string{
 	MutableStateChecksumGenProbability:                    "history.mutableStateChecksumGenProbability",
 	MutableStateChecksumVerifyProbability:                 "history.mutableStateChecksumVerifyProbability",
 	MutableStateChecksumInvalidateBefore:                  "history.mutableStateChecksumInvalidateBefore",
+	ReplicationEventsFromCurrentCluster:                   "history.ReplicationEventsFromCurrentCluster",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -671,6 +672,9 @@ const (
 	MutableStateChecksumVerifyProbability
 	// MutableStateChecksumInvalidateBefore is the epoch timestamp before which all checksums are to be discarded
 	MutableStateChecksumInvalidateBefore
+
+	//ReplicationEventsFromCurrentCluster is a feature flag to allow cross DC replicate events that generated from the current cluster
+	ReplicationEventsFromCurrentCluster
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

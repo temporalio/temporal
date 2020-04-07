@@ -221,6 +221,7 @@ type (
 		GetUpdateCondition() int64
 
 		StartTransaction(entry *cache.DomainCacheEntry) (bool, error)
+		StartTransactionSkipDecisionFail(entry *cache.DomainCacheEntry) error
 		CloseTransactionAsMutation(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 	}

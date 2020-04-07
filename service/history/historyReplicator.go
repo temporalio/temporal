@@ -272,7 +272,22 @@ func (r *historyReplicator) ApplyEvents(
 	default:
 		// apply events, other than simple start workflow execution
 		// the continue as new + start workflow execution combination will also be processed here
-		msBuilder, err := context.loadWorkflowExecution()
+		var mutableState mutableState
+		var err error
+		domainEntry, err := r.domainCache.GetDomainByID(context.getDomainID())
+		if err != nil {
+			return err
+		}
+
+		if r.shard.GetConfig().ReplicationEventsFromCurrentCluster(domainEntry.GetInfo().Name) {
+			// this branch is used when replicating events (generated from current cluster)from remote cluster to current cluster.
+			// this could happen when the events are lost in current cluster and plan to recover them from remote cluster.
+			// if the incoming version equals last write version, skip to fail in-flight decision.
+			mutableState, err = context.loadWorkflowExecutionForReplication(request.GetVersion())
+		} else {
+			mutableState, err = context.loadWorkflowExecution()
+		}
+
 		if err != nil {
 			if _, ok := err.(*shared.EntityNotExistsError); !ok {
 				return err
@@ -285,16 +300,16 @@ func (r *historyReplicator) ApplyEvents(
 		}
 
 		// Sanity check to make only 2DC mutable state here
-		if msBuilder.GetReplicationState() == nil {
+		if mutableState.GetReplicationState() == nil {
 			return &workflow.InternalServiceError{Message: "The mutable state does not support 2DC."}
 		}
 
-		logger.WithTags(tag.CurrentVersion(msBuilder.GetReplicationState().LastWriteVersion))
-		msBuilder, err = r.ApplyOtherEventsVersionChecking(ctx, context, msBuilder, request, logger)
-		if err != nil || msBuilder == nil {
+		logger.WithTags(tag.CurrentVersion(mutableState.GetReplicationState().LastWriteVersion))
+		mutableState, err = r.ApplyOtherEventsVersionChecking(ctx, context, mutableState, request, logger)
+		if err != nil || mutableState == nil {
 			return err
 		}
-		return r.ApplyOtherEvents(ctx, context, msBuilder, request, logger)
+		return r.ApplyOtherEvents(ctx, context, mutableState, request, logger)
 	}
 }
 
@@ -864,7 +879,6 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 	return currentRunID, currentLastWriteVetsion, persistence.WorkflowStateCompleted, nil
 }
 
-// func (r *historyReplicator) getCurrentWorkflowInfo(domainID string, workflowID string) (runID string, lastWriteVersion int64, closeStatus int, retError error) {
 func (r *historyReplicator) getCurrentWorkflowMutableState(
 	ctx ctx.Context,
 	domainID string,

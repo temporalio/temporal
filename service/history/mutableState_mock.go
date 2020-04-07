@@ -2418,6 +2418,20 @@ func (mr *MockmutableStateMockRecorder) StartTransaction(entry interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransaction", reflect.TypeOf((*MockmutableState)(nil).StartTransaction), entry)
 }
 
+// StartTransactionSkipDecisionFail mocks base method
+func (m *MockmutableState) StartTransactionSkipDecisionFail(entry *cache.DomainCacheEntry) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartTransactionSkipDecisionFail", entry)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StartTransactionSkipDecisionFail indicates an expected call of StartTransactionSkipDecisionFail
+func (mr *MockmutableStateMockRecorder) StartTransactionSkipDecisionFail(entry interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransactionSkipDecisionFail", reflect.TypeOf((*MockmutableState)(nil).StartTransactionSkipDecisionFail), entry)
+}
+
 // CloseTransactionAsMutation mocks base method
 func (m *MockmutableState) CloseTransactionAsMutation(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
 	m.ctrl.T.Helper()
