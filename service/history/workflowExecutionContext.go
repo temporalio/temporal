@@ -49,6 +49,7 @@ type (
 		getExecution() *workflow.WorkflowExecution
 
 		loadWorkflowExecution() (mutableState, error)
+		loadWorkflowExecutionForReplication(incomingVersion int64) (mutableState, error)
 		loadExecutionStats() (*persistence.ExecutionStats, error)
 		clear()
 
@@ -223,6 +224,83 @@ func (c *workflowExecutionContextImpl) loadExecutionStats() (*persistence.Execut
 		return nil, err
 	}
 	return c.stats, nil
+}
+
+func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
+	incomingVersion int64,
+) (mutableState, error) {
+
+	domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.mutableState == nil {
+		response, err := c.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{
+			DomainID:  c.domainID,
+			Execution: c.workflowExecution,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		c.mutableState = newMutableStateBuilder(
+			c.shard,
+			c.shard.GetEventsCache(),
+			c.logger,
+			domainEntry,
+		)
+
+		c.mutableState.Load(response.State)
+
+		c.stats = response.State.ExecutionStats
+		c.updateCondition = response.State.ExecutionInfo.NextEventID
+
+		// finally emit execution and session stats
+		emitWorkflowExecutionStats(
+			c.metricsClient,
+			c.getDomainName(),
+			response.MutableStateStats,
+			c.stats.HistorySize,
+		)
+	}
+
+	lastWriteVersion, err := c.mutableState.GetLastWriteVersion()
+	if err != nil {
+		return nil, err
+	}
+
+	if lastWriteVersion == incomingVersion {
+		err = c.mutableState.StartTransactionSkipDecisionFail(domainEntry)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		flushBeforeReady, err := c.mutableState.StartTransaction(domainEntry)
+		if err != nil {
+			return nil, err
+		}
+		if !flushBeforeReady {
+			return c.mutableState, nil
+		}
+
+		if err = c.updateWorkflowExecutionAsActive(
+			c.shard.GetTimeSource().Now(),
+		); err != nil {
+			return nil, err
+		}
+
+		flushBeforeReady, err = c.mutableState.StartTransaction(domainEntry)
+		if err != nil {
+			return nil, err
+		}
+		if flushBeforeReady {
+			return nil, &workflow.InternalServiceError{
+				Message: "workflowExecutionContext counter flushBeforeReady status after loading mutable state from DB",
+			}
+		}
+	}
+	return c.mutableState, nil
 }
 
 func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, error) {

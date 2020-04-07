@@ -118,6 +118,21 @@ func (mr *MockworkflowExecutionContextMockRecorder) loadWorkflowExecution() *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "loadWorkflowExecution", reflect.TypeOf((*MockworkflowExecutionContext)(nil).loadWorkflowExecution))
 }
 
+// loadWorkflowExecutionForReplication mocks base method
+func (m *MockworkflowExecutionContext) loadWorkflowExecutionForReplication(incomingVersion int64) (mutableState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "loadWorkflowExecutionForReplication", incomingVersion)
+	ret0, _ := ret[0].(mutableState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// loadWorkflowExecutionForReplication indicates an expected call of loadWorkflowExecutionForReplication
+func (mr *MockworkflowExecutionContextMockRecorder) loadWorkflowExecutionForReplication(incomingVersion interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "loadWorkflowExecutionForReplication", reflect.TypeOf((*MockworkflowExecutionContext)(nil).loadWorkflowExecutionForReplication), incomingVersion)
+}
+
 // loadExecutionStats mocks base method
 func (m *MockworkflowExecutionContext) loadExecutionStats() (*persistence.ExecutionStats, error) {
 	m.ctrl.T.Helper()
