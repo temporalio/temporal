@@ -58,6 +58,7 @@ type (
 		config               *Config
 		logger               log.Logger
 		metricsClient        metrics.Client
+		metricsScope         metrics.Scope
 		timerFiredCount      uint64
 		timerProcessor       timerProcessor
 		timerQueueAckMgr     timerQueueAckMgr
@@ -90,6 +91,7 @@ func newTimerQueueProcessorBase(
 	timerGate TimerGate,
 	maxPollRPS dynamicconfig.IntPropertyFn,
 	logger log.Logger,
+	metricsScope metrics.Scope,
 ) *timerQueueProcessorBase {
 
 	logger = logger.WithTags(tag.ComponentTimerQueue)
@@ -116,6 +118,7 @@ func newTimerQueueProcessorBase(
 		config:               config,
 		logger:               logger,
 		metricsClient:        historyService.metricsClient,
+		metricsScope:         metricsScope,
 		timerQueueAckMgr:     timerQueueAckMgr,
 		timerGate:            timerGate,
 		timeSource:           shard.GetTimeSource(),
@@ -271,13 +274,21 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 			go t.Stop()
 			return nil
 		case <-t.timerGate.FireChan():
-			lookAheadTimer, err := t.readAndFanoutTimerTasks()
-			if err != nil {
-				return err
+			if !t.isPriorityTaskProcessorEnabled() || t.redispatchQueue.Len() <= t.config.TimerProcessorMaxRedispatchQueueSize() {
+				lookAheadTimer, err := t.readAndFanoutTimerTasks()
+				if err != nil {
+					return err
+				}
+				if lookAheadTimer != nil {
+					t.timerGate.Update(lookAheadTimer.VisibilityTimestamp)
+				}
+				continue
 			}
-			if lookAheadTimer != nil {
-				t.timerGate.Update(lookAheadTimer.VisibilityTimestamp)
-			}
+
+			// has too many pending tasks in re-dispatch queue, block loading tasks from persistence
+			t.redispatchTasks()
+			// re-enqueue the event to see if we need keep re-dispatching or load new tasks from persistence
+			t.notifyNewTimer(time.Time{})
 		case <-pollTimer.C:
 			pollTimer.Reset(backoff.JitDuration(
 				t.config.TimerProcessorMaxPollInterval(),
@@ -389,6 +400,7 @@ func (t *timerQueueProcessorBase) redispatchTasks() {
 		t.redispatchQueue,
 		t.queueTaskProcessor,
 		t.logger,
+		t.metricsScope,
 		t.shutdownCh,
 	)
 }

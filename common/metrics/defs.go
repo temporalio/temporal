@@ -1619,6 +1619,7 @@ const (
 	TaskBatchCompleteCounter
 	TaskProcessingLatency
 	TaskQueueLatency
+	TaskRedispatchQueuePendingTasksTimer
 
 	TransferTaskThrottledCounter
 	TimerTaskThrottledCounter
@@ -1973,6 +1974,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskProcessingLatency:                             {metricName: "task_latency_processing", metricType: Timer},
 		TaskQueueLatency:                                  {metricName: "task_latency_queue", metricType: Timer},
 		TaskBatchCompleteCounter:                          {metricName: "task_batch_complete_counter", metricType: Counter},
+		TaskRedispatchQueuePendingTasksTimer:              {metricName: "task_redispatch_queue_pending_tasks", metricType: Timer},
 		TransferTaskThrottledCounter:                      {metricName: "transfer_task_throttled_counter", metricType: Counter},
 		TimerTaskThrottledCounter:                         {metricName: "timer_task_throttled_counter", metricType: Counter},
 		ActivityE2ELatency:                                {metricName: "activity_end_to_end_latency", metricType: Timer},

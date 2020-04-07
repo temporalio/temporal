@@ -74,6 +74,7 @@ func newTransferQueueActiveProcessor(
 		MaxRetryCount:                       config.TransferTaskMaxRetryCount,
 		RedispatchInterval:                  config.TransferProcessorRedispatchInterval,
 		RedispatchIntervalJitterCoefficient: config.TransferProcessorRedispatchIntervalJitterCoefficient,
+		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
 		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.TransferActiveQueueProcessorScope,
 	}
@@ -158,6 +159,7 @@ func newTransferQueueActiveProcessor(
 		historyService.historyCache,
 		transferQueueTaskInitializer,
 		logger,
+		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
@@ -192,6 +194,7 @@ func newTransferQueueFailoverProcessor(
 		MaxRetryCount:                       config.TransferTaskMaxRetryCount,
 		RedispatchInterval:                  config.TransferProcessorRedispatchInterval,
 		RedispatchIntervalJitterCoefficient: config.TransferProcessorRedispatchIntervalJitterCoefficient,
+		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
 		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.TransferActiveQueueProcessorScope,
 	}
@@ -291,6 +294,7 @@ func newTransferQueueFailoverProcessor(
 		historyService.historyCache,
 		transferQueueTaskInitializer,
 		logger,
+		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase

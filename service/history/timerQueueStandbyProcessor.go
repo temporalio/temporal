@@ -135,6 +135,7 @@ func newTimerQueueStandbyProcessor(
 		timerGate,
 		shard.GetConfig().TimerProcessorMaxPollRPS,
 		logger,
+		shard.GetMetricsClient().Scope(metrics.TimerStandbyQueueProcessorScope),
 	)
 
 	return processor
