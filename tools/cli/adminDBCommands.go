@@ -69,7 +69,7 @@ const (
 )
 
 const (
-	historyPageSize = 50
+	historyPageSize = 1
 )
 
 type (
@@ -170,6 +170,7 @@ func AdminDBScan(c *cli.Context) {
 		scanWorkerCount = numShards
 	}
 
+	printStopMessage()
 	payloadSerializer := persistence.NewPayloadSerializer()
 	rateLimiter := getRateLimiter(startingRPS, targetRPS, scaleUpSeconds)
 	session := connectToCassandra(c)
@@ -226,7 +227,9 @@ func scanShard(
 	report := &ShardScanReport{
 		ShardID: shardID,
 	}
+	fileWriter := NewAdminDBCommandFileWriter(outputFiles.ExecutionCheckFailureFile, outputFiles.CorruptedExecutionFile)
 	defer func() {
+		fileWriter.Flush()
 		recordShardScanReport(outputFiles.ShardScanReportFile, report)
 		deleteEmptyShardScanOutputFiles(outputFiles)
 		closeFn()
@@ -266,8 +269,7 @@ func scanShard(
 			historyVerificationResult, history, historyBranch := verifyHistoryExists(
 				e,
 				branchDecoder,
-				outputFiles.CorruptedExecutionFile,
-				outputFiles.ExecutionCheckFailureFile,
+				fileWriter,
 				shardID,
 				limiter,
 				historyStore,
@@ -286,8 +288,7 @@ func scanShard(
 			firstHistoryEventVerificationResult := verifyFirstHistoryEvent(
 				e,
 				historyBranch,
-				outputFiles.CorruptedExecutionFile,
-				outputFiles.ExecutionCheckFailureFile,
+				fileWriter,
 				shardID,
 				payloadSerializer,
 				history)
@@ -304,8 +305,7 @@ func scanShard(
 
 			currentExecutionVerificationResult := verifyCurrentExecution(
 				e,
-				outputFiles.CorruptedExecutionFile,
-				outputFiles.ExecutionCheckFailureFile,
+				fileWriter,
 				shardID,
 				historyBranch,
 				execStore,
@@ -329,8 +329,7 @@ func scanShard(
 func verifyHistoryExists(
 	execution *persistence.InternalWorkflowExecutionInfo,
 	branchDecoder *codec.ThriftRWEncoder,
-	corruptedExecutionFile *os.File,
-	executionCheckFailureFile *os.File,
+	fileWriter AdminDBCommandFileWriter,
 	shardID int,
 	limiter *quotas.DynamicRateLimiter,
 	historyStore persistence.HistoryStore,
@@ -339,7 +338,7 @@ func verifyHistoryExists(
 	var branch shared.HistoryBranch
 	err := branchDecoder.Decode(execution.BranchToken, &branch)
 	if err != nil {
-		recordExecutionCheckFailure(executionCheckFailureFile, &ExecutionCheckFailure{
+		fileWriter.AddExecutionCheckFailure(&ExecutionCheckFailure{
 			ShardID:    shardID,
 			DomainID:   execution.DomainID,
 			WorkflowID: execution.WorkflowID,
@@ -353,7 +352,7 @@ func verifyHistoryExists(
 		TreeID:    branch.GetTreeID(),
 		BranchID:  branch.GetBranchID(),
 		MinNodeID: common.FirstEventID,
-		MaxNodeID: common.EndEventID,
+		MaxNodeID: common.FirstEventID + 1,
 		ShardID:   shardID,
 		PageSize:  historyPageSize,
 	}
@@ -361,7 +360,7 @@ func verifyHistoryExists(
 	history, err := historyStore.ReadHistoryBranch(readHistoryBranchReq)
 	if err != nil {
 		if err == gocql.ErrNotFound {
-			recordCorruptedWorkflow(corruptedExecutionFile, &CorruptedExecution{
+			fileWriter.AddCorruptedExecution(&CorruptedExecution{
 				ShardID:     shardID,
 				DomainID:    execution.DomainID,
 				WorkflowID:  execution.WorkflowID,
@@ -378,7 +377,7 @@ func verifyHistoryExists(
 			})
 			return VerificationResultDetectedCorruption, nil, nil
 		}
-		recordExecutionCheckFailure(executionCheckFailureFile, &ExecutionCheckFailure{
+		fileWriter.AddExecutionCheckFailure(&ExecutionCheckFailure{
 			ShardID:    shardID,
 			DomainID:   execution.DomainID,
 			WorkflowID: execution.WorkflowID,
@@ -388,7 +387,7 @@ func verifyHistoryExists(
 		})
 		return VerificationResultCheckFailure, nil, nil
 	} else if history == nil || len(history.History) == 0 {
-		recordCorruptedWorkflow(corruptedExecutionFile, &CorruptedExecution{
+		fileWriter.AddCorruptedExecution(&CorruptedExecution{
 			ShardID:     shardID,
 			DomainID:    execution.DomainID,
 			WorkflowID:  execution.WorkflowID,
@@ -410,15 +409,14 @@ func verifyHistoryExists(
 func verifyFirstHistoryEvent(
 	execution *persistence.InternalWorkflowExecutionInfo,
 	branch *shared.HistoryBranch,
-	corruptedExecutionFile *os.File,
-	executionCheckFailureFile *os.File,
+	fileWriter AdminDBCommandFileWriter,
 	shardID int,
 	payloadSerializer persistence.PayloadSerializer,
 	history *persistence.InternalReadHistoryBranchResponse,
 ) VerificationResult {
 	firstBatch, err := payloadSerializer.DeserializeBatchEvents(history.History[0])
 	if err != nil || len(firstBatch) == 0 {
-		recordExecutionCheckFailure(executionCheckFailureFile, &ExecutionCheckFailure{
+		fileWriter.AddExecutionCheckFailure(&ExecutionCheckFailure{
 			ShardID:    shardID,
 			DomainID:   execution.DomainID,
 			WorkflowID: execution.WorkflowID,
@@ -428,7 +426,7 @@ func verifyFirstHistoryEvent(
 		})
 		return VerificationResultCheckFailure
 	} else if firstBatch[0].GetEventId() != common.FirstEventID {
-		recordCorruptedWorkflow(corruptedExecutionFile, &CorruptedExecution{
+		fileWriter.AddCorruptedExecution(&CorruptedExecution{
 			ShardID:     shardID,
 			DomainID:    execution.DomainID,
 			WorkflowID:  execution.WorkflowID,
@@ -445,7 +443,7 @@ func verifyFirstHistoryEvent(
 		})
 		return VerificationResultDetectedCorruption
 	} else if firstBatch[0].GetEventType() != shared.EventTypeWorkflowExecutionStarted {
-		recordCorruptedWorkflow(corruptedExecutionFile, &CorruptedExecution{
+		fileWriter.AddCorruptedExecution(&CorruptedExecution{
 			ShardID:     shardID,
 			DomainID:    execution.DomainID,
 			WorkflowID:  execution.WorkflowID,
@@ -467,8 +465,7 @@ func verifyFirstHistoryEvent(
 
 func verifyCurrentExecution(
 	execution *persistence.InternalWorkflowExecutionInfo,
-	corruptedExecutionFile *os.File,
-	executionCheckFailureFile *os.File,
+	fileWriter AdminDBCommandFileWriter,
 	shardID int,
 	branch *shared.HistoryBranch,
 	execStore persistence.ExecutionStore,
@@ -487,7 +484,7 @@ func verifyCurrentExecution(
 	if err != nil {
 		switch err.(type) {
 		case *shared.EntityNotExistsError:
-			recordCorruptedWorkflow(corruptedExecutionFile, &CorruptedExecution{
+			fileWriter.AddCorruptedExecution(&CorruptedExecution{
 				ShardID:     shardID,
 				DomainID:    execution.DomainID,
 				WorkflowID:  execution.WorkflowID,
@@ -504,7 +501,7 @@ func verifyCurrentExecution(
 			})
 			return VerificationResultDetectedCorruption
 		default:
-			recordExecutionCheckFailure(executionCheckFailureFile, &ExecutionCheckFailure{
+			fileWriter.AddExecutionCheckFailure(&ExecutionCheckFailure{
 				ShardID:    shardID,
 				DomainID:   execution.DomainID,
 				WorkflowID: execution.WorkflowID,
@@ -515,7 +512,7 @@ func verifyCurrentExecution(
 			return VerificationResultCheckFailure
 		}
 	} else if currentExecution.RunID != execution.RunID {
-		recordCorruptedWorkflow(corruptedExecutionFile, &CorruptedExecution{
+		fileWriter.AddCorruptedExecution(&CorruptedExecution{
 			ShardID:     shardID,
 			DomainID:    execution.DomainID,
 			WorkflowID:  execution.WorkflowID,
@@ -596,20 +593,8 @@ func createScanOutputDirectories() *ScanOutputDirectories {
 	return sod
 }
 
-func recordCorruptedWorkflow(file *os.File, cee *CorruptedExecution) {
-	data, err := json.Marshal(cee)
-	if err != nil {
-		ErrorAndExit("failed to marshal CorruptedExecution", err)
-	}
-	writeToFile(file, string(data))
-}
-
-func recordExecutionCheckFailure(file *os.File, ecf *ExecutionCheckFailure) {
-	data, err := json.Marshal(ecf)
-	if err != nil {
-		ErrorAndExit("failed to marshal ExecutionCheckFailure", err)
-	}
-	writeToFile(file, string(data))
+func printStopMessage() {
+	fmt.Printf("in order to stop scan run `kill -9 %v`\n", os.Getpid())
 }
 
 func recordShardScanReport(file *os.File, ssr *ShardScanReport) {
@@ -655,6 +640,9 @@ func includeShardInProgressReport(report *ShardScanReport, progressReport *Progr
 func getRateLimiter(startRPS int, targetRPS int, scaleUpSeconds int) *quotas.DynamicRateLimiter {
 	if startRPS >= targetRPS {
 		ErrorAndExit("startRPS is greater than target RPS", nil)
+	}
+	if scaleUpSeconds == 0 {
+		return quotas.NewDynamicRateLimiter(func() float64 { return float64(targetRPS) })
 	}
 	rpsIncreasePerSecond := (targetRPS - startRPS) / scaleUpSeconds
 	startTime := time.Now()
