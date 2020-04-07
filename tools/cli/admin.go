@@ -28,7 +28,7 @@ func newAdminWorkflowCommands() []cli.Command {
 			Name:    "show",
 			Aliases: []string{"show"},
 			Usage:   "show workflow history from database",
-			Flags: []cli.Flag{
+			Flags: append(getDBFlags(),
 				// v2 history events
 				cli.StringFlag{
 					Name:  FlagTreeID,
@@ -42,57 +42,11 @@ func newAdminWorkflowCommands() []cli.Command {
 					Name:  FlagOutputFilenameWithAlias,
 					Usage: "output file",
 				},
-
-				// for persistence connection
-				// TODO need to support other database: https://github.com/uber/cadence/issues/2777
-				cli.StringFlag{
-					Name:  FlagDBAddress,
-					Usage: "persistence address(right now only cassandra is supported)",
-				},
-				cli.IntFlag{
-					Name:  FlagDBPort,
-					Value: 9042,
-					Usage: "persistence port",
-				},
-				cli.StringFlag{
-					Name:  FlagUsername,
-					Usage: "cassandra username",
-				},
-				cli.StringFlag{
-					Name:  FlagPassword,
-					Usage: "cassandra password",
-				},
-				cli.StringFlag{
-					Name:  FlagKeyspace,
-					Usage: "cassandra keyspace",
-				},
-				cli.BoolFlag{
-					Name:  FlagEnableTLS,
-					Usage: "enable TLS over cassandra connection",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSCertPath,
-					Usage: "cassandra tls client cert path (tls must be enabled)",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSKeyPath,
-					Usage: "cassandra tls client key path (tls must be enabled)",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSCaPath,
-					Usage: "cassandra tls client ca path (tls must be enabled)",
-				},
-				cli.BoolFlag{
-					Name:  FlagTLSEnableHostVerification,
-					Usage: "cassandra tls verify hostname and server cert (tls must be enabled)",
-				},
-
 				// support mysql query
 				cli.IntFlag{
 					Name:  FlagShardIDWithAlias,
 					Usage: "ShardID",
-				},
-			},
+				}),
 			Action: func(c *cli.Context) {
 				AdminShowWorkflow(c)
 			},
@@ -137,7 +91,7 @@ func newAdminWorkflowCommands() []cli.Command {
 			Name:    "delete",
 			Aliases: []string{"del"},
 			Usage:   "Delete current workflow execution and the mutableState record",
-			Flags: []cli.Flag{
+			Flags: append(getDBFlags(),
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
 					Usage: "WorkflowID",
@@ -149,52 +103,7 @@ func newAdminWorkflowCommands() []cli.Command {
 				cli.BoolFlag{
 					Name:  FlagSkipErrorModeWithAlias,
 					Usage: "skip errors when deleting history",
-				},
-
-				// for persistence connection
-				// TODO need to support other database: https://github.com/uber/cadence/issues/2777
-				cli.StringFlag{
-					Name:  FlagDBAddress,
-					Usage: "persistence address(right now only cassandra is supported)",
-				},
-				cli.IntFlag{
-					Name:  FlagDBPort,
-					Value: 9042,
-					Usage: "persistence port",
-				},
-				cli.StringFlag{
-					Name:  FlagUsername,
-					Usage: "cassandra username",
-				},
-				cli.StringFlag{
-					Name:  FlagPassword,
-					Usage: "cassandra password",
-				},
-				cli.StringFlag{
-					Name:  FlagKeyspace,
-					Usage: "cassandra keyspace",
-				},
-				cli.BoolFlag{
-					Name:  FlagEnableTLS,
-					Usage: "use TLS over cassandra connection",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSCertPath,
-					Usage: "cassandra tls client cert path (tls must be enabled)",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSKeyPath,
-					Usage: "cassandra tls client key path (tls must be enabled)",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSCaPath,
-					Usage: "cassandra tls client ca path (tls must be enabled)",
-				},
-				cli.BoolFlag{
-					Name:  FlagTLSEnableHostVerification,
-					Usage: "cassandra tls verify hostname and server cert (tls must be enabled)",
-				},
-			},
+				}),
 			Action: func(c *cli.Context) {
 				AdminDeleteWorkflow(c)
 			},
@@ -329,7 +238,7 @@ func newAdminDomainCommands() []cli.Command {
 			Name:    "getdomainidorname",
 			Aliases: []string{"getdn"},
 			Usage:   "Get domainID or domainName",
-			Flags: []cli.Flag{
+			Flags: append(getDBFlags(),
 				cli.StringFlag{
 					Name:  FlagDomain,
 					Usage: "DomainName",
@@ -337,52 +246,7 @@ func newAdminDomainCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagDomainID,
 					Usage: "Domain ID(uuid)",
-				},
-
-				// for persistence connection
-				// TODO need to support other database: https://github.com/uber/cadence/issues/2777
-				cli.StringFlag{
-					Name:  FlagDBAddress,
-					Usage: "persistence address(right now only cassandra is supported)",
-				},
-				cli.IntFlag{
-					Name:  FlagDBPort,
-					Value: 9042,
-					Usage: "persistence port",
-				},
-				cli.StringFlag{
-					Name:  FlagUsername,
-					Usage: "cassandra username",
-				},
-				cli.StringFlag{
-					Name:  FlagPassword,
-					Usage: "cassandra password",
-				},
-				cli.StringFlag{
-					Name:  FlagKeyspace,
-					Usage: "cassandra keyspace",
-				},
-				cli.BoolFlag{
-					Name:  FlagEnableTLS,
-					Usage: "use TLS over cassandra connection",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSCertPath,
-					Usage: "cassandra tls client cert path (tls must be enabled)",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSKeyPath,
-					Usage: "cassandra tls client key path (tls must be enabled)",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSCaPath,
-					Usage: "cassandra tls client ca path (tls must be enabled)",
-				},
-				cli.BoolFlag{
-					Name:  FlagTLSEnableHostVerification,
-					Usage: "cassandra tls verify hostname and server cert (tls must be enabled)",
-				},
-			},
+				}),
 			Action: func(c *cli.Context) {
 				AdminGetDomainIDOrName(c)
 			},
@@ -523,8 +387,7 @@ clusters:
 			Name:    "rereplicate",
 			Aliases: []string{"rrp"},
 			Usage:   "Rereplicate replication tasks to target topic from history tables",
-			Flags: []cli.Flag{
-
+			Flags: append(getDBFlags(),
 				cli.StringFlag{
 					Name:  FlagTargetCluster,
 					Usage: "Name of targetCluster to receive the replication task",
@@ -561,51 +424,6 @@ clusters:
 					Name:  FlagDomainID,
 					Usage: "DomainID",
 				},
-
-				// for persistence connection
-				// TODO need to support other database: https://github.com/uber/cadence/issues/2777
-				cli.StringFlag{
-					Name:  FlagDBAddress,
-					Usage: "persistence address(right now only cassandra is supported)",
-				},
-				cli.IntFlag{
-					Name:  FlagDBPort,
-					Value: 9042,
-					Usage: "persistence port",
-				},
-				cli.StringFlag{
-					Name:  FlagUsername,
-					Usage: "cassandra username",
-				},
-				cli.StringFlag{
-					Name:  FlagPassword,
-					Usage: "cassandra password",
-				},
-				cli.StringFlag{
-					Name:  FlagKeyspace,
-					Usage: "cassandra keyspace",
-				},
-				cli.BoolFlag{
-					Name:  FlagEnableTLS,
-					Usage: "use TLS over cassandra connection",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSCertPath,
-					Usage: "cassandra tls client cert path (tls must be enabled)",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSKeyPath,
-					Usage: "cassandra tls client key path (tls must be enabled)",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSCaPath,
-					Usage: "cassandra tls client ca path (tls must be enabled)",
-				},
-				cli.BoolFlag{
-					Name:  FlagTLSEnableHostVerification,
-					Usage: "cassandra tls verify hostname and server cert (tls must be enabled)",
-				},
-
 				// kafka
 				cli.StringFlag{
 					Name:  FlagCluster,
@@ -628,8 +446,7 @@ clusters:
 		brokers:
 		- 127.0.0.1
 		- 127.0.0.2`,
-				},
-			},
+				}),
 			Action: func(c *cli.Context) {
 				AdminRereplicate(c)
 			},
@@ -907,6 +724,107 @@ func newAdminDLQCommands() []cli.Command {
 			Action: func(c *cli.Context) {
 				AdminMergeDLQMessages(c)
 			},
+		},
+	}
+}
+
+func newDBCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "scan",
+			Aliases: []string{"scan"},
+			Usage:   "scan all concrete executions in database and detect corruptions",
+			Flags: append(getDBFlags(),
+				cli.IntFlag{
+					Name:  FlagLowerShardBound,
+					Usage: "lower bound of shard to scan (inclusive)",
+					Value: 0,
+				},
+				cli.IntFlag{
+					Name:  FlagUpperShardBound,
+					Usage: "upper bound of shard to scan (exclusive)",
+					Value: 16384,
+				},
+				cli.IntFlag{
+					Name:  FlagStartingRPS,
+					Usage: "starting rps of database queries, rps will be increased to target over scale up seconds",
+					Value: 100,
+				},
+				cli.IntFlag{
+					Name:  FlagRPS,
+					Usage: "target rps of database queries, target will be reached over scale up seconds",
+					Value: 7000,
+				},
+				cli.IntFlag{
+					Name:  FlagRPSScaleUpSeconds,
+					Usage: "number of seconds over which rps is scaled up to target",
+					Value: 1800,
+				},
+				cli.IntFlag{
+					Name:  FlagPageSize,
+					Usage: "page size used to query db executions table",
+					Value: 500,
+				},
+				cli.IntFlag{
+					Name:  FlagConcurrency,
+					Usage: "number of threads to handle scan",
+					Value: 1000,
+				},
+				cli.IntFlag{
+					Name:  FlagScanReportRate,
+					Usage: "the number of shards which get handled between each emitting of progress",
+					Value: 10,
+				}),
+			Action: func(c *cli.Context) {
+				AdminDBScan(c)
+			},
+		},
+	}
+}
+
+// TODO need to support other database: https://github.com/uber/cadence/issues/2777
+func getDBFlags() []cli.Flag {
+	return []cli.Flag{
+		cli.StringFlag{
+			Name:  FlagDBAddress,
+			Usage: "persistence address(right now only cassandra is supported)",
+		},
+		cli.IntFlag{
+			Name:  FlagDBPort,
+			Value: 9042,
+			Usage: "persistence port",
+		},
+		cli.StringFlag{
+			Name:  FlagUsername,
+			Usage: "cassandra username",
+		},
+		cli.StringFlag{
+			Name:  FlagPassword,
+			Usage: "cassandra password",
+		},
+		cli.StringFlag{
+			Name:  FlagKeyspace,
+			Usage: "cassandra keyspace",
+		},
+		cli.BoolFlag{
+			Name:  FlagEnableTLS,
+			Usage: "enable TLS over cassandra connection",
+		},
+		cli.StringFlag{
+			Name:  FlagTLSCertPath,
+			Usage: "cassandra tls client cert path (tls must be enabled)",
+		},
+		cli.StringFlag{
+			Name:  FlagTLSKeyPath,
+			Usage: "cassandra tls client key path (tls must be enabled)",
+		},
+		cli.StringFlag{
+			Name:  FlagTLSCaPath,
+			Usage: "cassandra tls client ca path (tls must be enabled)",
+		},
+		cli.BoolFlag{
+			Name:  FlagTLSEnableHostVerification,
+			Usage: "cassandra tls verify hostname and server cert (tls must be enabled)",
 		},
 	}
 }

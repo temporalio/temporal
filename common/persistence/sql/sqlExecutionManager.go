@@ -830,6 +830,12 @@ func (m *sqlExecutionManager) GetCurrentExecution(
 	}, nil
 }
 
+func (m *sqlExecutionManager) ListConcreteExecutions(
+	_ *p.ListConcreteExecutionsRequest,
+) (*p.InternalListConcreteExecutionsResponse, error) {
+	return nil, &workflow.InternalServiceError{Message: "Not yet implemented"}
+}
+
 func (m *sqlExecutionManager) GetTransferTasks(
 	request *p.GetTransferTasksRequest,
 ) (*p.GetTransferTasksResponse, error) {

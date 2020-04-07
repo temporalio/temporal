@@ -784,6 +784,18 @@ type (
 		WorkflowID string
 	}
 
+	// ListConcreteExecutionsRequest is request to ListConcreteExecutions
+	ListConcreteExecutionsRequest struct {
+		PageSize  int
+		PageToken []byte
+	}
+
+	// ListConcreteExecutionsResponse is response to ListConcreteExecutions
+	ListConcreteExecutionsResponse struct {
+		ExecutionInfos []*WorkflowExecutionInfo
+		PageToken      []byte
+	}
+
 	// GetCurrentExecutionResponse is the response to GetCurrentExecution
 	GetCurrentExecutionResponse struct {
 		StartRequestID   string
@@ -1493,6 +1505,9 @@ type (
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
+
+		// Scan operations
+		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error)
 	}
 
 	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard

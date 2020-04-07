@@ -436,6 +436,11 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ?`
 
+	templateListWorkflowExecutionQuery = `SELECT run_id, execution ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ?`
+
 	templateCheckWorkflowExecutionQuery = `UPDATE executions ` +
 		`SET next_event_id = ? ` +
 		`WHERE shard_id = ? ` +
@@ -2031,6 +2036,42 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 		CloseStatus:      executionInfo.CloseStatus,
 		LastWriteVersion: replicationState.LastWriteVersion,
 	}, nil
+}
+
+func (d *cassandraPersistence) ListConcreteExecutions(
+	request *p.ListConcreteExecutionsRequest,
+) (*p.InternalListConcreteExecutionsResponse, error) {
+	query := d.session.Query(
+		templateListWorkflowExecutionQuery,
+		d.shardID,
+		rowTypeExecution,
+	).PageSize(request.PageSize).PageState(request.PageToken)
+
+	iter := query.Iter()
+	if iter == nil {
+		return nil, &workflow.InternalServiceError{
+			Message: "ListConcreteExecutions operation failed.  Not able to create query iterator.",
+		}
+	}
+
+	response := &p.InternalListConcreteExecutionsResponse{}
+	result := make(map[string]interface{})
+	for iter.MapScan(result) {
+		runID := result["run_id"].(gocql.UUID).String()
+		if runID == permanentRunID {
+			result = make(map[string]interface{})
+			continue
+		}
+		if _, ok := result["execution"]; ok {
+			wfInfo := createWorkflowExecutionInfo(result["execution"].(map[string]interface{}))
+			response.ExecutionInfos = append(response.ExecutionInfos, wfInfo)
+		}
+		result = make(map[string]interface{})
+	}
+	nextPageToken := iter.PageState()
+	response.NextPageToken = make([]byte, len(nextPageToken))
+	copy(response.NextPageToken, nextPageToken)
+	return response, nil
 }
 
 func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksRequest) (*p.GetTransferTasksResponse, error) {

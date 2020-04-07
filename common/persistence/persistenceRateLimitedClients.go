@@ -263,6 +263,15 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetCurrentExecution(requ
 	return response, err
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.ListConcreteExecutions(request)
+	return response, err
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
