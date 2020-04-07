@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
@@ -195,7 +196,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Overriding() {
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equal(namespacepb.BadBinaries{
+	assert.True(s.T(), proto.Equal(&out, &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason2", CreatedTimeNano: nowInt64},
 		},
@@ -232,7 +233,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Merging() {
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equal(namespacepb.BadBinaries{
+	assert.True(s.T(), proto.Equal(&out, &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason1", CreatedTimeNano: nowInt64},
 			"k1": {Reason: "reason2", CreatedTimeNano: nowInt64},
@@ -249,7 +250,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Nil() {
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equal(namespacepb.BadBinaries{
+	assert.True(s.T(), proto.Equal(&out, &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason1", CreatedTimeNano: nowInt64},
 			"k1": {Reason: "reason2", CreatedTimeNano: nowInt64},
