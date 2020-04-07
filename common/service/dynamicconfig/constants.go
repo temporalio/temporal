@@ -82,6 +82,7 @@ var keys = map[Key]string{
 
 	// frontend settings
 	FrontendPersistenceMaxQPS:             "frontend.persistenceMaxQPS",
+	FrontendPersistenceGlobalMaxQPS:       "frontend.persistenceGlobalMaxQPS",
 	FrontendVisibilityMaxPageSize:         "frontend.visibilityMaxPageSize",
 	FrontendVisibilityListMaxQPS:          "frontend.visibilityListMaxQPS",
 	FrontendESVisibilityListMaxQPS:        "frontend.esVisibilityListMaxQPS",
@@ -108,6 +109,7 @@ var keys = map[Key]string{
 	// matching settings
 	MatchingRPS:                             "matching.rps",
 	MatchingPersistenceMaxQPS:               "matching.persistenceMaxQPS",
+	MatchingPersistenceGlobalMaxQPS:         "matching.persistenceGlobalMaxQPS",
 	MatchingMinTaskThrottlingBurstSize:      "matching.minTaskThrottlingBurstSize",
 	MatchingGetTasksBatchSize:               "matching.getTasksBatchSize",
 	MatchingLongPollExpirationInterval:      "matching.longPollExpirationInterval",
@@ -130,6 +132,7 @@ var keys = map[Key]string{
 	// history settings
 	HistoryRPS:                                             "history.rps",
 	HistoryPersistenceMaxQPS:                               "history.persistenceMaxQPS",
+	HistoryPersistenceGlobalMaxQPS:                         "history.persistenceGlobalMaxQPS",
 	HistoryVisibilityOpenMaxQPS:                            "history.historyVisibilityOpenMaxQPS",
 	HistoryVisibilityClosedMaxQPS:                          "history.historyVisibilityClosedMaxQPS",
 	HistoryLongPollExpirationInterval:                      "history.longPollExpirationInterval",
@@ -235,6 +238,7 @@ var keys = map[Key]string{
 	ReplicationEventsFromCurrentCluster:                    "history.ReplicationEventsFromCurrentCluster",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
+	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
 	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
 	WorkerReplicatorTaskConcurrency:                 "worker.replicatorTaskConcurrency",
 	WorkerReplicatorMessageConcurrency:              "worker.replicatorMessageConcurrency",
@@ -342,6 +346,8 @@ const (
 
 	// FrontendPersistenceMaxQPS is the max qps frontend host can query DB
 	FrontendPersistenceMaxQPS
+	// FrontendPersistenceMaxGlobalQPS is the max qps frontend cluster can query DB
+	FrontendPersistenceGlobalMaxQPS
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize
 	// FrontendVisibilityListMaxQPS is max qps frontend can list open/close workflows
@@ -392,6 +398,8 @@ const (
 	MatchingRPS
 	// MatchingPersistenceMaxQPS is the max qps matching host can query DB
 	MatchingPersistenceMaxQPS
+	// MatchingPersistenceMaxQPS is the max qps matching cluster can query DB
+	MatchingPersistenceGlobalMaxQPS
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task list throttling
 	MatchingMinTaskThrottlingBurstSize
 	// MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer
@@ -435,6 +443,8 @@ const (
 	HistoryRPS
 	// HistoryPersistenceMaxQPS is the max qps history host can query DB
 	HistoryPersistenceMaxQPS
+	// HistoryPersistenceGlobalMaxQPS is the max qps history cluster can query DB
+	HistoryPersistenceGlobalMaxQPS
 	// HistoryVisibilityOpenMaxQPS is max qps one history host can write visibility open_executions
 	HistoryVisibilityOpenMaxQPS
 	// HistoryVisibilityClosedMaxQPS is max qps one history host can write visibility closed_executions
@@ -618,6 +628,8 @@ const (
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
 	WorkerPersistenceMaxQPS
+	// WorkerPersistenceGlobalMaxQPS is the max qps worker cluster can query DB
+	WorkerPersistenceGlobalMaxQPS
 	// WorkerReplicatorMetaTaskConcurrency is the number of coroutine handling metadata related tasks
 	WorkerReplicatorMetaTaskConcurrency
 	// WorkerReplicatorTaskConcurrency is the number of coroutine handling non metadata related tasks
