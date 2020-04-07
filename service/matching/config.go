@@ -31,10 +31,11 @@ import (
 type (
 	// Config represents configuration for cadence-matching service
 	Config struct {
-		PersistenceMaxQPS     dynamicconfig.IntPropertyFn
-		EnableSyncMatch       dynamicconfig.BoolPropertyFnWithTaskListInfoFilters
-		RPS                   dynamicconfig.IntPropertyFn
-		ShutdownDrainDuration dynamicconfig.DurationPropertyFn
+		PersistenceMaxQPS       dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
+		EnableSyncMatch         dynamicconfig.BoolPropertyFnWithTaskListInfoFilters
+		RPS                     dynamicconfig.IntPropertyFn
+		ShutdownDrainDuration   dynamicconfig.DurationPropertyFn
 
 		// taskListManager configuration
 		RangeSize                    int64
@@ -92,6 +93,7 @@ type (
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		PersistenceMaxQPS:               dc.GetIntProperty(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
+		PersistenceGlobalMaxQPS:         dc.GetIntProperty(dynamicconfig.MatchingPersistenceGlobalMaxQPS, 0),
 		EnableSyncMatch:                 dc.GetBoolPropertyFilteredByTaskListInfo(dynamicconfig.MatchingEnableSyncMatch, true),
 		RPS:                             dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		RangeSize:                       100000,
