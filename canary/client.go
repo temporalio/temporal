@@ -48,6 +48,7 @@ type cadenceClient struct {
 // if the domain already exist, this method silently returns success
 func (client *cadenceClient) createDomain(name string, desc string, owner string, archivalStatus *shared.ArchivalStatus) error {
 	emitMetric := true
+	isGlobalDomain := false
 	retention := int32(workflowRetentionDays)
 	if archivalStatus != nil && *archivalStatus == shared.ArchivalStatusEnabled {
 		retention = int32(0)
@@ -59,6 +60,8 @@ func (client *cadenceClient) createDomain(name string, desc string, owner string
 		WorkflowExecutionRetentionPeriodInDays: &retention,
 		EmitMetric:                             &emitMetric,
 		HistoryArchivalStatus:                  archivalStatus,
+		VisibilityArchivalStatus:               archivalStatus,
+		IsGlobalDomain:                         &isGlobalDomain,
 	}
 	err := client.Register(context.Background(), req)
 	if err != nil {
