@@ -26,4 +26,4 @@ package cassandra
 const Version = "0.27"
 
 // VisibilityVersion is the Cassandra visibility database release version
-const VisibilityVersion = "0.4"
+const VisibilityVersion = "0.5"

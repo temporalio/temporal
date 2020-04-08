@@ -15,6 +15,7 @@ frontend.validSearchAttributes:
       CloseTime: 2
       CloseStatus: 2
       HistoryLength: 2
+      TaskList: 1
       CustomStringField: 0
       CustomKeywordField: 1
       CustomIntField: 2

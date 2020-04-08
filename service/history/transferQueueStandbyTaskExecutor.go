@@ -250,6 +250,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			workflowHistoryLength,
 			transferTask.GetTaskID(),
 			visibilityMemo,
+			executionInfo.TaskList,
 			searchAttr,
 		)
 	}
@@ -442,6 +443,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 			executionTimestamp.UnixNano(),
 			workflowTimeout,
 			transferTask.GetTaskID(),
+			executionInfo.TaskList,
 			visibilityMemo,
 			searchAttr,
 		)
@@ -455,6 +457,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 		executionTimestamp.UnixNano(),
 		workflowTimeout,
 		transferTask.GetTaskID(),
+		executionInfo.TaskList,
 		visibilityMemo,
 		searchAttr,
 	)

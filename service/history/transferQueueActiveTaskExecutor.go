@@ -275,6 +275,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		workflowHistoryLength,
 		task.GetTaskID(),
 		visibilityMemo,
+		executionInfo.TaskList,
 		searchAttr,
 	)
 	if err != nil {
@@ -685,6 +686,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 			executionTimestamp.UnixNano(),
 			workflowTimeout,
 			task.GetTaskID(),
+			executionInfo.TaskList,
 			visibilityMemo,
 			searchAttr,
 		)
@@ -698,6 +700,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 		executionTimestamp.UnixNano(),
 		workflowTimeout,
 		task.GetTaskID(),
+		executionInfo.TaskList,
 		visibilityMemo,
 		searchAttr,
 	)

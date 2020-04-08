@@ -43,6 +43,9 @@
         "KafkaKey": {
           "type": "keyword"
         },
+        "TaskList": {
+          "type": "keyword"
+        },
         "Attr": {
           "properties": {
             "CadenceChangeVersion":  { "type": "keyword" },

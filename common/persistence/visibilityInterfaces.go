@@ -44,6 +44,7 @@ type (
 		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *s.Memo
+		TaskList           string
 		SearchAttributes   map[string][]byte
 	}
 
@@ -62,6 +63,7 @@ type (
 		RetentionSeconds   int64
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *s.Memo
+		TaskList           string
 		SearchAttributes   map[string][]byte
 	}
 
@@ -76,6 +78,7 @@ type (
 		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *s.Memo
+		TaskList           string
 		SearchAttributes   map[string][]byte
 	}
 

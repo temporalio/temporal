@@ -1913,6 +1913,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 		ExecutionTimestamp: executionTimestamp.UnixNano(),
 		WorkflowTimeout:    int64(executionInfo.WorkflowTimeout),
 		TaskID:             task.TaskID,
+		TaskList:           task.TaskList,
 	}
 }
 
@@ -2040,6 +2041,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttribu
 		StartTimestamp:   startEvent.GetTimestamp(),
 		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
 		TaskID:           task.TaskID,
+		TaskList:         task.TaskList,
 	}
 }
 

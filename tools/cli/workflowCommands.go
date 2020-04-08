@@ -1086,6 +1086,7 @@ func appendWorkflowExecutionsToTable(
 			executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
 			closeTime = convertTime(e.GetCloseTime(), !printDateTime)
 		}
+		// TODO add TaskList after client upgrade
 		row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
 		if !queryOpen {
 			row = append(row, closeTime)

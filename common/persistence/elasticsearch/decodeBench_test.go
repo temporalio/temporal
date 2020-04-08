@@ -43,6 +43,7 @@ var (
          "WorkflowID": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
          "WorkflowType": "TestWorkflowExecute",
  		 "Encoding" : "thriftrw",
+         "TaskList" : "taskList",
  	     "Memo" : "WQ0ACgsLAAAAAwAAAAJrMgAAAAkidmFuY2V4dSIAAAACazMAAAADMTIzAAAAAmsxAAAAUXsia2V5MSI6MTIzNDMyMSwia2V5MiI6ImEgc3RyaW5nIGlzIHZlcnkgbG9uZyIsIm1hcCI6eyJtS2V5IjoxMjM0MywiYXNkIjoiYXNkZiJ9fQA="}`)
 )
 
@@ -64,6 +65,7 @@ func BenchmarkJSONDecodeToType(b *testing.B) {
 			StartTime:     time.Unix(0, source.StartTime),
 			ExecutionTime: time.Unix(0, source.ExecutionTime),
 			Memo:          p.NewDataBlob(source.Memo, common.EncodingType(source.Encoding)),
+			TaskList:      source.TaskList,
 		}
 		record.CloseTime = time.Unix(0, source.CloseTime)
 		record.Status = &source.CloseStatus
@@ -91,6 +93,7 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 			TypeName:      source[definition.WorkflowType].(string),
 			StartTime:     time.Unix(0, startTime),
 			ExecutionTime: time.Unix(0, executionTime),
+			TaskList:      source[definition.TaskList].(string),
 			Memo:          p.NewDataBlob([]byte(source[definition.Memo].(string)), common.EncodingType(source[definition.Encoding].(string))),
 		}
 		record.CloseTime = time.Unix(0, closeTime)

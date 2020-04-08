@@ -26,4 +26,4 @@ package mysql
 const Version = "0.3"
 
 // VisibilityVersion is the MySQL visibility database release version
-const VisibilityVersion = "0.1"
+const VisibilityVersion = "0.2"
