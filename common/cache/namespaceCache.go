@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -674,13 +675,9 @@ func (c *namespaceCache) buildEntryFromRecord(
 func (entry *NamespaceCacheEntry) duplicate() *NamespaceCacheEntry {
 	// this is a deep copy
 	result := newNamespaceCacheEntry(entry.clusterMetadata)
-	result.info = entry.info
-	result.info.Data = map[string]string{}
-	for k, v := range entry.info.Data {
-		result.info.Data[k] = v
-	}
-	result.config = entry.config
-	result.replicationConfig = entry.replicationConfig
+	result.info = proto.Clone(entry.info).(*persistenceblobs.NamespaceInfo)
+	result.config = proto.Clone(entry.config).(*persistenceblobs.NamespaceConfig)
+	result.replicationConfig = proto.Clone(entry.replicationConfig).(*persistenceblobs.NamespaceReplicationConfig)
 	result.configVersion = entry.configVersion
 	result.failoverVersion = entry.failoverVersion
 	result.isGlobalNamespace = entry.isGlobalNamespace
