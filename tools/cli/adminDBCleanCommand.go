@@ -133,7 +133,7 @@ func AdminDBClean(c *cli.Context) {
 	for i := 0; i < numShards; i++ {
 		report := <-reports
 		includeShardCleanInProgressReport(report, progressReport, startTime)
-		if i%scanReportRate == 0 {
+		if i%scanReportRate == 0 || i == numShards-1 {
 			reportBytes, err := json.MarshalIndent(*progressReport, "", "\t")
 			if err != nil {
 				ErrorAndExit("failed to print progress", err)

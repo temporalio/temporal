@@ -292,7 +292,8 @@ func scanShard(
 				shardID,
 				limiter,
 				historyStore,
-				&report.TotalDBRequests)
+				&report.TotalDBRequests,
+				execStore)
 			switch historyVerificationResult {
 			case VerificationResultNoCorruption:
 				// nothing to do just keep checking other conditions
@@ -302,6 +303,10 @@ func scanShard(
 				continue
 			case VerificationResultCheckFailure:
 				report.Scanned.ExecutionCheckFailureCount++
+				continue
+			}
+
+			if history == nil || historyBranch == nil {
 				continue
 			}
 
@@ -359,6 +364,7 @@ func verifyHistoryExists(
 	limiter *quotas.DynamicRateLimiter,
 	historyStore persistence.HistoryStore,
 	totalDBRequests *int64,
+	execStore persistence.ExecutionStore,
 ) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *shared.HistoryBranch) {
 	var branch shared.HistoryBranch
 	err := branchDecoder.Decode(execution.BranchToken, &branch)
@@ -383,6 +389,16 @@ func verifyHistoryExists(
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
 	history, err := historyStore.ReadHistoryBranch(readHistoryBranchReq)
+
+	ecf, stillExists := concreteExecutionStillExists(execution, shardID, execStore, limiter, totalDBRequests)
+	if ecf != nil {
+		checkFailureWriter.Add(ecf)
+		return VerificationResultCheckFailure, nil, nil
+	}
+	if !stillExists {
+		return VerificationResultNoCorruption, nil, nil
+	}
+
 	if err != nil {
 		if err == gocql.ErrNotFound {
 			corruptedExecutionWriter.Add(&CorruptedExecution{
@@ -566,6 +582,41 @@ func verifyCurrentExecution(
 		return VerificationResultDetectedCorruption
 	}
 	return VerificationResultNoCorruption
+}
+
+func concreteExecutionStillExists(
+	execution *persistence.InternalWorkflowExecutionInfo,
+	shardID int,
+	execStore persistence.ExecutionStore,
+	limiter *quotas.DynamicRateLimiter,
+	totalDBRequests *int64,
+) (*ExecutionCheckFailure, bool) {
+	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
+		DomainID: execution.DomainID,
+		Execution: shared.WorkflowExecution{
+			WorkflowId: &execution.WorkflowID,
+			RunId:      &execution.RunID,
+		},
+	}
+	preconditionForDBCall(totalDBRequests, limiter)
+	_, err := execStore.GetWorkflowExecution(getConcreteExecution)
+	if err == nil {
+		return nil, true
+	}
+
+	switch err.(type) {
+	case *shared.EntityNotExistsError:
+		return nil, false
+	default:
+		return &ExecutionCheckFailure{
+			ShardID:    shardID,
+			DomainID:   execution.DomainID,
+			WorkflowID: execution.WorkflowID,
+			RunID:      execution.RunID,
+			Note:       "failed to verify that concrete execution still exists",
+			Details:    err.Error(),
+		}, false
+	}
 }
 
 func concreteExecutionStillOpen(
