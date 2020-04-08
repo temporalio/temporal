@@ -48,7 +48,6 @@ import (
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/service/matching"
 )
 
@@ -335,7 +334,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	expectedActivity := int32(1)
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		s.EqualValues(primitives.MustParseUUID(id), execution.WorkflowId)
+		s.EqualValues(id, execution.WorkflowId)
 		s.Equal(activityName, activityType.Name)
 		id, _ := strconv.Atoi(activityID)
 		s.Equal(int(expectedActivity), id)
@@ -519,7 +518,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		s.EqualValues(primitives.MustParseUUID(id), execution.WorkflowId)
+		s.EqualValues(id, execution.WorkflowId)
 		s.Equal(activityName, activityType.Name)
 		s.Logger.Info("Activity ID", tag.WorkflowActivityID(activityID))
 		return []byte("Activity Result"), false, nil
