@@ -24,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/types"
-	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
 	replicationpb "go.temporal.io/temporal-proto/replication"
