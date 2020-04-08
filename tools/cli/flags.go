@@ -216,9 +216,10 @@ const (
 	FlagLastMessageID                     = "last_message_id"
 	FlagLastMessageIDWithAlias            = FlagLastMessageID + ", lm"
 	FlagConcurrency                       = "concurrency"
-	FlagScanReportRate                    = "scan_report_rate"
+	FlagReportRate                        = "report_rate"
 	FlagLowerShardBound                   = "lower_shard_bound"
 	FlagUpperShardBound                   = "upper_shard_bound"
+	FlagInputDirectory                    = "input_directory"
 )
 
 var flagsForExecution = []cli.Flag{

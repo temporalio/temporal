@@ -733,7 +733,7 @@ func newDBCommands() []cli.Command {
 		{
 			Name:    "scan",
 			Aliases: []string{"scan"},
-			Usage:   "scan all concrete executions in database and detect corruptions",
+			Usage:   "scan concrete executions in database and detect corruptions",
 			Flags: append(getDBFlags(),
 				cli.IntFlag{
 					Name:  FlagLowerShardBound,
@@ -771,12 +771,60 @@ func newDBCommands() []cli.Command {
 					Value: 1000,
 				},
 				cli.IntFlag{
-					Name:  FlagScanReportRate,
+					Name:  FlagReportRate,
 					Usage: "the number of shards which get handled between each emitting of progress",
 					Value: 10,
 				}),
 			Action: func(c *cli.Context) {
 				AdminDBScan(c)
+			},
+		},
+		{
+			Name:    "clean",
+			Aliases: []string{"clean"},
+			Usage:   "clean up corrupted workflows",
+			Flags: append(getDBFlags(),
+				cli.StringFlag{
+					Name:  FlagInputDirectory,
+					Usage: "the directory which contains corrupted workflow execution files from scan",
+				},
+				cli.IntFlag{
+					Name:  FlagLowerShardBound,
+					Usage: "lower bound of corrupt shard to handle (inclusive)",
+					Value: 0,
+				},
+				cli.IntFlag{
+					Name:  FlagUpperShardBound,
+					Usage: "upper bound of shard to handle (exclusive)",
+					Value: 16384,
+				},
+				cli.IntFlag{
+					Name:  FlagStartingRPS,
+					Usage: "starting rps of database queries, rps will be increased to target over scale up seconds",
+					Value: 100,
+				},
+				cli.IntFlag{
+					Name:  FlagRPS,
+					Usage: "target rps of database queries, target will be reached over scale up seconds",
+					Value: 7000,
+				},
+				cli.IntFlag{
+					Name:  FlagRPSScaleUpSeconds,
+					Usage: "number of seconds over which rps is scaled up to target",
+					Value: 1800,
+				},
+				cli.IntFlag{
+					Name:  FlagConcurrency,
+					Usage: "number of threads to handle clean",
+					Value: 1000,
+				},
+				cli.IntFlag{
+					Name:  FlagReportRate,
+					Usage: "the number of shards which get handled between each emitting of progress",
+					Value: 10,
+				}),
+			Action: func(c *cli.Context) {
+				AdminDBClean(c)
 			},
 		},
 	}

@@ -349,7 +349,7 @@ const (
 
 	// FrontendPersistenceMaxQPS is the max qps frontend host can query DB
 	FrontendPersistenceMaxQPS
-	// FrontendPersistenceMaxGlobalQPS is the max qps frontend cluster can query DB
+	// FrontendPersistenceGlobalMaxQPS is the max qps frontend cluster can query DB
 	FrontendPersistenceGlobalMaxQPS
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize
@@ -401,7 +401,7 @@ const (
 	MatchingRPS
 	// MatchingPersistenceMaxQPS is the max qps matching host can query DB
 	MatchingPersistenceMaxQPS
-	// MatchingPersistenceMaxQPS is the max qps matching cluster can query DB
+	// MatchingPersistenceGlobalMaxQPS is the max qps matching cluster can query DB
 	MatchingPersistenceGlobalMaxQPS
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task list throttling
 	MatchingMinTaskThrottlingBurstSize

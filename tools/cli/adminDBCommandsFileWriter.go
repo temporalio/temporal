@@ -29,75 +29,52 @@ import (
 )
 
 const (
-	flushThreshold = 100
+	flushThreshold = 50
 )
 
 type (
-	// AdminDBCommandFileWriter is used to batch writes to db scan
-	AdminDBCommandFileWriter interface {
-		AddCorruptedExecution(*CorruptedExecution)
-		AddExecutionCheckFailure(*ExecutionCheckFailure)
+	// BufferedWriter is used to buffer entities and write them to a file
+	BufferedWriter interface {
+		Add(interface{})
 		Flush()
 	}
 
-	adminDBCommandFileWriterImpl struct {
-		executionCheckFailureFile *os.File
-		corruptedExecutionFile    *os.File
-		corruptedExecutions       []*CorruptedExecution
-		executionCheckFailures    []*ExecutionCheckFailure
+	bufferedWriter struct {
+		f       *os.File
+		entries []interface{}
 	}
 )
 
-// NewAdminDBCommandFileWriter constructs a new AdminDBCommandFileWriter
-func NewAdminDBCommandFileWriter(executionCheckFailureFile *os.File, corruptedExecutionFile *os.File) AdminDBCommandFileWriter {
-	return &adminDBCommandFileWriterImpl{
-		executionCheckFailureFile: executionCheckFailureFile,
-		corruptedExecutionFile:    corruptedExecutionFile,
+// NewBufferedWriter constructs a new BufferedWriter
+func NewBufferedWriter(f *os.File) BufferedWriter {
+	return &bufferedWriter{
+		f: f,
 	}
 }
 
-// AddCorruptedExecution adds a CorruptedExecution
-func (fw *adminDBCommandFileWriterImpl) AddCorruptedExecution(ce *CorruptedExecution) {
-	if fw.shouldFlush() {
-		fw.Flush()
+// Add adds a new entity
+func (bw *bufferedWriter) Add(e interface{}) {
+	if len(bw.entries) > flushThreshold {
+		bw.Flush()
 	}
-	fw.corruptedExecutions = append(fw.corruptedExecutions, ce)
+	bw.entries = append(bw.entries, e)
 }
 
-// AddExecutionCheckFailure adds a ExecutionCheckFailure
-func (fw *adminDBCommandFileWriterImpl) AddExecutionCheckFailure(ecf *ExecutionCheckFailure) {
-	if fw.shouldFlush() {
-		fw.Flush()
-	}
-	fw.executionCheckFailures = append(fw.executionCheckFailures, ecf)
-}
-
-// Flush flushes contents of writer to file
-func (fw *adminDBCommandFileWriterImpl) Flush() {
-	var checkFailureBuilder strings.Builder
-	for _, ecf := range fw.executionCheckFailures {
-		if err := fw.writeToBuilder(&checkFailureBuilder, ecf); err != nil {
-			ErrorAndExit("failed to marshal executionCheckFailures", err)
+// Flush flushes contents to file
+func (bw *bufferedWriter) Flush() {
+	var builder strings.Builder
+	for _, e := range bw.entries {
+		if err := bw.writeToBuilder(&builder, e); err != nil {
+			ErrorAndExit("failed to write to builder", err)
 		}
 	}
-	if err := fw.writeToFile(&checkFailureBuilder, fw.executionCheckFailureFile); err != nil {
-		ErrorAndExit("failed to write executionCheckFailureFile", err)
+	if err := bw.writeBuilderToFile(&builder, bw.f); err != nil {
+		ErrorAndExit("failed to write to file", err)
 	}
-	fw.executionCheckFailures = nil
-
-	var corruptedExecutionsBuilder strings.Builder
-	for _, ce := range fw.corruptedExecutions {
-		if err := fw.writeToBuilder(&corruptedExecutionsBuilder, ce); err != nil {
-			ErrorAndExit("failed to marshal corruptedExecutionsBuilder", err)
-		}
-	}
-	if err := fw.writeToFile(&corruptedExecutionsBuilder, fw.corruptedExecutionFile); err != nil {
-		ErrorAndExit("failed to write corruptedExecutionFile", err)
-	}
-	fw.corruptedExecutions = nil
+	bw.entries = nil
 }
 
-func (fw *adminDBCommandFileWriterImpl) writeToBuilder(builder *strings.Builder, e interface{}) error {
+func (bw *bufferedWriter) writeToBuilder(builder *strings.Builder, e interface{}) error {
 	data, err := json.Marshal(e)
 	if err != nil {
 		return err
@@ -107,11 +84,7 @@ func (fw *adminDBCommandFileWriterImpl) writeToBuilder(builder *strings.Builder,
 	return nil
 }
 
-func (fw *adminDBCommandFileWriterImpl) writeToFile(builder *strings.Builder, f *os.File) error {
+func (bw *bufferedWriter) writeBuilderToFile(builder *strings.Builder, f *os.File) error {
 	_, err := f.WriteString(builder.String())
 	return err
-}
-
-func (fw *adminDBCommandFileWriterImpl) shouldFlush() bool {
-	return len(fw.corruptedExecutions)+len(fw.executionCheckFailures) >= flushThreshold
 }
