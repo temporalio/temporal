@@ -70,7 +70,7 @@ func (s *transmissionTaskSuite) TearDownTest() {
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask_IsGlobalNamespace() {
 	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
-	id := primitives.UUID(uuid.New())
+	id := primitives.NewUUID()
 	name := "some random namespace test name"
 	status := namespacepb.NamespaceStatus_Registered
 	description := "some random test description"
@@ -150,7 +150,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask_NotGlobalNamespace() {
-	id := primitives.UUID(uuid.New())
+	id := primitives.NewUUID()
 	name := "some random namespace test name"
 	description := "some random test description"
 	ownerEmail := "some random test owner"
@@ -197,7 +197,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_IsGlobalNamespace() {
 	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
-	id := primitives.UUID(uuid.New())
+	id := primitives.NewUUID()
 	name := "some random namespace test name"
 	status, _ := s.namespaceReplicator.convertNamespaceStatusToProto(int(namespacepb.NamespaceStatus_Deprecated))
 	description := "some random test description"
@@ -275,7 +275,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_NotGlobalNamespace() {
-	id := primitives.UUID(uuid.New())
+	id := primitives.NewUUID()
 	name := "some random namespace test name"
 	description := "some random test description"
 	ownerEmail := "some random test owner"

@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -676,7 +677,15 @@ func (entry *NamespaceCacheEntry) duplicate() *NamespaceCacheEntry {
 	// this is a deep copy
 	result := newNamespaceCacheEntry(entry.clusterMetadata)
 	result.info = proto.Clone(entry.info).(*persistenceblobs.NamespaceInfo)
+	if result.info.Data == nil {
+		result.info.Data = make(map[string]string, 0)
+	}
+
 	result.config = proto.Clone(entry.config).(*persistenceblobs.NamespaceConfig)
+	if result.config.BadBinaries == nil || result.config.BadBinaries.Binaries == nil{
+		result.config.BadBinaries.Binaries = make(map[string]*namespace.BadBinaryInfo, 0)
+	}
+
 	result.replicationConfig = proto.Clone(entry.replicationConfig).(*persistenceblobs.NamespaceReplicationConfig)
 	result.configVersion = entry.configVersion
 	result.failoverVersion = entry.failoverVersion
