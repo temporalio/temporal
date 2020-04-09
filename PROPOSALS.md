@@ -1,8 +1,8 @@
-# Proposing Changes to Cadence
+# Proposing Changes to Temporal
 
 ## Introduction
 
-The design process for changes to Cadence is modeled on the [proposal process used by the M3 project](https://github.com/m3db/proposal).
+The design process for changes to Temporal is modeled on the [proposal process used by the M3 project](https://github.com/m3db/proposal).
 
 ## Process
 
@@ -21,8 +21,7 @@ The design process for changes to Cadence is modeled on the [proposal process us
   - The design doc should be linked from the opened GitHub issue.
   - The design doc should only allow edit access to authors of the document.
   - Do not create the document from a corporate G Suite account. If you want to edit from a corporate G Suite account then first create the document from a personal Google account and grant edit access to your corporate G Suite account.
-  - Comment access should be granted explicitly to [cadence-discussion@googlegroups.com](https://groups.google.com/d/forum/cadence-discussion) so that users viewing the document display under their account names rather than anonymous users.
-  - Comment access should also be accessible by the public. Make sure this is the case by clicking "Share" and "Get shareable link" ensuring you select "Anyone with the link can comment".
+  - Comment access should be accessible by the public. Make sure this is the case by clicking "Share" and "Get shareable link" ensuring you select "Anyone with the link can comment".
   
 - Once comments and revisions on the design doc wind down, there is a final discussion about the proposal.
 
@@ -39,4 +38,4 @@ The design process for changes to Cadence is modeled on the [proposal process us
 
 ---
 
-This project is released under the [Apache License, Version 2.0](LICENSE).
+This project is released under the [MIT License](LICENSE).

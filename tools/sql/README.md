@@ -11,7 +11,7 @@ SQL_USER=$USERNAME SQL_PASSWORD=$PASSWD make install-schema-mysql
 ## For production
 
 ### Create the binaries
-- Run `make bins`
+- Run `make`
 - You should see an executable `temporal-sql-tool`
 - Temporal officially support MySQL and Postgres for SQL. 
 - For other SQL database, you can add it easily as we do for MySQL/Postgres following our code in sql-extensions  
