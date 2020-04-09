@@ -154,7 +154,12 @@ func commentOutLines(str string) (string, error) {
 	var lines []string
 	scanner := bufio.NewScanner(strings.NewReader(str))
 	for scanner.Scan() {
-		lines = append(lines, "// "+scanner.Text()+"\n")
+		line := scanner.Text()
+		if line == "" {
+			lines = append(lines, "//")
+		} else {
+			lines = append(lines, fmt.Sprintf("// %s\n", line))
+		}
 	}
 	lines = append(lines, "\n")
 
