@@ -156,7 +156,7 @@ func commentOutLines(str string) (string, error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
-			lines = append(lines, "//")
+			lines = append(lines, "//\n")
 		} else {
 			lines = append(lines, fmt.Sprintf("// %s\n", line))
 		}
