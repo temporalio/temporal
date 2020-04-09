@@ -2,14 +2,21 @@
 This package contains the tooling for temporal cassandra operations.
 
 ## For localhost development
+For the very first time run:
+``` 
+make
+```
+
+then run:
 ``` 
 make install-schema
 ```
+to create schama in your `cassandra` instance.
 
 ## For production
 
 ### Create the binaries
-- Run `make bins`
+- Run `make`
 - You should see an executable `temporal-cassandra-tool`
 
 ### Do one time database creation and schema setup for a new cluster

@@ -1,7 +1,7 @@
 Documentation for the Temporal command line interface is located at our [main site](https://docs.temporal.io/docs/08_cli).
 
 ## Quick Start
-Run `make bins` from the project root. You should see an executable file called `tctl`. Try a few example commands to 
+Run `make` from the project root. You should see an executable file called `tctl`. Try a few example commands to 
 get started:   
 `./tctl` for help on top level commands and global options   
 `./tctl namespace` for help on namespace operations  
