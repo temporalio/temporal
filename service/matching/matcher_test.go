@@ -68,8 +68,7 @@ func (t *MatcherTestSuite) SetupTest() {
 		ForwarderMaxChildrenPerNode:  func() int { return 20 },
 	}
 	t.cfg = tlCfg
-	scope := func() metrics.Scope { return metrics.NoopScope(metrics.Matching) }
-	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskList, shared.TaskListKindNormal, t.client, scope)
+	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskList, shared.TaskListKindNormal, t.client)
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
 
 	rootTaskList := newTestTaskListID(t.taskList.domainID, t.taskList.Parent(20), persistence.TaskListTypeDecision)

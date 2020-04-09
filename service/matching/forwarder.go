@@ -28,7 +28,6 @@ import (
 	gen "github.com/uber/cadence/.gen/go/matching"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/matching"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/quotas"
 )
@@ -59,15 +58,6 @@ type (
 		// todo: implement a rate limiter that automatically
 		// adjusts rate based on ServiceBusy errors from API calls
 		limiter *quotas.DynamicRateLimiter
-
-		// cached metric scopes for API calls
-		//nolint
-		scope struct {
-			forwardTask  metrics.Scope
-			forwardQuery metrics.Scope
-			forwardPoll  metrics.Scope
-		}
-		scopeFunc func() metrics.Scope
 	}
 	// ForwarderReqToken is the token that must be acquired before
 	// making forwarder API calls. This type contains the state
@@ -102,7 +92,6 @@ func newForwarder(
 	taskListID *taskListID,
 	kind shared.TaskListKind,
 	client matching.Client,
-	scopeFunc func() metrics.Scope,
 ) *Forwarder {
 	rpsFunc := func() float64 { return float64(cfg.ForwarderMaxRatePerSecond()) }
 	fwdr := &Forwarder{
@@ -113,7 +102,6 @@ func newForwarder(
 		outstandingTasksLimit: int32(cfg.ForwarderMaxOutstandingTasks()),
 		outstandingPollsLimit: int32(cfg.ForwarderMaxOutstandingPolls()),
 		limiter:               quotas.NewDynamicRateLimiter(rpsFunc),
-		scopeFunc:             scopeFunc,
 	}
 	fwdr.addReqToken.Store(newForwarderReqToken(cfg.ForwarderMaxOutstandingTasks()))
 	fwdr.pollReqToken.Store(newForwarderReqToken(cfg.ForwarderMaxOutstandingPolls()))

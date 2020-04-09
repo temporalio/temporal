@@ -36,7 +36,6 @@ import (
 	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -63,8 +62,7 @@ func (t *ForwarderTestSuite) SetupTest() {
 		ForwarderMaxOutstandingTasks: func() int { return 1 },
 	}
 	t.taskList = newTestTaskListID("fwdr", "tl0", persistence.TaskListTypeDecision)
-	scope := func() metrics.Scope { return metrics.NoopScope(metrics.Matching) }
-	t.fwdr = newForwarder(t.cfg, t.taskList, shared.TaskListKindNormal, t.client, scope)
+	t.fwdr = newForwarder(t.cfg, t.taskList, shared.TaskListKindNormal, t.client)
 }
 
 func (t *ForwarderTestSuite) TearDownTest() {

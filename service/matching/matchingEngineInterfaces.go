@@ -21,8 +21,6 @@
 package matching
 
 import (
-	"context"
-
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 )
@@ -31,14 +29,14 @@ type (
 	// Engine exposes interfaces for clients to poll for activity and decision tasks.
 	Engine interface {
 		Stop()
-		AddDecisionTask(ctx context.Context, addRequest *m.AddDecisionTaskRequest) (syncMatch bool, err error)
-		AddActivityTask(ctx context.Context, addRequest *m.AddActivityTaskRequest) (syncMatch bool, err error)
-		PollForDecisionTask(ctx context.Context, request *m.PollForDecisionTaskRequest) (*m.PollForDecisionTaskResponse, error)
-		PollForActivityTask(ctx context.Context, request *m.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error)
-		QueryWorkflow(ctx context.Context, request *m.QueryWorkflowRequest) (*workflow.QueryWorkflowResponse, error)
-		RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest) error
-		CancelOutstandingPoll(ctx context.Context, request *m.CancelOutstandingPollRequest) error
-		DescribeTaskList(ctx context.Context, request *m.DescribeTaskListRequest) (*workflow.DescribeTaskListResponse, error)
-		ListTaskListPartitions(ctx context.Context, request *m.ListTaskListPartitionsRequest) (*workflow.ListTaskListPartitionsResponse, error)
+		AddDecisionTask(hCtx *handlerContext, request *m.AddDecisionTaskRequest) (syncMatch bool, err error)
+		AddActivityTask(hCtx *handlerContext, request *m.AddActivityTaskRequest) (syncMatch bool, err error)
+		PollForDecisionTask(hCtx *handlerContext, request *m.PollForDecisionTaskRequest) (*m.PollForDecisionTaskResponse, error)
+		PollForActivityTask(hCtx *handlerContext, request *m.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error)
+		QueryWorkflow(hCtx *handlerContext, request *m.QueryWorkflowRequest) (*workflow.QueryWorkflowResponse, error)
+		RespondQueryTaskCompleted(hCtx *handlerContext, request *m.RespondQueryTaskCompletedRequest) error
+		CancelOutstandingPoll(hCtx *handlerContext, request *m.CancelOutstandingPollRequest) error
+		DescribeTaskList(hCtx *handlerContext, request *m.DescribeTaskListRequest) (*workflow.DescribeTaskListResponse, error)
+		ListTaskListPartitions(hCtx *handlerContext, request *m.ListTaskListPartitionsRequest) (*workflow.ListTaskListPartitionsResponse, error)
 	}
 )

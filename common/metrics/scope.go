@@ -28,60 +28,93 @@ import (
 
 type metricsScope struct {
 	scope          tally.Scope
+	rootScope      tally.Scope
 	defs           map[int]metricDefinition
 	isDomainTagged bool
 }
 
-func newMetricsScope(scope tally.Scope, defs map[int]metricDefinition, isDomain bool) Scope {
-	return &metricsScope{scope, defs, isDomain}
+func newMetricsScope(
+	rootScope tally.Scope,
+	scope tally.Scope,
+	defs map[int]metricDefinition,
+	isDomain bool,
+) Scope {
+	return &metricsScope{
+		scope:          scope,
+		rootScope:      rootScope,
+		defs:           defs,
+		isDomainTagged: isDomain,
+	}
 }
 
 // NoopScope returns a noop scope of metrics
 func NoopScope(serviceIdx ServiceIdx) Scope {
-	return &metricsScope{tally.NoopScope, getMetricDefs(serviceIdx), false}
+	return &metricsScope{
+		scope:     tally.NoopScope,
+		rootScope: tally.NoopScope,
+		defs:      getMetricDefs(serviceIdx),
+	}
 }
 
 func (m *metricsScope) IncCounter(id int) {
-	name := string(m.defs[id].metricName)
-	m.scope.Counter(name).Inc(1)
+	m.AddCounter(id, 1)
 }
 
 func (m *metricsScope) AddCounter(id int, delta int64) {
-	name := string(m.defs[id].metricName)
-	m.scope.Counter(name).Inc(delta)
+	def := m.defs[id]
+	m.scope.Counter(def.metricName.String()).Inc(delta)
+	if !def.metricRollupName.Empty() {
+		m.rootScope.Counter(def.metricRollupName.String()).Inc(delta)
+	}
 }
 
 func (m *metricsScope) UpdateGauge(id int, value float64) {
-	name := string(m.defs[id].metricName)
-	m.scope.Gauge(name).Update(value)
+	def := m.defs[id]
+	m.scope.Gauge(def.metricName.String()).Update(value)
+	if !def.metricRollupName.Empty() {
+		m.scope.Gauge(def.metricRollupName.String()).Update(value)
+	}
 }
 
 func (m *metricsScope) StartTimer(id int) Stopwatch {
-	name := string(m.defs[id].metricName)
-	timer := m.scope.Timer(name)
-	if m.isDomainTagged {
-		timerAll := m.scope.Tagged(map[string]string{domain: domainAllValue}).Timer(name)
+	def := m.defs[id]
+	timer := m.scope.Timer(def.metricName.String())
+	switch {
+	case !def.metricRollupName.Empty():
+		return NewStopwatch(timer, m.rootScope.Timer(def.metricRollupName.String()))
+	case m.isDomainTagged:
+		timerAll := m.scope.Tagged(map[string]string{domain: domainAllValue}).Timer(def.metricName.String())
 		return NewStopwatch(timer, timerAll)
+	default:
+		return NewStopwatch(timer)
 	}
-	return NewStopwatch(timer)
 }
 
 func (m *metricsScope) RecordTimer(id int, d time.Duration) {
-	name := string(m.defs[id].metricName)
-	m.scope.Timer(name).Record(d)
-	if m.isDomainTagged {
-		m.scope.Tagged(map[string]string{domain: domainAllValue}).Timer(name).Record(d)
+	def := m.defs[id]
+	m.scope.Timer(def.metricName.String()).Record(d)
+	switch {
+	case !def.metricRollupName.Empty():
+		m.rootScope.Timer(def.metricRollupName.String()).Record(d)
+	case m.isDomainTagged:
+		m.scope.Tagged(map[string]string{domain: domainAllValue}).Timer(def.metricName.String()).Record(d)
 	}
 }
 
 func (m *metricsScope) RecordHistogramDuration(id int, value time.Duration) {
-	name := string(m.defs[id].metricName)
-	m.scope.Histogram(name, m.getBuckets(id)).RecordDuration(value)
+	def := m.defs[id]
+	m.scope.Histogram(def.metricName.String(), m.getBuckets(id)).RecordDuration(value)
+	if !def.metricRollupName.Empty() {
+		m.rootScope.Histogram(def.metricRollupName.String(), m.getBuckets(id)).RecordDuration(value)
+	}
 }
 
 func (m *metricsScope) RecordHistogramValue(id int, value float64) {
-	name := string(m.defs[id].metricName)
-	m.scope.Histogram(name, m.getBuckets(id)).RecordValue(value)
+	def := m.defs[id]
+	m.scope.Histogram(def.metricName.String(), m.getBuckets(id)).RecordValue(value)
+	if !def.metricRollupName.Empty() {
+		m.rootScope.Histogram(def.metricRollupName.String(), m.getBuckets(id)).RecordValue(value)
+	}
 }
 
 func (m *metricsScope) Tagged(tags ...Tag) Scope {
@@ -93,7 +126,7 @@ func (m *metricsScope) Tagged(tags ...Tag) Scope {
 		}
 		tagMap[tag.Key()] = tag.Value()
 	}
-	return newMetricsScope(m.scope.Tagged(tagMap), m.defs, domainTagged)
+	return newMetricsScope(m.rootScope, m.scope.Tagged(tagMap), m.defs, domainTagged)
 }
 
 func (m *metricsScope) getBuckets(id int) tally.Buckets {

@@ -33,9 +33,10 @@ type (
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
 		//nolint
-		metricType MetricType    // metric type
-		metricName MetricName    // metric name
-		buckets    tally.Buckets // buckets if we are emitting histograms
+		metricType       MetricType    // metric type
+		metricName       MetricName    // metric name
+		metricRollupName MetricName    // optional. if non-empty, this name must be used for rolled-up version of this metric
+		buckets          tally.Buckets // buckets if we are emitting histograms
 	}
 
 	// scopeDefinition holds the tag definitions for a scope
@@ -67,7 +68,6 @@ const (
 
 // Common tags for all services
 const (
-	HostnameTagName    = "hostname"
 	OperationTagName   = "operation"
 	CadenceRoleTagName = "cadence_role"
 	StatsTypeTagName   = "stats_type"
@@ -76,8 +76,6 @@ const (
 
 // This package should hold all the metrics and tags for cadence
 const (
-	UnknownDirectoryTagValue = "Unknown"
-
 	HistoryRoleTagValue       = "history"
 	MatchingRoleTagValue      = "matching"
 	FrontendRoleTagValue      = "frontend"
@@ -1606,6 +1604,28 @@ const (
 	DomainReplicationDLQAckLevelGauge
 	DomainReplicationDLQMaxLevelGauge
 
+	// common metrics that are emitted per task list
+	CadenceRequestsPerTaskList
+	CadenceFailuresPerTaskList
+	CadenceLatencyPerTaskList
+	CadenceErrBadRequestPerTaskListCounter
+	CadenceErrDomainNotActivePerTaskListCounter
+	CadenceErrServiceBusyPerTaskListCounter
+	CadenceErrEntityNotExistsPerTaskListCounter
+	CadenceErrExecutionAlreadyStartedPerTaskListCounter
+	CadenceErrDomainAlreadyExistsPerTaskListCounter
+	CadenceErrCancellationAlreadyRequestedPerTaskListCounter
+	CadenceErrQueryFailedPerTaskListCounter
+	CadenceErrLimitExceededPerTaskListCounter
+	CadenceErrContextTimeoutPerTaskListCounter
+	CadenceErrRetryTaskPerTaskListCounter
+	CadenceErrBadBinaryPerTaskListCounter
+	CadenceErrClientVersionNotSupportedPerTaskListCounter
+	CadenceErrIncompleteHistoryPerTaskListCounter
+	CadenceErrNonDeterministicPerTaskListCounter
+	CadenceErrUnauthorizedPerTaskListCounter
+	CadenceErrAuthorizeFailedPerTaskListCounter
+
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
@@ -1781,32 +1801,32 @@ const (
 
 // Matching metrics enum
 const (
-	PollSuccessCounter = iota + NumCommonMetrics
-	PollTimeoutCounter
-	PollSuccessWithSyncCounter
-	LeaseRequestCounter
-	LeaseFailureCounter
-	ConditionFailedErrorCounter
-	RespondQueryTaskFailedCounter
-	SyncThrottleCounter
-	BufferThrottleCounter
-	SyncMatchLatency
-	AsyncMatchLatency
-	ExpiredTasksCounter
-	ForwardedCounter
-	ForwardTaskCalls
-	ForwardTaskErrors
-	ForwardTaskLatency
-	ForwardQueryCalls
-	ForwardQueryErrors
-	ForwardQueryLatency
-	ForwardPollCalls
-	ForwardPollErrors
-	ForwardPollLatency
-	LocalToLocalMatchCounter
-	LocalToRemoteMatchCounter
-	RemoteToLocalMatchCounter
-	RemoteToRemoteMatchCounter
+	PollSuccessPerTaskListCounter = iota + NumCommonMetrics
+	PollTimeoutPerTaskListCounter
+	PollSuccessWithSyncPerTaskListCounter
+	LeaseRequestPerTaskListCounter
+	LeaseFailurePerTaskListCounter
+	ConditionFailedErrorPerTaskListCounter
+	RespondQueryTaskFailedPerTaskListCounter
+	SyncThrottlePerTaskListCounter
+	BufferThrottlePerTaskListCounter
+	SyncMatchLatencyPerTaskList
+	AsyncMatchLatencyPerTaskList
+	ExpiredTasksPerTaskListCounter
+	ForwardedPerTaskListCounter
+	ForwardTaskCallsPerTaskList
+	ForwardTaskErrorsPerTaskList
+	ForwardTaskLatencyPerTaskList
+	ForwardQueryCallsPerTaskList
+	ForwardQueryErrorsPerTaskList
+	ForwardQueryLatencyPerTaskList
+	ForwardPollCallsPerTaskList
+	ForwardPollErrorsPerTaskList
+	ForwardPollLatencyPerTaskList
+	LocalToLocalMatchPerTaskListCounter
+	LocalToRemoteMatchPerTaskListCounter
+	RemoteToLocalMatchPerTaskListCounter
+	RemoteToRemoteMatchPerTaskListCounter
 
 	NumMatchingMetrics
 )
@@ -1964,6 +1984,69 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		DomainReplicationTaskAckLevelGauge: {metricName: "domain_replication_task_ack_level", metricType: Gauge},
 		DomainReplicationDLQAckLevelGauge:  {metricName: "domain_dlq_ack_level", metricType: Gauge},
 		DomainReplicationDLQMaxLevelGauge:  {metricName: "domain_dlq_max_level", metricType: Gauge},
+
+		// per task list common metrics
+
+		CadenceRequestsPerTaskList: {
+			metricName: "cadence_requests_per_tl", metricRollupName: "cadence_requests", metricType: Counter,
+		},
+		CadenceFailuresPerTaskList: {
+			metricName: "cadence_errors_per_tl", metricRollupName: "cadence_errors", metricType: Counter,
+		},
+		CadenceLatencyPerTaskList: {
+			metricName: "cadence_latency_per_tl", metricRollupName: "cadence_latency", metricType: Timer,
+		},
+		CadenceErrBadRequestPerTaskListCounter: {
+			metricName: "cadence_errors_bad_request_per_tl", metricRollupName: "cadence_errors_bad_request", metricType: Counter,
+		},
+		CadenceErrDomainNotActivePerTaskListCounter: {
+			metricName: "cadence_errors_domain_not_active_per_tl", metricRollupName: "cadence_errors_domain_not_active", metricType: Counter,
+		},
+		CadenceErrServiceBusyPerTaskListCounter: {
+			metricName: "cadence_errors_service_busy_per_tl", metricRollupName: "cadence_errors_service_busy", metricType: Counter,
+		},
+		CadenceErrEntityNotExistsPerTaskListCounter: {
+			metricName: "cadence_errors_entity_not_exists_per_tl", metricRollupName: "cadence_errors_entity_not_exists", metricType: Counter,
+		},
+		CadenceErrExecutionAlreadyStartedPerTaskListCounter: {
+			metricName: "cadence_errors_execution_already_started_per_tl", metricRollupName: "cadence_errors_execution_already_started", metricType: Counter,
+		},
+		CadenceErrDomainAlreadyExistsPerTaskListCounter: {
+			metricName: "cadence_errors_domain_already_exists_per_tl", metricRollupName: "cadence_errors_domain_already_exists", metricType: Counter,
+		},
+		CadenceErrCancellationAlreadyRequestedPerTaskListCounter: {
+			metricName: "cadence_errors_cancellation_already_requested_per_tl", metricRollupName: "cadence_errors_cancellation_already_requested", metricType: Counter,
+		},
+		CadenceErrQueryFailedPerTaskListCounter: {
+			metricName: "cadence_errors_query_failed_per_tl", metricRollupName: "cadence_errors_query_failed", metricType: Counter,
+		},
+		CadenceErrLimitExceededPerTaskListCounter: {
+			metricName: "cadence_errors_limit_exceeded_per_tl", metricRollupName: "cadence_errors_limit_exceeded", metricType: Counter,
+		},
+		CadenceErrContextTimeoutPerTaskListCounter: {
+			metricName: "cadence_errors_context_timeout_per_tl", metricRollupName: "cadence_errors_context_timeout", metricType: Counter,
+		},
+		CadenceErrRetryTaskPerTaskListCounter: {
+			metricName: "cadence_errors_retry_task_per_tl", metricRollupName: "cadence_errors_retry_task", metricType: Counter,
+		},
+		CadenceErrBadBinaryPerTaskListCounter: {
+			metricName: "cadence_errors_bad_binary_per_tl", metricRollupName: "cadence_errors_bad_binary", metricType: Counter,
+		},
+		CadenceErrClientVersionNotSupportedPerTaskListCounter: {
+			metricName: "cadence_errors_client_version_not_supported_per_tl", metricRollupName: "cadence_errors_client_version_not_supported", metricType: Counter,
+		},
+		CadenceErrIncompleteHistoryPerTaskListCounter: {
+			metricName: "cadence_errors_incomplete_history_per_tl", metricRollupName: "cadence_errors_incomplete_history", metricType: Counter,
+		},
+		CadenceErrNonDeterministicPerTaskListCounter: {
+			metricName: "cadence_errors_nondeterministic_per_tl", metricRollupName: "cadence_errors_nondeterministic", metricType: Counter,
+		},
+		CadenceErrUnauthorizedPerTaskListCounter: {
+			metricName: "cadence_errors_unauthorized_per_tl", metricRollupName: "cadence_errors_unauthorized", metricType: Counter,
+		},
+		CadenceErrAuthorizeFailedPerTaskListCounter: {
+			metricName: "cadence_errors_authorize_failed_per_tl", metricRollupName: "cadence_errors_authorize_failed", metricType: Counter,
+		},
 	},
 	History: {
 		TaskRequests:                                      {metricName: "task_requests", metricType: Counter},
@@ -2130,32 +2213,32 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MutableStateChecksumInvalidated:                   {metricName: "mutable_state_checksum_invalidated", metricType: Counter},
 	},
 	Matching: {
-		PollSuccessCounter:            {metricName: "poll_success"},
-		PollTimeoutCounter:            {metricName: "poll_timeouts"},
-		PollSuccessWithSyncCounter:    {metricName: "poll_success_sync"},
-		LeaseRequestCounter:           {metricName: "lease_requests"},
-		LeaseFailureCounter:           {metricName: "lease_failures"},
-		ConditionFailedErrorCounter:   {metricName: "condition_failed_errors"},
-		RespondQueryTaskFailedCounter: {metricName: "respond_query_failed"},
-		SyncThrottleCounter:           {metricName: "sync_throttle_count"},
-		BufferThrottleCounter:         {metricName: "buffer_throttle_count"},
-		ExpiredTasksCounter:           {metricName: "tasks_expired"},
-		ForwardedCounter:              {metricName: "forwarded"},
-		ForwardTaskCalls:              {metricName: "forward_task_calls"},
-		ForwardTaskErrors:             {metricName: "forward_task_errors"},
-		ForwardQueryCalls:             {metricName: "forward_query_calls"},
-		ForwardQueryErrors:            {metricName: "forward_query_errors"},
-		ForwardPollCalls:              {metricName: "forward_poll_calls"},
-		ForwardPollErrors:             {metricName: "forward_poll_errors"},
-		SyncMatchLatency:              {metricName: "syncmatch_latency", metricType: Timer},
-		AsyncMatchLatency:             {metricName: "asyncmatch_latency", metricType: Timer},
-		ForwardTaskLatency:            {metricName: "forward_task_latency"},
-		ForwardQueryLatency:           {metricName: "forward_query_latency"},
-		ForwardPollLatency:            {metricName: "forward_poll_latency"},
-		LocalToLocalMatchCounter:      {metricName: "local_to_local_matches"},
-		LocalToRemoteMatchCounter:     {metricName: "local_to_remote_matches"},
-		RemoteToLocalMatchCounter:     {metricName: "remote_to_local_matches"},
-		RemoteToRemoteMatchCounter:    {metricName: "remote_to_remote_matches"},
+		PollSuccessPerTaskListCounter:            {metricName: "poll_success_per_tl", metricRollupName: "poll_success"},
+		PollTimeoutPerTaskListCounter:            {metricName: "poll_timeouts_per_tl", metricRollupName: "poll_timeouts"},
+		PollSuccessWithSyncPerTaskListCounter:    {metricName: "poll_success_sync_per_tl", metricRollupName: "poll_success_sync"},
+		LeaseRequestPerTaskListCounter:           {metricName: "lease_requests_per_tl", metricRollupName: "lease_requests"},
+		LeaseFailurePerTaskListCounter:           {metricName: "lease_failures_per_tl", metricRollupName: "lease_failures"},
+		ConditionFailedErrorPerTaskListCounter:   {metricName: "condition_failed_errors_per_tl", metricRollupName: "condition_failed_errors"},
+		RespondQueryTaskFailedPerTaskListCounter: {metricName: "respond_query_failed_per_tl", metricRollupName: "respond_query_failed"},
+		SyncThrottlePerTaskListCounter:           {metricName: "sync_throttle_count_per_tl", metricRollupName: "sync_throttle_count"},
+		BufferThrottlePerTaskListCounter:         {metricName: "buffer_throttle_count_per_tl", metricRollupName: "buffer_throttle_count"},
+		ExpiredTasksPerTaskListCounter:           {metricName: "tasks_expired_per_tl", metricRollupName: "tasks_expired"},
+		ForwardedPerTaskListCounter:              {metricName: "forwarded_per_tl", metricRollupName: "forwarded"},
+		ForwardTaskCallsPerTaskList:              {metricName: "forward_task_calls_per_tl", metricRollupName: "forward_task_calls"},
+		ForwardTaskErrorsPerTaskList:             {metricName: "forward_task_errors_per_tl", metricRollupName: "forward_task_errors"},
+		ForwardQueryCallsPerTaskList:             {metricName: "forward_query_calls_per_tl", metricRollupName: "forward_query_calls"},
+		ForwardQueryErrorsPerTaskList:            {metricName: "forward_query_errors_per_tl", metricRollupName: "forward_query_errors"},
+		ForwardPollCallsPerTaskList:              {metricName: "forward_poll_calls_per_tl", metricRollupName: "forward_poll_calls"},
+		ForwardPollErrorsPerTaskList:             {metricName: "forward_poll_errors_per_tl", metricRollupName: "forward_poll_errors"},
+		SyncMatchLatencyPerTaskList:              {metricName: "syncmatch_latency_per_tl", metricRollupName: "syncmatch_latency", metricType: Timer},
+		AsyncMatchLatencyPerTaskList:             {metricName: "asyncmatch_latency_per_tl", metricRollupName: "asyncmatch_latency", metricType: Timer},
+		ForwardTaskLatencyPerTaskList:            {metricName: "forward_task_latency_per_tl", metricRollupName: "forward_task_latency"},
+		ForwardQueryLatencyPerTaskList:           {metricName: "forward_query_latency_per_tl", metricRollupName: "forward_query_latency"},
+		ForwardPollLatencyPerTaskList:            {metricName: "forward_poll_latency_per_tl", metricRollupName: "forward_poll_latency"},
+		LocalToLocalMatchPerTaskListCounter:      {metricName: "local_to_local_matches_per_tl", metricRollupName: "local_to_local_matches"},
+		LocalToRemoteMatchPerTaskListCounter:     {metricName: "local_to_remote_matches_per_tl", metricRollupName: "local_to_remote_matches"},
+		RemoteToLocalMatchPerTaskListCounter:     {metricName: "remote_to_local_matches_per_tl", metricRollupName: "remote_to_local_matches"},
+		RemoteToRemoteMatchPerTaskListCounter:    {metricName: "remote_to_remote_matches_per_tl", metricRollupName: "remote_to_remote_matches"},
 	},
 	Worker: {
 		ReplicatorMessages:                            {metricName: "replicator_messages"},
@@ -2228,3 +2311,13 @@ const (
 	// InternalError indicates that this is an SLA-reportable error
 	InternalError
 )
+
+// Empty returns true if the metricName is an empty string
+func (mn MetricName) Empty() bool {
+	return mn == ""
+}
+
+// String returns string representation of this metric name
+func (mn MetricName) String() string {
+	return string(mn)
+}

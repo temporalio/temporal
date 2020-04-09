@@ -81,7 +81,7 @@ type (
 	// Single task list in memory state
 	taskListManagerImpl struct {
 		taskListID       *taskListID
-		taskListKind     int // sticky taskList has different process in persistence
+		taskListKind     s.TaskListKind // sticky taskList has different process in persistence
 		config           *taskListConfig
 		db               *taskListDB
 		engine           *matchingEngineImpl
@@ -94,7 +94,7 @@ type (
 		logger           log.Logger
 		metricsClient    metrics.Client
 		domainNameValue  atomic.Value
-		domainScopeValue atomic.Value // domain tagged metric scope
+		metricScopeValue atomic.Value // domain/tasklist tagged metric scope
 		// pollerHistory stores poller which poll from this tasklist in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
@@ -137,12 +137,14 @@ func newTaskListManager(
 	}
 
 	db := newTaskListDB(e.taskManager, taskList.domainID, taskList.name, taskList.taskType, int(*taskListKind), e.logger)
+
 	tlMgr := &taskListManagerImpl{
 		domainCache:   e.domainCache,
 		metricsClient: e.metricsClient,
 		engine:        e,
 		shutdownCh:    make(chan struct{}),
 		taskListID:    taskList,
+		taskListKind:  *taskListKind,
 		logger: e.logger.WithTags(tag.WorkflowTaskListName(taskList.name),
 			tag.WorkflowTaskListType(taskList.taskType)),
 		db:                  db,
@@ -151,18 +153,27 @@ func newTaskListManager(
 		config:              taskListConfig,
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
-		taskListKind:        int(*taskListKind),
 	}
+
 	tlMgr.domainNameValue.Store("")
-	tlMgr.domainScopeValue.Store(e.metricsClient.Scope(metrics.MatchingTaskListMgrScope, metrics.DomainUnknownTag()))
-	tlMgr.tryInitDomainNameAndScope()
+	if tlMgr.metricScope() == nil { // domain name lookup failed
+		// metric scope to use when domainName lookup fails
+		tlMgr.metricScopeValue.Store(newPerTaskListScope(
+			"",
+			tlMgr.taskListID.name,
+			tlMgr.taskListKind,
+			e.metricsClient,
+			metrics.MatchingTaskListMgrScope,
+		))
+	}
+
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
 	var fwdr *Forwarder
 	if tlMgr.isFowardingAllowed(taskList, *taskListKind) {
-		fwdr = newForwarder(&taskListConfig.forwarderConfig, taskList, *taskListKind, e.matchingClient, tlMgr.domainScope)
+		fwdr = newForwarder(&taskListConfig.forwarderConfig, taskList, *taskListKind, e.matchingClient)
 	}
-	tlMgr.matcher = newTaskMatcher(taskListConfig, fwdr, tlMgr.domainScope)
+	tlMgr.matcher = newTaskMatcher(taskListConfig, fwdr, tlMgr.metricScope)
 	tlMgr.startWG.Add(1)
 	return tlMgr, nil
 }
@@ -417,10 +428,10 @@ func (c *taskListManagerImpl) renewLeaseWithRetry() (taskListState, error) {
 		newState, err = c.db.RenewLease()
 		return
 	}
-	c.domainScope().IncCounter(metrics.LeaseRequestCounter)
+	c.metricScope().IncCounter(metrics.LeaseRequestPerTaskListCounter)
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
-		c.domainScope().IncCounter(metrics.LeaseFailureCounter)
+		c.metricScope().IncCounter(metrics.LeaseFailurePerTaskListCounter)
 		c.engine.unloadTaskList(c.taskListID)
 		return newState, err
 	}
@@ -466,7 +477,7 @@ func (c *taskListManagerImpl) executeWithRetry(
 	})
 
 	if _, ok := err.(*persistence.ConditionFailedError); ok {
-		c.domainScope().IncCounter(metrics.ConditionFailedErrorCounter)
+		c.metricScope().IncCounter(metrics.ConditionFailedErrorPerTaskListCounter)
 		c.logger.Debug(fmt.Sprintf("Stopping task list due to persistence condition failure. Err: %v", err))
 		c.Stop()
 	}
@@ -518,13 +529,9 @@ func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind s.Ta
 	return !taskList.IsRoot() && kind != s.TaskListKindSticky
 }
 
-func (c *taskListManagerImpl) domainScope() metrics.Scope {
-	scope := c.domainScopeValue.Load().(metrics.Scope)
-	if scope != nil {
-		return scope
-	}
+func (c *taskListManagerImpl) metricScope() metrics.Scope {
 	c.tryInitDomainNameAndScope()
-	return c.domainScopeValue.Load().(metrics.Scope)
+	return c.metricScopeValue.Load().(metrics.Scope)
 }
 
 func (c *taskListManagerImpl) domainName() string {
@@ -539,24 +546,29 @@ func (c *taskListManagerImpl) domainName() string {
 // reload from domainCache in case it got empty result during construction
 func (c *taskListManagerImpl) tryInitDomainNameAndScope() {
 	domainName := c.domainNameValue.Load().(string)
-	if len(domainName) == 0 {
-		domainName, scope := domainNameAndMetricScope(c.domainCache, c.taskListID.domainID, c.metricsClient, metrics.MatchingTaskListMgrScope)
-		if len(domainName) > 0 && scope != nil {
-			c.domainNameValue.Store(domainName)
-			c.domainScopeValue.Store(scope)
-		}
+	if domainName != "" {
+		return
 	}
+
+	entry, err := c.domainCache.GetDomainByID(c.taskListID.domainID)
+	if err != nil {
+		return
+	}
+
+	domainName = entry.GetInfo().Name
+
+	scope := newPerTaskListScope(
+		domainName,
+		c.taskListID.name,
+		c.taskListKind,
+		c.metricsClient,
+		metrics.MatchingTaskListMgrScope,
+	)
+
+	c.metricScopeValue.Store(scope)
+	c.domainNameValue.Store(domainName)
 }
 
 func createServiceBusyError(msg string) *s.ServiceBusyError {
 	return &s.ServiceBusyError{Message: msg}
-}
-
-// if domainCache return error, it will return "" as domainName and a scope without domainName tagged
-func domainNameAndMetricScope(cache cache.DomainCache, domainID string, client metrics.Client, scope int) (string, metrics.Scope) {
-	entry, err := cache.GetDomainByID(domainID)
-	if err != nil {
-		return "", nil
-	}
-	return entry.GetInfo().Name, client.Scope(scope, metrics.DomainTag(entry.GetInfo().Name))
 }

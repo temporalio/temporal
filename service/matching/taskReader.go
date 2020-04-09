@@ -104,7 +104,7 @@ dispatchLoop:
 					break dispatchLoop
 				}
 				// this should never happen unless there is a bug - don't drop the task
-				tr.scope().IncCounter(metrics.BufferThrottleCounter)
+				tr.scope().IncCounter(metrics.BufferThrottlePerTaskListCounter)
 				tr.logger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				runtime.Gosched()
 			}
@@ -239,7 +239,7 @@ func (tr *taskReader) addTasksToBuffer(
 	now := time.Now()
 	for _, t := range tasks {
 		if tr.isTaskExpired(t, now) {
-			tr.scope().IncCounter(metrics.ExpiredTasksCounter)
+			tr.scope().IncCounter(metrics.ExpiredTasksPerTaskListCounter)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
 			tr.tlMgr.taskAckManager.setReadLevel(t.TaskID)
@@ -283,5 +283,5 @@ func (tr *taskReader) logger() log.Logger {
 }
 
 func (tr *taskReader) scope() metrics.Scope {
-	return tr.tlMgr.domainScope()
+	return tr.tlMgr.metricScope()
 }

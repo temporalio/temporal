@@ -104,7 +104,8 @@ func (m *ClientImpl) UpdateGauge(scopeIdx int, gaugeIdx int, value float64) {
 // Scope return a new internal metrics scope that can be used to add additional
 // information to the metrics emitted
 func (m *ClientImpl) Scope(scopeIdx int, tags ...Tag) Scope {
-	return newMetricsScope(m.childScopes[scopeIdx], m.metricDefs, false).Tagged(tags...)
+	scope := m.childScopes[scopeIdx]
+	return newMetricsScope(scope, scope, m.metricDefs, false).Tagged(tags...)
 }
 
 func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {

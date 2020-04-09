@@ -25,8 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber-go/tally"
-
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaserver"
 	m "github.com/uber/cadence/.gen/go/matching"
@@ -108,76 +106,108 @@ func (h *Handler) Health(ctx context.Context) (*health.HealthStatus, error) {
 	return hs, nil
 }
 
-// startRequestProfile initiates recording of request metrics
-func (h *Handler) startRequestProfile(api string, scope int) tally.Stopwatch {
-	h.startWG.Wait()
-	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
-	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
-	return sw
+func (h *Handler) newHandlerContext(
+	ctx context.Context,
+	domainID string,
+	taskList *gen.TaskList,
+	scope int,
+) *handlerContext {
+	return newHandlerContext(
+		ctx,
+		h.domainName(domainID),
+		taskList,
+		h.metricsClient,
+		scope,
+	)
 }
 
 // AddActivityTask - adds an activity task.
-func (h *Handler) AddActivityTask(ctx context.Context, addRequest *m.AddActivityTaskRequest) (retError error) {
+func (h *Handler) AddActivityTask(
+	ctx context.Context,
+	request *m.AddActivityTaskRequest,
+) (retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	startT := time.Now()
-	scope := metrics.MatchingAddActivityTaskScope
-	sw := h.startRequestProfile("AddActivityTask", scope)
+	hCtx := h.newHandlerContext(
+		ctx,
+		request.GetDomainUUID(),
+		request.GetTaskList(),
+		metrics.MatchingAddActivityTaskScope,
+	)
+
+	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if addRequest.GetForwardedFrom() != "" {
-		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
+	if request.GetForwardedFrom() != "" {
+		hCtx.scope.IncCounter(metrics.ForwardedPerTaskListCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.handleErr(errMatchingHostThrottle, scope)
+		return hCtx.handleErr(errMatchingHostThrottle)
 	}
 
-	syncMatch, err := h.engine.AddActivityTask(ctx, addRequest)
+	syncMatch, err := h.engine.AddActivityTask(hCtx, request)
 	if syncMatch {
-		h.metricsClient.RecordTimer(scope, metrics.SyncMatchLatency, time.Since(startT))
+		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskList, time.Since(startT))
 	}
 
-	return h.handleErr(err, scope)
+	return hCtx.handleErr(err)
 }
 
 // AddDecisionTask - adds a decision task.
-func (h *Handler) AddDecisionTask(ctx context.Context, addRequest *m.AddDecisionTaskRequest) (retError error) {
+func (h *Handler) AddDecisionTask(
+	ctx context.Context,
+	request *m.AddDecisionTaskRequest,
+) (retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	startT := time.Now()
-	scope := metrics.MatchingAddDecisionTaskScope
-	sw := h.startRequestProfile("AddDecisionTask", scope)
+	hCtx := h.newHandlerContext(
+		ctx,
+		request.GetDomainUUID(),
+		request.GetTaskList(),
+		metrics.MatchingAddDecisionTaskScope,
+	)
+
+	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if addRequest.GetForwardedFrom() != "" {
-		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
+	if request.GetForwardedFrom() != "" {
+		hCtx.scope.IncCounter(metrics.ForwardedPerTaskListCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.handleErr(errMatchingHostThrottle, scope)
+		return hCtx.handleErr(errMatchingHostThrottle)
 	}
 
-	syncMatch, err := h.engine.AddDecisionTask(ctx, addRequest)
+	syncMatch, err := h.engine.AddDecisionTask(hCtx, request)
 	if syncMatch {
-		h.metricsClient.RecordTimer(scope, metrics.SyncMatchLatency, time.Since(startT))
+		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskList, time.Since(startT))
 	}
-	return h.handleErr(err, scope)
+	return hCtx.handleErr(err)
 }
 
 // PollForActivityTask - long poll for an activity task.
-func (h *Handler) PollForActivityTask(ctx context.Context,
-	pollRequest *m.PollForActivityTaskRequest) (resp *gen.PollForActivityTaskResponse, retError error) {
+func (h *Handler) PollForActivityTask(
+	ctx context.Context,
+	request *m.PollForActivityTaskRequest,
+) (resp *gen.PollForActivityTaskResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
+	hCtx := h.newHandlerContext(
+		ctx,
+		request.GetDomainUUID(),
+		request.GetPollRequest().GetTaskList(),
+		metrics.MatchingPollForActivityTaskScope,
+	)
 
-	scope := metrics.MatchingPollForActivityTaskScope
-	sw := h.startRequestProfile("PollForActivityTask", scope)
+	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if pollRequest.GetForwardedFrom() != "" {
-		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
+	if request.GetForwardedFrom() != "" {
+		hCtx.scope.IncCounter(metrics.ForwardedPerTaskListCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.handleErr(errMatchingHostThrottle, scope)
+		return nil, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
@@ -185,28 +215,35 @@ func (h *Handler) PollForActivityTask(ctx context.Context,
 		"PollForActivityTask",
 		h.Resource.GetThrottledLogger(),
 	); err != nil {
-		return nil, h.handleErr(err, scope)
+		return nil, hCtx.handleErr(err)
 	}
 
-	response, err := h.engine.PollForActivityTask(ctx, pollRequest)
-	return response, h.handleErr(err, scope)
+	response, err := h.engine.PollForActivityTask(hCtx, request)
+	return response, hCtx.handleErr(err)
 }
 
 // PollForDecisionTask - long poll for a decision task.
-func (h *Handler) PollForDecisionTask(ctx context.Context,
-	pollRequest *m.PollForDecisionTaskRequest) (resp *m.PollForDecisionTaskResponse, retError error) {
+func (h *Handler) PollForDecisionTask(
+	ctx context.Context,
+	request *m.PollForDecisionTaskRequest,
+) (resp *m.PollForDecisionTaskResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
+	hCtx := h.newHandlerContext(
+		ctx,
+		request.GetDomainUUID(),
+		request.GetPollRequest().GetTaskList(),
+		metrics.MatchingPollForDecisionTaskScope,
+	)
 
-	scope := metrics.MatchingPollForDecisionTaskScope
-	sw := h.startRequestProfile("PollForDecisionTask", scope)
+	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if pollRequest.GetForwardedFrom() != "" {
-		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
+	if request.GetForwardedFrom() != "" {
+		hCtx.scope.IncCounter(metrics.ForwardedPerTaskListCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.handleErr(errMatchingHostThrottle, scope)
+		return nil, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
@@ -214,130 +251,140 @@ func (h *Handler) PollForDecisionTask(ctx context.Context,
 		"PollForDecisionTask",
 		h.Resource.GetThrottledLogger(),
 	); err != nil {
-		return nil, h.handleErr(err, scope)
+		return nil, hCtx.handleErr(err)
 	}
 
-	response, err := h.engine.PollForDecisionTask(ctx, pollRequest)
-	return response, h.handleErr(err, scope)
+	response, err := h.engine.PollForDecisionTask(hCtx, request)
+	return response, hCtx.handleErr(err)
 }
 
 // QueryWorkflow queries a given workflow synchronously and return the query result.
-func (h *Handler) QueryWorkflow(ctx context.Context,
-	queryRequest *m.QueryWorkflowRequest) (resp *gen.QueryWorkflowResponse, retError error) {
+func (h *Handler) QueryWorkflow(
+	ctx context.Context,
+	request *m.QueryWorkflowRequest,
+) (resp *gen.QueryWorkflowResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	scope := metrics.MatchingQueryWorkflowScope
-	sw := h.startRequestProfile("QueryWorkflow", scope)
+	hCtx := h.newHandlerContext(
+		ctx,
+		request.GetDomainUUID(),
+		request.GetTaskList(),
+		metrics.MatchingQueryWorkflowScope,
+	)
+
+	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
-	if queryRequest.GetForwardedFrom() != "" {
-		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
+	if request.GetForwardedFrom() != "" {
+		hCtx.scope.IncCounter(metrics.ForwardedPerTaskListCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.handleErr(errMatchingHostThrottle, scope)
+		return nil, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
-	response, err := h.engine.QueryWorkflow(ctx, queryRequest)
-	return response, h.handleErr(err, scope)
+	response, err := h.engine.QueryWorkflow(hCtx, request)
+	return response, hCtx.handleErr(err)
 }
 
 // RespondQueryTaskCompleted responds a query task completed
-func (h *Handler) RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest) (retError error) {
+func (h *Handler) RespondQueryTaskCompleted(
+	ctx context.Context,
+	request *m.RespondQueryTaskCompletedRequest,
+) (retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	scope := metrics.MatchingRespondQueryTaskCompletedScope
-	sw := h.startRequestProfile("RespondQueryTaskCompleted", scope)
+	hCtx := h.newHandlerContext(
+		ctx,
+		request.GetDomainUUID(),
+		request.GetTaskList(),
+		metrics.MatchingRespondQueryTaskCompletedScope,
+	)
+
+	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
 	h.rateLimiter.Allow()
 
-	err := h.engine.RespondQueryTaskCompleted(ctx, request)
-	return h.handleErr(err, scope)
+	err := h.engine.RespondQueryTaskCompleted(hCtx, request)
+	return hCtx.handleErr(err)
 }
 
 // CancelOutstandingPoll is used to cancel outstanding pollers
 func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	request *m.CancelOutstandingPollRequest) (retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	scope := metrics.MatchingCancelOutstandingPollScope
-	sw := h.startRequestProfile("CancelOutstandingPoll", scope)
+	hCtx := h.newHandlerContext(
+		ctx,
+		request.GetDomainUUID(),
+		request.GetTaskList(),
+		metrics.MatchingCancelOutstandingPollScope,
+	)
+
+	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
 	h.rateLimiter.Allow()
 
-	err := h.engine.CancelOutstandingPoll(ctx, request)
-	return h.handleErr(err, scope)
+	err := h.engine.CancelOutstandingPoll(hCtx, request)
+	return hCtx.handleErr(err)
 }
 
 // DescribeTaskList returns information about the target tasklist, right now this API returns the
 // pollers which polled this tasklist in last few minutes. If includeTaskListStatus field is true,
 // it will also return status of tasklist's ackManager (readLevel, ackLevel, backlogCountHint and taskIDBlock).
-func (h *Handler) DescribeTaskList(ctx context.Context, request *m.DescribeTaskListRequest) (resp *gen.DescribeTaskListResponse, retError error) {
+func (h *Handler) DescribeTaskList(
+	ctx context.Context,
+	request *m.DescribeTaskListRequest,
+) (resp *gen.DescribeTaskListResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	scope := metrics.MatchingDescribeTaskListScope
-	sw := h.startRequestProfile("DescribeTaskList", scope)
+	hCtx := h.newHandlerContext(
+		ctx,
+		request.GetDomainUUID(),
+		request.GetDescRequest().GetTaskList(),
+		metrics.MatchingDescribeTaskListScope,
+	)
+
+	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.handleErr(errMatchingHostThrottle, scope)
+		return nil, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
-	response, err := h.engine.DescribeTaskList(ctx, request)
-	return response, h.handleErr(err, scope)
+	response, err := h.engine.DescribeTaskList(hCtx, request)
+	return response, hCtx.handleErr(err)
 }
 
 // ListTaskListPartitions returns information about partitions for a taskList
-func (h *Handler) ListTaskListPartitions(ctx context.Context, request *m.ListTaskListPartitionsRequest) (resp *gen.ListTaskListPartitionsResponse, retError error) {
+func (h *Handler) ListTaskListPartitions(
+	ctx context.Context,
+	request *m.ListTaskListPartitionsRequest,
+) (resp *gen.ListTaskListPartitionsResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	scope := metrics.MatchingListTaskListPartitionsScope
-	sw := h.startRequestProfile("ListTaskListPartitions", scope)
+	hCtx := newHandlerContext(
+		ctx,
+		request.GetDomain(),
+		request.GetTaskList(),
+		h.metricsClient,
+		metrics.MatchingListTaskListPartitionsScope,
+	)
+
+	sw := hCtx.startProfiling(&h.startWG)
 	defer sw.Stop()
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return nil, h.handleErr(errMatchingHostThrottle, scope)
+		return nil, hCtx.handleErr(errMatchingHostThrottle)
 	}
 
-	response, err := h.engine.ListTaskListPartitions(ctx, request)
-	return response, h.handleErr(err, scope)
+	response, err := h.engine.ListTaskListPartitions(hCtx, request)
+	return response, hCtx.handleErr(err)
 }
 
-func (h *Handler) handleErr(err error, scope int) error {
-
-	if err == nil {
-		return nil
+func (h *Handler) domainName(id string) string {
+	entry, err := h.GetDomainCache().GetDomainByID(id)
+	if err != nil {
+		return ""
 	}
-
-	switch err.(type) {
-	case *gen.InternalServiceError:
-		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
-		return err
-	case *gen.BadRequestError:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
-		return err
-	case *gen.EntityNotExistsError:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
-		return err
-	case *gen.WorkflowExecutionAlreadyStartedError:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
-		return err
-	case *gen.DomainAlreadyExistsError:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrDomainAlreadyExistsCounter)
-		return err
-	case *gen.QueryFailedError:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrQueryFailedCounter)
-		return err
-	case *gen.LimitExceededError:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
-		return err
-	case *gen.ServiceBusyError:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrServiceBusyCounter)
-		return err
-	case *gen.DomainNotActiveError:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrDomainNotActiveCounter)
-		return err
-	default:
-		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
-		return &gen.InternalServiceError{Message: err.Error()}
-	}
+	return entry.GetInfo().Name
 }

@@ -52,6 +52,8 @@ type (
 
 	domainUnknownTag struct{}
 
+	taskListUnknownTag struct{}
+
 	instanceTag struct {
 		value string
 	}
@@ -103,6 +105,21 @@ func DomainUnknownTag() Tag {
 }
 
 // Key returns the key of the domain unknown tag
+func (d taskListUnknownTag) Key() string {
+	return domain
+}
+
+// Value returns the value of the domain unknown tag
+func (d taskListUnknownTag) Value() string {
+	return unknownValue
+}
+
+// TaskListUnknownTag returns a new tasklist:unknown tag-value
+func TaskListUnknownTag() Tag {
+	return taskListUnknownTag{}
+}
+
+// Key returns the key of the domain unknown tag
 func (d domainUnknownTag) Key() string {
 	return domain
 }
@@ -150,7 +167,7 @@ func TaskListTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return taskListTag{value}
+	return taskListTag{sanitizer.Value(value)}
 }
 
 // Key returns the key of the task list tag

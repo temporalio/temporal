@@ -110,7 +110,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 	if !task.isForwarded() {
 		rsv, err = tm.ratelimit(ctx)
 		if err != nil {
-			tm.scope().IncCounter(metrics.SyncThrottleCounter)
+			tm.scope().IncCounter(metrics.SyncThrottlePerTaskListCounter)
 			return false, err
 		}
 	}
@@ -316,16 +316,16 @@ func (tm *TaskMatcher) pollOrForward(
 	select {
 	case task := <-taskC:
 		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
 		}
-		tm.scope().IncCounter(metrics.PollSuccessCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
 		return task, nil
 	case task := <-queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
-		tm.scope().IncCounter(metrics.PollSuccessCounter)
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
 		return task, nil
 	case <-ctx.Done():
-		tm.scope().IncCounter(metrics.PollTimeoutCounter)
+		tm.scope().IncCounter(metrics.PollTimeoutPerTaskListCounter)
 		return nil, ErrNoTasks
 	case token := <-tm.fwdrPollReqTokenC():
 		if task, err := tm.fwdr.ForwardPoll(ctx); err == nil {
@@ -345,16 +345,16 @@ func (tm *TaskMatcher) poll(
 	select {
 	case task := <-taskC:
 		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
 		}
-		tm.scope().IncCounter(metrics.PollSuccessCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
 		return task, nil
 	case task := <-queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
-		tm.scope().IncCounter(metrics.PollSuccessCounter)
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
 		return task, nil
 	case <-ctx.Done():
-		tm.scope().IncCounter(metrics.PollTimeoutCounter)
+		tm.scope().IncCounter(metrics.PollTimeoutPerTaskListCounter)
 		return nil, ErrNoTasks
 	}
 }
@@ -367,13 +367,13 @@ func (tm *TaskMatcher) pollNonBlocking(
 	select {
 	case task := <-taskC:
 		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
 		}
-		tm.scope().IncCounter(metrics.PollSuccessCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
 		return task, nil
 	case task := <-queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncCounter)
-		tm.scope().IncCounter(metrics.PollSuccessCounter)
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskListCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskListCounter)
 		return task, nil
 	default:
 		return nil, ErrNoTasks
