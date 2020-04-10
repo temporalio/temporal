@@ -792,8 +792,14 @@ type (
 
 	// ListConcreteExecutionsResponse is response to ListConcreteExecutions
 	ListConcreteExecutionsResponse struct {
-		ExecutionInfos []*WorkflowExecutionInfo
-		PageToken      []byte
+		Executions []*ListConcreteExecutionsEntity
+		PageToken  []byte
+	}
+
+	// ListConcreteExecutionsEntity is a single entity in ListConcreteExecutionsResponse
+	ListConcreteExecutionsEntity struct {
+		ExecutionInfo    *WorkflowExecutionInfo
+		VersionHistories *VersionHistories
 	}
 
 	// GetCurrentExecutionResponse is the response to GetCurrentExecution

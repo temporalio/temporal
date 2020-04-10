@@ -786,13 +786,21 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 		return nil, err
 	}
 	newResponse := &ListConcreteExecutionsResponse{
-		ExecutionInfos: make([]*WorkflowExecutionInfo, len(response.ExecutionInfos), len(response.ExecutionInfos)),
-		PageToken:      response.NextPageToken,
+		Executions: make([]*ListConcreteExecutionsEntity, len(response.Executions), len(response.Executions)),
+		PageToken:  response.NextPageToken,
 	}
-	for i, info := range response.ExecutionInfos {
-		newResponse.ExecutionInfos[i], _, err = m.DeserializeExecutionInfo(info)
+	for i, e := range response.Executions {
+		info, _, err := m.DeserializeExecutionInfo(e.ExecutionInfo)
 		if err != nil {
 			return nil, err
+		}
+		vh, err := m.DeserializeVersionHistories(e.VersionHistories)
+		if err != nil {
+			return nil, err
+		}
+		newResponse.Executions[i] = &ListConcreteExecutionsEntity{
+			ExecutionInfo:    info,
+			VersionHistories: vh,
 		}
 	}
 	return newResponse, nil

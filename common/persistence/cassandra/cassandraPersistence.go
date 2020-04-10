@@ -436,7 +436,7 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ?`
 
-	templateListWorkflowExecutionQuery = `SELECT run_id, execution ` +
+	templateListWorkflowExecutionQuery = `SELECT run_id, execution, version_histories, version_histories_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ?`
@@ -1311,10 +1311,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	replicationState := createReplicationState(result["replication_state"].(map[string]interface{}))
 	state.ReplicationState = replicationState
 
-	state.VersionHistories = p.NewDataBlob(
-		result["version_histories"].([]byte),
-		common.EncodingType(result["version_histories_encoding"].(string)),
-	)
+	state.VersionHistories = p.NewDataBlob(result["version_histories"].([]byte), common.EncodingType(result["version_histories_encoding"].(string)))
 
 	if state.VersionHistories != nil && state.ReplicationState != nil {
 		return nil, &workflow.InternalServiceError{
@@ -2062,10 +2059,10 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 			result = make(map[string]interface{})
 			continue
 		}
-		if _, ok := result["execution"]; ok {
-			wfInfo := createWorkflowExecutionInfo(result["execution"].(map[string]interface{}))
-			response.ExecutionInfos = append(response.ExecutionInfos, wfInfo)
-		}
+		response.Executions = append(response.Executions, &p.InternalListConcreteExecutionsEntity{
+			ExecutionInfo:    createWorkflowExecutionInfo(result["execution"].(map[string]interface{})),
+			VersionHistories: p.NewDataBlob(result["version_histories"].([]byte), common.EncodingType(result["version_histories_encoding"].(string))),
+		})
 		result = make(map[string]interface{})
 	}
 	nextPageToken := iter.PageState()

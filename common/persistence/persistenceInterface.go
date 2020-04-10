@@ -457,8 +457,14 @@ type (
 
 	// InternalListConcreteExecutionsResponse is the response to ListConcreteExecutions for Persistence Interface
 	InternalListConcreteExecutionsResponse struct {
-		ExecutionInfos []*InternalWorkflowExecutionInfo
-		NextPageToken  []byte
+		Executions    []*InternalListConcreteExecutionsEntity
+		NextPageToken []byte
+	}
+
+	// InternalListConcreteExecutionsEntity is a single entity in InternalListConcreteExecutionsResponse
+	InternalListConcreteExecutionsEntity struct {
+		ExecutionInfo    *InternalWorkflowExecutionInfo
+		VersionHistories *DataBlob
 	}
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
