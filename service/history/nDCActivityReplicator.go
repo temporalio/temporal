@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 const (
@@ -59,7 +60,7 @@ type (
 )
 
 func newNDCActivityReplicator(
-	shard ShardContext,
+	shard shard.Context,
 	historyCache *historyCache,
 	logger log.Logger,
 ) *nDCActivityReplicatorImpl {

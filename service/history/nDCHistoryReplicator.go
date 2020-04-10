@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 var (
@@ -87,7 +88,7 @@ type (
 	}
 
 	nDCHistoryReplicatorImpl struct {
-		shard             ShardContext
+		shard             shard.Context
 		clusterMetadata   cluster.Metadata
 		historyV2Mgr      persistence.HistoryManager
 		historySerializer persistence.PayloadSerializer
@@ -109,7 +110,7 @@ type (
 var errPanic = errors.NewInternalFailureError("encounter panic")
 
 func newNDCHistoryReplicator(
-	shard ShardContext,
+	shard shard.Context,
 	historyCache *historyCache,
 	eventsReapplier nDCEventsReapplier,
 	logger log.Logger,

@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package shard
 
 import (
 	"errors"
@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -42,6 +41,7 @@ import (
 	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/engine"
 )
 
 type (
@@ -51,17 +51,17 @@ type (
 
 		controller          *gomock.Controller
 		mockResource        *resource.Test
-		mockHistoryEngine   *MockEngine
+		mockHistoryEngine   *engine.MockEngine
 		mockClusterMetadata *cluster.MockMetadata
 		mockServiceResolver *membership.MockServiceResolver
 
 		hostInfo          *membership.HostInfo
 		mockShardManager  *mmocks.ShardManager
-		mockEngineFactory *MockHistoryEngineFactory
+		mockEngineFactory *MockEngineFactory
 
 		config          *config.Config
 		logger          log.Logger
-		shardController *shardController
+		shardController *controller
 	}
 )
 
@@ -75,24 +75,24 @@ func (s *shardControllerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resource.NewTest(s.controller, metrics.History)
-	s.mockHistoryEngine = NewMockEngine(s.controller)
+	s.mockEngineFactory = NewMockEngineFactory(s.controller)
 
-	s.mockEngineFactory = &MockHistoryEngineFactory{}
+	s.mockHistoryEngine = engine.NewMockEngine(s.controller)
+
 	s.mockShardManager = s.mockResource.ShardMgr
 	s.mockServiceResolver = s.mockResource.HistoryServiceResolver
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.hostInfo = s.mockResource.GetHostInfo()
 
 	s.logger = s.mockResource.Logger
-	s.config = NewDynamicConfigForTest()
+	s.config = config.NewForTest()
 
-	s.shardController = newShardController(s.mockResource, s.mockEngineFactory, s.config)
+	s.shardController = NewShardController(s.mockResource, s.mockEngineFactory, s.config).(*controller)
 }
 
 func (s *shardControllerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockResource.Finish(s.T())
-	s.mockEngineFactory.AssertExpectations(s.T())
 }
 
 func (s *shardControllerSuite) TestAcquireShardSuccess() {
@@ -112,7 +112,7 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 			myShards = append(myShards, shardID)
 			s.mockHistoryEngine.EXPECT().Start().Return().Times(1)
 			s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).Times(2)
-			s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(s.mockHistoryEngine).Once()
+			s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine).Times(1)
 			s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 				&persistence.GetShardResponse{
 					ShardInfo: &persistence.ShardInfo{
@@ -168,7 +168,7 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 	s.shardController.acquireShards()
 	count := 0
 	for _, shardID := range myShards {
-		s.NotNil(s.shardController.getEngineForShard(shardID))
+		s.NotNil(s.shardController.GetEngineForShard(shardID))
 		count++
 	}
 	s.Equal(3, count)
@@ -194,7 +194,7 @@ func (s *shardControllerSuite) TestAcquireShardsConcurrently() {
 			myShards = append(myShards, shardID)
 			s.mockHistoryEngine.EXPECT().Start().Return().Times(1)
 			s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).Times(2)
-			s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(s.mockHistoryEngine).Once()
+			s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine).Times(1)
 			s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 				&persistence.GetShardResponse{
 					ShardInfo: &persistence.ShardInfo{
@@ -250,7 +250,7 @@ func (s *shardControllerSuite) TestAcquireShardsConcurrently() {
 	s.shardController.acquireShards()
 	count := 0
 	for _, shardID := range myShards {
-		s.NotNil(s.shardController.getEngineForShard(shardID))
+		s.NotNil(s.shardController.GetEngineForShard(shardID))
 		count++
 	}
 	s.Equal(3, count)
@@ -266,7 +266,7 @@ func (s *shardControllerSuite) TestAcquireShardLookupFailure() {
 	s.shardController.acquireShards()
 	for shardID := 0; shardID < numShards; shardID++ {
 		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(nil, errors.New("ring failure")).Times(1)
-		s.Nil(s.shardController.getEngineForShard(shardID))
+		s.Nil(s.shardController.GetEngineForShard(shardID))
 	}
 }
 
@@ -283,7 +283,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 	for shardID := 0; shardID < numShards; shardID++ {
 		s.mockHistoryEngine.EXPECT().Start().Return().Times(1)
 		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).Times(2)
-		s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(s.mockHistoryEngine).Once()
+		s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine).Times(1)
 		s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 			&persistence.GetShardResponse{
 				ShardInfo: &persistence.ShardInfo{
@@ -340,7 +340,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 	s.shardController.acquireShards()
 
 	for shardID := 0; shardID < numShards; shardID++ {
-		s.NotNil(s.shardController.getEngineForShard(shardID))
+		s.NotNil(s.shardController.GetEngineForShard(shardID))
 	}
 }
 
@@ -357,7 +357,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 	for shardID := 0; shardID < numShards; shardID++ {
 		s.mockHistoryEngine.EXPECT().Start().Return().Times(1)
 		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).Times(2)
-		s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(s.mockHistoryEngine).Once()
+		s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine).Times(1)
 		s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 			&persistence.GetShardResponse{
 				ShardInfo: &persistence.ShardInfo{
@@ -414,17 +414,17 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 	s.shardController.acquireShards()
 
 	for shardID := 0; shardID < numShards; shardID++ {
-		s.NotNil(s.shardController.getEngineForShard(shardID))
+		s.NotNil(s.shardController.GetEngineForShard(shardID))
 	}
 }
 
 func (s *shardControllerSuite) TestHistoryEngineClosed() {
 	numShards := 4
 	s.config.NumberOfShards = numShards
-	s.shardController = newShardController(s.mockResource, s.mockEngineFactory, s.config)
-	historyEngines := make(map[int]*MockEngine)
+	s.shardController = NewShardController(s.mockResource, s.mockEngineFactory, s.config).(*controller)
+	historyEngines := make(map[int]*engine.MockEngine)
 	for shardID := 0; shardID < numShards; shardID++ {
-		mockEngine := NewMockEngine(s.controller)
+		mockEngine := engine.NewMockEngine(s.controller)
 		historyEngines[shardID] = mockEngine
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
 	}
@@ -441,7 +441,7 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 		go func() {
 			for attempt := 0; attempt < 10; attempt++ {
 				for shardID := 0; shardID < numShards; shardID++ {
-					engine, err := s.shardController.getEngineForShard(shardID)
+					engine, err := s.shardController.GetEngineForShard(shardID)
 					s.Nil(err)
 					s.NotNil(engine)
 				}
@@ -465,7 +465,7 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 		go func() {
 			for attempt := 0; attempt < 10; attempt++ {
 				for shardID := 2; shardID < numShards; shardID++ {
-					engine, err := s.shardController.getEngineForShard(shardID)
+					engine, err := s.shardController.GetEngineForShard(shardID)
 					s.Nil(err)
 					s.NotNil(engine)
 					time.Sleep(20 * time.Millisecond)
@@ -481,7 +481,7 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 			shardLost := false
 			for attempt := 0; !shardLost && attempt < 10; attempt++ {
 				for shardID := 0; shardID < 2; shardID++ {
-					_, err := s.shardController.getEngineForShard(shardID)
+					_, err := s.shardController.GetEngineForShard(shardID)
 					if err != nil {
 						s.logger.Error("ShardLost", tag.Error(err))
 						shardLost = true
@@ -509,10 +509,10 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 func (s *shardControllerSuite) TestShardControllerClosed() {
 	numShards := 4
 	s.config.NumberOfShards = numShards
-	s.shardController = newShardController(s.mockResource, s.mockEngineFactory, s.config)
-	historyEngines := make(map[int]*MockEngine)
+	s.shardController = NewShardController(s.mockResource, s.mockEngineFactory, s.config).(*controller)
+	historyEngines := make(map[int]*engine.MockEngine)
 	for shardID := 0; shardID < numShards; shardID++ {
-		mockEngine := NewMockEngine(s.controller)
+		mockEngine := engine.NewMockEngine(s.controller)
 		historyEngines[shardID] = mockEngine
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
 	}
@@ -530,7 +530,7 @@ func (s *shardControllerSuite) TestShardControllerClosed() {
 			shardLost := false
 			for attempt := 0; !shardLost && attempt < 10; attempt++ {
 				for shardID := 0; shardID < numShards; shardID++ {
-					_, err := s.shardController.getEngineForShard(shardID)
+					_, err := s.shardController.GetEngineForShard(shardID)
 					if err != nil {
 						s.logger.Error("ShardLost", tag.Error(err))
 						shardLost = true
@@ -554,7 +554,7 @@ func (s *shardControllerSuite) TestShardControllerClosed() {
 	workerWG.Wait()
 }
 
-func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int, mockEngine *MockEngine, currentRangeID,
+func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int, mockEngine *engine.MockEngine, currentRangeID,
 	newRangeID int64) {
 
 	replicationAck := int64(201)
@@ -566,7 +566,7 @@ func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int, mockEngine
 	// s.mockResource.ExecutionMgr.On("Close").Return()
 	mockEngine.EXPECT().Start().Times(1)
 	s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).Times(2)
-	s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(mockEngine).Once()
+	s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(mockEngine).Times(1)
 	s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 		&persistence.GetShardResponse{
 			ShardInfo: &persistence.ShardInfo{

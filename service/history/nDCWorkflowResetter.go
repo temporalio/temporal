@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 const (
@@ -51,7 +52,7 @@ type (
 	}
 
 	nDCWorkflowResetterImpl struct {
-		shard          ShardContext
+		shard          shard.Context
 		transactionMgr nDCTransactionMgr
 		historyV2Mgr   persistence.HistoryManager
 		stateRebuilder nDCStateRebuilder
@@ -69,7 +70,7 @@ type (
 var _ nDCWorkflowResetter = (*nDCWorkflowResetterImpl)(nil)
 
 func newNDCWorkflowResetter(
-	shard ShardContext,
+	shard shard.Context,
 	transactionMgr nDCTransactionMgr,
 	domainID string,
 	workflowID string,

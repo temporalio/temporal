@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -42,7 +43,7 @@ type (
 	}
 
 	nDCConflictResolverImpl struct {
-		shard          ShardContext
+		shard          shard.Context
 		stateRebuilder nDCStateRebuilder
 
 		context      workflowExecutionContext
@@ -54,7 +55,7 @@ type (
 var _ nDCConflictResolver = (*nDCConflictResolverImpl)(nil)
 
 func newNDCConflictResolver(
-	shard ShardContext,
+	shard shard.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	logger log.Logger,

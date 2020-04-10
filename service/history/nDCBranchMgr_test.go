@@ -36,6 +36,8 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -44,7 +46,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shardContextTest
+		mockShard           *shard.TestContext
 		mockContext         *MockworkflowExecutionContext
 		mockMutableState    *MockmutableState
 		mockClusterMetadata *cluster.MockMetadata
@@ -74,18 +76,18 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 	s.mockContext = NewMockworkflowExecutionContext(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID:          10,
 			RangeID:          1,
 			TransferAckLevel: 0,
 		},
-		NewDynamicConfigForTest(),
+		config.NewForTest(),
 	)
 
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()

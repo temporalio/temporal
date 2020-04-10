@@ -46,6 +46,7 @@ import (
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -54,7 +55,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockShard                *shardContextTest
+		mockShard                *shard.TestContext
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
@@ -80,7 +81,7 @@ func TestWorkflowResetorSuite(t *testing.T) {
 }
 
 func (s *resetorSuite) SetupSuite() {
-	s.config = NewDynamicConfigForTest()
+	s.config = config.NewForTest()
 }
 
 func (s *resetorSuite) TearDownSuite() {
@@ -100,7 +101,7 @@ func (s *resetorSuite) SetupTest() {
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&p.ShardInfo{
 			ShardID:          shardID,
@@ -110,11 +111,11 @@ func (s *resetorSuite) SetupTest() {
 		s.config,
 	)
 
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockDomainCache = s.mockShard.resource.DomainCache
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockDomainCache = s.mockShard.Resource.DomainCache
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -134,7 +135,7 @@ func (s *resetorSuite) SetupTest() {
 		metricsClient:        s.mockShard.GetMetricsClient(),
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		config:               s.config,
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), s.mockShard.GetMetricsClient(), func(string) int { return 0 }),
+		historyEventNotifier: events.NewNotifier(clock.NewRealTimeSource(), s.mockShard.GetMetricsClient(), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,

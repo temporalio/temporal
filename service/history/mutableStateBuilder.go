@@ -44,6 +44,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 const (
@@ -145,7 +146,7 @@ type (
 		decisionTaskManager mutableStateDecisionTaskManager
 		queryRegistry       queryRegistry
 
-		shard           ShardContext
+		shard           shard.Context
 		clusterMetadata cluster.Metadata
 		eventsCache     events.Cache
 		config          *config.Config
@@ -158,7 +159,7 @@ type (
 var _ mutableState = (*mutableStateBuilder)(nil)
 
 func newMutableStateBuilder(
-	shard ShardContext,
+	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
 	domainEntry *cache.DomainCacheEntry,
@@ -228,7 +229,7 @@ func newMutableStateBuilder(
 }
 
 func newMutableStateBuilderWithReplicationState(
-	shard ShardContext,
+	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
 	domainEntry *cache.DomainCacheEntry,
@@ -245,7 +246,7 @@ func newMutableStateBuilderWithReplicationState(
 }
 
 func newMutableStateBuilderWithVersionHistories(
-	shard ShardContext,
+	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
 	domainEntry *cache.DomainCacheEntry,
@@ -306,7 +307,7 @@ func (e *mutableStateBuilder) Load(
 
 	if len(state.Checksum.Value) > 0 {
 		switch {
-		case e.shouldInvalidateCheckum():
+		case e.shouldInvalidateChecksum():
 			e.checksum = checksum.Checksum{}
 			e.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumInvalidated)
 		case e.shouldVerifyChecksum():
@@ -2446,7 +2447,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskCancelRequestedEvent(
 	ai.Version = event.GetVersion()
 
 	// - We have the activity dispatched to worker.
-	// - The activity might not be heartbeat'ing, but the activity can still call RecordActivityHeartBeat()
+	// - The activity might not be heartbeating, but the activity can still call RecordActivityHeartBeat()
 	//   to see cancellation while reporting progress of the activity.
 	ai.CancelRequested = true
 
@@ -4362,7 +4363,7 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 			tag.WorkflowID(executionInfo.WorkflowID),
 			tag.WorkflowRunID(executionInfo.RunID),
 		)
-		return ErrEventsAterWorkflowFinish
+		return ErrEventsAfterWorkflowFinish
 	}
 }
 
@@ -4625,7 +4626,7 @@ func (e *mutableStateBuilder) shouldVerifyChecksum() bool {
 	return rand.Intn(100) < e.config.MutableStateChecksumVerifyProbability(e.domainEntry.GetInfo().Name)
 }
 
-func (e *mutableStateBuilder) shouldInvalidateCheckum() bool {
+func (e *mutableStateBuilder) shouldInvalidateChecksum() bool {
 	invalidateBeforeEpochSecs := int64(e.config.MutableStateChecksumInvalidateBefore())
 	if invalidateBeforeEpochSecs > 0 {
 		invalidateBefore := time.Unix(invalidateBeforeEpochSecs, 0)

@@ -28,6 +28,7 @@ import (
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -62,7 +63,7 @@ func (s *DecisionHandlerSuite) SetupTest() {
 	s.decisionHandler = &decisionHandlerImpl{
 		versionChecker: client.NewVersionChecker(),
 		metricsClient:  metrics.NewClient(tally.NoopScope, metrics.History),
-		config:         NewDynamicConfigForTest(),
+		config:         config.NewForTest(),
 		logger:         loggerimpl.NewNopLogger(),
 	}
 	s.queryRegistry = s.constructQueryRegistry(10)

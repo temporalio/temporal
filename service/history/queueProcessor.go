@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -60,7 +61,7 @@ type (
 
 	queueProcessorBase struct {
 		clusterName          string
-		shard                ShardContext
+		shard                shard.Context
 		timeSource           clock.TimeSource
 		options              *QueueProcessorOptions
 		processor            processor
@@ -90,7 +91,7 @@ var (
 
 func newQueueProcessorBase(
 	clusterName string,
-	shard ShardContext,
+	shard shard.Context,
 	options *QueueProcessorOptions,
 	processor processor,
 	queueTaskProcessor queueTaskProcessor,
@@ -234,7 +235,7 @@ processorPumpLoop:
 				p.options.UpdateAckInterval(),
 				p.options.UpdateAckIntervalJitterCoefficient(),
 			))
-			if err := p.ackMgr.updateQueueAckLevel(); err == ErrShardClosed {
+			if err := p.ackMgr.updateQueueAckLevel(); err == shard.ErrShardClosed {
 				// shard is no longer owned by this instance, bail out
 				go p.Stop()
 				break processorPumpLoop

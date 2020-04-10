@@ -27,6 +27,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -40,7 +41,7 @@ type (
 
 	taskAllocatorImpl struct {
 		currentClusterName string
-		shard              ShardContext
+		shard              shard.Context
 		domainCache        cache.DomainCache
 		logger             log.Logger
 
@@ -49,7 +50,7 @@ type (
 )
 
 // newTaskAllocator create a new task allocator
-func newTaskAllocator(shard ShardContext) taskAllocator {
+func newTaskAllocator(shard shard.Context) taskAllocator {
 	return &taskAllocatorImpl{
 		currentClusterName: shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              shard,

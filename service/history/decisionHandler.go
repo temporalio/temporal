@@ -38,6 +38,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -56,7 +57,7 @@ type (
 	decisionHandlerImpl struct {
 		currentClusterName    string
 		config                *config.Config
-		shard                 ShardContext
+		shard                 shard.Context
 		timeSource            clock.TimeSource
 		historyEngine         *historyEngineImpl
 		domainCache           cache.DomainCache

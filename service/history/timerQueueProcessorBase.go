@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 var (
@@ -49,7 +50,7 @@ var (
 type (
 	timerQueueProcessorBase struct {
 		scope                int
-		shard                ShardContext
+		shard                shard.Context
 		historyService       *historyEngineImpl
 		cache                *historyCache
 		executionManager     persistence.ExecutionManager
@@ -82,7 +83,7 @@ type (
 
 func newTimerQueueProcessorBase(
 	scope int,
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	timerProcessor timerProcessor,
 	queueTaskProcessor queueTaskProcessor,
@@ -309,7 +310,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 				t.config.TimerProcessorUpdateAckInterval(),
 				t.config.TimerProcessorUpdateAckIntervalJitterCoefficient(),
 			))
-			if err := t.timerQueueAckMgr.updateAckLevel(); err == ErrShardClosed {
+			if err := t.timerQueueAckMgr.updateAckLevel(); err == shard.ErrShardClosed {
 				// shard is closed, shutdown timerQProcessor and bail out
 				go t.Stop()
 				return err

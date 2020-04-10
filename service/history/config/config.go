@@ -26,6 +26,7 @@ import (
 
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/definition"
+	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/common/task"
 )
@@ -377,6 +378,16 @@ func New(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isA
 	}
 
 	return cfg
+}
+
+// NewForTest create new history service config for test
+func NewForTest() *Config {
+	dc := dynamicconfig.NewNopCollection()
+	config := New(dc, 1, config.StoreTypeCassandra, false)
+	// reduce the duration of long poll to increase test speed
+	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByDomain(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
+	config.EnableConsistentQueryByDomain = dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableConsistentQueryByDomain, true)
+	return config
 }
 
 // GetShardID return the corresponding shard ID for a given workflow ID

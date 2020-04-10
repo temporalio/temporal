@@ -37,6 +37,8 @@ import (
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -45,7 +47,7 @@ type (
 		*require.Assertions
 
 		controller         *gomock.Controller
-		mockShard          *shardContextTest
+		mockShard          *shard.TestContext
 		mockStateRebuilder *MocknDCStateRebuilder
 
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
@@ -79,16 +81,16 @@ func (s *workflowResetterSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockStateRebuilder = NewMocknDCStateRebuilder(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID:          0,
 			RangeID:          1,
 			TransferAckLevel: 0,
 		},
-		NewDynamicConfigForTest(),
+		config.NewForTest(),
 	)
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
 
 	s.workflowResetter = newWorkflowResetter(
 		s.mockShard,

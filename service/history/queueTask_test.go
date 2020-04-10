@@ -39,6 +39,8 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/common/task"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -47,7 +49,7 @@ type (
 		*require.Assertions
 
 		controller            *gomock.Controller
-		mockShard             *shardContextTest
+		mockShard             *shard.TestContext
 		mockQueueTaskExecutor *MockqueueTaskExecutor
 		mockQueueTaskInfo     *MockqueueTaskInfo
 
@@ -67,13 +69,13 @@ func (s *queueTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID: 10,
 			RangeID: 1,
 		},
-		NewDynamicConfigForTest(),
+		config.NewForTest(),
 	)
 	s.mockQueueTaskExecutor = NewMockqueueTaskExecutor(s.controller)
 	s.mockQueueTaskInfo = NewMockqueueTaskInfo(s.controller)

@@ -45,6 +45,7 @@ import (
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -53,7 +54,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockShard                *shardContextTest
+		mockShard                *shard.TestContext
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
@@ -76,7 +77,7 @@ func TestEngine3Suite(t *testing.T) {
 }
 
 func (s *engine3Suite) SetupSuite() {
-	s.config = NewDynamicConfigForTest()
+	s.config = config.NewForTest()
 }
 
 func (s *engine3Suite) TearDownSuite() {
@@ -93,7 +94,7 @@ func (s *engine3Suite) SetupTest() {
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&p.ShardInfo{
 			ShardID:          0,
@@ -103,11 +104,11 @@ func (s *engine3Suite) SetupTest() {
 		s.config,
 	)
 
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockDomainCache = s.mockShard.resource.DomainCache
-	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockDomainCache = s.mockShard.Resource.DomainCache
+	s.mockEventsCache = s.mockShard.MockEventsCache
 
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -130,7 +131,7 @@ func (s *engine3Suite) SetupTest() {
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		config:               s.config,
 		timeSource:           s.mockShard.GetTimeSource(),
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		historyEventNotifier: events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,

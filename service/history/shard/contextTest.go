@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package shard
 
 import (
 	"time"
@@ -33,23 +33,25 @@ import (
 	"github.com/uber/cadence/service/history/events"
 )
 
-type shardContextTest struct {
-	*shardContextImpl
+// TestContext is a test implementation for shard Context interface
+type TestContext struct {
+	*contextImpl
 
-	resource        *resource.Test
-	mockEventsCache *events.MockCache
+	Resource        *resource.Test
+	MockEventsCache *events.MockCache
 }
 
-var _ ShardContext = (*shardContextTest)(nil)
+var _ Context = (*TestContext)(nil)
 
-func newTestShardContext(
+// NewTestContext create a new shardContext for test
+func NewTestContext(
 	ctrl *gomock.Controller,
 	shardInfo *persistence.ShardInfo,
 	config *config.Config,
-) *shardContextTest {
+) *TestContext {
 	resource := resource.NewTest(ctrl, metrics.History)
 	eventsCache := events.NewMockCache(ctrl)
-	shard := &shardContextImpl{
+	shard := &contextImpl{
 		Resource:                  resource,
 		shardID:                   shardInfo.ShardID,
 		rangeID:                   shardInfo.RangeID,
@@ -65,15 +67,29 @@ func newTestShardContext(
 		remoteClusterCurrentTime:  make(map[string]time.Time),
 		eventsCache:               eventsCache,
 	}
-	return &shardContextTest{
-		shardContextImpl: shard,
-		resource:         resource,
-		mockEventsCache:  eventsCache,
+	return &TestContext{
+		contextImpl:     shard,
+		Resource:        resource,
+		MockEventsCache: eventsCache,
 	}
 }
 
-func (s *shardContextTest) Finish(
+// ShardInfo is a test hook for getting shard info
+func (s *TestContext) ShardInfo() *persistence.ShardInfo {
+	return s.shardInfo
+}
+
+// SetEventsCache is a test hook for setting events cache
+func (s *TestContext) SetEventsCache(
+	eventsCache events.Cache,
+) {
+	s.eventsCache = eventsCache
+	s.MockEventsCache = nil
+}
+
+// Finish checks whether expectations are met
+func (s *TestContext) Finish(
 	t mock.TestingT,
 ) {
-	s.resource.Finish(t)
+	s.Resource.Finish(t)
 }

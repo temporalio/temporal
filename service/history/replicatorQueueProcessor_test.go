@@ -38,6 +38,8 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -46,7 +48,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shardContextTest
+		mockShard           *shard.TestContext
 		mockDomainCache     *cache.MockDomainCache
 		mockMutableState    *MockmutableState
 		mockClusterMetadata *cluster.MockMetadata
@@ -80,21 +82,21 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockMutableState = NewMockmutableState(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID:          0,
 			RangeID:          1,
 			TransferAckLevel: 0,
 		},
-		NewDynamicConfigForTest(),
+		config.NewForTest(),
 	)
 
 	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockDomainCache = s.mockShard.resource.DomainCache
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockDomainCache = s.mockShard.Resource.DomainCache
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
 

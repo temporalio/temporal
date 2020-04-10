@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -43,7 +44,7 @@ type (
 
 	historyCache struct {
 		cache.Cache
-		shard            ShardContext
+		shard            shard.Context
 		executionManager persistence.ExecutionManager
 		disabled         bool
 		logger           log.Logger
@@ -59,7 +60,7 @@ const (
 	cacheReleased    int32 = 1
 )
 
-func newHistoryCache(shard ShardContext) *historyCache {
+func newHistoryCache(shard shard.Context) *historyCache {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
 	opts.InitialCapacity = config.HistoryCacheInitialSize()

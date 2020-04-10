@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/common/task"
+	"github.com/uber/cadence/service/history/config"
 )
 
 type (
@@ -64,7 +65,7 @@ func (s *taskPriorityAssignerSuite) SetupTest() {
 
 	s.testTaskProcessRPS = 10
 	dc := dynamicconfig.NewNopCollection()
-	config := NewDynamicConfigForTest()
+	config := config.NewForTest()
 	config.TaskProcessRPS = dc.GetIntPropertyFilteredByDomain(dynamicconfig.TaskProcessRPS, s.testTaskProcessRPS)
 
 	s.priorityAssigner = newTaskPriorityAssigner(

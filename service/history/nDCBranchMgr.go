@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 const (
@@ -50,7 +51,7 @@ type (
 	}
 
 	nDCBranchMgrImpl struct {
-		shard           ShardContext
+		shard           shard.Context
 		domainCache     cache.DomainCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryManager
@@ -64,7 +65,7 @@ type (
 var _ nDCBranchMgr = (*nDCBranchMgrImpl)(nil)
 
 func newNDCBranchMgr(
-	shard ShardContext,
+	shard shard.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	logger log.Logger,

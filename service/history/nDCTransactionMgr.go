@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 // NOTE: terminology
@@ -143,7 +144,7 @@ type (
 	}
 
 	nDCTransactionMgrImpl struct {
-		shard            ShardContext
+		shard            shard.Context
 		domainCache      cache.DomainCache
 		historyCache     *historyCache
 		clusterMetadata  cluster.Metadata
@@ -162,7 +163,7 @@ type (
 var _ nDCTransactionMgr = (*nDCTransactionMgrImpl)(nil)
 
 func newNDCTransactionMgr(
-	shard ShardContext,
+	shard shard.Context,
 	historyCache *historyCache,
 	eventsReapplier nDCEventsReapplier,
 	logger log.Logger,

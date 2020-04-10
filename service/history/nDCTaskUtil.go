@@ -28,11 +28,12 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 // verifyTaskVersion, will return true if failover version check is successful
 func verifyTaskVersion(
-	shard ShardContext,
+	shard shard.Context,
 	logger log.Logger,
 	domainID string,
 	version int64,

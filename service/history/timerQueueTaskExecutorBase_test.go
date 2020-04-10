@@ -36,6 +36,8 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/worker/archiver"
 )
 
@@ -45,7 +47,7 @@ type (
 		*require.Assertions
 
 		controller                   *gomock.Controller
-		mockShard                    *shardContextTest
+		mockShard                    *shard.TestContext
 		mockWorkflowExecutionContext *MockworkflowExecutionContext
 		mockMutableState             *MockmutableState
 
@@ -78,8 +80,8 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.mockWorkflowExecutionContext = NewMockworkflowExecutionContext(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
 
-	config := NewDynamicConfigForTest()
-	s.mockShard = newTestShardContext(
+	config := config.NewForTest()
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID:          0,
@@ -89,9 +91,9 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		config,
 	)
 
-	s.mockExecutionManager = s.mockShard.resource.ExecutionMgr
-	s.mockVisibilityManager = s.mockShard.resource.VisibilityMgr
-	s.mockHistoryV2Manager = s.mockShard.resource.HistoryMgr
+	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
+	s.mockVisibilityManager = s.mockShard.Resource.VisibilityMgr
+	s.mockHistoryV2Manager = s.mockShard.Resource.HistoryMgr
 	s.mockArchivalClient = &archiver.ClientMock{}
 
 	logger := s.mockShard.GetLogger()

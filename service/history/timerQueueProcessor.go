@@ -38,6 +38,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 var (
@@ -59,7 +60,7 @@ type (
 	timerQueueProcessorImpl struct {
 		isGlobalDomainEnabled  bool
 		currentClusterName     string
-		shard                  ShardContext
+		shard                  shard.Context
 		taskAllocator          taskAllocator
 		config                 *config.Config
 		metricsClient          metrics.Client
@@ -77,7 +78,7 @@ type (
 )
 
 func newTimerQueueProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	matchingClient matching.Client,
 	queueTaskProcessor queueTaskProcessor,
@@ -274,7 +275,7 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 				err := t.completeTimers()
 				if err != nil {
 					t.logger.Info("Failed to complete timers.", tag.Error(err))
-					if err == ErrShardClosed {
+					if err == shard.ErrShardClosed {
 						// shard is unloaded, timer processor should quit as well
 						go t.Stop()
 						return

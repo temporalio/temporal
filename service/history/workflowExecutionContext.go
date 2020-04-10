@@ -36,6 +36,9 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/engine"
+	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 const (
@@ -135,8 +138,8 @@ type (
 	workflowExecutionContextImpl struct {
 		domainID          string
 		workflowExecution workflow.WorkflowExecution
-		shard             ShardContext
-		engine            Engine
+		shard             shard.Context
+		engine            engine.Engine
 		executionManager  persistence.ExecutionManager
 		logger            log.Logger
 		metricsClient     metrics.Client
@@ -158,7 +161,7 @@ var (
 func newWorkflowExecutionContext(
 	domainID string,
 	execution workflow.WorkflowExecution,
-	shard ShardContext,
+	shard shard.Context,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) *workflowExecutionContextImpl {
@@ -541,7 +544,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 
 	workflowState, workflowCloseState := resetMutableState.GetWorkflowStateCloseStatus()
 	// Current branch changed and notify the watchers
-	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
+	c.engine.NotifyNewHistoryEvent(events.NewNotification(
 		c.domainID,
 		&c.workflowExecution,
 		resetMutableState.GetLastFirstEventID(),
@@ -738,7 +741,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		return err
 	}
 	workflowState, workflowCloseState := c.mutableState.GetWorkflowStateCloseStatus()
-	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
+	c.engine.NotifyNewHistoryEvent(events.NewNotification(
 		c.domainID,
 		&c.workflowExecution,
 		c.mutableState.GetLastFirstEventID(),

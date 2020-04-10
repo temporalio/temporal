@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -43,7 +44,7 @@ type (
 )
 
 func newTimerQueueActiveTaskExecutor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	queueProcessor *timerQueueActiveProcessorImpl,
 	logger log.Logger,
@@ -562,7 +563,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	now := t.shard.GetTimeSource().Now()
 	err = context.updateWorkflowExecutionAsActive(now)
 	if err != nil {
-		if isShardOwnershiptLostError(err) {
+		if shard.IsShardOwnershiptLostError(err) {
 			// Shard is stolen.  Stop timer processing to reduce duplicates
 			t.queueProcessor.Stop()
 			return err

@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -51,7 +52,7 @@ type (
 	}
 
 	stateBuilderImpl struct {
-		shard           ShardContext
+		shard           shard.Context
 		clusterMetadata cluster.Metadata
 		domainCache     cache.DomainCache
 		logger          log.Logger
@@ -69,7 +70,7 @@ const (
 var _ stateBuilder = (*stateBuilderImpl)(nil)
 
 func newStateBuilder(
-	shard ShardContext,
+	shard shard.Context,
 	logger log.Logger,
 	mutableState mutableState,
 	taskGeneratorProvider taskGeneratorProvider,

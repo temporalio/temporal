@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -38,7 +39,7 @@ type (
 		queueAckMgr
 
 		clusterName        string
-		shard              ShardContext
+		shard              shard.Context
 		config             *config.Config
 		transferTaskFilter taskFilter
 		logger             log.Logger
@@ -49,7 +50,7 @@ type (
 
 func newTransferQueueStandbyProcessor(
 	clusterName string,
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,

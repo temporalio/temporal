@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -57,13 +58,13 @@ type (
 
 	replicationDLQHandlerImpl struct {
 		replicationTaskExecutor replicationTaskExecutor
-		shard                   ShardContext
+		shard                   shard.Context
 		logger                  log.Logger
 	}
 )
 
 func newReplicationDLQHandler(
-	shard ShardContext,
+	shard shard.Context,
 	replicationTaskExecutor replicationTaskExecutor,
 ) replicationDLQHandler {
 

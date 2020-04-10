@@ -39,12 +39,12 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/engine"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -53,9 +53,8 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		mockResource            *resource.Test
-		mockShard               ShardContext
-		mockEngine              *MockEngine
+		mockShard               *shard.TestContext
+		mockEngine              *engine.MockEngine
 		config                  *config.Config
 		historyClient           *historyservicetest.MockClient
 		replicationTaskFetcher  *MockReplicationTaskFetcher
@@ -86,29 +85,27 @@ func (s *replicationTaskProcessorSuite) TearDownSuite() {
 
 func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.controller = gomock.NewController(s.T())
 
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
-	s.mockDomainCache = s.mockResource.DomainCache
-	s.mockClientBean = s.mockResource.ClientBean
-	s.adminClient = s.mockResource.RemoteAdminClient
-	s.clusterMetadata = s.mockResource.ClusterMetadata
-	s.executionManager = s.mockResource.ExecutionMgr
+	s.controller = gomock.NewController(s.T())
+	s.mockShard = shard.NewTestContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          0,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		s.config,
+	)
+
+	s.mockDomainCache = s.mockShard.Resource.DomainCache
+	s.mockClientBean = s.mockShard.Resource.ClientBean
+	s.adminClient = s.mockShard.Resource.RemoteAdminClient
+	s.clusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.executionManager = s.mockShard.Resource.ExecutionMgr
 	s.replicationTaskExecutor = NewMockreplicationTaskExecutor(s.controller)
-	logger := log.NewNoop()
-	s.mockShard = &shardContextImpl{
-		shardID:                   0,
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		config:                    NewDynamicConfigForTest(),
-		logger:                    logger,
-		remoteClusterCurrentTime:  make(map[string]time.Time),
-		executionManager:          s.executionManager,
-	}
-	s.mockEngine = NewMockEngine(s.controller)
-	s.config = NewDynamicConfigForTest()
+
+	s.mockEngine = engine.NewMockEngine(s.controller)
+	s.config = config.NewForTest()
 	s.historyClient = historyservicetest.NewMockClient(s.controller)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.requestChan = make(chan *request, 10)
@@ -131,7 +128,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 
 func (s *replicationTaskProcessorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *replicationTaskProcessorSuite) TestSendFetchMessageRequest() {
@@ -220,7 +217,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 			Version: common.Int64Ptr(1),
 		},
 	}
-	serializer := s.mockResource.GetPayloadSerializer()
+	serializer := s.mockShard.GetPayloadSerializer()
 	data, err := serializer.SerializeBatchEvents(events, common.EncodingTypeThriftRW)
 	s.NoError(err)
 	task := &replicator.ReplicationTask{

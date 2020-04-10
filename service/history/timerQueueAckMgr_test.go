@@ -35,6 +35,8 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -43,7 +45,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shardContextTest
+		mockShard           *shard.TestContext
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *mocks.ExecutionManager
@@ -59,7 +61,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shardContextTest
+		mockShard           *shard.TestContext
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *mocks.ExecutionManager
@@ -94,11 +96,11 @@ func (s *timerQueueAckMgrSuite) TearDownSuite() {
 func (s *timerQueueAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	config := NewDynamicConfigForTest()
+	config := config.NewForTest()
 	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID: 0,
@@ -111,9 +113,9 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 		config,
 	)
 
-	s.mockShardMgr = s.mockShard.resource.ShardMgr
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockShardMgr = s.mockShard.Resource.ShardMgr
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -527,11 +529,11 @@ func (s *timerQueueFailoverAckMgrSuite) TearDownSuite() {
 func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	config := NewDynamicConfigForTest()
+	config := config.NewForTest()
 	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID: 0,
@@ -545,9 +547,9 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 		config,
 	)
 
-	s.mockShardMgr = s.mockShard.resource.ShardMgr
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockShardMgr = s.mockShard.Resource.ShardMgr
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()

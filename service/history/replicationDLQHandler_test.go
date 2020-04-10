@@ -23,7 +23,6 @@ package history
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -36,12 +35,10 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -50,8 +47,7 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		mockResource           *resource.Test
-		mockShard              ShardContext
+		mockShard              *shard.TestContext
 		config                 *config.Config
 		mockClientBean         *client.MockBean
 		adminClient            *adminservicetest.MockClient
@@ -79,30 +75,26 @@ func (s *replicationDLQHandlerSuite) TearDownSuite() {
 
 func (s *replicationDLQHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.controller = gomock.NewController(s.T())
 
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
-	s.mockClientBean = s.mockResource.ClientBean
-	s.adminClient = s.mockResource.RemoteAdminClient
-	s.clusterMetadata = s.mockResource.ClusterMetadata
-	s.executionManager = s.mockResource.ExecutionMgr
-	s.shardManager = s.mockResource.ShardMgr
-	logger := log.NewNoop()
-	s.mockShard = &shardContextImpl{
-		shardID:  0,
-		Resource: s.mockResource,
-		shardInfo: &persistence.ShardInfo{
+	s.config = config.NewForTest()
+
+	s.controller = gomock.NewController(s.T())
+	s.mockShard = shard.NewTestContext(
+		s.controller,
+		&persistence.ShardInfo{
 			ShardID:                0,
 			RangeID:                1,
-			ReplicationDLQAckLevel: map[string]int64{"test": -1}},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		config:                    NewDynamicConfigForTest(),
-		logger:                    logger,
-		remoteClusterCurrentTime:  make(map[string]time.Time),
-		executionManager:          s.executionManager,
-	}
-	s.config = NewDynamicConfigForTest()
+			ReplicationDLQAckLevel: map[string]int64{"test": -1},
+		},
+		s.config,
+	)
+
+	s.mockClientBean = s.mockShard.Resource.ClientBean
+	s.adminClient = s.mockShard.Resource.RemoteAdminClient
+	s.clusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.executionManager = s.mockShard.Resource.ExecutionMgr
+	s.shardManager = s.mockShard.Resource.ShardMgr
+
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
 	s.replicatorTaskExecutor = NewMockreplicationTaskExecutor(s.controller)
 
@@ -114,7 +106,7 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 
 func (s *replicationDLQHandlerSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {

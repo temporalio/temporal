@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package events
 
 import (
 	"sync/atomic"
@@ -39,18 +39,27 @@ const (
 )
 
 type (
-	historyEventNotification struct {
-		id                     definition.WorkflowIdentifier
-		lastFirstEventID       int64
-		nextEventID            int64
-		previousStartedEventID int64
-		timestamp              time.Time
-		currentBranchToken     []byte
-		workflowState          int
-		workflowCloseState     int
+	// Notifier is a pub-sub for sending and receiving notifications on new history events
+	Notifier interface {
+		common.Daemon
+		NotifyNewHistoryEvent(event *Notification)
+		WatchHistoryEvent(identifier definition.WorkflowIdentifier) (string, chan *Notification, error)
+		UnwatchHistoryEvent(identifier definition.WorkflowIdentifier, subscriberID string) error
 	}
 
-	historyEventNotifierImpl struct {
+	// Notification is the notification for new history events
+	Notification struct {
+		ID                     definition.WorkflowIdentifier
+		LastFirstEventID       int64
+		NextEventID            int64
+		PreviousStartedEventID int64
+		Timestamp              time.Time
+		CurrentBranchToken     []byte
+		WorkflowState          int
+		WorkflowCloseState     int
+	}
+
+	notifierImpl struct {
 		timeSource clock.TimeSource
 		metrics    metrics.Client
 		// internal status indicator
@@ -58,11 +67,11 @@ type (
 		// stop signal channel
 		closeChan chan bool
 		// this channel will never close
-		eventsChan chan *historyEventNotification
+		eventsChan chan *Notification
 		// function which calculate the shard ID from given workflow ID
 		workflowIDToShardID func(string) int
 
-		// concurrent map with key workflowIdentifier, value map[string]chan *historyEventNotification.
+		// concurrent map with key workflowIdentifier, value map[string]chan *Notification.
 		// the reason for the second map being non thread safe:
 		// 1. expected number of subscriber per workflow is low, i.e. < 5
 		// 2. update to this map is already guarded by GetAndDo API provided by ConcurrentTxMap
@@ -70,9 +79,10 @@ type (
 	}
 )
 
-var _ historyEventNotifier = (*historyEventNotifierImpl)(nil)
+var _ Notifier = (*notifierImpl)(nil)
 
-func newHistoryEventNotification(
+// NewNotification creates a new history event notification
+func NewNotification(
 	domainID string,
 	workflowExecution *gen.WorkflowExecution,
 	lastFirstEventID int64,
@@ -81,42 +91,43 @@ func newHistoryEventNotification(
 	currentBranchToken []byte,
 	workflowState int,
 	workflowCloseState int,
-) *historyEventNotification {
+) *Notification {
 
-	return &historyEventNotification{
-		id: definition.NewWorkflowIdentifier(
+	return &Notification{
+		ID: definition.NewWorkflowIdentifier(
 			domainID,
 			workflowExecution.GetWorkflowId(),
 			workflowExecution.GetRunId(),
 		),
-		lastFirstEventID:       lastFirstEventID,
-		nextEventID:            nextEventID,
-		previousStartedEventID: previousStartedEventID,
-		currentBranchToken:     currentBranchToken,
-		workflowState:          workflowState,
-		workflowCloseState:     workflowCloseState,
+		LastFirstEventID:       lastFirstEventID,
+		NextEventID:            nextEventID,
+		PreviousStartedEventID: previousStartedEventID,
+		CurrentBranchToken:     currentBranchToken,
+		WorkflowState:          workflowState,
+		WorkflowCloseState:     workflowCloseState,
 	}
 }
 
-func newHistoryEventNotifier(
+// NewNotifier creates a new history event notifier
+func NewNotifier(
 	timeSource clock.TimeSource,
 	metrics metrics.Client,
 	workflowIDToShardID func(string) int,
-) *historyEventNotifierImpl {
+) Notifier {
 
 	hashFn := func(key interface{}) uint32 {
-		notification, ok := key.(historyEventNotification)
+		notification, ok := key.(Notification)
 		if !ok {
 			return 0
 		}
-		return uint32(workflowIDToShardID(notification.id.WorkflowID))
+		return uint32(workflowIDToShardID(notification.ID.WorkflowID))
 	}
-	return &historyEventNotifierImpl{
+	return &notifierImpl{
 		timeSource: timeSource,
 		metrics:    metrics,
 		status:     common.DaemonStatusInitialized,
 		closeChan:  make(chan bool),
-		eventsChan: make(chan *historyEventNotification, eventsChanSize),
+		eventsChan: make(chan *Notification, eventsChanSize),
 
 		workflowIDToShardID: workflowIDToShardID,
 
@@ -124,17 +135,17 @@ func newHistoryEventNotifier(
 	}
 }
 
-func (notifier *historyEventNotifierImpl) WatchHistoryEvent(
-	identifier definition.WorkflowIdentifier) (string, chan *historyEventNotification, error) {
+func (notifier *notifierImpl) WatchHistoryEvent(
+	identifier definition.WorkflowIdentifier) (string, chan *Notification, error) {
 
-	channel := make(chan *historyEventNotification, 1)
+	channel := make(chan *Notification, 1)
 	subscriberID := uuid.New()
-	subscribers := map[string]chan *historyEventNotification{
+	subscribers := map[string]chan *Notification{
 		subscriberID: channel,
 	}
 
 	_, _, err := notifier.eventsPubsubs.PutOrDo(identifier, subscribers, func(key interface{}, value interface{}) error {
-		subscribers := value.(map[string]chan *historyEventNotification)
+		subscribers := value.(map[string]chan *Notification)
 
 		if _, ok := subscribers[subscriberID]; ok {
 			// UUID collision
@@ -153,12 +164,12 @@ func (notifier *historyEventNotifierImpl) WatchHistoryEvent(
 	return subscriberID, channel, nil
 }
 
-func (notifier *historyEventNotifierImpl) UnwatchHistoryEvent(
+func (notifier *notifierImpl) UnwatchHistoryEvent(
 	identifier definition.WorkflowIdentifier, subscriberID string) error {
 
 	success := true
 	notifier.eventsPubsubs.RemoveIf(identifier, func(key interface{}, value interface{}) bool {
-		subscribers := value.(map[string]chan *historyEventNotification)
+		subscribers := value.(map[string]chan *Notification)
 
 		if _, ok := subscribers[subscriberID]; !ok {
 			// cannot find the subscribe ID, which means there is a bug
@@ -180,13 +191,13 @@ func (notifier *historyEventNotifierImpl) UnwatchHistoryEvent(
 	return nil
 }
 
-func (notifier *historyEventNotifierImpl) dispatchHistoryEventNotification(event *historyEventNotification) {
-	identifier := event.id
+func (notifier *notifierImpl) dispatchHistoryEventNotification(event *Notification) {
+	identifier := event.ID
 
 	timer := notifier.metrics.StartTimer(metrics.HistoryEventNotificationScope, metrics.HistoryEventNotificationFanoutLatency)
 	defer timer.Stop()
 	notifier.eventsPubsubs.GetAndDo(identifier, func(key interface{}, value interface{}) error { //nolint:errcheck
-		subscribers := value.(map[string]chan *historyEventNotification)
+		subscribers := value.(map[string]chan *Notification)
 
 		for _, channel := range subscribers {
 			select {
@@ -200,9 +211,9 @@ func (notifier *historyEventNotifierImpl) dispatchHistoryEventNotification(event
 	})
 }
 
-func (notifier *historyEventNotifierImpl) enqueueHistoryEventNotification(event *historyEventNotification) {
+func (notifier *notifierImpl) enqueueHistoryEventNotification(event *Notification) {
 	// set the timestamp just before enqueuing the event
-	event.timestamp = notifier.timeSource.Now()
+	event.Timestamp = notifier.timeSource.Now()
 	select {
 	case notifier.eventsChan <- event:
 	default:
@@ -213,7 +224,7 @@ func (notifier *historyEventNotifierImpl) enqueueHistoryEventNotification(event 
 	}
 }
 
-func (notifier *historyEventNotifierImpl) dequeueHistoryEventNotifications() {
+func (notifier *notifierImpl) dequeueHistoryEventNotifications() {
 	for {
 		// send out metrics about the current number of messages in flight
 		notifier.metrics.UpdateGauge(metrics.HistoryEventNotificationScope,
@@ -221,7 +232,7 @@ func (notifier *historyEventNotifierImpl) dequeueHistoryEventNotifications() {
 		select {
 		case event := <-notifier.eventsChan:
 			// send out metrics about message processing delay
-			timeelapsed := time.Since(event.timestamp)
+			timeelapsed := time.Since(event.Timestamp)
 			notifier.metrics.RecordTimer(metrics.HistoryEventNotificationScope,
 				metrics.HistoryEventNotificationQueueingLatency, timeelapsed)
 
@@ -233,20 +244,20 @@ func (notifier *historyEventNotifierImpl) dequeueHistoryEventNotifications() {
 	}
 }
 
-func (notifier *historyEventNotifierImpl) Start() {
+func (notifier *notifierImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&notifier.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 	go notifier.dequeueHistoryEventNotifications()
 }
 
-func (notifier *historyEventNotifierImpl) Stop() {
+func (notifier *notifierImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&notifier.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 	close(notifier.closeChan)
 }
 
-func (notifier *historyEventNotifierImpl) NotifyNewHistoryEvent(event *historyEventNotification) {
+func (notifier *notifierImpl) NotifyNewHistoryEvent(event *Notification) {
 	notifier.enqueueHistoryEventNotification(event)
 }

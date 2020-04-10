@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -45,7 +46,7 @@ type (
 	}
 
 	conflictResolverImpl struct {
-		shard           ShardContext
+		shard           shard.Context
 		clusterMetadata cluster.Metadata
 		context         workflowExecutionContext
 		historyV2Mgr    persistence.HistoryManager
@@ -53,7 +54,7 @@ type (
 	}
 )
 
-func newConflictResolver(shard ShardContext, context workflowExecutionContext, historyV2Mgr persistence.HistoryManager,
+func newConflictResolver(shard shard.Context, context workflowExecutionContext, historyV2Mgr persistence.HistoryManager,
 	logger log.Logger) *conflictResolverImpl {
 
 	return &conflictResolverImpl{

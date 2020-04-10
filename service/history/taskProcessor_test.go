@@ -35,6 +35,8 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -43,7 +45,7 @@ type (
 		*require.Assertions
 
 		controller *gomock.Controller
-		mockShard  *shardContextTest
+		mockShard  *shard.TestContext
 
 		mockProcessor *MockTimerProcessor
 
@@ -73,14 +75,14 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID:          0,
 			RangeID:          1,
 			TransferAckLevel: 0,
 		},
-		NewDynamicConfigForTest(),
+		config.NewForTest(),
 	)
 
 	s.mockProcessor = &MockTimerProcessor{}
@@ -131,7 +133,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr()
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(1)
+	s.mockShard.Resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(1)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
@@ -147,7 +149,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(1)
+	s.mockShard.Resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(1)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
@@ -162,7 +164,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
 	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(1)
+	s.mockShard.Resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(1)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
@@ -179,7 +181,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessErrNoErr() 
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, err).Once()
 	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
 	s.mockProcessor.On("complete", task).Once()
-	s.mockShard.resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(2)
+	s.mockShard.Resource.DomainCache.EXPECT().GetDomainName(gomock.Any()).Return(testDomainName, nil).Times(2)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,

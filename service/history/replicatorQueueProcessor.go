@@ -35,12 +35,13 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
 	replicatorQueueProcessorImpl struct {
 		currentClusterName    string
-		shard                 ShardContext
+		shard                 shard.Context
 		historyCache          *historyCache
 		replicationTaskFilter taskFilter
 		executionMgr          persistence.ExecutionManager
@@ -66,7 +67,7 @@ var (
 )
 
 func newReplicatorQueueProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyCache *historyCache,
 	replicator messaging.Producer,
 	executionMgr persistence.ExecutionManager,

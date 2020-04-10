@@ -34,6 +34,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	task "github.com/uber/cadence/common/task"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 // MockqueueTaskInfo is a mock of queueTaskInfo interface
@@ -399,10 +400,10 @@ func (mr *MockqueueTaskMockRecorder) GetQueueType() *gomock.Call {
 }
 
 // GetShard mocks base method
-func (m *MockqueueTask) GetShard() ShardContext {
+func (m *MockqueueTask) GetShard() shard.Context {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetShard")
-	ret0, _ := ret[0].(ShardContext)
+	ret0, _ := ret[0].(shard.Context)
 	return ret0
 }
 
@@ -497,7 +498,7 @@ func (mr *MockqueueTaskProcessorMockRecorder) Stop() *gomock.Call {
 }
 
 // StopShardProcessor mocks base method
-func (m *MockqueueTaskProcessor) StopShardProcessor(arg0 ShardContext) {
+func (m *MockqueueTaskProcessor) StopShardProcessor(arg0 shard.Context) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "StopShardProcessor", arg0)
 }

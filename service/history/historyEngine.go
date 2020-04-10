@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination historyEngine_mock.go
-
 package history
 
 import (
@@ -56,6 +54,9 @@ import (
 	sconfig "github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/engine"
+	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/shard"
 	warchiver "github.com/uber/cadence/service/worker/archiver"
 )
 
@@ -69,55 +70,9 @@ const (
 )
 
 type (
-	// Engine represents an interface for managing workflow execution history.
-	Engine interface {
-		common.Daemon
-
-		StartWorkflowExecution(ctx ctx.Context, request *h.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error)
-		GetMutableState(ctx ctx.Context, request *h.GetMutableStateRequest) (*h.GetMutableStateResponse, error)
-		PollMutableState(ctx ctx.Context, request *h.PollMutableStateRequest) (*h.PollMutableStateResponse, error)
-		DescribeMutableState(ctx ctx.Context, request *h.DescribeMutableStateRequest) (*h.DescribeMutableStateResponse, error)
-		ResetStickyTaskList(ctx ctx.Context, resetRequest *h.ResetStickyTaskListRequest) (*h.ResetStickyTaskListResponse, error)
-		DescribeWorkflowExecution(ctx ctx.Context, request *h.DescribeWorkflowExecutionRequest) (*workflow.DescribeWorkflowExecutionResponse, error)
-		RecordDecisionTaskStarted(ctx ctx.Context, request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
-		RecordActivityTaskStarted(ctx ctx.Context, request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error)
-		RespondDecisionTaskCompleted(ctx ctx.Context, request *h.RespondDecisionTaskCompletedRequest) (*h.RespondDecisionTaskCompletedResponse, error)
-		RespondDecisionTaskFailed(ctx ctx.Context, request *h.RespondDecisionTaskFailedRequest) error
-		RespondActivityTaskCompleted(ctx ctx.Context, request *h.RespondActivityTaskCompletedRequest) error
-		RespondActivityTaskFailed(ctx ctx.Context, request *h.RespondActivityTaskFailedRequest) error
-		RespondActivityTaskCanceled(ctx ctx.Context, request *h.RespondActivityTaskCanceledRequest) error
-		RecordActivityTaskHeartbeat(ctx ctx.Context, request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
-		RequestCancelWorkflowExecution(ctx ctx.Context, request *h.RequestCancelWorkflowExecutionRequest) error
-		SignalWorkflowExecution(ctx ctx.Context, request *h.SignalWorkflowExecutionRequest) error
-		SignalWithStartWorkflowExecution(ctx ctx.Context, request *h.SignalWithStartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error)
-		RemoveSignalMutableState(ctx ctx.Context, request *h.RemoveSignalMutableStateRequest) error
-		TerminateWorkflowExecution(ctx ctx.Context, request *h.TerminateWorkflowExecutionRequest) error
-		ResetWorkflowExecution(ctx ctx.Context, request *h.ResetWorkflowExecutionRequest) (*workflow.ResetWorkflowExecutionResponse, error)
-		ScheduleDecisionTask(ctx ctx.Context, request *h.ScheduleDecisionTaskRequest) error
-		RecordChildExecutionCompleted(ctx ctx.Context, request *h.RecordChildExecutionCompletedRequest) error
-		ReplicateEvents(ctx ctx.Context, request *h.ReplicateEventsRequest) error
-		ReplicateRawEvents(ctx ctx.Context, request *h.ReplicateRawEventsRequest) error
-		ReplicateEventsV2(ctx ctx.Context, request *h.ReplicateEventsV2Request) error
-		SyncShardStatus(ctx ctx.Context, request *h.SyncShardStatusRequest) error
-		SyncActivity(ctx ctx.Context, request *h.SyncActivityRequest) error
-		GetReplicationMessages(ctx ctx.Context, pollingCluster string, lastReadMessageID int64) (*r.ReplicationMessages, error)
-		GetDLQReplicationMessages(ctx ctx.Context, taskInfos []*r.ReplicationTaskInfo) ([]*r.ReplicationTask, error)
-		QueryWorkflow(ctx ctx.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
-		ReapplyEvents(ctx ctx.Context, domainUUID string, workflowID string, runID string, events []*workflow.HistoryEvent) error
-		ReadDLQMessages(ctx ctx.Context, messagesRequest *r.ReadDLQMessagesRequest) (*r.ReadDLQMessagesResponse, error)
-		PurgeDLQMessages(ctx ctx.Context, messagesRequest *r.PurgeDLQMessagesRequest) error
-		MergeDLQMessages(ctx ctx.Context, messagesRequest *r.MergeDLQMessagesRequest) (*r.MergeDLQMessagesResponse, error)
-		RefreshWorkflowTasks(ctx ctx.Context, domainUUID string, execution workflow.WorkflowExecution) error
-
-		NotifyNewHistoryEvent(event *historyEventNotification)
-		NotifyNewTransferTasks(tasks []persistence.Task)
-		NotifyNewReplicationTasks(tasks []persistence.Task)
-		NotifyNewTimerTasks(tasks []persistence.Task)
-	}
-
 	historyEngineImpl struct {
 		currentClusterName        string
-		shard                     ShardContext
+		shard                     shard.Context
 		timeSource                clock.TimeSource
 		decisionHandler           decisionHandler
 		clusterMetadata           cluster.Metadata
@@ -130,7 +85,7 @@ type (
 		nDCReplicator             nDCHistoryReplicator
 		nDCActivityReplicator     nDCActivityReplicator
 		replicatorProcessor       ReplicatorQueueProcessor
-		historyEventNotifier      historyEventNotifier
+		historyEventNotifier      events.Notifier
 		tokenSerializer           common.TaskTokenSerializer
 		historyCache              *historyCache
 		metricsClient             metrics.Client
@@ -151,7 +106,7 @@ type (
 	}
 )
 
-var _ Engine = (*historyEngineImpl)(nil)
+var _ engine.Engine = (*historyEngineImpl)(nil)
 
 var (
 	// ErrTaskDiscarded is the error indicating that the timer / transfer task is pending for too long and discarded.
@@ -180,8 +135,8 @@ var (
 	ErrCancellationAlreadyRequested = &workflow.CancellationAlreadyRequestedError{Message: "cancellation already requested for this workflow execution"}
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
 	ErrSignalsLimitExceeded = &workflow.LimitExceededError{Message: "exceeded workflow execution limit for signal events"}
-	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
-	ErrEventsAterWorkflowFinish = &workflow.InternalServiceError{Message: "error validating last event being workflow finish event"}
+	// ErrEventsAfterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
+	ErrEventsAfterWorkflowFinish = &workflow.InternalServiceError{Message: "error validating last event being workflow finish event"}
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
 	ErrQueryEnteredInvalidState = &workflow.BadRequestError{Message: "query entered invalid state, this should be impossible"}
 	// ErrQueryWorkflowBeforeFirstDecision is error indicating that query was attempted before first decision task completed
@@ -203,18 +158,18 @@ var (
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
-	shard ShardContext,
+	shard shard.Context,
 	visibilityMgr persistence.VisibilityManager,
 	matching matching.Client,
 	historyClient hc.Client,
 	publicClient workflowserviceclient.Interface,
-	historyEventNotifier historyEventNotifier,
+	historyEventNotifier events.Notifier,
 	publisher messaging.Producer,
 	config *config.Config,
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matching.Client,
 	queueTaskProcessor queueTaskProcessor,
-) Engine {
+) engine.Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
@@ -399,7 +354,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 	// Domain change notification follows the following steps, order matters
 	// 1. lock all task processing.
 	// 2. domain changes visible to everyone (Note: lock of task processing prevents task processing logic seeing the domain changes).
-	// 3. failover min and max task levels are calaulated, then update to shard.
+	// 3. failover min and max task levels are calculated, then update to shard.
 	// 4. failover start & task processing unlock & shard domain version notification update. (order does not matter for this discussion)
 	//
 	// The above guarantees that task created during the failover will be processed.
@@ -431,7 +386,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 		},
 		func(prevDomains []*cache.DomainCacheEntry, nextDomains []*cache.DomainCacheEntry) {
 			defer func() {
-				e.txProcessor.UnlockTaskPrrocessing()
+				e.txProcessor.UnlockTaskProcessing()
 				e.timerProcessor.UnlockTaskProcessing()
 			}()
 
@@ -790,16 +745,16 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		for {
 			select {
 			case event := <-channel:
-				response.LastFirstEventId = common.Int64Ptr(event.lastFirstEventID)
-				response.NextEventId = common.Int64Ptr(event.nextEventID)
-				response.IsWorkflowRunning = common.BoolPtr(event.workflowCloseState == persistence.WorkflowCloseStatusNone)
-				response.PreviousStartedEventId = common.Int64Ptr(event.previousStartedEventID)
-				response.WorkflowState = common.Int32Ptr(int32(event.workflowState))
-				response.WorkflowCloseState = common.Int32Ptr(int32(event.workflowCloseState))
-				if !bytes.Equal(request.CurrentBranchToken, event.currentBranchToken) {
+				response.LastFirstEventId = common.Int64Ptr(event.LastFirstEventID)
+				response.NextEventId = common.Int64Ptr(event.NextEventID)
+				response.IsWorkflowRunning = common.BoolPtr(event.WorkflowCloseState == persistence.WorkflowCloseStatusNone)
+				response.PreviousStartedEventId = common.Int64Ptr(event.PreviousStartedEventID)
+				response.WorkflowState = common.Int32Ptr(int32(event.WorkflowState))
+				response.WorkflowCloseState = common.Int32Ptr(int32(event.WorkflowCloseState))
+				if !bytes.Equal(request.CurrentBranchToken, event.CurrentBranchToken) {
 					return nil, &workflow.CurrentBranchChangedError{
 						Message:            "Current branch token and request branch token doesn't match.",
-						CurrentBranchToken: event.currentBranchToken}
+						CurrentBranchToken: event.CurrentBranchToken}
 				}
 				if expectedNextEventID < response.GetNextEventId() || !response.GetIsWorkflowRunning() {
 					return response, nil
@@ -2594,7 +2549,7 @@ func (e *historyEngineImpl) failDecision(
 }
 
 func (e *historyEngineImpl) NotifyNewHistoryEvent(
-	event *historyEventNotification,
+	event *events.Notification,
 ) {
 
 	e.historyEventNotifier.NotifyNewHistoryEvent(event)
@@ -2709,7 +2664,7 @@ func (e *historyEngineImpl) getActiveDomainEntry(
 }
 
 func getActiveDomainEntryFromShard(
-	shard ShardContext,
+	shard shard.Context,
 	domainUUID *string,
 ) (*cache.DomainCacheEntry, error) {
 

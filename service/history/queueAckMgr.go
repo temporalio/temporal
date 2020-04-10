@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -40,7 +41,7 @@ type (
 	// for the shard when all preceding tasks are acknowledged.
 	queueAckMgrImpl struct {
 		isFailover    bool
-		shard         ShardContext
+		shard         shard.Context
 		options       *QueueProcessorOptions
 		processor     processor
 		logger        log.Logger
@@ -59,7 +60,7 @@ const (
 	warnPendingTasks = 2000
 )
 
-func newQueueAckMgr(shard ShardContext, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
+func newQueueAckMgr(shard shard.Context, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
 
 	return &queueAckMgrImpl{
 		isFailover:       false,
@@ -75,7 +76,7 @@ func newQueueAckMgr(shard ShardContext, options *QueueProcessorOptions, processo
 	}
 }
 
-func newQueueFailoverAckMgr(shard ShardContext, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
+func newQueueFailoverAckMgr(shard shard.Context, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
 
 	return &queueAckMgrImpl{
 		isFailover:       true,

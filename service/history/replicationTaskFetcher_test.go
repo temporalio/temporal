@@ -69,7 +69,7 @@ func (s *replicationTaskFetcherSuite) SetupTest() {
 	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.frontendClient = s.mockResource.RemoteAdminClient
 	logger := log.NewNoop()
-	s.config = NewDynamicConfigForTest()
+	s.config = config.NewForTest()
 
 	s.replicationTaskFetcher = newReplicationTaskFetcher(
 		logger,

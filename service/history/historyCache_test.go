@@ -34,6 +34,8 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -42,7 +44,7 @@ type (
 		*require.Assertions
 
 		controller *gomock.Controller
-		mockShard  *shardContextTest
+		mockShard  *shard.TestContext
 
 		cache *historyCache
 	}
@@ -64,17 +66,17 @@ func (s *historyCacheSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID:          0,
 			RangeID:          1,
 			TransferAckLevel: 0,
 		},
-		NewDynamicConfigForTest(),
+		config.NewForTest(),
 	)
 
-	s.mockShard.resource.ClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false).AnyTimes()
 }
 
 func (s *historyCacheSuite) TearDownTest() {

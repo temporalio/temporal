@@ -43,7 +43,9 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
+	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -52,7 +54,7 @@ type (
 		*require.Assertions
 
 		controller             *gomock.Controller
-		mockShard              *shardContextTest
+		mockShard              *shard.TestContext
 		mockDomainCache        *cache.MockDomainCache
 		mockClusterMetadata    *cluster.MockMetadata
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
@@ -90,7 +92,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupSuite() {
 func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	config := NewDynamicConfigForTest()
+	config := config.NewForTest()
 	s.domainID = testDomainID
 	s.domainEntry = testGlobalDomainEntry
 	s.version = s.domainEntry.GetFailoverVersion()
@@ -103,7 +105,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockNDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			RangeID:          1,
@@ -111,23 +113,23 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		},
 		config,
 	)
-	s.mockShard.eventsCache = events.NewCache(
+	s.mockShard.SetEventsCache(events.NewCache(
 		s.mockShard.GetShardID(),
 		s.mockShard.GetHistoryManager(),
 		s.mockShard.GetConfig(),
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),
-	)
-	s.mockShard.resource.TimeSource = s.timeSource
+	))
+	s.mockShard.Resource.TimeSource = s.timeSource
 
 	s.mockHistoryRereplicator = &xdc.MockHistoryRereplicator{}
-	s.mockMatchingClient = s.mockShard.resource.MatchingClient
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockVisibilityMgr = s.mockShard.resource.VisibilityMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockArchivalMetadata = s.mockShard.resource.ArchivalMetadata
-	s.mockArchiverProvider = s.mockShard.resource.ArchiverProvider
-	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockVisibilityMgr = s.mockShard.Resource.VisibilityMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockArchivalMetadata = s.mockShard.Resource.ArchivalMetadata
+	s.mockArchiverProvider = s.mockShard.Resource.ArchiverProvider
+	s.mockDomainCache = s.mockShard.Resource.DomainCache
 	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(testGlobalDomainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomain(testDomainName).Return(testGlobalDomainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomainByID(testTargetDomainID).Return(testGlobalTargetDomainEntry, nil).AnyTimes()

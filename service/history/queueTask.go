@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/common/task"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -41,7 +42,7 @@ type (
 		sync.Mutex
 		queueTaskInfo
 
-		shard         ShardContext
+		shard         shard.Context
 		state         task.State
 		priority      int
 		attempt       int
@@ -76,7 +77,7 @@ type (
 )
 
 func newTimerQueueTask(
-	shard ShardContext,
+	shard shard.Context,
 	taskInfo queueTaskInfo,
 	scope metrics.Scope,
 	logger log.Logger,
@@ -104,7 +105,7 @@ func newTimerQueueTask(
 }
 
 func newTransferQueueTask(
-	shard ShardContext,
+	shard shard.Context,
 	taskInfo queueTaskInfo,
 	scope metrics.Scope,
 	logger log.Logger,
@@ -132,7 +133,7 @@ func newTransferQueueTask(
 }
 
 func newQueueTaskBase(
-	shard ShardContext,
+	shard shard.Context,
 	queueTaskInfo queueTaskInfo,
 	scope metrics.Scope,
 	logger log.Logger,
@@ -323,6 +324,6 @@ func (t *queueTaskBase) SetPriority(
 	t.priority = priority
 }
 
-func (t *queueTaskBase) GetShard() ShardContext {
+func (t *queueTaskBase) GetShard() shard.Context {
 	return t.shard
 }

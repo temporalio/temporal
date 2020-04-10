@@ -39,13 +39,14 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
 	conflictResolverProvider func(context workflowExecutionContext, logger log.Logger) conflictResolver
 
 	historyReplicator struct {
-		shard             ShardContext
+		shard             shard.Context
 		timeSource        clock.TimeSource
 		historyEngine     *historyEngineImpl
 		historyCache      *historyCache
@@ -107,7 +108,7 @@ var (
 )
 
 func newHistoryReplicator(
-	shard ShardContext,
+	shard shard.Context,
 	timeSource clock.TimeSource,
 	historyEngine *historyEngineImpl,
 	historyCache *historyCache,
@@ -1357,7 +1358,7 @@ func newRetryTaskErrorWithHint(
 }
 
 func notify(
-	shard ShardContext,
+	shard shard.Context,
 	clusterName string,
 	now time.Time,
 ) {

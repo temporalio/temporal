@@ -41,7 +41,9 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -50,7 +52,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockShard                *shardContextTest
+		mockShard                *shard.TestContext
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
@@ -90,21 +92,21 @@ func (s *conflictResolverSuite) SetupTest() {
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID:          10,
 			RangeID:          1,
 			TransferAckLevel: 0,
 		},
-		NewDynamicConfigForTest(),
+		config.NewForTest(),
 	)
 
-	s.mockDomainCache = s.mockShard.resource.DomainCache
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockDomainCache = s.mockShard.Resource.DomainCache
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -113,7 +115,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	h := &historyEngineImpl{
 		shard:                s.mockShard,
 		clusterMetadata:      s.mockClusterMetadata,
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
+		historyEventNotifier: events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
@@ -134,7 +136,7 @@ func (s *conflictResolverSuite) TearDownTest() {
 }
 
 func (s *conflictResolverSuite) TestReset() {
-	s.mockShard.config.AdvancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeDual)
+	s.mockShard.GetConfig().AdvancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeDual)
 
 	prevRunID := uuid.New()
 	prevLastWriteVersion := int64(123)
@@ -225,7 +227,7 @@ func (s *conflictResolverSuite) TestReset() {
 		input.ResetWorkflowSnapshot.TransferTasks = nil
 
 		s.Equal(&persistence.ConflictResolveWorkflowExecutionRequest{
-			RangeID: s.mockShard.shardInfo.RangeID,
+			RangeID: s.mockShard.ShardInfo().RangeID,
 			CurrentWorkflowCAS: &persistence.CurrentWorkflowCAS{
 				PrevRunID:            prevRunID,
 				PrevLastWriteVersion: prevLastWriteVersion,
@@ -271,7 +273,7 @@ func (s *conflictResolverSuite) TestReset() {
 			ExecutionInfo:  &persistence.WorkflowExecutionInfo{},
 			ExecutionStats: &persistence.ExecutionStats{},
 		},
-	}, nil).Once() // return empty resoonse since we are not testing the load
+	}, nil).Once() // return empty response since we are not testing the load
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(event1.GetVersion()).Return(sourceCluster).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(

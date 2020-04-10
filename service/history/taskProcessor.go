@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -57,7 +58,7 @@ type (
 	}
 
 	taskProcessor struct {
-		shard         ShardContext
+		shard         shard.Context
 		cache         *historyCache
 		shutdownCh    chan struct{}
 		tasksCh       chan *taskInfo
@@ -92,7 +93,7 @@ func newTaskInfo(
 
 func newTaskProcessor(
 	options taskProcessorOptions,
-	shard ShardContext,
+	shard shard.Context,
 	historyCache *historyCache,
 	logger log.Logger,
 ) *taskProcessor {

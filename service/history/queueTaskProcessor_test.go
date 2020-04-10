@@ -37,6 +37,8 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/task"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -45,7 +47,7 @@ type (
 		*require.Assertions
 
 		controller           *gomock.Controller
-		mockShard            *shardContextTest
+		mockShard            *shard.TestContext
 		mockPriorityAssigner *MocktaskPriorityAssigner
 
 		metricsClient metrics.Client
@@ -68,13 +70,13 @@ func (s *queueTaskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID: 10,
 			RangeID: 1,
 		},
-		NewDynamicConfigForTest(),
+		config.NewForTest(),
 	)
 	s.mockPriorityAssigner = NewMocktaskPriorityAssigner(s.controller)
 
@@ -163,13 +165,13 @@ func (s *queueTaskProcessorSuite) TestStopShardProcessor() {
 
 func (s *queueTaskProcessorSuite) TestStop() {
 	for i := 0; i != 10; i++ {
-		mockShard := newTestShardContext(
+		mockShard := shard.NewTestContext(
 			s.controller,
 			&persistence.ShardInfo{
 				ShardID: 10,
 				RangeID: 1,
 			},
-			NewDynamicConfigForTest(),
+			config.NewForTest(),
 		)
 		mockScheduler := task.NewMockScheduler(s.controller)
 		mockScheduler.EXPECT().Stop().Times(1)

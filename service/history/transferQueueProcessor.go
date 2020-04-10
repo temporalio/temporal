@@ -39,6 +39,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 var (
@@ -51,7 +52,7 @@ type (
 		FailoverDomain(domainIDs map[string]struct{})
 		NotifyNewTask(clusterName string, transferTasks []persistence.Task)
 		LockTaskProcessing()
-		UnlockTaskPrrocessing()
+		UnlockTaskProcessing()
 	}
 
 	taskFilter func(task queueTaskInfo) (bool, error)
@@ -59,7 +60,7 @@ type (
 	transferQueueProcessorImpl struct {
 		isGlobalDomainEnabled bool
 		currentClusterName    string
-		shard                 ShardContext
+		shard                 shard.Context
 		taskAllocator         taskAllocator
 		config                *config.Config
 		metricsClient         metrics.Client
@@ -79,7 +80,7 @@ type (
 )
 
 func newTransferQueueProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
@@ -270,7 +271,7 @@ func (t *transferQueueProcessorImpl) LockTaskProcessing() {
 	t.taskAllocator.lock()
 }
 
-func (t *transferQueueProcessorImpl) UnlockTaskPrrocessing() {
+func (t *transferQueueProcessorImpl) UnlockTaskProcessing() {
 	t.taskAllocator.unlock()
 }
 
@@ -293,7 +294,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 				err := t.completeTransfer()
 				if err != nil {
 					t.logger.Info("Failed to complete transfer task", tag.Error(err))
-					if err == ErrShardClosed {
+					if err == shard.ErrShardClosed {
 						// shard closed, trigger shutdown and bail out
 						t.Stop()
 						return

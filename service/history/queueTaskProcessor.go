@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/task"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -42,7 +43,7 @@ type (
 		sync.RWMutex
 
 		priorityAssigner taskPriorityAssigner
-		schedulers       map[ShardContext]task.Scheduler
+		schedulers       map[shard.Context]task.Scheduler
 
 		status        int32
 		options       *queueTaskProcessorOptions
@@ -80,7 +81,7 @@ func newQueueTaskProcessor(
 
 	return &queueTaskProcessorImpl{
 		priorityAssigner: priorityAssigner,
-		schedulers:       make(map[ShardContext]task.Scheduler),
+		schedulers:       make(map[shard.Context]task.Scheduler),
 		status:           common.DaemonStatusInitialized,
 		options:          options,
 		logger:           logger,
@@ -113,7 +114,7 @@ func (p *queueTaskProcessorImpl) Stop() {
 }
 
 func (p *queueTaskProcessorImpl) StopShardProcessor(
-	shard ShardContext,
+	shard shard.Context,
 ) {
 	p.Lock()
 	scheduler, ok := p.schedulers[shard]
@@ -160,7 +161,7 @@ func (p *queueTaskProcessorImpl) prepareSubmit(
 }
 
 func (p *queueTaskProcessorImpl) getOrCreateTaskScheduler(
-	shard ShardContext,
+	shard shard.Context,
 ) (task.Scheduler, error) {
 	p.RLock()
 	if scheduler, ok := p.schedulers[shard]; ok {

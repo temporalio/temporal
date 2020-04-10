@@ -34,6 +34,8 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -42,7 +44,7 @@ type (
 		*require.Assertions
 
 		controller *gomock.Controller
-		mockShard  *shardContextTest
+		mockShard  *shard.TestContext
 
 		mockProcessor *MockProcessor
 
@@ -55,7 +57,7 @@ type (
 		*require.Assertions
 
 		controller *gomock.Controller
-		mockShard  *shardContextTest
+		mockShard  *shard.TestContext
 
 		mockProcessor *MockProcessor
 
@@ -85,11 +87,11 @@ func (s *queueAckMgrSuite) TearDownSuite() {
 func (s *queueAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	config := NewDynamicConfigForTest()
+	config := config.NewForTest()
 	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&p.ShardInfo{
 			ShardID: 0,
@@ -273,11 +275,11 @@ func (s *queueFailoverAckMgrSuite) TearDownSuite() {
 func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	config := NewDynamicConfigForTest()
+	config := config.NewForTest()
 	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&p.ShardInfo{
 			ShardID: 0,

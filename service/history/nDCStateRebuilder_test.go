@@ -39,7 +39,9 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -48,7 +50,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shardContextTest
+		mockShard           *shard.TestContext
 		mockEventsCache     *events.MockCache
 		mockTaskRefresher   *MockmutableStateTaskRefresher
 		mockDomainCache     *cache.MockDomainCache
@@ -76,20 +78,20 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskRefresher = NewMockmutableStateTaskRefresher(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID:          10,
 			RangeID:          1,
 			TransferAckLevel: 0,
 		},
-		NewDynamicConfigForTest(),
+		config.NewForTest(),
 	)
 
-	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
-	s.mockDomainCache = s.mockShard.resource.DomainCache
-	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
-	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockHistoryV2Mgr = s.mockShard.Resource.HistoryMgr
+	s.mockDomainCache = s.mockShard.Resource.DomainCache
+	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 

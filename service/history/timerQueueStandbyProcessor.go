@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 const (
@@ -37,7 +38,7 @@ const (
 
 type (
 	timerQueueStandbyProcessorImpl struct {
-		shard                   ShardContext
+		shard                   shard.Context
 		timerTaskFilter         taskFilter
 		logger                  log.Logger
 		metricsClient           metrics.Client
@@ -48,7 +49,7 @@ type (
 )
 
 func newTimerQueueStandbyProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	clusterName string,
 	taskAllocator taskAllocator,

@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -44,7 +45,7 @@ type (
 		*require.Assertions
 
 		controller      *gomock.Controller
-		mockShard       *shardContextTest
+		mockShard       *shard.TestContext
 		mockEventsCache *events.MockCache
 		mockDomainCache *cache.MockDomainCache
 
@@ -65,14 +66,14 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID:          0,
 			RangeID:          1,
 			TransferAckLevel: 0,
 		},
-		NewDynamicConfigForTest(),
+		config.NewForTest(),
 	)
 
 	s.logger = log.NewNoop()
@@ -81,8 +82,8 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.domainID = testDomainID
 	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
 
-	s.mockDomainCache = s.mockShard.resource.DomainCache
-	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockDomainCache = s.mockShard.Resource.DomainCache
+	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()

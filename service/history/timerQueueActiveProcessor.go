@@ -31,11 +31,12 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
 	timerQueueActiveProcessorImpl struct {
-		shard                   ShardContext
+		shard                   shard.Context
 		timerTaskFilter         taskFilter
 		now                     timeNow
 		logger                  log.Logger
@@ -47,7 +48,7 @@ type (
 )
 
 func newTimerQueueActiveProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	matchingClient matching.Client,
 	taskAllocator taskAllocator,
@@ -137,7 +138,7 @@ func newTimerQueueActiveProcessor(
 }
 
 func newTimerQueueFailoverProcessor(
-	shard ShardContext,
+	shard shard.Context,
 	historyService *historyEngineImpl,
 	domainIDs map[string]struct{},
 	standbyClusterName string,

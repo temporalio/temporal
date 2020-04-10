@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/xdc"
+	"github.com/uber/cadence/service/history/engine"
 )
 
 type (
@@ -46,7 +47,7 @@ type (
 		domainCache         cache.DomainCache
 		nDCHistoryResender  xdc.NDCHistoryResender
 		historyRereplicator xdc.HistoryRereplicator
-		historyEngine       Engine
+		historyEngine       engine.Engine
 
 		metricsClient metrics.Client
 		logger        log.Logger
@@ -60,7 +61,7 @@ func newReplicationTaskExecutor(
 	domainCache cache.DomainCache,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyRereplicator xdc.HistoryRereplicator,
-	historyEngine Engine,
+	historyEngine engine.Engine,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) replicationTaskExecutor {

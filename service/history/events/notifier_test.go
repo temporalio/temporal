@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package events
 
 import (
 	"sync"
@@ -38,31 +38,31 @@ import (
 )
 
 type (
-	historyEventNotifierSuite struct {
+	notifierSuite struct {
 		suite.Suite
 		*require.Assertions
 
-		historyEventNotifier *historyEventNotifierImpl
+		historyEventNotifier Notifier
 	}
 )
 
 func TestHistoryEventNotifierSuite(t *testing.T) {
-	s := new(historyEventNotifierSuite)
+	s := new(notifierSuite)
 	suite.Run(t, s)
 }
 
-func (s *historyEventNotifierSuite) SetupSuite() {
+func (s *notifierSuite) SetupSuite() {
 
 }
 
-func (s *historyEventNotifierSuite) TearDownSuite() {
+func (s *notifierSuite) TearDownSuite() {
 
 }
 
-func (s *historyEventNotifierSuite) SetupTest() {
+func (s *notifierSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.historyEventNotifier = newHistoryEventNotifier(
+	s.historyEventNotifier = NewNotifier(
 		clock.NewRealTimeSource(),
 		metrics.NewClient(tally.NoopScope, metrics.History),
 		func(workflowID string) int {
@@ -72,11 +72,11 @@ func (s *historyEventNotifierSuite) SetupTest() {
 	s.historyEventNotifier.Start()
 }
 
-func (s *historyEventNotifierSuite) TearDownTest() {
+func (s *notifierSuite) TearDownTest() {
 	s.historyEventNotifier.Stop()
 }
 
-func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
+func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 	domainID := "domain ID"
 	execution := &gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("workflow ID"),
@@ -88,7 +88,7 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	workflowState := persistence.WorkflowStateCreated
 	workflowCloseState := persistence.WorkflowCloseStatusNone
 	branchToken := make([]byte, 0)
-	historyEvent := newHistoryEventNotification(domainID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowCloseState)
+	historyEvent := NewNotification(domainID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowCloseState)
 	timerChan := time.NewTimer(time.Second * 2).C
 
 	subscriberID, channel, err := s.historyEventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()))
@@ -108,7 +108,7 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	s.Nil(err)
 }
 
-func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
+func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 	domainID := "domain ID"
 	execution := &gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("workflow ID"),
@@ -121,7 +121,7 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	workflowState := persistence.WorkflowStateCreated
 	workflowCloseState := persistence.WorkflowCloseStatusNone
 	branchToken := make([]byte, 0)
-	historyEvent := newHistoryEventNotification(domainID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowCloseState)
+	historyEvent := NewNotification(domainID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowCloseState)
 	timerChan := time.NewTimer(time.Second * 5).C
 
 	subscriberCount := 100

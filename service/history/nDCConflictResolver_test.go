@@ -32,6 +32,8 @@ import (
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/shard"
 )
 
 type (
@@ -40,7 +42,7 @@ type (
 		*require.Assertions
 
 		controller       *gomock.Controller
-		mockShard        *shardContextTest
+		mockShard        *shard.TestContext
 		mockContext      *MockworkflowExecutionContext
 		mockMutableState *MockmutableState
 		mockStateBuilder *MocknDCStateRebuilder
@@ -69,14 +71,14 @@ func (s *nDCConflictResolverSuite) SetupTest() {
 	s.mockMutableState = NewMockmutableState(s.controller)
 	s.mockStateBuilder = NewMocknDCStateRebuilder(s.controller)
 
-	s.mockShard = newTestShardContext(
+	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfo{
 			ShardID:          10,
 			RangeID:          1,
 			TransferAckLevel: 0,
 		},
-		NewDynamicConfigForTest(),
+		config.NewForTest(),
 	)
 
 	s.logger = s.mockShard.GetLogger()
