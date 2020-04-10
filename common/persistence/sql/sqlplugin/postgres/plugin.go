@@ -36,7 +36,8 @@ import (
 const (
 	// PluginName is the name of the plugin
 	PluginName             = "postgres"
-	dataSourceNamePostgres = "user=%v password=%v host=%v port=%v dbname=%v sslmode=disable "
+	dataSourceNamePostgres = "user=%v host=%v port=%v dbname=%v sslmode=disable %v "
+	dataSourceNamePostgresPassword = "password=%v"
 )
 
 var errTLSNotImplemented = errors.New("tls for postgres has not been implemented")
@@ -89,7 +90,11 @@ func (d *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
 	if dbName == "" {
 		dbName = "postgres"
 	}
-	db, err := sqlx.Connect(PluginName, fmt.Sprintf(dataSourceNamePostgres, cfg.User, cfg.Password, host, port, dbName))
+	password := ""
+	if cfg.Password != "" {
+		password = fmt.Sprintf(dataSourceNamePostgresPassword, cfg.Password)
+	}
+	db, err := sqlx.Connect(PluginName, fmt.Sprintf(dataSourceNamePostgres, cfg.User, host, port, dbName, password))
 
 	if err != nil {
 		return nil, err

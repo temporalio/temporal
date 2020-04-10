@@ -40,13 +40,13 @@ setup_mysql_schema() {
 
 setup_postgres_schema() {
     SCHEMA_DIR=$CADENCE_HOME/schema/postgres/cadence/versioned
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT create --db $DBNAME
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $DBNAME setup-schema -v 0.0
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $DBNAME update-schema -d $SCHEMA_DIR
+    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw "$POSTGRES_PWD" -p $DB_PORT create --db $DBNAME
+    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw "$POSTGRES_PWD" -p $DB_PORT --db $DBNAME setup-schema -v 0.0
+    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw "$POSTGRES_PWD" -p $DB_PORT --db $DBNAME update-schema -d $SCHEMA_DIR
     VISIBILITY_SCHEMA_DIR=$CADENCE_HOME/schema/postgres/visibility/versioned
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT create --db $VISIBILITY_DBNAME
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $VISIBILITY_DBNAME setup-schema -v 0.0
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
+    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw "$POSTGRES_PWD" -p $DB_PORT create --db $VISIBILITY_DBNAME
+    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw "$POSTGRES_PWD" -p $DB_PORT --db $VISIBILITY_DBNAME setup-schema -v 0.0
+    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw "$POSTGRES_PWD" -p $DB_PORT --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 
