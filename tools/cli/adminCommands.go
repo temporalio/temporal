@@ -294,6 +294,7 @@ func connectToCassandra(c *cli.Context) *gocql.Session {
 	clusterCfg.SerialConsistency = gocql.LocalSerial
 	clusterCfg.NumConns = 20
 	clusterCfg.PoolConfig.HostSelectionPolicy = nil
+	clusterCfg.Consistency = gocql.LocalQuorum
 
 	session, err := clusterCfg.CreateSession()
 	if err != nil {

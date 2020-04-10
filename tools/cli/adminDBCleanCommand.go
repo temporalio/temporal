@@ -30,6 +30,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
+
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 
@@ -205,8 +208,7 @@ func cleanShard(
 			WorkflowID: ce.WorkflowID,
 			RunID:      ce.RunID,
 		}
-		preconditionForDBCall(&report.TotalDBRequests, limiter)
-		err = execStore.DeleteWorkflowExecution(deleteConcreteReq)
+		err = retryDeleteWorkflowExecution(limiter, &report.TotalDBRequests, execStore, deleteConcreteReq)
 		if err != nil {
 			report.Handled.FailedCleanedCount++
 			failedCleanWriter.Add(&ce)
@@ -214,17 +216,15 @@ func cleanShard(
 		}
 		report.Handled.SuccessfullyCleanedCount++
 		successfullyCleanWriter.Add(&ce)
-		if ce.CorruptedExceptionMetadata.CorruptionType != OpenExecutionInvalidCurrentExecution {
-			deleteCurrentReq := &persistence.DeleteCurrentWorkflowExecutionRequest{
-				DomainID:   ce.DomainID,
-				WorkflowID: ce.WorkflowID,
-				RunID:      ce.RunID,
-			}
-			// deleting current execution is best effort, the success or failure of the cleanup
-			// is determined above based on if the concrete execution could be deleted
-			preconditionForDBCall(&report.TotalDBRequests, limiter)
-			execStore.DeleteCurrentWorkflowExecution(deleteCurrentReq)
+		deleteCurrentReq := &persistence.DeleteCurrentWorkflowExecutionRequest{
+			DomainID:   ce.DomainID,
+			WorkflowID: ce.WorkflowID,
+			RunID:      ce.RunID,
 		}
+		// deleting current execution is best effort, the success or failure of the cleanup
+		// is determined above based on if the concrete execution could be deleted
+		retryDeleteCurrentWorkflowExecution(limiter, &report.TotalDBRequests, execStore, deleteCurrentReq)
+
 		// TODO: we will want to also cleanup history for corrupted workflows, this will be punted on until this is converted to a workflow
 	}
 	return report
@@ -289,13 +289,13 @@ func createCleanOutputDirectories() *CleanOutputDirectories {
 		SuccessfullyCleanedDirectoryPath: fmt.Sprintf("./clean_%v/successfully_cleaned", now),
 		FailedCleanedDirectoryPath:       fmt.Sprintf("./clean_%v/failed_cleaned", now),
 	}
-	if err := os.MkdirAll(cod.ShardCleanReportDirectoryPath, 0766); err != nil {
+	if err := os.MkdirAll(cod.ShardCleanReportDirectoryPath, 0777); err != nil {
 		ErrorAndExit("failed to create ShardCleanReportDirectoryPath", err)
 	}
-	if err := os.MkdirAll(cod.SuccessfullyCleanedDirectoryPath, 0766); err != nil {
+	if err := os.MkdirAll(cod.SuccessfullyCleanedDirectoryPath, 0777); err != nil {
 		ErrorAndExit("failed to create SuccessfullyCleanedDirectoryPath", err)
 	}
-	if err := os.MkdirAll(cod.FailedCleanedDirectoryPath, 0766); err != nil {
+	if err := os.MkdirAll(cod.FailedCleanedDirectoryPath, 0777); err != nil {
 		ErrorAndExit("failed to create FailedCleanedDirectoryPath", err)
 	}
 	fmt.Println("clean results located under: ", fmt.Sprintf("./clean_%v", now))
@@ -308,4 +308,40 @@ func recordShardCleanReport(file *os.File, sdr *ShardCleanReport) {
 		ErrorAndExit("failed to marshal ShardCleanReport", err)
 	}
 	writeToFile(file, string(data))
+}
+
+func retryDeleteWorkflowExecution(
+	limiter *quotas.DynamicRateLimiter,
+	totalDBRequests *int64,
+	execStore persistence.ExecutionStore,
+	req *persistence.DeleteWorkflowExecutionRequest,
+) error {
+	op := func() error {
+		preconditionForDBCall(totalDBRequests, limiter)
+		return execStore.DeleteWorkflowExecution(req)
+	}
+
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func retryDeleteCurrentWorkflowExecution(
+	limiter *quotas.DynamicRateLimiter,
+	totalDBRequests *int64,
+	execStore persistence.ExecutionStore,
+	req *persistence.DeleteCurrentWorkflowExecutionRequest,
+) error {
+	op := func() error {
+		preconditionForDBCall(totalDBRequests, limiter)
+		return execStore.DeleteCurrentWorkflowExecution(req)
+	}
+
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err != nil {
+		return err
+	}
+	return nil
 }
