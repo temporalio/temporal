@@ -30,9 +30,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
@@ -85,7 +85,7 @@ func (s *attrValidatorSuite) TestValidateConfigRetentionPeriod() {
 	}
 	for _, tc := range testCases {
 		actualErr := s.validator.validateNamespaceConfig(
-			&persistence.NamespaceConfig{Retention: tc.retentionPeriod},
+			&persistenceblobs.NamespaceConfig{RetentionDays: tc.retentionPeriod},
 		)
 		s.Equal(tc.expectedErr, actualErr)
 	}
@@ -115,42 +115,42 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNames
 	)
 
 	err := s.validator.validateNamespaceReplicationConfigForLocalNamespace(
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestAlternativeClusterName,
 			},
 		},
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
 			},
 		},
 	)
@@ -166,42 +166,42 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalName
 	)
 
 	err := s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
 			},
 		},
 	)
 	s.NoError(err)
 
 	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestAlternativeClusterName,
 			},
 		},
 	)
 	s.NoError(err)
 
 	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 	)
 	s.NoError(err)
 
 	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 	)
@@ -210,45 +210,45 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalName
 
 func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigClustersDoesNotRemove() {
 	err := s.validator.validateNamespaceReplicationConfigClustersDoesNotRemove(
-		[]*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
+		[]string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
 		},
-		[]*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
-		},
-	)
-	s.NoError(err)
-
-	err = s.validator.validateNamespaceReplicationConfigClustersDoesNotRemove(
-		[]*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-		},
-		[]*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
+		[]string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
 		},
 	)
 	s.NoError(err)
 
 	err = s.validator.validateNamespaceReplicationConfigClustersDoesNotRemove(
-		[]*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
+		[]string{
+			cluster.TestCurrentClusterName,
 		},
-		[]*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestAlternativeClusterName},
+		[]string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
+		},
+	)
+	s.NoError(err)
+
+	err = s.validator.validateNamespaceReplicationConfigClustersDoesNotRemove(
+		[]string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
+		},
+		[]string{
+			cluster.TestAlternativeClusterName,
 		},
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateNamespaceReplicationConfigClustersDoesNotRemove(
-		[]*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
+		[]string{
+			cluster.TestCurrentClusterName,
 		},
-		[]*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestAlternativeClusterName},
+		[]string{
+			cluster.TestAlternativeClusterName,
 		},
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)

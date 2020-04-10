@@ -37,6 +37,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -45,7 +46,6 @@ import (
 	messageMocks "github.com/temporalio/temporal/common/messaging/mocks"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/namespace"
-	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/common/task"
 	"github.com/temporalio/temporal/common/xdc"
@@ -100,13 +100,13 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockNDCResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistence.NamespaceInfo{},
-			&persistence.NamespaceConfig{},
-			&persistence.NamespaceReplicationConfig{
+			&persistenceblobs.NamespaceInfo{},
+			&persistenceblobs.NamespaceConfig{},
+			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
-				Clusters: []*persistence.ClusterReplicationConfig{
-					{ClusterName: cluster.TestCurrentClusterName},
-					{ClusterName: cluster.TestAlternativeClusterName},
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
 				},
 			},
 			123,

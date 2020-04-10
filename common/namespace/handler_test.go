@@ -272,9 +272,9 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	isGlobalNamespace1 := false
 	activeClusterName1 := s.ClusterMetadata.GetCurrentClusterName()
 	var cluster1 []*replicationpb.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		cluster1 = append(cluster1, &replicationpb.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: name,
 		})
 	}
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{

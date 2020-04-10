@@ -1429,3 +1429,17 @@ func (c *clusterMetadataPersistenceClient) PruneClusterMembership(request *Prune
 
 	return err
 }
+
+func (c *metadataPersistenceClient) InitializeSystemNamespaces(currentClusterName string) error {
+	c.metricClient.IncCounter(metrics.PersistenceInitializeSystemNamespaceScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceInitializeSystemNamespaceScope, metrics.PersistenceLatency)
+	err := c.persistence.InitializeSystemNamespaces(currentClusterName)
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceInitializeSystemNamespaceScope, metrics.PersistenceFailures)
+	}
+
+	return err
+}

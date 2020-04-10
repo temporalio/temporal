@@ -80,11 +80,12 @@ type (
 
 	// NamespaceRow represents a row in namespace table
 	NamespaceRow struct {
-		ID           primitives.UUID
-		Name         string
-		Data         []byte
-		DataEncoding string
-		IsGlobal     bool
+		ID                  primitives.UUID
+		Name                string
+		Data                []byte
+		DataEncoding        string
+		IsGlobal            bool
+		NotificationVersion int64
 	}
 
 	// NamespaceFilter contains the column names within namespace table that

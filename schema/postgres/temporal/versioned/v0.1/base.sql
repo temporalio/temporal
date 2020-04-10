@@ -2,6 +2,7 @@ CREATE TABLE namespaces(
   shard_id INTEGER NOT NULL DEFAULT 54321,
   id BYTEA NOT NULL,
   name VARCHAR(255) UNIQUE NOT NULL,
+  notification_version BIGINT NOT NULL,
   --
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,

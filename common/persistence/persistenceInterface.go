@@ -38,7 +38,6 @@ import (
 
 	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
@@ -625,51 +624,27 @@ type (
 		SearchAttributes   map[string][]byte
 	}
 
-	// InternalNamespaceConfig describes the namespace configuration
-	InternalNamespaceConfig struct {
-		// NOTE: this retention is in days, not in seconds
-		Retention                int32
-		EmitMetric               bool                       // deprecated
-		ArchivalBucket           string                     // deprecated
-		ArchivalStatus           namespacepb.ArchivalStatus // deprecated
-		HistoryArchivalStatus    namespacepb.ArchivalStatus
-		HistoryArchivalURI       string
-		VisibilityArchivalStatus namespacepb.ArchivalStatus
-		VisibilityArchivalURI    string
-		BadBinaries              *serialization.DataBlob
-	}
-
 	// InternalCreateNamespaceRequest is used to create the namespace
 	InternalCreateNamespaceRequest struct {
-		Info              *NamespaceInfo
-		Config            *InternalNamespaceConfig
-		ReplicationConfig *NamespaceReplicationConfig
-		IsGlobalNamespace bool
-		ConfigVersion     int64
-		FailoverVersion   int64
+		ID					primitives.UUID
+		Name                string
+		Namespace           *serialization.DataBlob
+		IsGlobal            bool
 	}
 
 	// InternalGetNamespaceResponse is the response for GetNamespace
 	InternalGetNamespaceResponse struct {
-		Info                        *NamespaceInfo
-		Config                      *InternalNamespaceConfig
-		ReplicationConfig           *NamespaceReplicationConfig
-		IsGlobalNamespace           bool
-		ConfigVersion               int64
-		FailoverVersion             int64
-		FailoverNotificationVersion int64
-		NotificationVersion         int64
+		Namespace           *serialization.DataBlob
+		IsGlobal            bool
+		NotificationVersion int64
 	}
 
 	// InternalUpdateNamespaceRequest is used to update namespace
 	InternalUpdateNamespaceRequest struct {
-		Info                        *NamespaceInfo
-		Config                      *InternalNamespaceConfig
-		ReplicationConfig           *NamespaceReplicationConfig
-		ConfigVersion               int64
-		FailoverVersion             int64
-		FailoverNotificationVersion int64
-		NotificationVersion         int64
+		Id					primitives.UUID
+		Name                string
+		Namespace           *serialization.DataBlob
+		NotificationVersion int64
 	}
 
 	// InternalListNamespacesResponse is the response for GetNamespace

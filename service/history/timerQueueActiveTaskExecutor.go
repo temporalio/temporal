@@ -425,7 +425,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 			if err != nil {
 				return serviceerror.NewInternal("unable to re-schedule activity across namespace.")
 			}
-			targetNamespaceID = namespaceEntry.GetInfo().ID
+			targetNamespaceID = primitives.UUIDString(namespaceEntry.GetInfo().Id)
 		}
 	}
 

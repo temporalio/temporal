@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -56,6 +57,7 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/resource"
 	dc "github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -94,6 +96,8 @@ type (
 		testNamespaceID string
 	}
 )
+
+var testNamespaceID = primitives.MustParseUUID("deadbeef-c001-4567-890a-bcdef0123456")
 
 func TestWorkflowHandlerSuite(t *testing.T) {
 	s := new(workflowHandlerSuite)
@@ -477,7 +481,7 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithNoArchiv
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", testVisibilityArchivalURI))
 	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
 	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
-		ID: "test-id",
+		ID: testNamespaceID,
 	}, nil)
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(nil)
 	s.mockVisibilityArchiver.On("ValidateURI", mock.Anything).Return(nil)
@@ -499,7 +503,7 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithArchival
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "invalidURI"))
 	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
 	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
-		ID: "test-id",
+		ID: testNamespaceID,
 	}, nil)
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(nil)
 	s.mockVisibilityArchiver.On("ValidateURI", mock.Anything).Return(nil)
@@ -526,7 +530,7 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_ClusterNotConfigure
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewDisabledArchvialConfig())
 	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
 	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
-		ID: "test-id",
+		ID: testNamespaceID,
 	}, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
@@ -549,7 +553,7 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_NotEnabled() {
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockMetadataMgr.On("GetNamespace", mock.Anything).Return(nil, serviceerror.NewNotFound(""))
 	s.mockMetadataMgr.On("CreateNamespace", mock.Anything).Return(&persistence.CreateNamespaceResponse{
-		ID: "test-id",
+		ID: testNamespaceID,
 	}, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
@@ -881,8 +885,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_NamespaceCacheEntr
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: "test-namespace"},
-		&persistence.NamespaceConfig{
+		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
+		&persistenceblobs.NamespaceConfig{
 			HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
 			HistoryArchivalURI:       "",
 			VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
@@ -901,8 +905,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: "test-namespace"},
-		&persistence.NamespaceConfig{
+		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
+		&persistenceblobs.NamespaceConfig{
 			HistoryArchivalStatus:    namespacepb.ArchivalStatus_Enabled,
 			HistoryArchivalURI:       "uri without scheme",
 			VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
@@ -921,8 +925,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: "test-namespace"},
-		&persistence.NamespaceConfig{
+		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
+		&persistenceblobs.NamespaceConfig{
 			HistoryArchivalStatus:    namespacepb.ArchivalStatus_Enabled,
 			HistoryArchivalURI:       testHistoryArchivalURI,
 			VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
@@ -1036,7 +1040,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceCache
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotConfiguredForArchival() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
 		nil,
-		&persistence.NamespaceConfig{
+		&persistenceblobs.NamespaceConfig{
 			VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
 		},
 		"",
@@ -1053,8 +1057,8 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotCo
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: "test-namespace"},
-		&persistence.NamespaceConfig{
+		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
+		&persistenceblobs.NamespaceConfig{
 			VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
 			VisibilityArchivalURI:    "uri without scheme",
 		},
@@ -1072,8 +1076,8 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: "test-namespace"},
-		&persistence.NamespaceConfig{
+		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
+		&persistenceblobs.NamespaceConfig{
 			VisibilityArchivalStatus: namespacepb.ArchivalStatus_Enabled,
 			VisibilityArchivalURI:    testVisibilityArchivalURI,
 		},
@@ -1311,35 +1315,35 @@ func updateRequest(
 
 func persistenceGetNamespaceResponse(historyArchivalState, visibilityArchivalState *namespace.ArchivalState) *persistence.GetNamespaceResponse {
 	return &persistence.GetNamespaceResponse{
-		Info: &persistence.NamespaceInfo{
-			ID:          "test-id",
-			Name:        "test-name",
-			Status:      0,
-			Description: "test-description",
-			OwnerEmail:  "test-owner-email",
-			Data:        make(map[string]string),
-		},
-		Config: &persistence.NamespaceConfig{
-			Retention:                1,
-			EmitMetric:               true,
-			HistoryArchivalStatus:    historyArchivalState.Status,
-			HistoryArchivalURI:       historyArchivalState.URI,
-			VisibilityArchivalStatus: visibilityArchivalState.Status,
-			VisibilityArchivalURI:    visibilityArchivalState.URI,
-		},
-		ReplicationConfig: &persistence.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{
-					ClusterName: cluster.TestCurrentClusterName,
+		Namespace: &persistenceblobs.NamespaceDetail{
+			Info: &persistenceblobs.NamespaceInfo{
+				Id:          testNamespaceID,
+				Name:        "test-name",
+				Status:      0,
+				Description: "test-description",
+				Owner:       "test-owner-email",
+				Data:        make(map[string]string),
+			},
+			Config: &persistenceblobs.NamespaceConfig{
+				RetentionDays:            1,
+				EmitMetric:               true,
+				HistoryArchivalStatus:    historyArchivalState.Status,
+				HistoryArchivalURI:       historyArchivalState.URI,
+				VisibilityArchivalStatus: visibilityArchivalState.Status,
+				VisibilityArchivalURI:    visibilityArchivalState.URI,
+			},
+			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
 				},
 			},
+			ConfigVersion:               0,
+			FailoverVersion:             0,
+			FailoverNotificationVersion: 0,
 		},
-		IsGlobalNamespace:           false,
-		ConfigVersion:               0,
-		FailoverVersion:             0,
-		FailoverNotificationVersion: 0,
-		NotificationVersion:         0,
+		IsGlobalNamespace:   false,
+		NotificationVersion: 0,
 	}
 }
 

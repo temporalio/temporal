@@ -147,7 +147,7 @@ func (b *stateBuilderImpl) applyEvents(
 				if err != nil {
 					return nil, err
 				}
-				parentNamespaceID = parentNamespaceEntry.GetInfo().ID
+				parentNamespaceID = primitives.UUIDString(parentNamespaceEntry.GetInfo().Id)
 			}
 
 			if err := b.mutableState.ReplicateWorkflowExecutionStartedEvent(

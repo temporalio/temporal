@@ -35,6 +35,10 @@ type MetadataManager struct {
 	mock.Mock
 }
 
+func (_m *MetadataManager) InitializeSystemNamespaces(currentClusterName string) error {
+	panic("implement me")
+}
+
 // GetName provides a mock function with given fields:
 func (_m *MetadataManager) GetName() string {
 	ret := _m.Called()

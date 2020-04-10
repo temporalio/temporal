@@ -29,11 +29,13 @@ import (
 	namespacepb "go.temporal.io/temporal-proto/namespace"
 	replicationpb "go.temporal.io/temporal-proto/replication"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 // NOTE: the counterpart of namespace replication receiving logic is in service/worker package
@@ -41,8 +43,8 @@ import (
 type (
 	// Replicator is the interface which can replicate the namespace
 	Replicator interface {
-		HandleTransmissionTask(namespaceOperation replicationgenpb.NamespaceOperation, info *persistence.NamespaceInfo,
-			config *persistence.NamespaceConfig, replicationConfig *persistence.NamespaceReplicationConfig,
+		HandleTransmissionTask(namespaceOperation replicationgenpb.NamespaceOperation, info *persistenceblobs.NamespaceInfo,
+			config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 			configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error
 	}
 
@@ -62,62 +64,56 @@ func NewNamespaceReplicator(replicationMessageSink messaging.Producer, logger lo
 
 // HandleTransmissionTask handle transmission of the namespace replication task
 func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(namespaceOperation replicationgenpb.NamespaceOperation,
-	info *persistence.NamespaceInfo, config *persistence.NamespaceConfig, replicationConfig *persistence.NamespaceReplicationConfig,
+	info *persistenceblobs.NamespaceInfo, config *persistenceblobs.NamespaceConfig, replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 	configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error {
 
 	if !isGlobalNamespaceEnabled {
-		namespaceReplicator.logger.Warn("Should not replicate non global namespace", tag.WorkflowNamespaceID(info.ID))
+		namespaceReplicator.logger.Warn("Should not replicate non global namespace", tag.WorkflowNamespaceIDBytes(info.Id))
 		return nil
 	}
 
-	status, err := namespaceReplicator.convertNamespaceStatusToProto(info.Status)
-	if err != nil {
-		return err
-	}
-
 	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
-	task := &replicationgenpb.NamespaceTaskAttributes{
-		NamespaceOperation: namespaceOperation,
-		Id:                 info.ID,
-		Info: &namespacepb.NamespaceInfo{
-			Name:        info.Name,
-			Status:      status,
-			Description: info.Description,
-			OwnerEmail:  info.OwnerEmail,
-			Data:        info.Data,
+	task := &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+		NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
+			NamespaceOperation: namespaceOperation,
+			Id:                 primitives.UUIDString(info.Id),
+			Info: &namespacepb.NamespaceInfo{
+				Name:        info.Name,
+				Status:      info.Status,
+				Description: info.Description,
+				OwnerEmail:  info.Owner,
+				Data:        info.Data,
+			},
+			Config: &namespacepb.NamespaceConfiguration{
+				WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
+				EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
+				HistoryArchivalStatus:                  config.HistoryArchivalStatus,
+				HistoryArchivalURI:                     config.HistoryArchivalURI,
+				VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
+				VisibilityArchivalURI:                  config.VisibilityArchivalURI,
+				BadBinaries:                            config.BadBinaries,
+			},
+			ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
+				ActiveClusterName: replicationConfig.ActiveClusterName,
+				Clusters:          namespaceReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
+			},
+			ConfigVersion:   configVersion,
+			FailoverVersion: failoverVersion,
 		},
-		Config: &namespacepb.NamespaceConfiguration{
-			WorkflowExecutionRetentionPeriodInDays: config.Retention,
-			EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
-			HistoryArchivalStatus:                  config.HistoryArchivalStatus,
-			HistoryArchivalURI:                     config.HistoryArchivalURI,
-			VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
-			VisibilityArchivalURI:                  config.VisibilityArchivalURI,
-			BadBinaries:                            &config.BadBinaries,
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfiguration{
-			ActiveClusterName: replicationConfig.ActiveClusterName,
-			Clusters:          namespaceReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
-		},
-		ConfigVersion:   configVersion,
-		FailoverVersion: failoverVersion,
 	}
 
 	return namespaceReplicator.replicationMessageSink.Publish(
 		&replicationgenpb.ReplicationTask{
 			TaskType: taskType,
-			Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
-				NamespaceTaskAttributes: task,
-			},
+			Attributes: task,
 		})
 }
 
 func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationConfigToProto(
-	input []*persistence.ClusterReplicationConfig,
+	input []string,
 ) []*replicationpb.ClusterReplicationConfiguration {
-	var output []*replicationpb.ClusterReplicationConfiguration
-	for _, cluster := range input {
-		clusterName := cluster.ClusterName
+	output := []*replicationpb.ClusterReplicationConfiguration{}
+	for _, clusterName := range input {
 		output = append(output, &replicationpb.ClusterReplicationConfiguration{ClusterName: clusterName})
 	}
 	return output

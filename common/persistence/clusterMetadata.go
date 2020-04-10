@@ -33,13 +33,9 @@ func GetOrUseDefaultActiveCluster(currentClusterName string, activeClusterName s
 }
 
 // GetOrUseDefaultClusters return the current cluster or use the input if valid
-func GetOrUseDefaultClusters(currentClusterName string, clusters []*ClusterReplicationConfig) []*ClusterReplicationConfig {
+func GetOrUseDefaultClusters(currentClusterName string, clusters []string) []string {
 	if len(clusters) == 0 {
-		return []*ClusterReplicationConfig{
-			&ClusterReplicationConfig{
-				ClusterName: currentClusterName,
-			},
-		}
+		return []string{ currentClusterName }
 	}
 	return clusters
 }

@@ -157,9 +157,9 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	namespace := s.getRandomNamespace()
 	isGlobalNamespace := false
 	var clusters []*replicationpb.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: name,
 		})
 	}
 
@@ -220,9 +220,9 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	isGlobalNamespace := false
 
 	var expectedClusters []*replicationpb.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		expectedClusters = append(expectedClusters, &replicationpb.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: name,
 		})
 	}
 
@@ -280,9 +280,9 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	emitMetric := true
 	data := map[string]string{"some random key": "some random value"}
 	var clusters []*replicationpb.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: name,
 		})
 	}
 	isGlobalNamespace := false
@@ -372,9 +372,9 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	emitMetric := true
 	data := map[string]string{"some random key": "some random value"}
 	var clusters []*replicationpb.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: name,
 		})
 	}
 
@@ -454,9 +454,9 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	namespace := s.getRandomNamespace()
 	isGlobalNamespace := true
 	var clusters []*replicationpb.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: name,
 		})
 	}
 

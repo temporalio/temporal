@@ -109,12 +109,12 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 	return shardInfo, nil
 }
 
-func NamespaceInfoToBlob(info *persistenceblobs.NamespaceInfo) (DataBlob, error) {
+func NamespaceDetailToBlob(info *persistenceblobs.NamespaceDetail) (DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func NamespaceInfoFromBlob(b []byte, proto string) (*persistenceblobs.NamespaceInfo, error) {
-	result := &persistenceblobs.NamespaceInfo{}
+func NamespaceDetailFromBlob(b []byte, proto string) (*persistenceblobs.NamespaceDetail, error) {
+	result := &persistenceblobs.NamespaceDetail{}
 	return result, proto3Decode(b, proto, result)
 }
 

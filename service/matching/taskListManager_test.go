@@ -164,7 +164,7 @@ func createTestTaskListManagerWithConfig(controller *gomock.Controller, cfg *Con
 		cfg, tm, nil, logger, mockNamespaceCache,
 	)
 	tl := "tl"
-	dID := "deadbeef-0123-4567-890a-bcdef0123456"
+	dID := "deadbeef-0000-4567-890a-bcdef0123456"
 	tlID := newTestTaskListID(dID, tl, persistence.TaskListTypeActivity)
 	tlKind := tasklistpb.TaskListKind_Normal
 	tlMgr, err := newTaskListManager(me, tlID, tlKind, cfg)

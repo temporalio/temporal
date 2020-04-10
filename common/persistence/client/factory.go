@@ -214,7 +214,7 @@ func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 		return nil, err
 	}
 
-	result := p.NewMetadataManagerImpl(store, f.logger)
+	result := p.NewMetadataManagerImpl(store, f.logger, f.clusterName)
 	if ds.ratelimit != nil {
 		result = p.NewMetadataPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}

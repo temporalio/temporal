@@ -710,10 +710,10 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 
 func (s *mutableStateSuite) newNamespaceCacheEntry() *cache.NamespaceCacheEntry {
 	return cache.NewNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: "mutableStateTest"},
-		&persistence.NamespaceConfig{},
+		&persistenceblobs.NamespaceInfo{Name: "mutableStateTest"},
+		&persistenceblobs.NamespaceConfig{},
 		true,
-		&persistence.NamespaceReplicationConfig{},
+		&persistenceblobs.NamespaceReplicationConfig{},
 		1,
 		nil,
 	)

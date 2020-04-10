@@ -445,7 +445,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 			for _, nextNamespace := range nextNamespaces {
 				failoverPredicate(shardNotificationVersion, nextNamespace, func() {
-					failoverNamespaceIDs[nextNamespace.GetInfo().ID] = struct{}{}
+					failoverNamespaceIDs[primitives.UUIDString(nextNamespace.GetInfo().Id)] = struct{}{}
 				})
 			}
 
@@ -541,7 +541,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	request := startRequest.StartRequest
 	err = validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit())
@@ -1334,7 +1334,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 
 	namespaceInfo := namespaceEntry.GetInfo()
 
-	namespaceID := namespaceInfo.ID
+	namespaceID := primitives.UUIDString(namespaceInfo.Id)
 	namespace := namespaceInfo.Name
 
 	execution := executionpb.WorkflowExecution{
@@ -1455,7 +1455,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 	namespace := namespaceEntry.GetInfo().Name
 
 	request := req.CompleteRequest
@@ -1529,7 +1529,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 	namespace := namespaceEntry.GetInfo().Name
 
 	request := req.FailedRequest
@@ -1613,7 +1613,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 	namespace := namespaceEntry.GetInfo().Name
 
 	request := req.CancelRequest
@@ -1696,7 +1696,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	request := req.HeartbeatRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1766,7 +1766,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	request := req.CancelRequest
 	parentExecution := req.ExternalWorkflowExecution
@@ -1823,7 +1823,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	request := signalRequest.SignalRequest
 	parentExecution := signalRequest.ExternalWorkflowExecution
@@ -1898,7 +1898,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	sRequest := signalWithStartRequest.SignalWithStartRequest
 	execution := executionpb.WorkflowExecution{
@@ -2108,7 +2108,7 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	execution := executionpb.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
@@ -2136,7 +2136,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	request := terminateRequest.TerminateRequest
 	execution := executionpb.WorkflowExecution{
@@ -2174,7 +2174,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	execution := executionpb.WorkflowExecution{
 		WorkflowId: completionRequest.WorkflowExecution.WorkflowId,
@@ -2884,7 +2884,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 	// remove run id from the execution so that reapply events to the current run
 	currentExecution := executionpb.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -3067,7 +3067,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
 	if err != nil {

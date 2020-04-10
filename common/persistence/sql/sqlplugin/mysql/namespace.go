@@ -33,14 +33,14 @@ import (
 
 const (
 	createNamespaceQuery = `INSERT INTO 
- namespaces (id, name, is_global, data, data_encoding)
- VALUES(?, ?, ?, ?, ?)`
+ namespaces (id, name, is_global, data, data_encoding, notification_version)
+ VALUES(?, ?, ?, ?, ?, ?)`
 
 	updateNamespaceQuery = `UPDATE namespaces 
- SET name = ?, data = ?, data_encoding = ?
+ SET name = ?, data = ?, data_encoding = ?, notification_version = ?
  WHERE shard_id=54321 AND id = ?`
 
-	getNamespacePart = `SELECT id, name, is_global, data, data_encoding FROM namespaces`
+	getNamespacePart = `SELECT id, name, is_global, data, data_encoding, notification_version FROM namespaces`
 
 	getNamespaceByIDQuery   = getNamespacePart + ` WHERE shard_id=? AND id = ?`
 	getNamespaceByNameQuery = getNamespacePart + ` WHERE shard_id=? AND name = ?`
@@ -64,12 +64,12 @@ var errMissingArgs = errors.New("missing one or more args for API")
 
 // InsertIntoNamespace inserts a single row into namespaces table
 func (mdb *db) InsertIntoNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
-	return mdb.conn.Exec(createNamespaceQuery, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding)
+	return mdb.conn.Exec(createNamespaceQuery, row.ID, row.Name, row.IsGlobal, row.Data, row.DataEncoding, row.NotificationVersion)
 }
 
 // UpdateNamespace updates a single row in namespaces table
 func (mdb *db) UpdateNamespace(row *sqlplugin.NamespaceRow) (sql.Result, error) {
-	return mdb.conn.Exec(updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.ID)
+	return mdb.conn.Exec(updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.NotificationVersion, row.ID)
 }
 
 // SelectFromNamespace reads one or more rows from namespaces table

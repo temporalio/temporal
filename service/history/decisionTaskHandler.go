@@ -39,6 +39,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -196,7 +197,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule activity across namespace %v.", attr.GetNamespace()))
 		}
-		targetNamespaceID = targetNamespaceEntry.GetInfo().ID
+		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
 	}
 
 	if err := handler.validateDecisionAttr(
@@ -575,7 +576,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelExternalWorkf
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Unable to cancel workflow across namespace: %v.", attr.GetNamespace()))
 		}
-		targetNamespaceID = targetNamespaceEntry.GetInfo().ID
+		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
 	}
 
 	if err := handler.validateDecisionAttr(
@@ -721,7 +722,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule child execution across namespace %v.", attr.GetNamespace()))
 		}
-		targetNamespaceID = targetNamespaceEntry.GetInfo().ID
+		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
 	}
 
 	if err := handler.validateDecisionAttr(
@@ -776,7 +777,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Unable to signal workflow across namespace: %v.", attr.GetNamespace()))
 		}
-		targetNamespaceID = targetNamespaceEntry.GetInfo().ID
+		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
 	}
 
 	if err := handler.validateDecisionAttr(

@@ -660,7 +660,7 @@ func (v *decisionAttrValidator) validateCrossNamespaceCall(
 	// one is local namespace, another one is global namespace or both global namespace
 	// treat global namespace with one replication cluster as local namespace
 	if len(namespaceClusters) == 1 && len(targetNamespaceClusters) == 1 {
-		if *namespaceClusters[0] == *targetNamespaceClusters[0] {
+		if namespaceClusters[0] == targetNamespaceClusters[0] {
 			return nil
 		}
 		return v.createCrossNamespaceCallError(namespaceEntry, targetNamespaceEntry)

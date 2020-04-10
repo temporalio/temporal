@@ -41,6 +41,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
@@ -706,19 +707,21 @@ func (c *cadenceImpl) startWorkerIndexer(params *resource.BootstrapParams, servi
 func (c *cadenceImpl) createSystemNamespace() error {
 
 	_, err := c.metadataMgr.CreateNamespace(&persistence.CreateNamespaceRequest{
-		Info: &persistence.NamespaceInfo{
-			ID:          uuid.New(),
-			Name:        "temporal-system",
-			Status:      persistence.NamespaceStatusRegistered,
-			Description: "Cadence system namespace",
+		Namespace: &persistenceblobs.NamespaceDetail{
+			Info: &persistenceblobs.NamespaceInfo{
+				Id:          uuid.NewRandom(),
+				Name:        "temporal-system",
+				Status:      namespacepb.NamespaceStatus_Registered,
+				Description: "Cadence system namespace",
+			},
+			Config: &persistenceblobs.NamespaceConfig{
+				RetentionDays:                1,
+				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
+				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
+			},
+			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{},
+			FailoverVersion:   common.EmptyVersion,
 		},
-		Config: &persistence.NamespaceConfig{
-			Retention:                1,
-			HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
-			VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
-		},
-		ReplicationConfig: &persistence.NamespaceReplicationConfig{},
-		FailoverVersion:   common.EmptyVersion,
 	})
 	if err != nil {
 		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); ok {
