@@ -41,6 +41,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/history/config"
 )
 
 type (
@@ -58,7 +59,7 @@ type (
 		mockShardManager  *mmocks.ShardManager
 		mockEngineFactory *MockHistoryEngineFactory
 
-		config          *Config
+		config          *config.Config
 		logger          log.Logger
 		shardController *shardController
 	}

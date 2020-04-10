@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/resource"
+	"github.com/uber/cadence/service/history/config"
 )
 
 type (
@@ -42,7 +43,7 @@ type (
 		controller *gomock.Controller
 
 		mockResource           *resource.Test
-		config                 *Config
+		config                 *config.Config
 		frontendClient         *adminservicetest.MockClient
 		replicationTaskFetcher *ReplicationTaskFetcherImpl
 	}

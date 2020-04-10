@@ -39,6 +39,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/events"
 )
 
 type (
@@ -48,7 +49,7 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shardContextTest
-		mockEventsCache     *MockeventsCache
+		mockEventsCache     *events.MockCache
 		mockTaskRefresher   *MockmutableStateTaskRefresher
 		mockDomainCache     *cache.MockDomainCache
 		mockClusterMetadata *cluster.MockMetadata
@@ -90,7 +91,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.mockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 

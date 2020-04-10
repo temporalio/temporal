@@ -53,8 +53,9 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service/config"
+	sconfig "github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/xdc"
+	"github.com/uber/cadence/service/history/config"
 	warchiver "github.com/uber/cadence/service/worker/archiver"
 )
 
@@ -135,7 +136,7 @@ type (
 		metricsClient             metrics.Client
 		logger                    log.Logger
 		throttledLogger           log.Logger
-		config                    *Config
+		config                    *config.Config
 		archivalClient            warchiver.Client
 		resetor                   workflowResetor
 		workflowResetter          workflowResetter
@@ -209,7 +210,7 @@ func NewEngineWithShardContext(
 	publicClient workflowserviceclient.Interface,
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,
-	config *Config,
+	config *config.Config,
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matching.Client,
 	queueTaskProcessor queueTaskProcessor,
@@ -356,7 +357,7 @@ func (e *historyEngineImpl) Start() {
 	e.timerProcessor.Start()
 
 	clusterMetadata := e.shard.GetClusterMetadata()
-	if e.replicatorProcessor != nil && clusterMetadata.GetReplicationConsumerConfig().Type != config.ReplicationConsumerTypeRPC {
+	if e.replicatorProcessor != nil && clusterMetadata.GetReplicationConsumerConfig().Type != sconfig.ReplicationConsumerTypeRPC {
 		e.replicatorProcessor.Start()
 	}
 

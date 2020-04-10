@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/worker/archiver"
 )
 
@@ -48,7 +49,7 @@ type (
 		metricsClient  metrics.Client
 		matchingClient matching.Client
 		visibilityMgr  persistence.VisibilityManager
-		config         *Config
+		config         *config.Config
 	}
 )
 
@@ -57,7 +58,7 @@ func newTransferQueueTaskExecutorBase(
 	historyService *historyEngineImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,
-	config *Config,
+	config *config.Config,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
 		shard:          shard,

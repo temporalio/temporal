@@ -53,6 +53,8 @@ import (
 	p "github.com/uber/cadence/common/persistence"
 	cconfig "github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/events"
 )
 
 type (
@@ -75,8 +77,8 @@ type (
 		mockHistoryV2Mgr  *mocks.HistoryV2Manager
 		mockShardManager  *mocks.ShardManager
 
-		eventsCache eventsCache
-		config      *Config
+		eventsCache events.Cache
+		config      *config.Config
 	}
 )
 
@@ -159,9 +161,9 @@ var testGlobalChildDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 	nil,
 )
 
-func NewDynamicConfigForTest() *Config {
+func NewDynamicConfigForTest() *config.Config {
 	dc := dynamicconfig.NewNopCollection()
-	config := NewConfig(dc, 1, cconfig.StoreTypeCassandra, false)
+	config := config.New(dc, 1, cconfig.StoreTypeCassandra, false)
 	// reduce the duration of long poll to increase test speed
 	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByDomain(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
 	config.EnableConsistentQueryByDomain = dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableConsistentQueryByDomain, true)
@@ -199,7 +201,13 @@ func (s *engineSuite) SetupTest() {
 		},
 		s.config,
 	)
-	s.eventsCache = newEventsCache(s.mockShard)
+	s.eventsCache = events.NewCache(
+		s.mockShard.GetShardID(),
+		s.mockShard.GetHistoryManager(),
+		s.config,
+		s.mockShard.GetLogger(),
+		s.mockShard.GetMetricsClient(),
+	)
 	s.mockShard.eventsCache = s.eventsCache
 
 	s.mockMatchingClient = s.mockShard.resource.MatchingClient
@@ -4917,7 +4925,7 @@ func addDecisionTaskCompletedEvent(builder mutableState, scheduleID, startedID i
 	event, _ := builder.AddDecisionTaskCompletedEvent(scheduleID, startedID, &workflow.RespondDecisionTaskCompletedRequest{
 		ExecutionContext: context,
 		Identity:         common.StringPtr(identity),
-	}, defaultHistoryMaxAutoResetPoints)
+	}, config.DefaultHistoryMaxAutoResetPoints)
 
 	builder.FlushBufferedEvents() //nolint:errcheck
 
@@ -5120,7 +5128,7 @@ func addFailWorkflowEvent(
 	return event
 }
 
-func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCache,
+func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache events.Cache,
 	logger log.Logger, runID string) *mutableStateBuilder {
 
 	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, testLocalDomainEntry)
@@ -5129,7 +5137,7 @@ func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCac
 	return msBuilder
 }
 
-func newMutableStateBuilderWithReplicationStateWithEventV2(shard ShardContext, eventsCache eventsCache,
+func newMutableStateBuilderWithReplicationStateWithEventV2(shard ShardContext, eventsCache events.Cache,
 	logger log.Logger, version int64, runID string) *mutableStateBuilder {
 
 	msBuilder := newMutableStateBuilderWithReplicationState(shard, eventsCache, logger, testGlobalDomainEntry)

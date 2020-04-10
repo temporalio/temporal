@@ -41,6 +41,7 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/resource"
+	"github.com/uber/cadence/service/history/config"
 )
 
 type (
@@ -51,7 +52,7 @@ type (
 
 		mockResource           *resource.Test
 		mockShard              ShardContext
-		config                 *Config
+		config                 *config.Config
 		mockClientBean         *client.MockBean
 		adminClient            *adminservicetest.MockClient
 		clusterMetadata        *cluster.MockMetadata

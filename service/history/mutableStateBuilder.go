@@ -42,6 +42,8 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/events"
 )
 
 const (
@@ -145,8 +147,8 @@ type (
 
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
-		eventsCache     eventsCache
-		config          *Config
+		eventsCache     events.Cache
+		config          *config.Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
 		metricsClient   metrics.Client
@@ -157,7 +159,7 @@ var _ mutableState = (*mutableStateBuilder)(nil)
 
 func newMutableStateBuilder(
 	shard ShardContext,
-	eventsCache eventsCache,
+	eventsCache events.Cache,
 	logger log.Logger,
 	domainEntry *cache.DomainCacheEntry,
 ) *mutableStateBuilder {
@@ -227,7 +229,7 @@ func newMutableStateBuilder(
 
 func newMutableStateBuilderWithReplicationState(
 	shard ShardContext,
-	eventsCache eventsCache,
+	eventsCache events.Cache,
 	logger log.Logger,
 	domainEntry *cache.DomainCacheEntry,
 ) *mutableStateBuilder {
@@ -244,7 +246,7 @@ func newMutableStateBuilderWithReplicationState(
 
 func newMutableStateBuilderWithVersionHistories(
 	shard ShardContext,
-	eventsCache eventsCache,
+	eventsCache events.Cache,
 	logger log.Logger,
 	domainEntry *cache.DomainCacheEntry,
 ) *mutableStateBuilder {
@@ -954,7 +956,7 @@ func (e *mutableStateBuilder) GetActivityScheduledEvent(
 	if err != nil {
 		return nil, err
 	}
-	scheduledEvent, err := e.eventsCache.getEvent(
+	scheduledEvent, err := e.eventsCache.GetEvent(
 		e.executionInfo.DomainID,
 		e.executionInfo.WorkflowID,
 		e.executionInfo.RunID,
@@ -1021,7 +1023,7 @@ func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(
 	if err != nil {
 		return nil, err
 	}
-	initiatedEvent, err := e.eventsCache.getEvent(
+	initiatedEvent, err := e.eventsCache.GetEvent(
 		e.executionInfo.DomainID,
 		e.executionInfo.WorkflowID,
 		e.executionInfo.RunID,
@@ -1121,7 +1123,7 @@ func (e *mutableStateBuilder) GetCompletionEvent() (*workflow.HistoryEvent, erro
 	// Completion EventID is always one less than NextEventID after workflow is completed
 	completionEventID := e.executionInfo.NextEventID - 1
 	firstEventID := e.executionInfo.CompletionEventBatchID
-	completionEvent, err := e.eventsCache.getEvent(
+	completionEvent, err := e.eventsCache.GetEvent(
 		e.executionInfo.DomainID,
 		e.executionInfo.WorkflowID,
 		e.executionInfo.RunID,
@@ -1147,7 +1149,7 @@ func (e *mutableStateBuilder) GetStartEvent() (*workflow.HistoryEvent, error) {
 		return nil, err
 	}
 
-	startEvent, err := e.eventsCache.getEvent(
+	startEvent, err := e.eventsCache.GetEvent(
 		e.executionInfo.DomainID,
 		e.executionInfo.WorkflowID,
 		e.executionInfo.RunID,
@@ -1232,7 +1234,7 @@ func (e *mutableStateBuilder) writeEventToCache(
 	// load it from database
 	// For completion event: store it within events cache so we can communicate the result to parent execution
 	// during the processing of DeleteTransferTask without loading this event from database
-	e.eventsCache.putEvent(
+	e.eventsCache.PutEvent(
 		e.executionInfo.DomainID,
 		e.executionInfo.WorkflowID,
 		e.executionInfo.RunID,
@@ -2109,7 +2111,7 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(
 	event := e.hBuilder.AddActivityTaskScheduledEvent(decisionCompletedEventID, attributes)
 
 	// Write the event to cache only on active cluster for processing on activity started or retried
-	e.eventsCache.putEvent(
+	e.eventsCache.PutEvent(
 		e.executionInfo.DomainID,
 		e.executionInfo.WorkflowID,
 		e.executionInfo.RunID,
@@ -3405,7 +3407,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 
 	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(decisionCompletedEventID, attributes)
 	// Write the event to cache only on active cluster
-	e.eventsCache.putEvent(e.executionInfo.DomainID, e.executionInfo.WorkflowID, e.executionInfo.RunID,
+	e.eventsCache.PutEvent(e.executionInfo.DomainID, e.executionInfo.WorkflowID, e.executionInfo.RunID,
 		event.GetEventId(), event)
 
 	ci, err := e.ReplicateStartChildWorkflowExecutionInitiatedEvent(decisionCompletedEventID, event, createRequestID)

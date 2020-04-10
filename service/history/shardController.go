@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/resource"
+	"github.com/uber/cadence/service/history/config"
 )
 
 const (
@@ -51,7 +52,7 @@ type (
 		shutdownCh         chan struct{}
 		logger             log.Logger
 		throttledLogger    log.Logger
-		config             *Config
+		config             *config.Config
 		metricsScope       metrics.Scope
 
 		sync.RWMutex
@@ -64,7 +65,7 @@ type (
 		resource.Resource
 
 		shardID         int
-		config          *Config
+		config          *config.Config
 		logger          log.Logger
 		throttledLogger log.Logger
 		engineFactory   EngineFactory
@@ -84,7 +85,7 @@ const (
 func newShardController(
 	resource resource.Resource,
 	factory EngineFactory,
-	config *Config,
+	config *config.Config,
 ) *shardController {
 	hostIdentity := resource.GetHostInfo().Identity()
 	return &shardController{
@@ -105,7 +106,7 @@ func newHistoryShardsItem(
 	resource resource.Resource,
 	shardID int,
 	factory EngineFactory,
-	config *Config,
+	config *config.Config,
 ) (*historyShardsItem, error) {
 
 	hostIdentity := resource.GetHostInfo().Identity()

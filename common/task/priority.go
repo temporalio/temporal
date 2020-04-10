@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,33 +18,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination interface_mock.go -self_package github.com/uber/cadence/service/frontend
+package task
 
-package frontend
-
-import (
-	"context"
-
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
-	"github.com/uber/cadence/.gen/go/health"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/resource"
+const (
+	numBitsPerLevel = 3
 )
 
-type (
-	// Handler is interface wrapping frontend handler
-	Handler interface {
-		workflowserviceserver.Interface
-		common.Daemon
-
-		GetResource() resource.Resource
-		GetConfig() *Config
-		// RegisterHandler register this handler, must be called before Start()
-		RegisterHandler()
-		// Health is the health check method for this rpc handler
-		Health(ctx context.Context) (*health.HealthStatus, error)
-		// UpdateHealthStatus sets the health status for this rpc handler.
-		// This health status will be used within the rpc health check handler
-		UpdateHealthStatus(status HealthStatus)
-	}
+const (
+	// HighPriorityClass is the priority class for high priority tasks
+	HighPriorityClass = iota << numBitsPerLevel
+	// DefaultPriorityClass is the priority class for default priority tasks
+	DefaultPriorityClass
+	// LowPriorityClass is the priority class for low priority tasks
+	LowPriorityClass
 )
+
+const (
+	// HighPrioritySubclass is the priority subclass for high priority tasks
+	HighPrioritySubclass = iota
+	// DefaultPrioritySubclass is the priority subclass for high priority tasks
+	DefaultPrioritySubclass
+	// LowPrioritySubclass is the priority subclass for high priority tasks
+	LowPrioritySubclass
+)
+
+// GetTaskPriority returns priority given a task's priority class and subclass
+func GetTaskPriority(
+	class int,
+	subClass int,
+) int {
+	return class | subClass
+}

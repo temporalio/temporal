@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/events"
 )
 
 type (
@@ -45,7 +46,7 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shardContextTest
-		mockEventsCache     *MockeventsCache
+		mockEventsCache     *events.MockCache
 		mockDomainCache     *cache.MockDomainCache
 		mockTaskGenerator   *MockmutableStateTaskGenerator
 		mockMutableState    *MockmutableState
@@ -96,7 +97,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockEventsCache = s.mockShard.mockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 

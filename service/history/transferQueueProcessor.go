@@ -38,6 +38,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
+	"github.com/uber/cadence/service/history/config"
 )
 
 var (
@@ -60,7 +61,7 @@ type (
 		currentClusterName    string
 		shard                 ShardContext
 		taskAllocator         taskAllocator
-		config                *Config
+		config                *config.Config
 		metricsClient         metrics.Client
 		historyService        *historyEngineImpl
 		visibilityMgr         persistence.VisibilityManager

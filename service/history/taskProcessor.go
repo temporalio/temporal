@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
 )
 
 type (
@@ -60,7 +61,7 @@ type (
 		cache         *historyCache
 		shutdownCh    chan struct{}
 		tasksCh       chan *taskInfo
-		config        *Config
+		config        *config.Config
 		logger        log.Logger
 		metricsClient metrics.Client
 		timeSource    clock.TimeSource

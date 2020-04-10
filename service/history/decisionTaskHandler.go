@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/service/history/config"
 )
 
 type (
@@ -59,7 +60,7 @@ type (
 		logger        log.Logger
 		domainCache   cache.DomainCache
 		metricsClient metrics.Client
-		config        *Config
+		config        *config.Config
 	}
 )
 
@@ -73,7 +74,7 @@ func newDecisionTaskHandler(
 	logger log.Logger,
 	domainCache cache.DomainCache,
 	metricsClient metrics.Client,
-	config *Config,
+	config *config.Config,
 ) *decisionTaskHandlerImpl {
 
 	return &decisionTaskHandlerImpl{

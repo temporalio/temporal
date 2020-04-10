@@ -23,7 +23,6 @@
 package history
 
 import (
-	"strconv"
 	"sync"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -32,6 +31,8 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/quotas"
+	"github.com/uber/cadence/common/task"
+	"github.com/uber/cadence/service/history/config"
 )
 
 type (
@@ -44,7 +45,7 @@ type (
 
 		currentClusterName string
 		domainCache        cache.DomainCache
-		config             *Config
+		config             *config.Config
 		logger             log.Logger
 		scope              metrics.Scope
 		rateLimiters       map[string]quotas.Limiter
@@ -53,34 +54,12 @@ type (
 
 var _ taskPriorityAssigner = (*taskPriorityAssignerImpl)(nil)
 
-const (
-	numBitsPerLevel = 3
-)
-
-const (
-	taskHighPriorityClass = iota << numBitsPerLevel
-	taskDefaultPriorityClass
-	taskLowPriorityClass
-)
-
-const (
-	taskHighPrioritySubclass = iota
-	taskDefaultPrioritySubclass
-	taskLowPrioritySubclass
-)
-
-var defaultTaskPriorityWeight = map[int]int{
-	getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass):    200,
-	getTaskPriority(taskDefaultPriorityClass, taskDefaultPrioritySubclass): 100,
-	getTaskPriority(taskLowPriorityClass, taskDefaultPrioritySubclass):     50,
-}
-
 func newTaskPriorityAssigner(
 	currentClusterName string,
 	domainCache cache.DomainCache,
 	logger log.Logger,
 	metricClient metrics.Client,
-	config *Config,
+	config *config.Config,
 ) *taskPriorityAssignerImpl {
 	return &taskPriorityAssignerImpl{
 		currentClusterName: currentClusterName,
@@ -93,28 +72,28 @@ func newTaskPriorityAssigner(
 }
 
 func (a *taskPriorityAssignerImpl) Assign(
-	task queueTask,
+	queueTask queueTask,
 ) error {
-	if task.GetQueueType() == replicationQueueType {
-		task.SetPriority(getTaskPriority(taskLowPriorityClass, taskDefaultPrioritySubclass))
+	if queueTask.GetQueueType() == replicationQueueType {
+		queueTask.SetPriority(task.GetTaskPriority(task.LowPriorityClass, task.DefaultPrioritySubclass))
 		return nil
 	}
 
 	// timer of transfer task, first check if domain is active or not
-	domainName, active, err := a.getDomainInfo(task.GetDomainID())
+	domainName, active, err := a.getDomainInfo(queueTask.GetDomainID())
 	if err != nil {
 		return err
 	}
 
 	if !active {
-		task.SetPriority(getTaskPriority(taskLowPriorityClass, taskDefaultPrioritySubclass))
+		queueTask.SetPriority(task.GetTaskPriority(task.LowPriorityClass, task.DefaultPrioritySubclass))
 		return nil
 	}
 
 	if !a.getRateLimiter(domainName).Allow() {
-		task.SetPriority(getTaskPriority(taskDefaultPriorityClass, taskDefaultPrioritySubclass))
+		queueTask.SetPriority(task.GetTaskPriority(task.DefaultPriorityClass, task.DefaultPrioritySubclass))
 		taggedScope := a.scope.Tagged(metrics.DomainTag(domainName))
-		if task.GetQueueType() == transferQueueType {
+		if queueTask.GetQueueType() == transferQueueType {
 			taggedScope.IncCounter(metrics.TransferTaskThrottledCounter)
 		} else {
 			taggedScope.IncCounter(metrics.TimerTaskThrottledCounter)
@@ -122,7 +101,7 @@ func (a *taskPriorityAssignerImpl) Assign(
 		return nil
 	}
 
-	task.SetPriority(getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass))
+	queueTask.SetPriority(task.GetTaskPriority(task.HighPriorityClass, task.DefaultPrioritySubclass))
 	return nil
 }
 
@@ -175,20 +154,4 @@ func (a *taskPriorityAssignerImpl) getRateLimiter(
 
 	a.rateLimiters[domainName] = limiter
 	return limiter
-}
-
-func getTaskPriority(
-	class, subClass int,
-) int {
-	return class | subClass
-}
-
-func convertWeightsToDynamicConfigValue(
-	weights map[int]int,
-) map[string]interface{} {
-	weightsForDC := make(map[string]interface{})
-	for priority, weight := range weights {
-		weightsForDC[strconv.Itoa(priority)] = weight
-	}
-	return weightsForDC
 }

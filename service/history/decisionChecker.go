@@ -35,6 +35,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
 )
 
 type (
@@ -68,7 +69,7 @@ const (
 
 func newDecisionAttrValidator(
 	domainCache cache.DomainCache,
-	config *Config,
+	config *config.Config,
 	logger log.Logger,
 ) *decisionAttrValidator {
 	return &decisionAttrValidator{

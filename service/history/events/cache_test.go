@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package events
 
 import (
 	"errors"
@@ -43,11 +43,10 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		logger log.Logger
+		logger             log.Logger
+		mockHistoryManager *mocks.HistoryV2Manager
 
-		mockEventsV2Mgr *mocks.HistoryV2Manager
-
-		cache *eventsCacheImpl
+		cache *cacheImpl
 	}
 )
 
@@ -70,16 +69,16 @@ func (s *eventsCacheSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.mockEventsV2Mgr = &mocks.HistoryV2Manager{}
+	s.mockHistoryManager = &mocks.HistoryV2Manager{}
 	s.cache = s.newTestEventsCache()
 }
 
 func (s *eventsCacheSuite) TearDownTest() {
-	s.mockEventsV2Mgr.AssertExpectations(s.T())
+	s.mockHistoryManager.AssertExpectations(s.T())
 }
 
-func (s *eventsCacheSuite) newTestEventsCache() *eventsCacheImpl {
-	return newEventsCacheWithOptions(16, 32, time.Minute, s.mockEventsV2Mgr, false, s.logger,
+func (s *eventsCacheSuite) newTestEventsCache() *cacheImpl {
+	return newCacheWithOption(16, 32, time.Minute, s.mockHistoryManager, false, s.logger,
 		metrics.NewClient(tally.NoopScope, metrics.History), common.IntPtr(10))
 }
 
@@ -94,8 +93,8 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 		ActivityTaskStartedEventAttributes: &shared.ActivityTaskStartedEventAttributes{},
 	}
 
-	s.cache.putEvent(domainID, workflowID, runID, eventID, event)
-	actualEvent, err := s.cache.getEvent(domainID, workflowID, runID, eventID, eventID, nil)
+	s.cache.PutEvent(domainID, workflowID, runID, eventID, event)
+	actualEvent, err := s.cache.GetEvent(domainID, workflowID, runID, eventID, eventID, nil)
 	s.Nil(err)
 	s.Equal(event, actualEvent)
 }
@@ -135,7 +134,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{},
 	}
 
-	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
+	s.mockHistoryManager.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event1.GetEventId(),
 		MaxEventID:    event6.GetEventId() + 1,
@@ -148,8 +147,8 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		LastFirstEventID: event1.GetEventId(),
 	}, nil)
 
-	s.cache.putEvent(domainID, workflowID, runID, event2.GetEventId(), event2)
-	actualEvent, err := s.cache.getEvent(domainID, workflowID, runID, event1.GetEventId(), event6.GetEventId(),
+	s.cache.PutEvent(domainID, workflowID, runID, event2.GetEventId(), event2)
+	actualEvent, err := s.cache.GetEvent(domainID, workflowID, runID, event1.GetEventId(), event6.GetEventId(),
 		[]byte("store_token"))
 	s.Nil(err)
 	s.Equal(event6, actualEvent)
@@ -161,7 +160,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 	runID := "events-cache-miss-failure-run-id"
 
 	expectedErr := errors.New("persistence call failed")
-	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
+	s.mockHistoryManager.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    int64(11),
 		MaxEventID:    int64(15),
@@ -170,7 +169,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 		ShardID:       common.IntPtr(10),
 	}).Return(nil, expectedErr)
 
-	actualEvent, err := s.cache.getEvent(domainID, workflowID, runID, int64(11), int64(14),
+	actualEvent, err := s.cache.GetEvent(domainID, workflowID, runID, int64(11), int64(14),
 		[]byte("store_token"))
 	s.Nil(actualEvent)
 	s.Equal(expectedErr, err)
@@ -191,7 +190,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		ActivityTaskStartedEventAttributes: &shared.ActivityTaskStartedEventAttributes{},
 	}
 
-	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
+	s.mockHistoryManager.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event2.GetEventId(),
 		MaxEventID:    event2.GetEventId() + 1,
@@ -204,10 +203,10 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		LastFirstEventID: event2.GetEventId(),
 	}, nil)
 
-	s.cache.putEvent(domainID, workflowID, runID, event1.GetEventId(), event1)
-	s.cache.putEvent(domainID, workflowID, runID, event2.GetEventId(), event2)
+	s.cache.PutEvent(domainID, workflowID, runID, event1.GetEventId(), event1)
+	s.cache.PutEvent(domainID, workflowID, runID, event2.GetEventId(), event2)
 	s.cache.disabled = true
-	actualEvent, err := s.cache.getEvent(domainID, workflowID, runID, event2.GetEventId(), event2.GetEventId(),
+	actualEvent, err := s.cache.GetEvent(domainID, workflowID, runID, event2.GetEventId(), event2.GetEventId(),
 		[]byte("store_token"))
 	s.Nil(err)
 	s.Equal(event2, actualEvent)

@@ -46,6 +46,7 @@ import (
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/task"
+	"github.com/uber/cadence/service/history/config"
 )
 
 // Handler - Thrift handler interface for history service
@@ -57,7 +58,7 @@ type (
 		controller              *shardController
 		tokenSerializer         common.TaskTokenSerializer
 		startWG                 sync.WaitGroup
-		config                  *Config
+		config                  *config.Config
 		historyEventNotifier    historyEventNotifier
 		publisher               messaging.Producer
 		rateLimiter             quotas.Limiter
@@ -86,7 +87,7 @@ var (
 // NewHandler creates a thrift handler for the history service
 func NewHandler(
 	resource resource.Resource,
-	config *Config,
+	config *config.Config,
 ) *Handler {
 	handler := &Handler{
 		Resource:        resource,

@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/worker/archiver"
 )
 
@@ -40,7 +41,7 @@ type (
 		cache          *historyCache
 		logger         log.Logger
 		metricsClient  metrics.Client
-		config         *Config
+		config         *config.Config
 	}
 )
 
@@ -49,7 +50,7 @@ func newTimerQueueTaskExecutorBase(
 	historyService *historyEngineImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,
-	config *Config,
+	config *config.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
 		shard:          shard,

@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	serviceConfig "github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/service/history/config"
 )
 
 const (
@@ -49,7 +50,7 @@ type (
 		status         int32
 		currentCluster string
 		sourceCluster  string
-		config         *Config
+		config         *config.Config
 		logger         log.Logger
 		remotePeer     admin.Client
 		requestChan    chan *request
@@ -81,7 +82,7 @@ type (
 // NewReplicationTaskFetchers creates an instance of ReplicationTaskFetchers with given configs.
 func NewReplicationTaskFetchers(
 	logger log.Logger,
-	config *Config,
+	config *config.Config,
 	consumerConfig *serviceConfig.ReplicationConsumerConfig,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
@@ -150,7 +151,7 @@ func newReplicationTaskFetcher(
 	logger log.Logger,
 	sourceCluster string,
 	currentCluster string,
-	config *Config,
+	config *config.Config,
 	sourceFrontend admin.Client,
 ) *ReplicationTaskFetcherImpl {
 

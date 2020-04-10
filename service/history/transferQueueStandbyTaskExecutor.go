@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/xdc"
+	"github.com/uber/cadence/service/history/config"
 )
 
 type (
@@ -50,7 +51,7 @@ func newTransferQueueStandbyTaskExecutor(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	clusterName string,
-	config *Config,
+	config *config.Config,
 ) queueTaskExecutor {
 	return &transferQueueStandbyTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(

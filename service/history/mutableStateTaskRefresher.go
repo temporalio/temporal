@@ -31,6 +31,8 @@ import (
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/events"
 )
 
 var emptyTasks = []persistence.Task{}
@@ -41,17 +43,17 @@ type (
 	}
 
 	mutableStateTaskRefresherImpl struct {
-		config      *Config
+		config      *config.Config
 		domainCache cache.DomainCache
-		eventsCache eventsCache
+		eventsCache events.Cache
 		logger      log.Logger
 	}
 )
 
 func newMutableStateTaskRefresher(
-	config *Config,
+	config *config.Config,
 	domainCache cache.DomainCache,
-	eventsCache eventsCache,
+	eventsCache events.Cache,
 	logger log.Logger,
 ) *mutableStateTaskRefresherImpl {
 
@@ -291,7 +293,7 @@ Loop:
 			continue Loop
 		}
 
-		scheduleEvent, err := r.eventsCache.getEvent(
+		scheduleEvent, err := r.eventsCache.GetEvent(
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
@@ -371,7 +373,7 @@ Loop:
 			continue Loop
 		}
 
-		scheduleEvent, err := r.eventsCache.getEvent(
+		scheduleEvent, err := r.eventsCache.GetEvent(
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
@@ -409,7 +411,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWork
 	}
 
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
-		initiateEvent, err := r.eventsCache.getEvent(
+		initiateEvent, err := r.eventsCache.GetEvent(
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
@@ -447,7 +449,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	}
 
 	for _, signalInfo := range pendingSignalInfos {
-		initiateEvent, err := r.eventsCache.getEvent(
+		initiateEvent, err := r.eventsCache.GetEvent(
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,

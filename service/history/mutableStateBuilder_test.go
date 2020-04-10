@@ -40,6 +40,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/history/events"
 )
 
 type (
@@ -49,7 +50,7 @@ type (
 
 		controller      *gomock.Controller
 		mockShard       *shardContextTest
-		mockEventsCache *MockeventsCache
+		mockEventsCache *events.MockCache
 
 		msBuilder *mutableStateBuilder
 		logger    log.Logger
@@ -74,7 +75,7 @@ func (s *mutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockEventsCache = NewMockeventsCache(s.controller)
+	s.mockEventsCache = events.NewMockCache(s.controller)
 
 	s.mockShard = newTestShardContext(
 		s.controller,
@@ -609,7 +610,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	}
 	eventID++
 
-	s.mockEventsCache.EXPECT().putEvent(
+	s.mockEventsCache.EXPECT().PutEvent(
 		domainID, execution.GetWorkflowId(), execution.GetRunId(),
 		workflowStartEvent.GetEventId(), workflowStartEvent,
 	).Times(1)

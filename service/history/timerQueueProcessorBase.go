@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/history/config"
 )
 
 var (
@@ -55,7 +56,7 @@ type (
 		status               int32
 		shutdownWG           sync.WaitGroup
 		shutdownCh           chan struct{}
-		config               *Config
+		config               *config.Config
 		logger               log.Logger
 		metricsClient        metrics.Client
 		metricsScope         metrics.Scope

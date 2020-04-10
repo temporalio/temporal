@@ -56,7 +56,6 @@ type (
 	nDCStateRebuilderImpl struct {
 		shard           ShardContext
 		domainCache     cache.DomainCache
-		eventsCache     eventsCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryManager
 		taskRefresher   mutableStateTaskRefresher
@@ -76,7 +75,6 @@ func newNDCStateRebuilder(
 	return &nDCStateRebuilderImpl{
 		shard:           shard,
 		domainCache:     shard.GetDomainCache(),
-		eventsCache:     shard.GetEventsCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryManager(),
 		taskRefresher: newMutableStateTaskRefresher(

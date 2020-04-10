@@ -34,6 +34,8 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/events"
 )
 
 type (
@@ -43,7 +45,7 @@ type (
 
 		controller      *gomock.Controller
 		mockShard       *shardContextTest
-		mockEventsCache *MockeventsCache
+		mockEventsCache *events.MockCache
 		mockDomainCache *cache.MockDomainCache
 
 		domainID    string
@@ -83,7 +85,7 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.mockEventsCache = s.mockShard.mockEventsCache
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
 		s.logger, testLocalDomainEntry)
@@ -819,7 +821,7 @@ func (s *historyBuilderSuite) addDecisionTaskCompletedEvent(scheduleID, startedI
 	event, err := s.msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, &workflow.RespondDecisionTaskCompletedRequest{
 		ExecutionContext: context,
 		Identity:         common.StringPtr(identity),
-	}, defaultHistoryMaxAutoResetPoints)
+	}, config.DefaultHistoryMaxAutoResetPoints)
 	s.Nil(err)
 
 	return event
