@@ -35,7 +35,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"go.temporal.io/temporal-proto/namespace"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -687,7 +687,7 @@ func (entry *NamespaceCacheEntry) duplicate() *NamespaceCacheEntry {
 
 	result.config = proto.Clone(entry.config).(*persistenceblobs.NamespaceConfig)
 	if result.config.BadBinaries == nil || result.config.BadBinaries.Binaries == nil{
-		result.config.BadBinaries.Binaries = make(map[string]*namespace.BadBinaryInfo, 0)
+		result.config.BadBinaries.Binaries = make(map[string]*namespacepb.BadBinaryInfo, 0)
 	}
 
 	result.replicationConfig = proto.Clone(entry.replicationConfig).(*persistenceblobs.NamespaceReplicationConfig)
