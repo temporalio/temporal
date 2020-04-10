@@ -2068,6 +2068,13 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 	nextPageToken := iter.PageState()
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
+
+	if err := iter.Close(); err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ListConcreteExecutions operation failed. Error: %v", err),
+		}
+	}
+
 	return response, nil
 }
 
