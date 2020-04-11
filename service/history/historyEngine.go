@@ -2636,11 +2636,11 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 ) {
 
 	namespace := namespaceEntry.GetInfo().Name
-	maxDecisionStartToCloseTimeoutSeconds := int32(e.config.MaxDecisionTaskStartToCloseTimeout(namespace).Seconds())
+	maxDecisionStartToCloseTimeoutSeconds := common.Int32Ceil(e.config.MaxDecisionTaskStartToCloseTimeout(namespace).Seconds())
 
 	taskStartToCloseTimeoutSecs := request.GetTaskStartToCloseTimeoutSeconds()
 	if taskStartToCloseTimeoutSecs == 0 {
-		taskStartToCloseTimeoutSecs = int32(e.config.DefaultDecisionTaskStartToCloseTimeout(namespace).Seconds())
+		taskStartToCloseTimeoutSecs = common.Int32Ceil(e.config.DefaultDecisionTaskStartToCloseTimeout(namespace).Seconds())
 	}
 	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, maxDecisionStartToCloseTimeoutSeconds)
 	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, request.GetExecutionStartToCloseTimeoutSeconds())
