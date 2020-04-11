@@ -199,6 +199,8 @@ var keys = map[Key]string{
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
 	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
 	StickyTTL:                                             "history.stickyTTL",
+	DefaultWorkflowExecutionTimeout:                       "history.defaultWorkflowExecutionTimeout",
+	MaxWorkflowExecutionTimeout:                           "history.maximumWorkflowExecutionTimeout",
 	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
 	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
 	NumParentClosePolicySystemWorkflows:                   "history.numParentClosePolicySystemWorkflows",
@@ -557,6 +559,10 @@ const (
 	StickyTTL
 	// DecisionHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
+	// DefaultWorkflowExecutionTimeout for a workflow execution
+	DefaultWorkflowExecutionTimeout
+	// Maximum allowed workflow execution timeout
+	MaxWorkflowExecutionTimeout
 
 	// key for worker
 

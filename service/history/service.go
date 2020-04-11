@@ -186,6 +186,10 @@ type Config struct {
 	// DecisionHeartbeatTimeout is to timeout behavior of: RespondDecisionTaskComplete with ForceCreateNewDecisionTask == true without any decisions
 	// So that decision will be scheduled to another worker(by clear stickyness)
 	DecisionHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	// The execution timeout a workflow execution defaults to if not specified
+	DefaultWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	// Maximum workflow execution timeout permitted by the service
+	MaxWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// MaxDecisionStartToCloseSeconds is the StartToCloseSeconds for decision
 	MaxDecisionStartToCloseSeconds dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -309,13 +313,14 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),
 
-		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
-		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
-		SearchAttributesSizeOfValueLimit:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
-		SearchAttributesTotalSizeLimit:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
-		StickyTTL:                         dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.StickyTTL, time.Hour*24*365),
-		DecisionHeartbeatTimeout:          dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DecisionHeartbeatTimeout, time.Minute*30),
-
+		ValidSearchAttributes:                            dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
+		SearchAttributesNumberOfKeysLimit:                dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
+		SearchAttributesSizeOfValueLimit:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
+		SearchAttributesTotalSizeLimit:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
+		StickyTTL:                                        dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.StickyTTL, time.Hour*24*365),
+		DecisionHeartbeatTimeout:                         dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DecisionHeartbeatTimeout, time.Minute*30),
+		DefaultWorkflowExecutionTimeout:                  dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowExecutionTimeout, time.Hour*24*365*10),
+		MaxWorkflowExecutionTimeout:                      dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowExecutionTimeout, time.Hour*24*365*10),
 		ReplicationTaskFetcherParallelism:                dc.GetIntProperty(dynamicconfig.ReplicationTaskFetcherParallelism, 1),
 		ReplicationTaskFetcherAggregationInterval:        dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
 		ReplicationTaskFetcherTimerJitterCoefficient:     dc.GetFloat64Property(dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient, 0.15),

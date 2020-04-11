@@ -2601,8 +2601,8 @@ func validateStartWorkflowExecutionRequest(
 	if len(request.GetRequestId()) == 0 {
 		return serviceerror.NewInvalidArgument("Missing request ID.")
 	}
-	if request.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
-		return serviceerror.NewInvalidArgument("Missing or invalid ExecutionStartToCloseTimeoutSeconds.")
+	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid ExecutionStartToCloseTimeoutSeconds.")
 	}
 	if request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
 		return serviceerror.NewInvalidArgument("Missing or invalid TaskStartToCloseTimeoutSeconds.")
@@ -2634,13 +2634,30 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	request *workflowservice.StartWorkflowExecutionRequest,
 	metricsScope int,
 ) {
-
 	namespace := namespaceEntry.GetInfo().Name
+
+	executionStartToCloseTimeoutSeconds := request.GetExecutionStartToCloseTimeoutSeconds()
+	if executionStartToCloseTimeoutSeconds == 0 {
+		executionStartToCloseTimeoutSeconds = int32(e.config.DefaultWorkflowExecutionTimeout(namespace).Seconds())
+	}
+	maxWorkflowExecutionTimeout := int32(e.config.MaxWorkflowExecutionTimeout(namespace).Seconds())
+
+	if executionStartToCloseTimeoutSeconds > maxWorkflowExecutionTimeout {
+		executionStartToCloseTimeoutSeconds = maxWorkflowExecutionTimeout
+	}
+	if executionStartToCloseTimeoutSeconds != request.GetExecutionStartToCloseTimeoutSeconds() {
+		request.ExecutionStartToCloseTimeoutSeconds = executionStartToCloseTimeoutSeconds
+		e.metricsClient.Scope(
+			metricsScope,
+			metrics.NamespaceTag(namespace),
+		).IncCounter(metrics.WorkflowExecutionStartToCloseTimeoutOverrideCount)
+	}
+
 	maxDecisionStartToCloseTimeoutSeconds := int32(e.config.MaxDecisionStartToCloseSeconds(namespace))
 
 	taskStartToCloseTimeoutSecs := request.GetTaskStartToCloseTimeoutSeconds()
 	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, maxDecisionStartToCloseTimeoutSeconds)
-	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, request.GetExecutionStartToCloseTimeoutSeconds())
+	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, executionStartToCloseTimeoutSeconds)
 
 	if taskStartToCloseTimeoutSecs != request.GetTaskStartToCloseTimeoutSeconds() {
 		request.TaskStartToCloseTimeoutSeconds = taskStartToCloseTimeoutSecs
