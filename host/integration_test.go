@@ -96,12 +96,24 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
 		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
 	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
+
+	// Validate the default value for TaskStartToCloseTimeoutSeconds
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.namespace,
+		Execution: &executionpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we0.RunId,
+		},
+	})
+	s.NoError(err)
+	history := historyResponse.History
+	startedEvent := history.Events[0].GetWorkflowExecutionStartedEventAttributes()
+	s.Equal(int32(10), startedEvent.GetTaskStartToCloseTimeoutSeconds())
 
 	we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err1)

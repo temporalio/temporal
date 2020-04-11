@@ -406,7 +406,6 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 			Name: "task-list",
 		},
 		ExecutionStartToCloseTimeoutSeconds: 0,
-		TaskStartToCloseTimeoutSeconds:      1,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
 			BackoffCoefficient:          2,
@@ -436,7 +435,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStar
 			Name: "task-list",
 		},
 		ExecutionStartToCloseTimeoutSeconds: 1,
-		TaskStartToCloseTimeoutSeconds:      0,
+		TaskStartToCloseTimeoutSeconds:      -1,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
 			BackoffCoefficient:          2,

@@ -68,7 +68,7 @@ var keys = map[Key]string{
 	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
 	TransactionSizeLimit:                   "system.transactionSizeLimit",
 	MinRetentionDays:                       "system.minRetentionDays",
-	MaxDecisionStartToCloseSeconds:         "system.maxDecisionStartToCloseSeconds",
+	MaxDecisionTaskStartToCloseTimeout:     "system.maxDecisionStartToCloseSeconds",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
@@ -190,26 +190,27 @@ var keys = map[Key]string{
 	ShardUpdateMinInterval:                                "history.shardUpdateMinInterval",
 	ShardSyncMinInterval:                                  "history.shardSyncMinInterval",
 	ShardSyncTimerJitterCoefficient:                       "history.shardSyncMinInterval",
-	DefaultEventEncoding:                                  "history.defaultEventEncoding",
-	EnableAdminProtection:                                 "history.enableAdminProtection",
-	AdminOperationToken:                                   "history.adminOperationToken",
-	EnableParentClosePolicy:                               "history.enableParentClosePolicy",
-	NumArchiveSystemWorkflows:                             "history.numArchiveSystemWorkflows",
-	ArchiveRequestRPS:                                     "history.archiveRequestRPS",
-	EmitShardDiffLog:                                      "history.emitShardDiffLog",
-	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
-	StickyTTL:                                             "history.stickyTTL",
-	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
-	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
-	NumParentClosePolicySystemWorkflows:                   "history.numParentClosePolicySystemWorkflows",
-	ReplicationTaskFetcherParallelism:                     "history.ReplicationTaskFetcherParallelism",
-	ReplicationTaskFetcherAggregationInterval:             "history.ReplicationTaskFetcherAggregationInterval",
-	ReplicationTaskFetcherTimerJitterCoefficient:          "history.ReplicationTaskFetcherTimerJitterCoefficient",
-	ReplicationTaskFetcherErrorRetryWait:                  "history.ReplicationTaskFetcherErrorRetryWait",
-	ReplicationTaskProcessorErrorRetryWait:                "history.ReplicationTaskProcessorErrorRetryWait",
-	ReplicationTaskProcessorErrorRetryMaxAttempts:         "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
-	ReplicationTaskProcessorNoTaskInitialWait:             "history.ReplicationTaskProcessorNoTaskInitialWait",
-	ReplicationTaskProcessorCleanupInterval:               "history.ReplicationTaskProcessorCleanupInterval",
+	DefaultEventEncoding:                          "history.defaultEventEncoding",
+	EnableAdminProtection:                         "history.enableAdminProtection",
+	AdminOperationToken:                           "history.adminOperationToken",
+	EnableParentClosePolicy:                       "history.enableParentClosePolicy",
+	NumArchiveSystemWorkflows:                     "history.numArchiveSystemWorkflows",
+	ArchiveRequestRPS:                             "history.archiveRequestRPS",
+	EmitShardDiffLog:                              "history.emitShardDiffLog",
+	HistoryThrottledLogRPS:                        "history.throttledLogRPS",
+	StickyTTL:                                     "history.stickyTTL",
+	DecisionHeartbeatTimeout:                      "history.decisionHeartbeatTimeout",
+	DefaultDecisionTaskStartToCloseTimeout:        "history.defaultDecisionTaskStartToCloseTimeout",
+	ParentClosePolicyThreshold:                    "history.parentClosePolicyThreshold",
+	NumParentClosePolicySystemWorkflows:           "history.numParentClosePolicySystemWorkflows",
+	ReplicationTaskFetcherParallelism:             "history.ReplicationTaskFetcherParallelism",
+	ReplicationTaskFetcherAggregationInterval:     "history.ReplicationTaskFetcherAggregationInterval",
+	ReplicationTaskFetcherTimerJitterCoefficient:  "history.ReplicationTaskFetcherTimerJitterCoefficient",
+	ReplicationTaskFetcherErrorRetryWait:          "history.ReplicationTaskFetcherErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryWait:        "history.ReplicationTaskProcessorErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryMaxAttempts: "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
+	ReplicationTaskProcessorNoTaskInitialWait:     "history.ReplicationTaskProcessorNoTaskInitialWait",
+	ReplicationTaskProcessorCleanupInterval:       "history.ReplicationTaskProcessorCleanupInterval",
 	ReplicationTaskProcessorCleanupJitterCoefficient:      "history.ReplicationTaskProcessorCleanupJitterCoefficient",
 	EnableConsistentQuery:                                 "history.EnableConsistentQuery",
 	EnableConsistentQueryByNamespace:                      "history.EnableConsistentQueryByNamespace",
@@ -297,8 +298,8 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
-	// MaxDecisionStartToCloseSeconds is the minimal allowed decision start to close timeout in seconds
-	MaxDecisionStartToCloseSeconds
+	// MaxDecisionTaskStartToCloseTimeout is the minimal allowed decision start to close timeout in seconds
+	MaxDecisionTaskStartToCloseTimeout
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
 
@@ -557,6 +558,8 @@ const (
 	StickyTTL
 	// DecisionHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
+	// DefaultDecisionTaskStartToCloseTimeout for a decision task
+	DefaultDecisionTaskStartToCloseTimeout
 
 	// key for worker
 
