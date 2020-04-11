@@ -2638,9 +2638,9 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 
 	executionStartToCloseTimeoutSeconds := request.GetExecutionStartToCloseTimeoutSeconds()
 	if executionStartToCloseTimeoutSeconds == 0 {
-		executionStartToCloseTimeoutSeconds = int32(e.config.DefaultWorkflowExecutionTimeout(namespace).Seconds())
+		executionStartToCloseTimeoutSeconds = int32(e.config.DefaultExecutionStartToCloseTimeoutSeconds(namespace).Seconds())
 	}
-	maxWorkflowExecutionTimeout := int32(e.config.MaxWorkflowExecutionTimeout(namespace).Seconds())
+	maxWorkflowExecutionTimeout := int32(e.config.MaxExecutionStartToCloseTimeoutSeconds(namespace).Seconds())
 
 	if executionStartToCloseTimeoutSeconds > maxWorkflowExecutionTimeout {
 		executionStartToCloseTimeoutSeconds = maxWorkflowExecutionTimeout

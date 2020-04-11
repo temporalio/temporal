@@ -189,28 +189,28 @@ var keys = map[Key]string{
 	MaximumSignalsPerExecution:                            "history.maximumSignalsPerExecution",
 	ShardUpdateMinInterval:                                "history.shardUpdateMinInterval",
 	ShardSyncMinInterval:                                  "history.shardSyncMinInterval",
-	ShardSyncTimerJitterCoefficient:                       "history.shardSyncMinInterval",
-	DefaultEventEncoding:                                  "history.defaultEventEncoding",
-	EnableAdminProtection:                                 "history.enableAdminProtection",
-	AdminOperationToken:                                   "history.adminOperationToken",
-	EnableParentClosePolicy:                               "history.enableParentClosePolicy",
-	NumArchiveSystemWorkflows:                             "history.numArchiveSystemWorkflows",
-	ArchiveRequestRPS:                                     "history.archiveRequestRPS",
-	EmitShardDiffLog:                                      "history.emitShardDiffLog",
-	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
-	StickyTTL:                                             "history.stickyTTL",
-	DefaultWorkflowExecutionTimeout:                       "history.defaultWorkflowExecutionTimeout",
-	MaxWorkflowExecutionTimeout:                           "history.maximumWorkflowExecutionTimeout",
-	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
-	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
-	NumParentClosePolicySystemWorkflows:                   "history.numParentClosePolicySystemWorkflows",
-	ReplicationTaskFetcherParallelism:                     "history.ReplicationTaskFetcherParallelism",
-	ReplicationTaskFetcherAggregationInterval:             "history.ReplicationTaskFetcherAggregationInterval",
-	ReplicationTaskFetcherTimerJitterCoefficient:          "history.ReplicationTaskFetcherTimerJitterCoefficient",
-	ReplicationTaskFetcherErrorRetryWait:                  "history.ReplicationTaskFetcherErrorRetryWait",
-	ReplicationTaskProcessorErrorRetryWait:                "history.ReplicationTaskProcessorErrorRetryWait",
-	ReplicationTaskProcessorErrorRetryMaxAttempts:         "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
-	ReplicationTaskProcessorNoTaskInitialWait:             "history.ReplicationTaskProcessorNoTaskInitialWait",
+	ShardSyncTimerJitterCoefficient:               "history.shardSyncMinInterval",
+	DefaultEventEncoding:                          "history.defaultEventEncoding",
+	EnableAdminProtection:                         "history.enableAdminProtection",
+	AdminOperationToken:                           "history.adminOperationToken",
+	EnableParentClosePolicy:                       "history.enableParentClosePolicy",
+	NumArchiveSystemWorkflows:                     "history.numArchiveSystemWorkflows",
+	ArchiveRequestRPS:                             "history.archiveRequestRPS",
+	EmitShardDiffLog:                              "history.emitShardDiffLog",
+	HistoryThrottledLogRPS:                        "history.throttledLogRPS",
+	StickyTTL:                                     "history.stickyTTL",
+	DefaultExecutionStartToCloseTimeout:           "history.defaultWorkflowExecutionTimeout",
+	MaxExecutionStartToCloseTimeout:               "history.maximumWorkflowExecutionTimeout",
+	DecisionHeartbeatTimeout:                      "history.decisionHeartbeatTimeout",
+	ParentClosePolicyThreshold:                    "history.parentClosePolicyThreshold",
+	NumParentClosePolicySystemWorkflows:           "history.numParentClosePolicySystemWorkflows",
+	ReplicationTaskFetcherParallelism:             "history.ReplicationTaskFetcherParallelism",
+	ReplicationTaskFetcherAggregationInterval:     "history.ReplicationTaskFetcherAggregationInterval",
+	ReplicationTaskFetcherTimerJitterCoefficient:  "history.ReplicationTaskFetcherTimerJitterCoefficient",
+	ReplicationTaskFetcherErrorRetryWait:          "history.ReplicationTaskFetcherErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryWait:        "history.ReplicationTaskProcessorErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryMaxAttempts: "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
+	ReplicationTaskProcessorNoTaskInitialWait:     "history.ReplicationTaskProcessorNoTaskInitialWait",
 	ReplicationTaskProcessorCleanupInterval:               "history.ReplicationTaskProcessorCleanupInterval",
 	ReplicationTaskProcessorCleanupJitterCoefficient:      "history.ReplicationTaskProcessorCleanupJitterCoefficient",
 	EnableConsistentQuery:                                 "history.EnableConsistentQuery",
@@ -559,10 +559,10 @@ const (
 	StickyTTL
 	// DecisionHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
-	// DefaultWorkflowExecutionTimeout for a workflow execution
-	DefaultWorkflowExecutionTimeout
+	// DefaultExecutionStartToCloseTimeoutSeconds for a workflow execution
+	DefaultExecutionStartToCloseTimeout
 	// Maximum allowed workflow execution timeout
-	MaxWorkflowExecutionTimeout
+	MaxExecutionStartToCloseTimeout
 
 	// key for worker
 

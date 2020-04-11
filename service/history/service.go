@@ -187,9 +187,9 @@ type Config struct {
 	// So that decision will be scheduled to another worker(by clear stickyness)
 	DecisionHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// The execution timeout a workflow execution defaults to if not specified
-	DefaultWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	DefaultExecutionStartToCloseTimeoutSeconds dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// Maximum workflow execution timeout permitted by the service
-	MaxWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	MaxExecutionStartToCloseTimeoutSeconds dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// MaxDecisionStartToCloseSeconds is the StartToCloseSeconds for decision
 	MaxDecisionStartToCloseSeconds dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -319,8 +319,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		SearchAttributesTotalSizeLimit:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
 		StickyTTL:                                        dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.StickyTTL, time.Hour*24*365),
 		DecisionHeartbeatTimeout:                         dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DecisionHeartbeatTimeout, time.Minute*30),
-		DefaultWorkflowExecutionTimeout:                  dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowExecutionTimeout, time.Hour*24*365*10),
-		MaxWorkflowExecutionTimeout:                      dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowExecutionTimeout, time.Hour*24*365*10),
+		DefaultExecutionStartToCloseTimeoutSeconds:       dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultExecutionStartToCloseTimeout, time.Hour*24*365*10),
+		MaxExecutionStartToCloseTimeoutSeconds:           dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxExecutionStartToCloseTimeout, time.Hour*24*365*10),
 		ReplicationTaskFetcherParallelism:                dc.GetIntProperty(dynamicconfig.ReplicationTaskFetcherParallelism, 1),
 		ReplicationTaskFetcherAggregationInterval:        dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
 		ReplicationTaskFetcherTimerJitterCoefficient:     dc.GetFloat64Property(dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient, 0.15),
