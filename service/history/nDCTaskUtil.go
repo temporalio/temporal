@@ -111,6 +111,43 @@ func loadMutableStateForTransferTask(
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
+func loadMutableStateForVisibilityTask(
+	context workflowExecutionContext,
+	visibilityTask *persistenceblobs.VisibilityTaskInfo,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) (mutableState, error) {
+
+	msBuilder, err := context.loadWorkflowExecution()
+	if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); ok {
+			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if visibilityTask.ScheduleID >= msBuilder.GetNextEventID() {
+		metricsClient.IncCounter(metrics.VisibilityQueueProcessorScope, metrics.StaleMutableStateCounter)
+		context.clear()
+
+		msBuilder, err = context.loadWorkflowExecution()
+		if err != nil {
+			return nil, err
+		}
+		// after refresh, still mutable state's next event ID <= task ID
+		if visibilityTask.ScheduleID >= msBuilder.GetNextEventID() {
+			logger.Info("Transfer Task Processor: task event ID >= MS NextEventID, skip.",
+				tag.WorkflowScheduleID(visibilityTask.ScheduleID),
+				tag.WorkflowNextEventID(msBuilder.GetNextEventID()))
+			return nil, nil
+		}
+	}
+	return msBuilder, nil
+}
+
+// load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
+// if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
 	context workflowExecutionContext,
 	timerTask *persistenceblobs.TimerTaskInfo,

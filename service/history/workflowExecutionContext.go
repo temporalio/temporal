@@ -330,6 +330,7 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 
 	c.notifyTasks(
 		newWorkflow.TransferTasks,
+		newWorkflow.VisibilityTasks,
 		newWorkflow.ReplicationTasks,
 		newWorkflow.TimerTasks,
 	)
@@ -480,12 +481,14 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 
 	c.notifyTasks(
 		resetWorkflow.TransferTasks,
+		resetWorkflow.VisibilityTasks,
 		resetWorkflow.ReplicationTasks,
 		resetWorkflow.TimerTasks,
 	)
 	if newWorkflow != nil {
 		c.notifyTasks(
 			newWorkflow.TransferTasks,
+			newWorkflow.VisibilityTasks,
 			newWorkflow.ReplicationTasks,
 			newWorkflow.TimerTasks,
 		)
@@ -493,6 +496,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 	if currentWorkflow != nil {
 		c.notifyTasks(
 			currentWorkflow.TransferTasks,
+			currentWorkflow.VisibilityTasks,
 			currentWorkflow.ReplicationTasks,
 			currentWorkflow.TimerTasks,
 		)
@@ -678,6 +682,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	// notify current workflow tasks
 	c.notifyTasks(
 		currentWorkflow.TransferTasks,
+		currentWorkflow.VisibilityTasks,
 		currentWorkflow.ReplicationTasks,
 		currentWorkflow.TimerTasks,
 	)
@@ -686,6 +691,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	if newWorkflow != nil {
 		c.notifyTasks(
 			newWorkflow.TransferTasks,
+			newWorkflow.VisibilityTasks,
 			newWorkflow.ReplicationTasks,
 			newWorkflow.TimerTasks,
 		)
@@ -717,10 +723,12 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 
 func (c *workflowExecutionContextImpl) notifyTasks(
 	transferTasks []persistence.Task,
+	visibilityTasks []persistence.Task,
 	replicationTasks []persistence.Task,
 	timerTasks []persistence.Task,
 ) {
 	c.engine.NotifyNewTransferTasks(transferTasks)
+	c.engine.NotifyNewVisibilityTasks(visibilityTasks)
 	c.engine.NotifyNewReplicationTasks(replicationTasks)
 	c.engine.NotifyNewTimerTasks(timerTasks)
 }
@@ -1116,6 +1124,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	// notify reset workflow tasks
 	c.notifyTasks(
 		resetWorkflow.TransferTasks,
+		resetWorkflow.VisibilityTasks,
 		resetWorkflow.ReplicationTasks,
 		resetWorkflow.TimerTasks,
 	)
@@ -1124,6 +1133,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	if resetWFReq.CurrentWorkflowMutation != nil {
 		c.notifyTasks(
 			resetWFReq.CurrentWorkflowMutation.TransferTasks,
+			resetWFReq.CurrentWorkflowMutation.VisibilityTasks,
 			resetWFReq.CurrentWorkflowMutation.ReplicationTasks,
 			resetWFReq.CurrentWorkflowMutation.TimerTasks,
 		)

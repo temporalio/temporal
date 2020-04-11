@@ -107,12 +107,8 @@ func (t *transferQueueActiveTaskExecutor) execute(
 		return t.processSignalExecution(task)
 	case persistence.TransferTaskTypeStartChildExecution:
 		return t.processStartChildExecution(task)
-	case persistence.TransferTaskTypeRecordWorkflowStarted:
-		return t.processRecordWorkflowStarted(task)
 	case persistence.TransferTaskTypeResetWorkflow:
 		return t.processResetWorkflow(task)
-	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
-		return t.processUpsertWorkflowSearchAttributes(task)
 	default:
 		return errUnknownTransferTask
 	}
@@ -617,6 +613,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	})
 }
 
+/* TODO becker Move to visibility task executor
 func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStarted(
 	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
@@ -708,6 +705,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 		searchAttr,
 	)
 }
+*/
 
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	task *persistenceblobs.TransferTaskInfo,

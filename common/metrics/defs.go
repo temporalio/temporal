@@ -891,6 +891,16 @@ const (
 	TransferStandbyTaskRecordWorkflowStartedScope
 	// TransferStandbyTaskUpsertWorkflowSearchAttributesScope is the scope used for upsert search attributes processing by transfer queue processor
 	TransferStandbyTaskUpsertWorkflowSearchAttributesScope
+	// VisibilityQueueProcessorScope is the scope used by all metric emitted by visibility queue processor
+	VisibilityQueueProcessorScope
+	// VisibilityActiveQueueProcessorScope is the scope used by all metric emitted by visibility queue processor
+	VisibilityActiveQueueProcessorScope
+	// VisibilityStandbyQueueProcessorScope is the scope used by all metric emitted by visibility queue processor
+	VisibilityStandbyQueueProcessorScope
+	// VisibilityActiveTaskActivityScope is the scope used for activity task processing by visibility queue processor
+	VisibilityActiveTaskActivityScope
+	// VisibilityStandbyTaskActivityScope is the scope used for activity task processing by visibility queue processor
+	VisibilityStandbyTaskActivityScope
 	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
 	TimerQueueProcessorScope
 	// TimerActiveQueueProcessorScope is the scope used by all metric emitted by timer queue processor
@@ -1692,6 +1702,7 @@ const (
 	ShardInfoTransferFailoverInProgressTimer
 	ShardInfoTimerFailoverInProgressTimer
 	ShardInfoTransferFailoverLatencyTimer
+	ShardInfoVisibilityFailoverLatencyTimer
 	ShardInfoTimerFailoverLatencyTimer
 	SyncShardFromRemoteCounter
 	SyncShardFromRemoteFailure

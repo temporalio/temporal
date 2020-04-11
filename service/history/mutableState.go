@@ -221,6 +221,7 @@ type (
 
 		AddTransferTasks(transferTasks ...persistence.Task)
 		AddTimerTasks(timerTasks ...persistence.Task)
+		AddVisibilityTasks(visibilityTasks ...persistence.Task)
 		SetUpdateCondition(int64)
 		GetUpdateCondition() int64
 

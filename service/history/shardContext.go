@@ -67,17 +67,23 @@ type (
 		GenerateTransferTaskIDs(number int) ([]int64, error)
 
 		GetTransferMaxReadLevel() int64
+		GetVisibilityMaxReadLevel() int64
+		GetTimerMaxReadLevel(cluster string) time.Time
 		UpdateTimerMaxReadLevel(cluster string) time.Time
 
 		SetCurrentTime(cluster string, currentTime time.Time)
 		GetCurrentTime(cluster string) time.Time
 		GetLastUpdatedTime() time.Time
-		GetTimerMaxReadLevel(cluster string) time.Time
 
 		GetTransferAckLevel() int64
 		UpdateTransferAckLevel(ackLevel int64) error
 		GetTransferClusterAckLevel(cluster string) int64
 		UpdateTransferClusterAckLevel(cluster string, ackLevel int64) error
+
+		GetVisibilityAckLevel() int64
+		UpdateVisibilityAckLevel(ackLevel int64) error
+		GetVisibilityClusterAckLevel(cluster string) int64
+		UpdateVisibilityClusterAckLevel(cluster string, ackLevel int64) error
 
 		GetReplicatorAckLevel() int64
 		UpdateReplicatorAckLevel(ackLevel int64) error
@@ -95,6 +101,10 @@ type (
 		UpdateTransferFailoverLevel(failoverID string, level persistence.TransferFailoverLevel) error
 		DeleteTransferFailoverLevel(failoverID string) error
 		GetAllTransferFailoverLevels() map[string]persistence.TransferFailoverLevel
+
+		UpdateVisibilityFailoverLevel(failoverID string, level persistence.VisibilityFailoverLevel) error
+		DeleteVisibilityFailoverLevel(failoverID string) error
+		GetAllVisibilityFailoverLevels() map[string]persistence.VisibilityFailoverLevel
 
 		UpdateTimerFailoverLevel(failoverID string, level persistence.TimerFailoverLevel) error
 		DeleteTimerFailoverLevel(failoverID string) error
@@ -131,6 +141,7 @@ type (
 		transferSequenceNumber    int64
 		maxTransferSequenceNumber int64
 		transferMaxReadLevel      int64
+		visibilityMaxReadLevel    int64
 		timerMaxReadLevelMap      map[string]time.Time // cluster -> timerMaxReadLevel
 
 		// exist only in memory
@@ -197,6 +208,12 @@ func (s *shardContextImpl) GetTransferMaxReadLevel() int64 {
 	return s.transferMaxReadLevel
 }
 
+func (s *shardContextImpl) GetVisibilityMaxReadLevel() int64 {
+	s.RLock()
+	defer s.RUnlock()
+	return s.visibilityMaxReadLevel
+}
+
 func (s *shardContextImpl) GetTransferAckLevel() int64 {
 	s.RLock()
 	defer s.RUnlock()
@@ -231,6 +248,44 @@ func (s *shardContextImpl) UpdateTransferClusterAckLevel(cluster string, ackLeve
 	defer s.Unlock()
 
 	s.shardInfo.ClusterTransferAckLevel[cluster] = ackLevel
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
+func (s *shardContextImpl) GetVisibilityAckLevel() int64 {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.shardInfo.VisibilityAckLevel
+}
+
+func (s *shardContextImpl) UpdateVisibilityAckLevel(ackLevel int64) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.VisibilityAckLevel = ackLevel
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
+func (s *shardContextImpl) GetVisibilityClusterAckLevel(cluster string) int64 {
+	s.RLock()
+	defer s.RUnlock()
+
+	// if we can find corresponding ack level
+	if ackLevel, ok := s.shardInfo.ClusterVisibilityAckLevel[cluster]; ok {
+		return ackLevel
+	}
+	// otherwise, default to existing ack level, which belongs to local cluster
+	// this can happen if you add more cluster
+	return s.shardInfo.VisibilityAckLevel
+}
+
+func (s *shardContextImpl) UpdateVisibilityClusterAckLevel(cluster string, ackLevel int64) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.ClusterVisibilityAckLevel[cluster] = ackLevel
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
 }
@@ -385,6 +440,36 @@ func (s *shardContextImpl) GetAllTransferFailoverLevels() map[string]persistence
 
 	ret := map[string]persistence.TransferFailoverLevel{}
 	for k, v := range s.shardInfo.TransferFailoverLevels {
+		ret[k] = v
+	}
+	return ret
+}
+
+func (s *shardContextImpl) UpdateVisibilityFailoverLevel(failoverID string, level persistence.VisibilityFailoverLevel) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.VisibilityFailoverLevels[failoverID] = level
+	return s.updateShardInfoLocked()
+}
+
+func (s *shardContextImpl) DeleteVisibilityFailoverLevel(failoverID string) error {
+	s.Lock()
+	defer s.Unlock()
+
+	if level, ok := s.shardInfo.VisibilityFailoverLevels[failoverID]; ok {
+		s.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoVisibilityFailoverLatencyTimer, time.Since(level.StartTime))
+		delete(s.shardInfo.VisibilityFailoverLevels, failoverID)
+	}
+	return s.updateShardInfoLocked()
+}
+
+func (s *shardContextImpl) GetAllVisibilityFailoverLevels() map[string]persistence.VisibilityFailoverLevel {
+	s.RLock()
+	defer s.RUnlock()
+
+	ret := map[string]persistence.VisibilityFailoverLevel{}
+	for k, v := range s.shardInfo.VisibilityFailoverLevels {
 		ret[k] = v
 	}
 	return ret

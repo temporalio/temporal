@@ -157,9 +157,13 @@ const (
 	TransferTaskTypeCancelExecution
 	TransferTaskTypeStartChildExecution
 	TransferTaskTypeSignalExecution
-	TransferTaskTypeRecordWorkflowStarted
 	TransferTaskTypeResetWorkflow
-	TransferTaskTypeUpsertWorkflowSearchAttributes
+)
+
+const (
+	VisibilityTaskTypeRecordCloseExecution = iota
+	VisibilityTaskTypeRecordWorkflowStarted
+	VisibilityTaskTypeUpsertWorkflowSearchAttributes
 )
 
 // Types of replication tasks
@@ -252,12 +256,22 @@ type (
 	// ShardInfoWithFailover describes a shard
 	ShardInfoWithFailover struct {
 		*pblobs.ShardInfo
-		TransferFailoverLevels map[string]TransferFailoverLevel // uuid -> TransferFailoverLevel
-		TimerFailoverLevels    map[string]TimerFailoverLevel    // uuid -> TimerFailoverLevel
+		TransferFailoverLevels   map[string]TransferFailoverLevel   // uuid -> TransferFailoverLevel
+		VisibilityFailoverLevels map[string]VisibilityFailoverLevel // uuid -> VisibilityFailoverLevel
+		TimerFailoverLevels      map[string]TimerFailoverLevel      // uuid -> TimerFailoverLevel
 	}
 
 	// TransferFailoverLevel contains corresponding start / end level
 	TransferFailoverLevel struct {
+		StartTime    time.Time
+		MinLevel     int64
+		CurrentLevel int64
+		MaxLevel     int64
+		DomainIDs    map[string]struct{}
+	}
+
+	// VisbilityFailoverLevel contains corresponding start / end level
+	VisibilityFailoverLevel struct {
 		StartTime    time.Time
 		MinLevel     int64
 		CurrentLevel int64
@@ -393,7 +407,7 @@ type (
 		RecordVisibility    bool
 	}
 
-	// RecordWorkflowStartedTask identifites a transfer task for writing visibility open execution record
+	// RecordWorkflowStartedTask identifites a visibility task for writing visibility open execution record
 	RecordWorkflowStartedTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
@@ -409,6 +423,13 @@ type (
 
 	// CloseExecutionTask identifies a transfer task for deletion of execution
 	CloseExecutionTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
+	}
+
+	// RecordCloseExecutionTask identifies a visibility task for deletion of execution
+	RecordCloseExecutionTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
@@ -462,7 +483,7 @@ type (
 		Version                 int64
 	}
 
-	// UpsertWorkflowSearchAttributesTask identifies a transfer task for upsert search attributes
+	// UpsertWorkflowSearchAttributesTask identifies a visibility task for upsert search attributes
 	UpsertWorkflowSearchAttributesTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
@@ -791,6 +812,7 @@ type (
 
 		TransferTasks    []Task
 		ReplicationTasks []Task
+		VisibilityTasks  []Task
 		TimerTasks       []Task
 
 		Condition int64
@@ -812,6 +834,7 @@ type (
 		SignalRequestedIDs  []string
 
 		TransferTasks    []Task
+		VisibilityTasks  []Task
 		ReplicationTasks []Task
 		TimerTasks       []Task
 
@@ -1691,7 +1714,7 @@ func (d *DecisionTask) SetVisibilityTimestamp(timestamp time.Time) {
 
 // GetType returns the type of the record workflow started task
 func (a *RecordWorkflowStartedTask) GetType() int {
-	return TransferTaskTypeRecordWorkflowStarted
+	return VisibilityTaskTypeRecordWorkflowStarted
 }
 
 // GetVersion returns the version of the record workflow started task
@@ -1791,6 +1814,41 @@ func (a *CloseExecutionTask) GetVisibilityTimestamp() time.Time {
 
 // SetVisibilityTimestamp set the visibility timestamp
 func (a *CloseExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the close execution task
+func (a *RecordCloseExecutionTask) GetType() int {
+	return VisibilityTaskTypeRecordCloseExecution
+}
+
+// GetVersion returns the version of the close execution task
+func (a *RecordCloseExecutionTask) GetVersion() int64 {
+	return a.Version
+}
+
+// SetVersion returns the version of the close execution task
+func (a *RecordCloseExecutionTask) SetVersion(version int64) {
+	a.Version = version
+}
+
+// GetTaskID returns the sequence ID of the close execution task
+func (a *RecordCloseExecutionTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+// SetTaskID sets the sequence ID of the close execution task
+func (a *RecordCloseExecutionTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+// GetVisibilityTimestamp get the visibility timestamp
+func (a *RecordCloseExecutionTask) GetVisibilityTimestamp() time.Time {
+	return a.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (a *RecordCloseExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 
@@ -2111,7 +2169,7 @@ func (u *SignalExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 
 // GetType returns the type of the upsert search attributes transfer task
 func (u *UpsertWorkflowSearchAttributesTask) GetType() int {
-	return TransferTaskTypeUpsertWorkflowSearchAttributes
+	return VisibilityTaskTypeUpsertWorkflowSearchAttributes
 }
 
 // GetVersion returns the version of the upsert search attributes transfer task

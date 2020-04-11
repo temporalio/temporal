@@ -48,7 +48,7 @@ import (
 // Where x is any hexadecimal value, E represents the entity type valid values are:
 // E = {DomainID = 1, WorkflowID = 2, RunID = 3}
 // R represents row type in executions table, valid values are:
-// R = {Shard = 1, Execution = 2, Transfer = 3, Timer = 4, Replication = 5}
+// R = {Shard = 1, Execution = 2, Transfer = 3, Timer = 4, Replication = 5, Visibility = 6}
 const (
 	cassandraProtoVersion = 4
 	defaultSessionTimeout = 10 * time.Second
@@ -80,6 +80,10 @@ const (
 	rowTypeExecutionTaskID = int64(-10)
 	rowTypeShardTaskID     = int64(-11)
 	emptyInitiatedID       = int64(-7)
+	// Row Constants for Visibility Task Row
+	rowTypeVisibilityDomainID   = "10000000-6000-f000-f000-000000000000"
+	rowTypeVisibilityWorkflowID = "20000000-6000-f000-f000-000000000000"
+	rowTypeVisibilityRunID      = "30000000-6000-f000-f000-000000000000"
 
 	stickyTaskListTTL = int32(24 * time.Hour / time.Second) // if sticky task_list stopped being updated, remove it in one day
 )
@@ -92,6 +96,7 @@ const (
 	rowTypeTimerTask
 	rowTypeReplicationTask
 	rowTypeDLQ
+	rowTypeVisibilityTask
 )
 
 const (
@@ -616,6 +621,17 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateGetTransferTasksQuery = `SELECT transfer, transfer_encoding ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id > ? ` +
+		`and task_id <= ?`
+
+	templateGetVisibilityTasksQuery = `SELECT transfer, transfer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -2043,7 +2059,7 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 
 func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksRequest) (*p.GetTransferTasksResponse, error) {
 
-	// Reading transfer tasks need to be quorum level consistent, otherwise we could loose task
+	// Reading transfer tasks needs to be quorum level consistent, otherwise we could loose tasks
 	query := d.session.Query(templateGetTransferTasksQuery,
 		d.shardID,
 		rowTypeTransferTask,
@@ -2084,7 +2100,45 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 }
 
 func (d *cassandraPersistence) GetVisibilityTasks(request *p.GetVisibilityTasksRequest) (*p.GetVisibilityTasksResponse, error) {
-	return nil, nil
+
+	// Reading visibility tasks needs to be quorum level consistent, otherwise we could loose tasks
+	query := d.session.Query(templateGetVisibilityTasksQuery,
+		d.shardID,
+		rowTypeVisibilityTask,
+		rowTypeVisibilityDomainID,
+		rowTypeVisibilityWorkflowID,
+		rowTypeVisibilityRunID,
+		defaultVisibilityTimestamp,
+		request.ReadLevel,
+		request.MaxReadLevel,
+	).PageSize(request.BatchSize).PageState(request.NextPageToken)
+
+	iter := query.Iter()
+	if iter == nil {
+		return nil, serviceerror.NewInternal("GetVisibilityTasks operation failed.  Not able to create query iterator.")
+	}
+
+	response := &p.GetVisibilityTasksResponse{}
+	var data []byte
+	var encoding string
+
+	for iter.Scan(&data, &encoding) {
+		t, err := serialization.VisibilityTaskInfoFromBlob(data, encoding)
+		if err != nil {
+			return nil, convertCommonErrors("GetVisibilityTasks", err)
+		}
+
+		response.Tasks = append(response.Tasks, t)
+	}
+	nextPageToken := iter.PageState()
+	response.NextPageToken = make([]byte, len(nextPageToken))
+	copy(response.NextPageToken, nextPageToken)
+
+	if err := iter.Close(); err != nil {
+		return nil, convertCommonErrors("GetVisibilityTasks", err)
+	}
+
+	return response, nil
 }
 
 func (d *cassandraPersistence) GetReplicationTasks(

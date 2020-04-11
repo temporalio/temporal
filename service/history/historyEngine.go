@@ -112,6 +112,7 @@ type (
 
 		NotifyNewHistoryEvent(event *historyEventNotification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
+		NotifyNewVisibilityTasks(tasks []persistence.Task)
 		NotifyNewReplicationTasks(tasks []persistence.Task)
 		NotifyNewTimerTasks(tasks []persistence.Task)
 	}
@@ -126,6 +127,7 @@ type (
 		executionManager          persistence.ExecutionManager
 		visibilityMgr             persistence.VisibilityManager
 		txProcessor               transferQueueProcessor
+		visibilityProcessor       visibilityQueueProcessor
 		timerProcessor            timerQueueProcessor
 		replicator                *historyReplicator
 		nDCReplicator             nDCHistoryReplicator
@@ -2564,6 +2566,17 @@ func (e *historyEngineImpl) NotifyNewTransferTasks(
 		task := tasks[0]
 		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
 		e.txProcessor.NotifyNewTask(clusterName, tasks)
+	}
+}
+
+func (e *historyEngineImpl) NotifyNewVisibilityTasks(
+	tasks []persistence.Task,
+) {
+
+	if len(tasks) > 0 {
+		task := tasks[0]
+		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
+		e.visibilityProcessor.NotifyNewTask(clusterName, tasks)
 	}
 }
 

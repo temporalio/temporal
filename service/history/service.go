@@ -116,6 +116,20 @@ type Config struct {
 	TransferProcessorCompleteTransferInterval           dynamicconfig.DurationPropertyFn
 	TransferProcessorVisibilityArchivalTimeLimit        dynamicconfig.DurationPropertyFn
 
+	// VisibilityQueueProcessor settings
+	VisibilityTaskBatchSize                                dynamicconfig.IntPropertyFn
+	VisibilityTaskWorkerCount                              dynamicconfig.IntPropertyFn
+	VisibilityTaskMaxRetryCount                            dynamicconfig.IntPropertyFn
+	VisibilityProcessorCompleteVisibilityFailureRetryCount dynamicconfig.IntPropertyFn
+	VisibilityProcessorFailoverMaxPollRPS                  dynamicconfig.IntPropertyFn
+	VisibilityProcessorMaxPollRPS                          dynamicconfig.IntPropertyFn
+	VisibilityProcessorMaxPollInterval                     dynamicconfig.DurationPropertyFn
+	VisibilityProcessorMaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
+	VisibilityProcessorUpdateAckInterval                   dynamicconfig.DurationPropertyFn
+	VisibilityProcessorUpdateAckIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
+	VisibilityProcessorCompleteVisibilityInterval          dynamicconfig.DurationPropertyFn
+	VisibilityProcessorVisibilityArchivalTimeLimit         dynamicconfig.DurationPropertyFn
+
 	// ReplicatorQueueProcessor settings
 	ReplicatorTaskBatchSize                               dynamicconfig.IntPropertyFn
 	ReplicatorTaskWorkerCount                             dynamicconfig.IntPropertyFn

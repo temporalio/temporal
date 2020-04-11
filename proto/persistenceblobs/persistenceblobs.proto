@@ -86,6 +86,8 @@ message ShardInfo {
     map<string, google.protobuf.Timestamp> clusterTimerAckLevel = 11;
     map<string, int64> clusterReplicationLevel = 12;
     map<string, int64> replicationDLQAckLevel = 13;
+    int64 visibilityAckLevel = 14;
+    map<string, int64> clusterVisibilityAckLevel = 15;
 }
 
 message ReplicationTaskInfo {

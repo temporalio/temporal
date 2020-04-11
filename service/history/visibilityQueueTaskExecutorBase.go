@@ -21,32 +21,26 @@
 package history
 
 import (
-	"context"
 	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	m "github.com/temporalio/temporal/.gen/proto/matchingservice"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/service/worker/archiver"
 )
 
 const (
-	transferActiveTaskDefaultTimeout = 30 * time.Second
+	visibilityActiveTaskDefaultTimeout = 30 * time.Second
 )
 
 type (
-	transferQueueTaskExecutorBase struct {
+	visibilityQueueTaskExecutorBase struct {
 		shard          ShardContext
 		historyService *historyEngineImpl
 		cache          *historyCache
@@ -58,14 +52,14 @@ type (
 	}
 )
 
-func newTransferQueueTaskExecutorBase(
+func newVisibilityQueueTaskExecutorBase(
 	shard ShardContext,
 	historyService *historyEngineImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *Config,
-) *transferQueueTaskExecutorBase {
-	return &transferQueueTaskExecutorBase{
+) *visibilityQueueTaskExecutorBase {
+	return &visibilityQueueTaskExecutorBase{
 		shard:          shard,
 		historyService: historyService,
 		cache:          historyService.historyCache,
@@ -77,8 +71,8 @@ func newTransferQueueTaskExecutorBase(
 	}
 }
 
-func (t *transferQueueTaskExecutorBase) getDomainIDAndWorkflowExecution(
-	task *persistenceblobs.TransferTaskInfo,
+func (t *visibilityQueueTaskExecutorBase) getDomainIDAndWorkflowExecution(
+	task *persistenceblobs.VisibilityTaskInfo,
 ) (string, commonproto.WorkflowExecution) {
 
 	return primitives.UUIDString(task.DomainID), commonproto.WorkflowExecution{
@@ -87,61 +81,7 @@ func (t *transferQueueTaskExecutorBase) getDomainIDAndWorkflowExecution(
 	}
 }
 
-func (t *transferQueueTaskExecutorBase) pushActivity(
-	task *persistenceblobs.TransferTaskInfo,
-	activityScheduleToStartTimeout int32,
-) error {
-
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
-
-	if task.TaskType != persistence.TransferTaskTypeActivityTask {
-		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
-	}
-
-	_, err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
-		DomainUUID:       primitives.UUIDString(task.TargetDomainID),
-		SourceDomainUUID: primitives.UUIDString(task.DomainID),
-		Execution: &commonproto.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      primitives.UUIDString(task.RunID),
-		},
-		TaskList:                      &commonproto.TaskList{Name: task.TaskList},
-		ScheduleId:                    task.ScheduleID,
-		ScheduleToStartTimeoutSeconds: activityScheduleToStartTimeout,
-	})
-
-	return err
-}
-
-func (t *transferQueueTaskExecutorBase) pushDecision(
-	task *persistenceblobs.TransferTaskInfo,
-	tasklist *commonproto.TaskList,
-	decisionScheduleToStartTimeout int32,
-) error {
-
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
-
-	if task.TaskType != persistence.TransferTaskTypeDecisionTask {
-		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
-	}
-
-	_, err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
-		DomainUUID: primitives.UUIDString(task.DomainID),
-		Execution: &commonproto.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      primitives.UUIDString(task.RunID),
-		},
-		TaskList:                      tasklist,
-		ScheduleId:                    task.ScheduleID,
-		ScheduleToStartTimeoutSeconds: decisionScheduleToStartTimeout,
-	})
-	return err
-}
-
-/* TODO becker move to visibilty task executor base
-func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
+func (t *visibilityQueueTaskExecutorBase) recordWorkflowStarted(
 	domainID string,
 	workflowID string,
 	runID string,
@@ -188,7 +128,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
 }
 
-func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
+func (t *visibilityQueueTaskExecutorBase) upsertWorkflowExecution(
 	domainID string,
 	workflowID string,
 	runID string,
@@ -229,9 +169,8 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 
 	return t.visibilityMgr.UpsertWorkflowExecution(request)
 }
-*/
 
-func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
+func (t *visibilityQueueTaskExecutorBase) recordWorkflowClosed(
 	domainID string,
 	workflowID string,
 	runID string,
@@ -247,10 +186,9 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 ) error {
 
 	// Record closing in visibility store
-	//retentionSeconds := int64(0)
+	retentionSeconds := int64(0)
 	domain := defaultDomainName
-	//recordWorkflowClose := true
-	archiveVisibility := false
+	recordWorkflowClose := true
 
 	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil && !isWorkflowNotExistError(err) {
@@ -259,20 +197,15 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 	if err == nil {
 		// retention in domain config is in days, convert to seconds
-		//retentionSeconds = int64(domainEntry.GetRetentionDays(workflowID)) * int64(secondsInDay)
+		retentionSeconds = int64(domainEntry.GetRetentionDays(workflowID)) * int64(secondsInDay)
 		domain = domainEntry.GetInfo().Name
 		// if sampled for longer retention is enabled, only record those sampled events
 		if domainEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
 			!domainEntry.IsSampledForLongerRetention(workflowID) {
-			//recordWorkflowClose = false
+			recordWorkflowClose = false
 		}
-
-		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-		domainConfiguredForVisibilityArchival := domainEntry.GetConfig().VisibilityArchivalStatus == enums.ArchivalStatusEnabled
-		archiveVisibility = clusterConfiguredForVisibilityArchival && domainConfiguredForVisibilityArchival
 	}
 
-	/* TODO becker Move to VisibilityTaskExecutor
 	if recordWorkflowClose {
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			DomainUUID: domainID,
@@ -295,85 +228,6 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 			return err
 		}
 	}
-	*/
 
-	if archiveVisibility {
-		ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
-		defer cancel()
-		_, err := t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
-			ArchiveRequest: &archiver.ArchiveRequest{
-				DomainID:           domainID,
-				DomainName:         domain,
-				WorkflowID:         workflowID,
-				RunID:              runID,
-				WorkflowTypeName:   workflowTypeName,
-				StartTimestamp:     startTimeUnixNano,
-				ExecutionTimestamp: executionTimeUnixNano,
-				CloseTimestamp:     endTimeUnixNano,
-				CloseStatus:        closeStatus,
-				HistoryLength:      historyLength,
-				Memo:               visibilityMemo,
-				SearchAttributes:   searchAttributes,
-				VisibilityURI:      domainEntry.GetConfig().VisibilityArchivalURI,
-				URI:                domainEntry.GetConfig().HistoryArchivalURI,
-				Targets:            []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
-			},
-			CallerService:        common.HistoryServiceName,
-			AttemptArchiveInline: true, // archive visibility inline by default
-		})
-		return err
-	}
 	return nil
-}
-
-// Argument startEvent is to save additional call of msBuilder.GetStartEvent
-func getWorkflowExecutionTimestamp(
-	msBuilder mutableState,
-	startEvent *commonproto.HistoryEvent,
-) time.Time {
-	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
-	// comparison between two field, we need a value to differentiate them from cron workflows
-	// or later runs of a workflow that needs retry.
-	executionTimestamp := time.Unix(0, 0)
-	if startEvent == nil {
-		return executionTimestamp
-	}
-
-	if backoffSeconds := startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstDecisionTaskBackoffSeconds(); backoffSeconds != 0 {
-		startTimestamp := time.Unix(0, startEvent.GetTimestamp())
-		executionTimestamp = startTimestamp.Add(time.Duration(backoffSeconds) * time.Second)
-	}
-	return executionTimestamp
-}
-
-func getWorkflowMemo(
-	memo map[string][]byte,
-) *commonproto.Memo {
-
-	if memo == nil {
-		return nil
-	}
-	return &commonproto.Memo{Fields: memo}
-}
-
-func copySearchAttributes(
-	input map[string][]byte,
-) map[string][]byte {
-
-	if input == nil {
-		return nil
-	}
-
-	result := make(map[string][]byte)
-	for k, v := range input {
-		val := make([]byte, len(v))
-		copy(val, v)
-		result[k] = val
-	}
-	return result
-}
-
-func isWorkflowNotExistError(err error) bool {
-	_, ok := err.(*serviceerror.NotFound)
-	return ok
 }

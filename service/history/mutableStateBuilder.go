@@ -136,6 +136,7 @@ type (
 		appliedEvents map[string]struct{}
 
 		insertTransferTasks    []persistence.Task
+		insertVisibilityTasks  []persistence.Task
 		insertReplicationTasks []persistence.Task
 		insertTimerTasks       []persistence.Task
 
@@ -3812,6 +3813,14 @@ func (e *mutableStateBuilder) AddTransferTasks(
 	e.insertTransferTasks = append(e.insertTransferTasks, transferTasks...)
 }
 
+// TODO convert AddVisibilityTasks to prepareVisibilityTasks
+func (e *mutableStateBuilder) AddVisibilityTasks(
+	transferTasks ...persistence.Task,
+) {
+
+	e.insertVisibilityTasks = append(e.insertVisibilityTasks, transferTasks...)
+}
+
 // TODO convert AddTransferTasks to prepareTimerTasks
 func (e *mutableStateBuilder) AddTimerTasks(
 	timerTasks ...persistence.Task,
@@ -3925,6 +3934,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		ClearBufferedEvents:       e.clearBufferedEvents,
 
 		TransferTasks:    e.insertTransferTasks,
+		VisibilityTasks:  e.insertVisibilityTasks,
 		ReplicationTasks: e.insertReplicationTasks,
 		TimerTasks:       e.insertTimerTasks,
 
@@ -4002,6 +4012,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		SignalRequestedIDs:  convertSignalRequestedIDs(e.pendingSignalRequestedIDs),
 
 		TransferTasks:    e.insertTransferTasks,
+		VisibilityTasks:  e.insertVisibilityTasks,
 		ReplicationTasks: e.insertReplicationTasks,
 		TimerTasks:       e.insertTimerTasks,
 

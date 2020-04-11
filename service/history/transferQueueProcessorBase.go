@@ -139,21 +139,11 @@ func (t *transferQueueProcessorBase) getTransferTaskMetricsScope(
 			return metrics.TransferActiveTaskStartChildExecutionScope
 		}
 		return metrics.TransferStandbyTaskStartChildExecutionScope
-	case persistence.TransferTaskTypeRecordWorkflowStarted:
-		if isActive {
-			return metrics.TransferActiveTaskRecordWorkflowStartedScope
-		}
-		return metrics.TransferStandbyTaskRecordWorkflowStartedScope
 	case persistence.TransferTaskTypeResetWorkflow:
 		if isActive {
 			return metrics.TransferActiveTaskResetWorkflowScope
 		}
 		return metrics.TransferStandbyTaskResetWorkflowScope
-	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
-		if isActive {
-			return metrics.TransferActiveTaskUpsertWorkflowSearchAttributesScope
-		}
-		return metrics.TransferStandbyTaskUpsertWorkflowSearchAttributesScope
 	default:
 		if isActive {
 			return metrics.TransferActiveQueueProcessorScope

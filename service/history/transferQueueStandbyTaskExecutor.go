@@ -99,14 +99,10 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 		return t.processSignalExecution(transferTask)
 	case persistence.TransferTaskTypeStartChildExecution:
 		return t.processStartChildExecution(transferTask)
-	case persistence.TransferTaskTypeRecordWorkflowStarted:
-		return t.processRecordWorkflowStarted(transferTask)
 	case persistence.TransferTaskTypeResetWorkflow:
 		// no reset needed for standby
 		// TODO: add error logs
 		return nil
-	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
-		return t.processUpsertWorkflowSearchAttributes(transferTask)
 	default:
 		return errUnknownTransferTask
 	}
@@ -375,6 +371,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	)
 }
 
+/* TODO becker move to visibility standby task executor
 func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStarted(
 	transferTask *persistenceblobs.TransferTaskInfo,
 ) error {
@@ -464,6 +461,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 	)
 
 }
+*/
 
 func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	processTaskIfClosed bool,

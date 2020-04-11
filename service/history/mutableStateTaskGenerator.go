@@ -161,6 +161,12 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 		Version:             currentVersion,
 	})
 
+	r.mutableState.AddVisibilityTasks(&persistence.RecordCloseExecutionTask{
+		// TaskID is set by shard
+		VisibilityTimestamp: now,
+		Version:             currentVersion,
+	})
+
 	retentionInDays := defaultWorkflowRetentionInDays
 	domainEntry, err := r.domainCache.GetDomainByID(executionInfo.DomainID)
 	switch err.(type) {
@@ -222,7 +228,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 
 	startVersion := startEvent.GetVersion()
 
-	r.mutableState.AddTransferTasks(&persistence.RecordWorkflowStartedTask{
+	r.mutableState.AddVisibilityTasks(&persistence.RecordWorkflowStartedTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		Version:             startVersion,
@@ -471,7 +477,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowSearchAttrTasks(
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 
-	r.mutableState.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{
+	r.mutableState.AddVisibilityTasks(&persistence.UpsertWorkflowSearchAttributesTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		Version:             currentVersion, // task processing does not check this version

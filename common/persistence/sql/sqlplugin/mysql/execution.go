@@ -88,12 +88,14 @@ workflow_id = :workflow_id
 	deleteTransferTaskQuery      = `DELETE FROM transfer_tasks WHERE shard_id = ? AND task_id = ?`
 	rangeDeleteTransferTaskQuery = `DELETE FROM transfer_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ?`
 
-	getVisibilityTasksQuery = `TODO`
+	getVisibilityTasksQuery = `SELECT task_id, data, data_encoding 
+ FROM visibility_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY shard_id, task_id`
 
-	createVisibilityTasksQuery = `TODO`
+	createVisibilityTasksQuery = `INSERT INTO visibility_tasks(shard_id, task_id, data, data_encoding) 
+ VALUES(:shard_id, :task_id, :data, :data_encoding)`
 
-	deleteVisibilityTaskQuery      = `TODO`
-	rangeDeleteVisibilityTaskQuery = `TODO`
+	deleteVisibilityTaskQuery      = `DELETE FROM visibility_tasks WHERE shard_id = ? AND task_id = ?`
+	rangeDeleteVisibilityTaskQuery = `DELETE FROM visibility_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ?`
 
 	createTimerTasksQuery = `INSERT INTO timer_tasks (shard_id, visibility_timestamp, task_id, data, data_encoding)
   VALUES (:shard_id, :visibility_timestamp, :task_id, :data, :data_encoding)`
