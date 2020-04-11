@@ -139,4 +139,4 @@ if [ "$SKIP_SCHEMA_SETUP" != true ]; then
     setup_schema
 fi
 
-bash /start-cadence.sh
+exec /start-cadence.sh
