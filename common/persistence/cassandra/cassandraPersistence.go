@@ -26,7 +26,6 @@ package cassandra
 
 import (
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
@@ -2445,7 +2444,7 @@ func GetTaskTTL(task *persistenceblobs.TaskInfo) int64 {
 		// Ignoring error since err is just validating 0 < yyyy < 1000 and nanos < 1e9
 		// and we'd have checked this upstream
 		expiryGo, _ := types.TimestampFromProto(task.Expiry)
-		expiryTtl := int64(math.Ceil(expiryGo.Sub(time.Now()).Seconds()))
+		expiryTtl := common.Int64Ceil(expiryGo.Sub(time.Now()).Seconds())
 		ttl = expiryTtl
 	}
 	return ttl

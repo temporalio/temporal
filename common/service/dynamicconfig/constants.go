@@ -68,7 +68,7 @@ var keys = map[Key]string{
 	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
 	TransactionSizeLimit:                   "system.transactionSizeLimit",
 	MinRetentionDays:                       "system.minRetentionDays",
-	MaxDecisionStartToCloseSeconds:         "system.maxDecisionStartToCloseSeconds",
+	MaxDecisionStartToCloseTimeout:         "system.maxDecisionStartToCloseTimeout",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
@@ -189,28 +189,28 @@ var keys = map[Key]string{
 	MaximumSignalsPerExecution:                            "history.maximumSignalsPerExecution",
 	ShardUpdateMinInterval:                                "history.shardUpdateMinInterval",
 	ShardSyncMinInterval:                                  "history.shardSyncMinInterval",
-	ShardSyncTimerJitterCoefficient:               "history.shardSyncMinInterval",
-	DefaultEventEncoding:                          "history.defaultEventEncoding",
-	EnableAdminProtection:                         "history.enableAdminProtection",
-	AdminOperationToken:                           "history.adminOperationToken",
-	EnableParentClosePolicy:                       "history.enableParentClosePolicy",
-	NumArchiveSystemWorkflows:                     "history.numArchiveSystemWorkflows",
-	ArchiveRequestRPS:                             "history.archiveRequestRPS",
-	EmitShardDiffLog:                              "history.emitShardDiffLog",
-	HistoryThrottledLogRPS:                        "history.throttledLogRPS",
-	StickyTTL:                                     "history.stickyTTL",
-	DefaultExecutionStartToCloseTimeout:           "history.defaultWorkflowExecutionTimeout",
-	MaxExecutionStartToCloseTimeout:               "history.maximumWorkflowExecutionTimeout",
-	DecisionHeartbeatTimeout:                      "history.decisionHeartbeatTimeout",
-	ParentClosePolicyThreshold:                    "history.parentClosePolicyThreshold",
-	NumParentClosePolicySystemWorkflows:           "history.numParentClosePolicySystemWorkflows",
-	ReplicationTaskFetcherParallelism:             "history.ReplicationTaskFetcherParallelism",
-	ReplicationTaskFetcherAggregationInterval:     "history.ReplicationTaskFetcherAggregationInterval",
-	ReplicationTaskFetcherTimerJitterCoefficient:  "history.ReplicationTaskFetcherTimerJitterCoefficient",
-	ReplicationTaskFetcherErrorRetryWait:          "history.ReplicationTaskFetcherErrorRetryWait",
-	ReplicationTaskProcessorErrorRetryWait:        "history.ReplicationTaskProcessorErrorRetryWait",
-	ReplicationTaskProcessorErrorRetryMaxAttempts: "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
-	ReplicationTaskProcessorNoTaskInitialWait:     "history.ReplicationTaskProcessorNoTaskInitialWait",
+	ShardSyncTimerJitterCoefficient:                       "history.shardSyncMinInterval",
+	DefaultEventEncoding:                                  "history.defaultEventEncoding",
+	EnableAdminProtection:                                 "history.enableAdminProtection",
+	AdminOperationToken:                                   "history.adminOperationToken",
+	EnableParentClosePolicy:                               "history.enableParentClosePolicy",
+	NumArchiveSystemWorkflows:                             "history.numArchiveSystemWorkflows",
+	ArchiveRequestRPS:                                     "history.archiveRequestRPS",
+	EmitShardDiffLog:                                      "history.emitShardDiffLog",
+	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
+	StickyTTL:                                             "history.stickyTTL",
+	DefaultExecutionStartToCloseTimeout:                   "history.defaultWorkflowExecutionTimeout",
+	MaxExecutionStartToCloseTimeout:                       "history.maximumWorkflowExecutionTimeout",
+	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
+	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
+	NumParentClosePolicySystemWorkflows:                   "history.numParentClosePolicySystemWorkflows",
+	ReplicationTaskFetcherParallelism:                     "history.ReplicationTaskFetcherParallelism",
+	ReplicationTaskFetcherAggregationInterval:             "history.ReplicationTaskFetcherAggregationInterval",
+	ReplicationTaskFetcherTimerJitterCoefficient:          "history.ReplicationTaskFetcherTimerJitterCoefficient",
+	ReplicationTaskFetcherErrorRetryWait:                  "history.ReplicationTaskFetcherErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryWait:                "history.ReplicationTaskProcessorErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryMaxAttempts:         "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
+	ReplicationTaskProcessorNoTaskInitialWait:             "history.ReplicationTaskProcessorNoTaskInitialWait",
 	ReplicationTaskProcessorCleanupInterval:               "history.ReplicationTaskProcessorCleanupInterval",
 	ReplicationTaskProcessorCleanupJitterCoefficient:      "history.ReplicationTaskProcessorCleanupJitterCoefficient",
 	EnableConsistentQuery:                                 "history.EnableConsistentQuery",
@@ -299,8 +299,8 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
-	// MaxDecisionStartToCloseSeconds is the minimal allowed decision start to close timeout in seconds
-	MaxDecisionStartToCloseSeconds
+	// MaxDecisionStartToClose is the minimal allowed decision start to close timeout in seconds
+	MaxDecisionStartToCloseTimeout
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
 
@@ -559,7 +559,7 @@ const (
 	StickyTTL
 	// DecisionHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
-	// DefaultExecutionStartToCloseTimeoutSeconds for a workflow execution
+	// DefaultExecutionStartToCloseTimeout for a workflow execution
 	DefaultExecutionStartToCloseTimeout
 	// Maximum allowed workflow execution timeout
 	MaxExecutionStartToCloseTimeout

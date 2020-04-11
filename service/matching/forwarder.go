@@ -27,7 +27,7 @@ package matching
 import (
 	"context"
 	"errors"
-	"math"
+	"github.com/temporalio/temporal/common"
 	"sync/atomic"
 	"time"
 
@@ -154,7 +154,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		return err
 	}
 
-	newScheduleToStartTimeout := int32(math.Ceil(time.Until(expiryGo).Seconds()))
+	newScheduleToStartTimeout := common.Int32Ceil(time.Until(expiryGo).Seconds())
 
 	// Todo - should we noop expired tasks? This will be moot once history stamp absolute time
 	/*if newScheduleToStartTimeout <= 0 {
