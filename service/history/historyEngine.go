@@ -667,12 +667,13 @@ func (e *historyEngineImpl) updateEntityNotExistsErrorOnPassiveCluster(err error
 		if domainCacheErr != nil {
 			return err // if could not access domain cache simply return original error
 		}
-		domainNotActiveErr := domainCache.GetDomainNotActiveErr().(*workflow.DomainNotActiveError)
-		if domainNotActiveErr != nil {
+
+		if domainNotActiveErr := domainCache.GetDomainNotActiveErr(); domainNotActiveErr != nil {
+			domainNotActiveErrCasted := domainNotActiveErr.(*workflow.DomainNotActiveError)
 			return &workflow.EntityNotExistsError{
 				Message:        "Workflow execution not found in non-active cluster",
-				ActiveCluster:  common.StringPtr(domainNotActiveErr.GetActiveCluster()),
-				CurrentCluster: common.StringPtr(domainNotActiveErr.GetCurrentCluster()),
+				ActiveCluster:  common.StringPtr(domainNotActiveErrCasted.GetActiveCluster()),
+				CurrentCluster: common.StringPtr(domainNotActiveErrCasted.GetCurrentCluster()),
 			}
 		}
 	}
