@@ -34,7 +34,6 @@ import (
 )
 
 const (
-	// PluginName is the name of the plugin
 	PluginName             = "postgres"
 	dataSourceNamePostgres = "user=%v password=%v host=%v port=%v dbname=%v sslmode=disable "
 )

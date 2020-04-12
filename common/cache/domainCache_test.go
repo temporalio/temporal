@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
@@ -37,6 +36,8 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -643,4 +644,40 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 
 	d.info.Data[SampleRateKey] = "invalid-value"
 	require.False(t, d.IsSampledForLongerRetention(wid))
+}
+
+func Test_DomainCacheEntry_GetDomainNotActiveErr(t *testing.T) {
+	clusterMetadata := cluster.NewMetadata(
+		loggerimpl.NewNopLogger(),
+		dynamicconfig.GetBoolPropertyFn(true),
+		int64(10),
+		cluster.TestCurrentClusterName,
+		cluster.TestCurrentClusterName,
+		cluster.TestAllClusterInfo,
+		&config.ReplicationConsumerConfig{
+			Type: config.ReplicationConsumerTypeRPC,
+		},
+	)
+	domainEntry := NewGlobalDomainCacheEntryForTest(
+		&persistence.DomainInfo{Name: "test-domain"},
+		nil,
+		&persistence.DomainReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []*persistence.ClusterReplicationConfig{
+				{ClusterName: cluster.TestCurrentClusterName},
+				{ClusterName: cluster.TestAlternativeClusterName},
+			},
+		},
+		1234,
+		clusterMetadata,
+	)
+
+	require.Nil(t, domainEntry.GetDomainNotActiveErr())
+
+	// update to become not active
+	domainEntry.replicationConfig.ActiveClusterName = cluster.TestAlternativeClusterName
+	err := domainEntry.GetDomainNotActiveErr()
+	require.NotNil(t, err)
+	_, ok := err.(*shared.DomainNotActiveError)
+	require.True(t, ok)
 }
