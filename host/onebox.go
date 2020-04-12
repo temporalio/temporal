@@ -30,18 +30,14 @@ import (
 	"net"
 	"sync"
 
-	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
@@ -705,28 +701,8 @@ func (c *cadenceImpl) startWorkerIndexer(params *resource.BootstrapParams, servi
 }
 
 func (c *cadenceImpl) createSystemNamespace() error {
-
-	_, err := c.metadataMgr.CreateNamespace(&persistence.CreateNamespaceRequest{
-		Namespace: &persistenceblobs.NamespaceDetail{
-			Info: &persistenceblobs.NamespaceInfo{
-				Id:          uuid.NewRandom(),
-				Name:        "temporal-system",
-				Status:      namespacepb.NamespaceStatus_Registered,
-				Description: "Cadence system namespace",
-			},
-			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:                1,
-				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
-				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
-			},
-			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{},
-			FailoverVersion:   common.EmptyVersion,
-		},
-	})
+	err := c.metadataMgr.InitializeSystemNamespaces(c.clusterMetadata.GetCurrentClusterName())
 	if err != nil {
-		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); ok {
-			return nil
-		}
 		return fmt.Errorf("failed to create temporal-system namespace: %v", err)
 	}
 	return nil

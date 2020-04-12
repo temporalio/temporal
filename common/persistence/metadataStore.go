@@ -25,8 +25,8 @@
 package persistence
 
 import (
-	"go.temporal.io/temporal-proto/serviceerror"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -69,10 +69,10 @@ func (m *metadataManagerImpl) CreateNamespace(request *CreateNamespaceRequest) (
 	}
 
 	return m.persistence.CreateNamespace(&InternalCreateNamespaceRequest{
-		ID:				   request.Namespace.Info.Id,
-		Name:              request.Namespace.Info.Name,
-		IsGlobal: 		   request.IsGlobalNamespace,
-		Namespace: 		   &datablob,
+		ID:        request.Namespace.Info.Id,
+		Name:      request.Namespace.Info.Name,
+		IsGlobal:  request.IsGlobalNamespace,
+		Namespace: &datablob,
 	})
 }
 
@@ -91,7 +91,7 @@ func (m *metadataManagerImpl) UpdateNamespace(request *UpdateNamespaceRequest) e
 	}
 
 	return m.persistence.UpdateNamespace(&InternalUpdateNamespaceRequest{
-		Id:				     request.Namespace.Info.Id,
+		Id:                  request.Namespace.Info.Id,
 		Name:                request.Namespace.Info.Name,
 		Namespace:           &datablob,
 		NotificationVersion: request.NotificationVersion,
@@ -154,18 +154,21 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(currentClusterName stri
 			Info: &persistenceblobs.NamespaceInfo{
 				Id:          primitives.MustParseUUID(common.SystemNamespaceID),
 				Name:        common.SystemLocalNamespace,
+				Status:      namespacepb.NamespaceStatus_Registered,
 				Description: "Temporal internal system namespace",
-				Owner: "temporal-core@temporal.io",
+				Owner:       "temporal-core@temporal.io",
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:  common.SystemNamespaceRetentionDays,
-				EmitMetric: true,
+				RetentionDays:            common.SystemNamespaceRetentionDays,
+				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
+				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
+				EmitMetric:               true,
 			},
 			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: currentClusterName,
 				Clusters:          GetOrUseDefaultClusters(currentClusterName, nil),
 			},
-			FailoverVersion:   common.EmptyVersion,
+			FailoverVersion:             common.EmptyVersion,
 			FailoverNotificationVersion: -1,
 		},
 		IsGlobalNamespace: false,
