@@ -63,7 +63,7 @@ const (
 	templateGetNamespaceByNameQueryV2 = templateListNamespaceQueryV2 + `and name = ?`
 
 	templateUpdateNamespaceByNameQueryWithinBatchV2 = `UPDATE namespaces_by_name_v2 ` +
-		`SET detail = ? ,`  +
+		`SET detail = ? ,` +
 		`detail_encoding = ? ,` +
 		`notification_version = ? ` +
 		`WHERE namespaces_partition = ? ` +
@@ -135,7 +135,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespace(request *p.InternalCrea
 		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
 	}
 	if !applied {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed because of uuid collision."))
+		return nil, serviceerror.NewNamespaceAlreadyExists("CreateNamespace operation failed because of uuid collision.")
 	}
 
 	return m.CreateNamespaceInV2Table(request)
@@ -300,8 +300,8 @@ func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespace
 		// do not include the metadata record
 		if name != namespaceMetadataRecordName {
 			response.Namespaces = append(response.Namespaces, &p.InternalGetNamespaceResponse{
-				Namespace:  p.NewDataBlob(detail, common.EncodingType(detailEncoding)),
-				IsGlobal:   isGlobal,
+				Namespace:           p.NewDataBlob(detail, common.EncodingType(detailEncoding)),
+				IsGlobal:            isGlobal,
 				NotificationVersion: notificationVersion,
 			})
 		}

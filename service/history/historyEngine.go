@@ -820,20 +820,22 @@ func (e *historyEngineImpl) QueryWorkflow(
 		}
 	}
 
-	// query cannot be processed unless at least one decision task has finished
-	// if first decision task has not finished wait for up to a second for it to complete
-	deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
-	for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
-		<-time.After(queryFirstDecisionTaskCheckInterval)
-		mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
-		if err != nil {
-			return nil, err
+	if request.GetRequest().GetQueryConsistencyLevel() == querypb.QueryConsistencyLevel_Eventual {
+		// query cannot be processed unless at least one decision task has finished
+		// if first decision task has not finished wait for up to a second for it to complete
+		deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
+		for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
+			<-time.After(queryFirstDecisionTaskCheckInterval)
+			mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
+			if err != nil {
+				return nil, err
+			}
 		}
-	}
 
-	if mutableStateResp.GetPreviousStartedEventId() <= 0 {
-		scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
-		return nil, ErrQueryWorkflowBeforeFirstDecision
+		if mutableStateResp.GetPreviousStartedEventId() <= 0 {
+			scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
+			return nil, ErrQueryWorkflowBeforeFirstDecision
+		}
 	}
 
 	de, err := e.shard.GetNamespaceCache().GetNamespaceByID(request.GetNamespaceId())
