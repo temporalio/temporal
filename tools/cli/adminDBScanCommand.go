@@ -137,6 +137,7 @@ type (
 		CorruptedExecutionsCount   int64
 		ExecutionCheckFailureCount int64
 		CorruptionTypeBreakdown    CorruptionTypeBreakdown
+		OpenCorruptions            OpenCorruptions
 	}
 
 	// ShardScanReportFailure is the part of the ShardScanReport that indicates failure to scan all or part of the shard
@@ -148,17 +149,40 @@ type (
 	// ProgressReport contains metadata about the scan for all shards which have been finished
 	// This is periodically printed to stdout
 	ProgressReport struct {
-		NumberOfShardsFinished           int
-		TotalExecutionsCount             int64
-		CorruptedExecutionsCount         int64
-		ExecutionCheckFailureCount       int64
-		NumberOfShardScanFailures        int
-		ShardsFailed                     []int
-		PercentageCorrupted              float64
-		PercentageCheckFailure           float64
-		Rates                            Rates
-		CorruptionTypeBreakdown          CorruptionTypeBreakdown
-		ShardExecutionCountsDistribution ShardExecutionCountsDistribution
+		ShardStats     ShardStats
+		ExecutionStats ExecutionStats
+		Rates          Rates
+	}
+
+	// ShardStats breaks out shard level stats
+	ShardStats struct {
+		NumberOfShardsFinished    int
+		NumberOfShardScanFailures int
+		ShardsFailed              []int
+		MinExecutions             *int64
+		MaxExecutions             *int64
+		AverageExecutions         int64
+	}
+
+	// ExecutionStats breaks down execution level stats
+	ExecutionStats struct {
+		TotalExecutionsCount int64
+		CorruptionStats      CorruptionStats
+		CheckFailureStats    CheckFailureStats
+	}
+
+	// CorruptionStats breaks out stats regarding corrupted executions
+	CorruptionStats struct {
+		CorruptedExecutionsCount int64
+		PercentageCorrupted      float64
+		CorruptionTypeBreakdown  CorruptionTypeBreakdown
+		OpenCorruptions          OpenCorruptions
+	}
+
+	// CheckFailureStats breaks out stats regarding execution check failures
+	CheckFailureStats struct {
+		ExecutionCheckFailureCount int64
+		PercentageCheckFailure     float64
 	}
 
 	// CorruptionTypeBreakdown breaks down counts and percentages of corruption types
@@ -171,6 +195,12 @@ type (
 		PercentageOpenExecutionInvalidCurrentExecution float64
 	}
 
+	// OpenCorruptions breaks down the count and percentage of open workflows which are corrupted
+	OpenCorruptions struct {
+		TotalOpen      int64
+		PercentageOpen float64
+	}
+
 	// Rates indicates the rates at which the scan is progressing
 	Rates struct {
 		TimeRunning       string
@@ -178,13 +208,6 @@ type (
 		TotalDBRequests   int64
 		ShardsPerHour     float64
 		ExecutionsPerHour float64
-	}
-
-	// ShardExecutionCountsDistribution breaks down stats on the distribution of executions per shard
-	ShardExecutionCountsDistribution struct {
-		MinExecutions     *int64
-		MaxExecutions     *int64
-		AverageExecutions int64
 	}
 )
 
@@ -319,6 +342,9 @@ func scanShard(
 			case VerificationResultDetectedCorruption:
 				report.Scanned.CorruptedExecutionsCount++
 				report.Scanned.CorruptionTypeBreakdown.TotalHistoryMissing++
+				if executionOpen(e.ExecutionInfo) {
+					report.Scanned.OpenCorruptions.TotalOpen++
+				}
 				continue
 			case VerificationResultCheckFailure:
 				report.Scanned.ExecutionCheckFailureCount++
@@ -343,6 +369,9 @@ func scanShard(
 			case VerificationResultDetectedCorruption:
 				report.Scanned.CorruptionTypeBreakdown.TotalInvalidFirstEvent++
 				report.Scanned.CorruptedExecutionsCount++
+				if executionOpen(e.ExecutionInfo) {
+					report.Scanned.OpenCorruptions.TotalOpen++
+				}
 				continue
 			case VerificationResultCheckFailure:
 				report.Scanned.ExecutionCheckFailureCount++
@@ -364,6 +393,9 @@ func scanShard(
 			case VerificationResultDetectedCorruption:
 				report.Scanned.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution++
 				report.Scanned.CorruptedExecutionsCount++
+				if executionOpen(e.ExecutionInfo) {
+					report.Scanned.OpenCorruptions.TotalOpen++
+				}
 				continue
 			case VerificationResultCheckFailure:
 				report.Scanned.ExecutionCheckFailureCount++
@@ -747,52 +779,73 @@ func writeToFile(file *os.File, message string) {
 }
 
 func includeShardInProgressReport(report *ShardScanReport, progressReport *ProgressReport, startTime time.Time) {
-	progressReport.NumberOfShardsFinished++
-	progressReport.Rates.TotalDBRequests += report.TotalDBRequests
-	progressReport.Rates.TimeRunning = time.Now().Sub(startTime).String()
-	if report.Failure != nil {
-		progressReport.NumberOfShardScanFailures++
-		progressReport.ShardsFailed = append(progressReport.ShardsFailed, report.ShardID)
-	}
+	includeExecutionStats(report, &progressReport.ExecutionStats)
+	includeShardStats(report, &progressReport.ShardStats, progressReport.ExecutionStats.TotalExecutionsCount)
+	includeRates(report, &progressReport.Rates, startTime, progressReport.ExecutionStats.TotalExecutionsCount, progressReport.ShardStats.NumberOfShardsFinished)
+}
+
+func includeExecutionStats(report *ShardScanReport, executionStats *ExecutionStats) {
 	if report.Scanned != nil {
-		progressReport.CorruptedExecutionsCount += report.Scanned.CorruptedExecutionsCount
-		progressReport.TotalExecutionsCount += report.Scanned.TotalExecutionsCount
-		progressReport.ExecutionCheckFailureCount += report.Scanned.ExecutionCheckFailureCount
-		progressReport.CorruptionTypeBreakdown.TotalHistoryMissing += report.Scanned.CorruptionTypeBreakdown.TotalHistoryMissing
-		progressReport.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution += report.Scanned.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution
-		progressReport.CorruptionTypeBreakdown.TotalInvalidFirstEvent += report.Scanned.CorruptionTypeBreakdown.TotalInvalidFirstEvent
-		if report.Failure == nil && (progressReport.ShardExecutionCountsDistribution.MinExecutions == nil ||
-			*progressReport.ShardExecutionCountsDistribution.MinExecutions > report.Scanned.TotalExecutionsCount) {
-			progressReport.ShardExecutionCountsDistribution.MinExecutions = &report.Scanned.TotalExecutionsCount
-		}
-		if report.Failure == nil && (progressReport.ShardExecutionCountsDistribution.MaxExecutions == nil ||
-			*progressReport.ShardExecutionCountsDistribution.MaxExecutions < report.Scanned.TotalExecutionsCount) {
-			progressReport.ShardExecutionCountsDistribution.MaxExecutions = &report.Scanned.TotalExecutionsCount
-		}
-		successfullyFinishedShards := progressReport.NumberOfShardsFinished - progressReport.NumberOfShardScanFailures
-		if successfullyFinishedShards > 0 {
-			progressReport.ShardExecutionCountsDistribution.AverageExecutions = progressReport.TotalExecutionsCount / int64(successfullyFinishedShards)
-		}
+		executionStats.TotalExecutionsCount += report.Scanned.TotalExecutionsCount
+		executionStats.CorruptionStats.CorruptedExecutionsCount += report.Scanned.CorruptedExecutionsCount
+		executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalHistoryMissing += report.Scanned.CorruptionTypeBreakdown.TotalHistoryMissing
+		executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution += report.Scanned.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution
+		executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalInvalidFirstEvent += report.Scanned.CorruptionTypeBreakdown.TotalInvalidFirstEvent
+		executionStats.CorruptionStats.OpenCorruptions.TotalOpen += report.Scanned.OpenCorruptions.TotalOpen
+		executionStats.CheckFailureStats.ExecutionCheckFailureCount += report.Scanned.ExecutionCheckFailureCount
+	}
+	if executionStats.TotalExecutionsCount > 0 {
+		executionStats.CorruptionStats.PercentageCorrupted = math.Round((float64(executionStats.CorruptionStats.CorruptedExecutionsCount) * 100.0) /
+			float64(executionStats.TotalExecutionsCount))
+
+		executionStats.CheckFailureStats.PercentageCheckFailure = math.Round((float64(executionStats.CheckFailureStats.ExecutionCheckFailureCount) * 100.0) /
+			float64(executionStats.TotalExecutionsCount))
 	}
 
-	if progressReport.TotalExecutionsCount > 0 {
-		progressReport.PercentageCorrupted = math.Round((float64(progressReport.CorruptedExecutionsCount) * 100.0) / float64(progressReport.TotalExecutionsCount))
-		progressReport.PercentageCheckFailure = math.Round((float64(progressReport.ExecutionCheckFailureCount) * 100.0) / float64(progressReport.TotalExecutionsCount))
-	}
+	if executionStats.CorruptionStats.CorruptedExecutionsCount > 0 {
+		executionStats.CorruptionStats.CorruptionTypeBreakdown.PercentageHistoryMissing = math.Round((float64(executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalHistoryMissing) * 100.0) /
+			float64(executionStats.CorruptionStats.CorruptedExecutionsCount))
 
-	if progressReport.CorruptedExecutionsCount > 0 {
-		progressReport.CorruptionTypeBreakdown.PercentageHistoryMissing = math.Round((float64(progressReport.CorruptionTypeBreakdown.TotalHistoryMissing) * 100.0) / float64(progressReport.CorruptedExecutionsCount))
-		progressReport.CorruptionTypeBreakdown.PercentageInvalidStartEvent = math.Round((float64(progressReport.CorruptionTypeBreakdown.TotalInvalidFirstEvent) * 100.0) / float64(progressReport.CorruptedExecutionsCount))
-		progressReport.CorruptionTypeBreakdown.PercentageOpenExecutionInvalidCurrentExecution = math.Round((float64(progressReport.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution) * 100.0) / float64(progressReport.CorruptedExecutionsCount))
-	}
+		executionStats.CorruptionStats.CorruptionTypeBreakdown.PercentageInvalidStartEvent = math.Round((float64(executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalInvalidFirstEvent) * 100.0) /
+			float64(executionStats.CorruptionStats.CorruptedExecutionsCount))
 
+		executionStats.CorruptionStats.CorruptionTypeBreakdown.PercentageOpenExecutionInvalidCurrentExecution = math.Round((float64(executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution) * 100.0) /
+			float64(executionStats.CorruptionStats.CorruptedExecutionsCount))
+
+		executionStats.CorruptionStats.OpenCorruptions.PercentageOpen = math.Round((float64(executionStats.CorruptionStats.OpenCorruptions.TotalOpen) * 100.0) /
+			float64(executionStats.CorruptionStats.CorruptedExecutionsCount))
+	}
+}
+
+func includeShardStats(report *ShardScanReport, shardStats *ShardStats, totalExecutions int64) {
+	shardStats.NumberOfShardsFinished++
+	if report.Failure != nil {
+		shardStats.NumberOfShardScanFailures++
+		shardStats.ShardsFailed = append(shardStats.ShardsFailed, report.ShardID)
+	}
+	if report.Scanned != nil &&
+		(shardStats.MinExecutions == nil || *shardStats.MinExecutions > report.Scanned.TotalExecutionsCount) {
+		shardStats.MinExecutions = &report.Scanned.TotalExecutionsCount
+	}
+	if report.Scanned != nil &&
+		(shardStats.MaxExecutions == nil || *shardStats.MaxExecutions < report.Scanned.TotalExecutionsCount) {
+		shardStats.MaxExecutions = &report.Scanned.TotalExecutionsCount
+	}
+	successfullyFinishedShards := shardStats.NumberOfShardsFinished - shardStats.NumberOfShardScanFailures
+	if successfullyFinishedShards > 0 {
+		shardStats.AverageExecutions = totalExecutions / int64(successfullyFinishedShards)
+	}
+}
+
+func includeRates(report *ShardScanReport, rates *Rates, startTime time.Time, totalExecutions int64, numberOfShardsFinished int) {
+	rates.TotalDBRequests += report.TotalDBRequests
+	rates.TimeRunning = time.Now().Sub(startTime).String()
 	pastTime := time.Now().Sub(startTime)
 	hoursPast := float64(pastTime) / float64(time.Hour)
-	progressReport.Rates.ShardsPerHour = math.Round(float64(progressReport.NumberOfShardsFinished) / hoursPast)
-	progressReport.Rates.ExecutionsPerHour = math.Round(float64(progressReport.TotalExecutionsCount) / hoursPast)
-
 	secondsPast := float64(pastTime) / float64(time.Second)
-	progressReport.Rates.DatabaseRPS = math.Round(float64(progressReport.Rates.TotalDBRequests) / secondsPast)
+	rates.ShardsPerHour = math.Round(float64(numberOfShardsFinished) / hoursPast)
+	rates.ExecutionsPerHour = math.Round(float64(totalExecutions) / hoursPast)
+	rates.DatabaseRPS = math.Round(float64(rates.TotalDBRequests) / secondsPast)
 }
 
 func getRateLimiter(startRPS int, targetRPS int, scaleUpSeconds int) *quotas.DynamicRateLimiter {
