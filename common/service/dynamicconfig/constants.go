@@ -299,7 +299,7 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
-	// MaxDecisionStartToClose is the minimal allowed decision start to close timeout in seconds
+	// MaxDecisionStartToCloseTimeout is the maximum allowed decision start to close timeout
 	MaxDecisionStartToCloseTimeout
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
