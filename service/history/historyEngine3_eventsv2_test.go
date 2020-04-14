@@ -45,6 +45,7 @@ import (
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -117,14 +118,13 @@ func (s *engine3Suite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
 		currentClusterName:   s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:                s.mockShard,
 		clusterMetadata:      s.mockClusterMetadata,
 		executionManager:     s.mockExecutionMgr,
 		historyV2Mgr:         s.mockHistoryV2Mgr,
-		historyCache:         historyCache,
+		executionCache:       execution.NewCache(s.mockShard),
 		logger:               s.logger,
 		throttledLogger:      s.logger,
 		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
@@ -163,8 +163,8 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	stickyTl := "stickyTaskList"
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId(), testLocalDomainEntry)
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.LastUpdatedTimestamp = time.Now()
 	executionInfo.StickyTaskList = stickyTl
@@ -172,7 +172,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 
-	ms := createMutableState(msBuilder)
+	ms := execution.CreatePersistenceMutableState(msBuilder)
 
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 
@@ -284,9 +284,9 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
-	ms := createMutableState(msBuilder)
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite), runID, testLocalDomainEntry)
+	ms := execution.CreatePersistenceMutableState(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 

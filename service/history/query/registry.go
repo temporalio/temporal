@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package history
+package query
 
 import (
 	"sync"
@@ -33,26 +33,27 @@ var (
 )
 
 type (
-	queryRegistry interface {
-		hasBufferedQuery() bool
-		getBufferedIDs() []string
-		hasCompletedQuery() bool
-		getCompletedIDs() []string
-		hasUnblockedQuery() bool
-		getUnblockedIDs() []string
-		hasFailedQuery() bool
-		getFailedIDs() []string
+	// Registry manages all the queries for a workflow
+	Registry interface {
+		HasBufferedQuery() bool
+		GetBufferedIDs() []string
+		HasCompletedQuery() bool
+		GetCompletedIDs() []string
+		HasUnblockedQuery() bool
+		GetUnblockedIDs() []string
+		HasFailedQuery() bool
+		GetFailedIDs() []string
 
-		getQueryTermCh(string) (<-chan struct{}, error)
-		getQueryInput(string) (*shared.WorkflowQuery, error)
-		getTerminationState(string) (*queryTerminationState, error)
+		GetQueryTermCh(string) (<-chan struct{}, error)
+		GetQueryInput(string) (*shared.WorkflowQuery, error)
+		GetTerminationState(string) (*TerminationState, error)
 
-		bufferQuery(queryInput *shared.WorkflowQuery) (string, <-chan struct{})
-		setTerminationState(string, *queryTerminationState) error
-		removeQuery(id string)
+		BufferQuery(queryInput *shared.WorkflowQuery) (string, <-chan struct{})
+		SetTerminationState(string, *TerminationState) error
+		RemoveQuery(id string)
 	}
 
-	queryRegistryImpl struct {
+	registryImpl struct {
 		sync.RWMutex
 
 		buffered  map[string]query
@@ -62,8 +63,9 @@ type (
 	}
 )
 
-func newQueryRegistry() queryRegistry {
-	return &queryRegistryImpl{
+// NewRegistry creates a new query registry
+func NewRegistry() Registry {
+	return &registryImpl{
 		buffered:  make(map[string]query),
 		completed: make(map[string]query),
 		unblocked: make(map[string]query),
@@ -71,55 +73,55 @@ func newQueryRegistry() queryRegistry {
 	}
 }
 
-func (r *queryRegistryImpl) hasBufferedQuery() bool {
+func (r *registryImpl) HasBufferedQuery() bool {
 	r.RLock()
 	defer r.RUnlock()
 	return len(r.buffered) > 0
 }
 
-func (r *queryRegistryImpl) getBufferedIDs() []string {
+func (r *registryImpl) GetBufferedIDs() []string {
 	r.RLock()
 	defer r.RUnlock()
 	return r.getIDs(r.buffered)
 }
 
-func (r *queryRegistryImpl) hasCompletedQuery() bool {
+func (r *registryImpl) HasCompletedQuery() bool {
 	r.RLock()
 	defer r.RUnlock()
 	return len(r.completed) > 0
 }
 
-func (r *queryRegistryImpl) getCompletedIDs() []string {
+func (r *registryImpl) GetCompletedIDs() []string {
 	r.RLock()
 	defer r.RUnlock()
 	return r.getIDs(r.completed)
 }
 
-func (r *queryRegistryImpl) hasUnblockedQuery() bool {
+func (r *registryImpl) HasUnblockedQuery() bool {
 	r.RLock()
 	defer r.RUnlock()
 	return len(r.unblocked) > 0
 }
 
-func (r *queryRegistryImpl) getUnblockedIDs() []string {
+func (r *registryImpl) GetUnblockedIDs() []string {
 	r.RLock()
 	defer r.RUnlock()
 	return r.getIDs(r.unblocked)
 }
 
-func (r *queryRegistryImpl) hasFailedQuery() bool {
+func (r *registryImpl) HasFailedQuery() bool {
 	r.RLock()
 	defer r.RUnlock()
 	return len(r.failed) > 0
 }
 
-func (r *queryRegistryImpl) getFailedIDs() []string {
+func (r *registryImpl) GetFailedIDs() []string {
 	r.RLock()
 	defer r.RUnlock()
 	return r.getIDs(r.failed)
 }
 
-func (r *queryRegistryImpl) getQueryTermCh(id string) (<-chan struct{}, error) {
+func (r *registryImpl) GetQueryTermCh(id string) (<-chan struct{}, error) {
 	r.RLock()
 	defer r.RUnlock()
 	q, err := r.getQueryNoLock(id)
@@ -129,7 +131,7 @@ func (r *queryRegistryImpl) getQueryTermCh(id string) (<-chan struct{}, error) {
 	return q.getQueryTermCh(), nil
 }
 
-func (r *queryRegistryImpl) getQueryInput(id string) (*shared.WorkflowQuery, error) {
+func (r *registryImpl) GetQueryInput(id string) (*shared.WorkflowQuery, error) {
 	r.RLock()
 	defer r.RUnlock()
 	q, err := r.getQueryNoLock(id)
@@ -139,7 +141,7 @@ func (r *queryRegistryImpl) getQueryInput(id string) (*shared.WorkflowQuery, err
 	return q.getQueryInput(), nil
 }
 
-func (r *queryRegistryImpl) getTerminationState(id string) (*queryTerminationState, error) {
+func (r *registryImpl) GetTerminationState(id string) (*TerminationState, error) {
 	r.RLock()
 	defer r.RUnlock()
 	q, err := r.getQueryNoLock(id)
@@ -149,7 +151,7 @@ func (r *queryRegistryImpl) getTerminationState(id string) (*queryTerminationSta
 	return q.getTerminationState()
 }
 
-func (r *queryRegistryImpl) bufferQuery(queryInput *shared.WorkflowQuery) (string, <-chan struct{}) {
+func (r *registryImpl) BufferQuery(queryInput *shared.WorkflowQuery) (string, <-chan struct{}) {
 	r.Lock()
 	defer r.Unlock()
 	q := newQuery(queryInput)
@@ -158,29 +160,29 @@ func (r *queryRegistryImpl) bufferQuery(queryInput *shared.WorkflowQuery) (strin
 	return id, q.getQueryTermCh()
 }
 
-func (r *queryRegistryImpl) setTerminationState(id string, terminationState *queryTerminationState) error {
+func (r *registryImpl) SetTerminationState(id string, TerminationState *TerminationState) error {
 	r.Lock()
 	defer r.Unlock()
 	q, ok := r.buffered[id]
 	if !ok {
 		return errQueryNotExists
 	}
-	if err := q.setTerminationState(terminationState); err != nil {
+	if err := q.setTerminationState(TerminationState); err != nil {
 		return err
 	}
 	delete(r.buffered, id)
-	switch terminationState.queryTerminationType {
-	case queryTerminationTypeCompleted:
+	switch TerminationState.TerminationType {
+	case TerminationTypeCompleted:
 		r.completed[id] = q
-	case queryTerminationTypeUnblocked:
+	case TerminationTypeUnblocked:
 		r.unblocked[id] = q
-	case queryTerminationTypeFailed:
+	case TerminationTypeFailed:
 		r.failed[id] = q
 	}
 	return nil
 }
 
-func (r *queryRegistryImpl) removeQuery(id string) {
+func (r *registryImpl) RemoveQuery(id string) {
 	r.Lock()
 	defer r.Unlock()
 	delete(r.buffered, id)
@@ -189,7 +191,7 @@ func (r *queryRegistryImpl) removeQuery(id string) {
 	delete(r.failed, id)
 }
 
-func (r *queryRegistryImpl) getQueryNoLock(id string) (query, error) {
+func (r *registryImpl) getQueryNoLock(id string) (query, error) {
 	if q, ok := r.buffered[id]; ok {
 		return q, nil
 	}
@@ -205,7 +207,7 @@ func (r *queryRegistryImpl) getQueryNoLock(id string) (query, error) {
 	return nil, errQueryNotExists
 }
 
-func (r *queryRegistryImpl) getIDs(m map[string]query) []string {
+func (r *registryImpl) getIDs(m map[string]query) []string {
 	result := make([]string, len(m), len(m))
 	index := 0
 	for id := range m {

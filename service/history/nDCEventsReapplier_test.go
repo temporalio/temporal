@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/execution"
 )
 
 type (
@@ -74,7 +75,7 @@ func (s *nDCEventReapplicationSuite) TearDownTest() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 	runID := uuid.New()
-	execution := &persistence.WorkflowExecutionInfo{
+	workflowExecution := &persistence.WorkflowExecutionInfo{
 		DomainID: uuid.New(),
 	}
 	event := &shared.HistoryEvent{
@@ -88,10 +89,10 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 	}
 	attr := event.WorkflowExecutionSignaledEventAttributes
 
-	msBuilderCurrent := NewMockmutableState(s.controller)
+	msBuilderCurrent := execution.NewMockMutableState(s.controller)
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
-	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(workflowExecution).AnyTimes()
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(
 		attr.GetSignalName(),
 		attr.GetInput(),
@@ -121,7 +122,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 		},
 	}
 
-	msBuilderCurrent := NewMockmutableState(s.controller)
+	msBuilderCurrent := execution.NewMockMutableState(s.controller)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(true).Times(1)
 	events := []*shared.HistoryEvent{
@@ -135,7 +136,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	runID := uuid.New()
-	execution := &persistence.WorkflowExecutionInfo{
+	workflowExecution := &persistence.WorkflowExecutionInfo{
 		DomainID: uuid.New(),
 	}
 	event1 := &shared.HistoryEvent{
@@ -158,10 +159,10 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	}
 	attr1 := event1.WorkflowExecutionSignaledEventAttributes
 
-	msBuilderCurrent := NewMockmutableState(s.controller)
+	msBuilderCurrent := execution.NewMockMutableState(s.controller)
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
-	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(workflowExecution).AnyTimes()
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(
 		attr1.GetSignalName(),
 		attr1.GetInput(),
@@ -184,7 +185,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	runID := uuid.New()
-	execution := &persistence.WorkflowExecutionInfo{
+	workflowExecution := &persistence.WorkflowExecutionInfo{
 		DomainID: uuid.New(),
 	}
 	event := &shared.HistoryEvent{
@@ -198,10 +199,10 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	}
 	attr := event.WorkflowExecutionSignaledEventAttributes
 
-	msBuilderCurrent := NewMockmutableState(s.controller)
+	msBuilderCurrent := execution.NewMockMutableState(s.controller)
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
-	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(workflowExecution).AnyTimes()
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(
 		attr.GetSignalName(),
 		attr.GetInput(),

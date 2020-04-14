@@ -33,6 +33,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	persistence "github.com/uber/cadence/common/persistence"
+	execution "github.com/uber/cadence/service/history/execution"
 )
 
 // MockconflictResolver is a mock of conflictResolver interface
@@ -59,10 +60,10 @@ func (m *MockconflictResolver) EXPECT() *MockconflictResolverMockRecorder {
 }
 
 // reset mocks base method
-func (m *MockconflictResolver) reset(prevRunID string, prevLastWriteVersion int64, prevState int, requestID string, replayEventID int64, info *persistence.WorkflowExecutionInfo, updateCondition int64) (mutableState, error) {
+func (m *MockconflictResolver) reset(prevRunID string, prevLastWriteVersion int64, prevState int, requestID string, replayEventID int64, info *persistence.WorkflowExecutionInfo, updateCondition int64) (execution.MutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "reset", prevRunID, prevLastWriteVersion, prevState, requestID, replayEventID, info, updateCondition)
-	ret0, _ := ret[0].(mutableState)
+	ret0, _ := ret[0].(execution.MutableState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

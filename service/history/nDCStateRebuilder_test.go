@@ -41,6 +41,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -52,7 +53,7 @@ type (
 		controller          *gomock.Controller
 		mockShard           *shard.TestContext
 		mockEventsCache     *events.MockCache
-		mockTaskRefresher   *MockmutableStateTaskRefresher
+		mockTaskRefresher   *execution.MockMutableStateTaskRefresher
 		mockDomainCache     *cache.MockDomainCache
 		mockClusterMetadata *cluster.MockMetadata
 
@@ -76,7 +77,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockTaskRefresher = NewMockmutableStateTaskRefresher(s.controller)
+	s.mockTaskRefresher = execution.NewMockMutableStateTaskRefresher(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -303,7 +304,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		1234,
 		s.mockClusterMetadata,
 	), nil).AnyTimes()
-	s.mockTaskRefresher.EXPECT().refreshTasks(now, gomock.Any()).Return(nil).Times(1)
+	s.mockTaskRefresher.EXPECT().RefreshTasks(now, gomock.Any()).Return(nil).Times(1)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		ctx.Background(),

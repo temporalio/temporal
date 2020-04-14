@@ -48,6 +48,11 @@ const (
 )
 
 const (
+	// EmptyUUID is the placeholder for UUID when it's empty
+	EmptyUUID = "emptyUuid"
+)
+
+const (
 	// FrontendServiceName is the name of the frontend service
 	FrontendServiceName = "cadence-frontend"
 	// HistoryServiceName is the name of the history service

@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -97,7 +98,7 @@ func newQueueProcessorBase(
 	queueTaskProcessor queueTaskProcessor,
 	queueAckMgr queueAckMgr,
 	redispatchQueue collection.Queue,
-	historyCache *historyCache,
+	executionCache *execution.Cache,
 	queueTaskInitializer queueTaskInitializer,
 	logger log.Logger,
 	metricsScope metrics.Scope,
@@ -109,7 +110,7 @@ func newQueueProcessorBase(
 			queueSize:   options.BatchSize(),
 			workerCount: options.WorkerCount(),
 		}
-		taskProcessor = newTaskProcessor(taskProcessorOptions, shard, historyCache, logger)
+		taskProcessor = newTaskProcessor(taskProcessorOptions, shard, executionCache, logger)
 	}
 
 	p := &queueProcessorBase{

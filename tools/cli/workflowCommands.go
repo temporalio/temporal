@@ -47,7 +47,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/service/history"
+	"github.com/uber/cadence/service/history/execution"
 )
 
 // ShowHistory shows the history of given workflow execution based on workflowID and runID.
@@ -1808,7 +1808,7 @@ func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksu
 		return "", 0, printErrorAndReturn("DescribeWorkflowExecution failed", err)
 	}
 
-	_, p := history.FindAutoResetPoint(clock.NewRealTimeSource(), &shared.BadBinaries{
+	_, p := execution.FindAutoResetPoint(clock.NewRealTimeSource(), &shared.BadBinaries{
 		Binaries: map[string]*shared.BadBinaryInfo{
 			binChecksum: {},
 		},

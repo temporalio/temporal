@@ -35,6 +35,7 @@ import (
 
 	history "github.com/uber/cadence/.gen/go/history"
 	shared "github.com/uber/cadence/.gen/go/shared"
+	execution "github.com/uber/cadence/service/history/execution"
 )
 
 // MockworkflowResetor is a mock of workflowResetor interface
@@ -61,7 +62,7 @@ func (m *MockworkflowResetor) EXPECT() *MockworkflowResetorMockRecorder {
 }
 
 // ResetWorkflowExecution mocks base method
-func (m *MockworkflowResetor) ResetWorkflowExecution(ctx context.Context, resetRequest *shared.ResetWorkflowExecutionRequest, baseContext workflowExecutionContext, baseMutableState mutableState, currContext workflowExecutionContext, currMutableState mutableState) (*shared.ResetWorkflowExecutionResponse, error) {
+func (m *MockworkflowResetor) ResetWorkflowExecution(ctx context.Context, resetRequest *shared.ResetWorkflowExecutionRequest, baseContext execution.Context, baseMutableState execution.MutableState, currContext execution.Context, currMutableState execution.MutableState) (*shared.ResetWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetWorkflowExecution", ctx, resetRequest, baseContext, baseMutableState, currContext, currMutableState)
 	ret0, _ := ret[0].(*shared.ResetWorkflowExecutionResponse)

@@ -29,6 +29,7 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/execution"
 )
 
 type (
@@ -230,10 +231,10 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsCurrent(
 ) error {
 
 	if newWorkflow == nil {
-		return targetWorkflow.getContext().updateWorkflowExecutionAsPassive(now)
+		return targetWorkflow.getContext().UpdateWorkflowExecutionAsPassive(now)
 	}
 
-	return targetWorkflow.getContext().updateWorkflowExecutionWithNewAsPassive(
+	return targetWorkflow.getContext().UpdateWorkflowExecutionWithNewAsPassive(
 		now,
 		newWorkflow.getContext(),
 		newWorkflow.getMutableState(),
@@ -254,15 +255,15 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	if err != nil {
 		return err
 	}
-	if targetPolicy != transactionPolicyPassive {
+	if targetPolicy != execution.TransactionPolicyPassive {
 		return &shared.InternalServiceError{
 			Message: "nDCTransactionMgrForExistingWorkflow updateAsZombie encounter target workflow policy not being passive",
 		}
 	}
 
-	var newContext workflowExecutionContext
-	var newMutableState mutableState
-	var newTransactionPolicy *transactionPolicy
+	var newContext execution.Context
+	var newMutableState execution.MutableState
+	var newTransactionPolicy *execution.TransactionPolicy
 	if newWorkflow != nil {
 		newWorkflowPolicy, err := newWorkflow.suppressBy(
 			currentWorkflow,
@@ -270,7 +271,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		if err != nil {
 			return err
 		}
-		if newWorkflowPolicy != transactionPolicyPassive {
+		if newWorkflowPolicy != execution.TransactionPolicyPassive {
 			return &shared.InternalServiceError{
 				Message: "nDCTransactionMgrForExistingWorkflow updateAsZombie encounter new workflow policy not being passive",
 			}
@@ -297,7 +298,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 			// new workflow does not exists, continue
 			newContext = newWorkflow.getContext()
 			newMutableState = newWorkflow.getMutableState()
-			newTransactionPolicy = transactionPolicyPassive.ptr()
+			newTransactionPolicy = execution.TransactionPolicyPassive.Ptr()
 		}
 	}
 
@@ -306,12 +307,12 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	currentWorkflow.getReleaseFn()(nil)
 	currentWorkflow = nil
 
-	return targetWorkflow.getContext().updateWorkflowExecutionWithNew(
+	return targetWorkflow.getContext().UpdateWorkflowExecutionWithNew(
 		now,
 		persistence.UpdateWorkflowModeBypassCurrent,
 		newContext,
 		newMutableState,
-		transactionPolicyPassive,
+		execution.TransactionPolicyPassive,
 		newTransactionPolicy,
 	)
 }
@@ -326,7 +327,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 
 	var err error
 
-	currentWorkflowPolicy := transactionPolicyPassive
+	currentWorkflowPolicy := execution.TransactionPolicyPassive
 	if currentWorkflow.getMutableState().IsWorkflowExecutionRunning() {
 		currentWorkflowPolicy, err = currentWorkflow.suppressBy(
 			targetWorkflow,
@@ -339,8 +340,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 		return err
 	}
 
-	var newContext workflowExecutionContext
-	var newMutableState mutableState
+	var newContext execution.Context
+	var newMutableState execution.MutableState
 	if newWorkflow != nil {
 		newContext = newWorkflow.getContext()
 		newMutableState = newWorkflow.getMutableState()
@@ -349,7 +350,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 		}
 	}
 
-	return targetWorkflow.getContext().conflictResolveWorkflowExecution(
+	return targetWorkflow.getContext().ConflictResolveWorkflowExecution(
 		now,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		targetWorkflow.getMutableState(),
@@ -357,7 +358,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 		newMutableState,
 		currentWorkflow.getContext(),
 		currentWorkflow.getMutableState(),
-		currentWorkflowPolicy.ptr(),
+		currentWorkflowPolicy.Ptr(),
 		nil,
 	)
 }
@@ -369,14 +370,14 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
 	newWorkflow nDCWorkflow,
 ) error {
 
-	var newContext workflowExecutionContext
-	var newMutableState mutableState
+	var newContext execution.Context
+	var newMutableState execution.MutableState
 	if newWorkflow != nil {
 		newContext = newWorkflow.getContext()
 		newMutableState = newWorkflow.getMutableState()
 	}
 
-	return targetWorkflow.getContext().conflictResolveWorkflowExecution(
+	return targetWorkflow.getContext().ConflictResolveWorkflowExecution(
 		now,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		targetWorkflow.getMutableState(),
@@ -403,14 +404,14 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	if err != nil {
 		return err
 	}
-	if targetWorkflowPolicy != transactionPolicyPassive {
+	if targetWorkflowPolicy != execution.TransactionPolicyPassive {
 		return &shared.InternalServiceError{
 			Message: "nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encounter target workflow policy not being passive",
 		}
 	}
 
-	var newContext workflowExecutionContext
-	var newMutableState mutableState
+	var newContext execution.Context
+	var newMutableState execution.MutableState
 	if newWorkflow != nil {
 		newWorkflowPolicy, err := newWorkflow.suppressBy(
 			currentWorkflow,
@@ -418,7 +419,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		if err != nil {
 			return err
 		}
-		if newWorkflowPolicy != transactionPolicyPassive {
+		if newWorkflowPolicy != execution.TransactionPolicyPassive {
 			return &shared.InternalServiceError{
 				Message: "nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encounter new workflow policy not being passive",
 			}
@@ -452,7 +453,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	currentWorkflow.getReleaseFn()(nil)
 	currentWorkflow = nil
 
-	return targetWorkflow.getContext().conflictResolveWorkflowExecution(
+	return targetWorkflow.getContext().ConflictResolveWorkflowExecution(
 		now,
 		persistence.ConflictResolveWorkflowModeBypassCurrent,
 		targetWorkflow.getMutableState(),

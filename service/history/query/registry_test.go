@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,18 +20,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package history
+package query
 
 import (
 	"errors"
 	"testing"
 
-	"github.com/uber/cadence/common"
-
-	"github.com/uber/cadence/.gen/go/shared"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 )
 
 type QueryRegistrySuite struct {
@@ -48,11 +47,11 @@ func (s *QueryRegistrySuite) SetupTest() {
 }
 
 func (s *QueryRegistrySuite) TestQueryRegistry() {
-	qr := newQueryRegistry()
+	qr := NewRegistry()
 	ids := make([]string, 100, 100)
 	termChans := make([]<-chan struct{}, 100, 100)
 	for i := 0; i < 100; i++ {
-		ids[i], termChans[i] = qr.bufferQuery(&shared.WorkflowQuery{})
+		ids[i], termChans[i] = qr.BufferQuery(&shared.WorkflowQuery{})
 	}
 	s.assertBufferedState(qr, ids...)
 	s.assertHasQueries(qr, true, false, false, false)
@@ -60,9 +59,9 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, termChans...)
 
 	for i := 0; i < 25; i++ {
-		err := qr.setTerminationState(ids[i], &queryTerminationState{
-			queryTerminationType: queryTerminationTypeCompleted,
-			queryResult: &shared.WorkflowQueryResult{
+		err := qr.SetTerminationState(ids[i], &TerminationState{
+			TerminationType: TerminationTypeCompleted,
+			QueryResult: &shared.WorkflowQueryResult{
 				ResultType: common.QueryResultTypePtr(shared.QueryResultTypeAnswered),
 				Answer:     []byte{1, 2, 3},
 			},
@@ -77,8 +76,8 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, termChans[25:]...)
 
 	for i := 25; i < 50; i++ {
-		err := qr.setTerminationState(ids[i], &queryTerminationState{
-			queryTerminationType: queryTerminationTypeUnblocked,
+		err := qr.SetTerminationState(ids[i], &TerminationState{
+			TerminationType: TerminationTypeUnblocked,
 		})
 		s.NoError(err)
 	}
@@ -91,9 +90,9 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, termChans[50:]...)
 
 	for i := 50; i < 75; i++ {
-		err := qr.setTerminationState(ids[i], &queryTerminationState{
-			queryTerminationType: queryTerminationTypeFailed,
-			failure:              errors.New("err"),
+		err := qr.SetTerminationState(ids[i], &TerminationState{
+			TerminationType: TerminationTypeFailed,
+			Failure:         errors.New("err"),
 		})
 		s.NoError(err)
 	}
@@ -109,18 +108,18 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	for i := 0; i < 75; i++ {
 		switch i % 3 {
 		case 0:
-			s.Equal(errQueryNotExists, qr.setTerminationState(ids[i], &queryTerminationState{
-				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult:          &shared.WorkflowQueryResult{},
+			s.Equal(errQueryNotExists, qr.SetTerminationState(ids[i], &TerminationState{
+				TerminationType: TerminationTypeCompleted,
+				QueryResult:     &shared.WorkflowQueryResult{},
 			}))
 		case 1:
-			s.Equal(errQueryNotExists, qr.setTerminationState(ids[i], &queryTerminationState{
-				queryTerminationType: queryTerminationTypeUnblocked,
+			s.Equal(errQueryNotExists, qr.SetTerminationState(ids[i], &TerminationState{
+				TerminationType: TerminationTypeUnblocked,
 			}))
 		case 2:
-			s.Equal(errQueryNotExists, qr.setTerminationState(ids[i], &queryTerminationState{
-				queryTerminationType: queryTerminationTypeFailed,
-				failure:              errors.New("err"),
+			s.Equal(errQueryNotExists, qr.SetTerminationState(ids[i], &TerminationState{
+				TerminationType: TerminationTypeFailed,
+				Failure:         errors.New("err"),
 			}))
 		}
 	}
@@ -134,22 +133,22 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, termChans[75:]...)
 
 	for i := 0; i < 25; i++ {
-		qr.removeQuery(ids[i])
+		qr.RemoveQuery(ids[i])
 		s.assertHasQueries(qr, true, i < 24, true, true)
 		s.assertQuerySizes(qr, 25, 25-i-1, 25, 25)
 	}
 	for i := 25; i < 50; i++ {
-		qr.removeQuery(ids[i])
+		qr.RemoveQuery(ids[i])
 		s.assertHasQueries(qr, true, false, i < 49, true)
 		s.assertQuerySizes(qr, 25, 0, 50-i-1, 25)
 	}
 	for i := 50; i < 75; i++ {
-		qr.removeQuery(ids[i])
+		qr.RemoveQuery(ids[i])
 		s.assertHasQueries(qr, true, false, false, i < 74)
 		s.assertQuerySizes(qr, 25, 0, 0, 75-i-1)
 	}
 	for i := 75; i < 100; i++ {
-		qr.removeQuery(ids[i])
+		qr.RemoveQuery(ids[i])
 		s.assertHasQueries(qr, i < 99, false, false, false)
 		s.assertQuerySizes(qr, 100-i-1, 0, 0, 0)
 	}
@@ -157,83 +156,83 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, termChans[75:]...)
 }
 
-func (s *QueryRegistrySuite) assertBufferedState(qr queryRegistry, ids ...string) {
+func (s *QueryRegistrySuite) assertBufferedState(qr Registry, ids ...string) {
 	for _, id := range ids {
-		termCh, err := qr.getQueryTermCh(id)
+		termCh, err := qr.GetQueryTermCh(id)
 		s.NoError(err)
 		s.False(closed(termCh))
-		input, err := qr.getQueryInput(id)
+		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
-		termState, err := qr.getTerminationState(id)
+		termState, err := qr.GetTerminationState(id)
 		s.Equal(errQueryNotInTerminalState, err)
 		s.Nil(termState)
 	}
 }
 
-func (s *QueryRegistrySuite) assertCompletedState(qr queryRegistry, ids ...string) {
+func (s *QueryRegistrySuite) assertCompletedState(qr Registry, ids ...string) {
 	for _, id := range ids {
-		termCh, err := qr.getQueryTermCh(id)
+		termCh, err := qr.GetQueryTermCh(id)
 		s.NoError(err)
 		s.True(closed(termCh))
-		input, err := qr.getQueryInput(id)
+		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
-		termState, err := qr.getTerminationState(id)
+		termState, err := qr.GetTerminationState(id)
 		s.NoError(err)
 		s.NotNil(termState)
-		s.Equal(queryTerminationTypeCompleted, termState.queryTerminationType)
-		s.NotNil(termState.queryResult)
-		s.Nil(termState.failure)
+		s.Equal(TerminationTypeCompleted, termState.TerminationType)
+		s.NotNil(termState.QueryResult)
+		s.Nil(termState.Failure)
 	}
 }
 
-func (s *QueryRegistrySuite) assertUnblockedState(qr queryRegistry, ids ...string) {
+func (s *QueryRegistrySuite) assertUnblockedState(qr Registry, ids ...string) {
 	for _, id := range ids {
-		termCh, err := qr.getQueryTermCh(id)
+		termCh, err := qr.GetQueryTermCh(id)
 		s.NoError(err)
 		s.True(closed(termCh))
-		input, err := qr.getQueryInput(id)
+		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
-		termState, err := qr.getTerminationState(id)
+		termState, err := qr.GetTerminationState(id)
 		s.NoError(err)
 		s.NotNil(termState)
-		s.Equal(queryTerminationTypeUnblocked, termState.queryTerminationType)
-		s.Nil(termState.queryResult)
-		s.Nil(termState.failure)
+		s.Equal(TerminationTypeUnblocked, termState.TerminationType)
+		s.Nil(termState.QueryResult)
+		s.Nil(termState.Failure)
 	}
 }
 
-func (s *QueryRegistrySuite) assertFailedState(qr queryRegistry, ids ...string) {
+func (s *QueryRegistrySuite) assertFailedState(qr Registry, ids ...string) {
 	for _, id := range ids {
-		termCh, err := qr.getQueryTermCh(id)
+		termCh, err := qr.GetQueryTermCh(id)
 		s.NoError(err)
 		s.True(closed(termCh))
-		input, err := qr.getQueryInput(id)
+		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
-		termState, err := qr.getTerminationState(id)
+		termState, err := qr.GetTerminationState(id)
 		s.NoError(err)
 		s.NotNil(termState)
-		s.Equal(queryTerminationTypeFailed, termState.queryTerminationType)
-		s.Nil(termState.queryResult)
-		s.NotNil(termState.failure)
+		s.Equal(TerminationTypeFailed, termState.TerminationType)
+		s.Nil(termState.QueryResult)
+		s.NotNil(termState.Failure)
 	}
 }
 
-func (s *QueryRegistrySuite) assertHasQueries(qr queryRegistry, buffered, completed, unblocked, failed bool) {
-	s.Equal(buffered, qr.hasBufferedQuery())
-	s.Equal(completed, qr.hasCompletedQuery())
-	s.Equal(unblocked, qr.hasUnblockedQuery())
-	s.Equal(failed, qr.hasFailedQuery())
+func (s *QueryRegistrySuite) assertHasQueries(qr Registry, buffered, completed, unblocked, failed bool) {
+	s.Equal(buffered, qr.HasBufferedQuery())
+	s.Equal(completed, qr.HasCompletedQuery())
+	s.Equal(unblocked, qr.HasUnblockedQuery())
+	s.Equal(failed, qr.HasFailedQuery())
 }
 
-func (s *QueryRegistrySuite) assertQuerySizes(qr queryRegistry, buffered, completed, unblocked, failed int) {
-	s.Len(qr.getBufferedIDs(), buffered)
-	s.Len(qr.getCompletedIDs(), completed)
-	s.Len(qr.getUnblockedIDs(), unblocked)
-	s.Len(qr.getFailedIDs(), failed)
+func (s *QueryRegistrySuite) assertQuerySizes(qr Registry, buffered, completed, unblocked, failed int) {
+	s.Len(qr.GetBufferedIDs(), buffered)
+	s.Len(qr.GetCompletedIDs(), completed)
+	s.Len(qr.GetUnblockedIDs(), unblocked)
+	s.Len(qr.GetFailedIDs(), failed)
 }
 
 func (s *QueryRegistrySuite) assertChanState(expectedClosed bool, chans ...<-chan struct{}) {

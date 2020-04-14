@@ -32,6 +32,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
+	execution "github.com/uber/cadence/service/history/execution"
 )
 
 // MocknDCConflictResolver is a mock of nDCConflictResolver interface
@@ -58,10 +60,10 @@ func (m *MocknDCConflictResolver) EXPECT() *MocknDCConflictResolverMockRecorder 
 }
 
 // prepareMutableState mocks base method
-func (m *MocknDCConflictResolver) prepareMutableState(ctx context.Context, branchIndex int, incomingVersion int64) (mutableState, bool, error) {
+func (m *MocknDCConflictResolver) prepareMutableState(ctx context.Context, branchIndex int, incomingVersion int64) (execution.MutableState, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "prepareMutableState", ctx, branchIndex, incomingVersion)
-	ret0, _ := ret[0].(mutableState)
+	ret0, _ := ret[0].(execution.MutableState)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

@@ -28,10 +28,11 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/execution"
 )
 
 type (
-	standbyActionFn     func(workflowExecutionContext, mutableState) (interface{}, error)
+	standbyActionFn     func(execution.Context, execution.MutableState) (interface{}, error)
 	standbyPostActionFn func(queueTaskInfo, interface{}, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time
@@ -159,7 +160,7 @@ func newPushDecisionToMatchingInfo(
 }
 
 func getHistoryResendInfo(
-	mutableState mutableState,
+	mutableState execution.MutableState,
 ) (*historyResendInfo, error) {
 
 	// TODO this logic is for 2DC, to be deprecated

@@ -158,7 +158,7 @@ func newTransferQueueStandbyProcessor(
 		queueTaskProcessor,
 		queueAckMgr,
 		redispatchQueue,
-		historyService.historyCache,
+		historyService.executionCache,
 		transferQueueTaskInitializer,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),

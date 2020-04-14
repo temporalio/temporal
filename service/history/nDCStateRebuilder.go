@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -51,7 +52,7 @@ type (
 			targetWorkflowIdentifier definition.WorkflowIdentifier,
 			targetBranchToken []byte,
 			requestID string,
-		) (mutableState, int64, error)
+		) (execution.MutableState, int64, error)
 	}
 
 	nDCStateRebuilderImpl struct {
@@ -59,7 +60,7 @@ type (
 		domainCache     cache.DomainCache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryManager
-		taskRefresher   mutableStateTaskRefresher
+		taskRefresher   execution.MutableStateTaskRefresher
 
 		rebuiltHistorySize int64
 		logger             log.Logger
@@ -78,7 +79,7 @@ func newNDCStateRebuilder(
 		domainCache:     shard.GetDomainCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryManager(),
-		taskRefresher: newMutableStateTaskRefresher(
+		taskRefresher: execution.NewMutableStateTaskRefresher(
 			shard.GetConfig(),
 			shard.GetDomainCache(),
 			shard.GetEventsCache(),
@@ -99,7 +100,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	targetWorkflowIdentifier definition.WorkflowIdentifier,
 	targetBranchToken []byte,
 	requestID string,
-) (mutableState, int64, error) {
+) (execution.MutableState, int64, error) {
 
 	iter := collection.NewPagingIterator(r.getPaginationFn(
 		baseWorkflowIdentifier,
@@ -160,13 +161,13 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(now, transactionPolicyPassive)
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(now, execution.TransactionPolicyPassive)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// refresh tasks to be generated
-	if err := r.taskRefresher.refreshTasks(now, rebuiltMutableState); err != nil {
+	if err := r.taskRefresher.RefreshTasks(now, rebuiltMutableState); err != nil {
 		return nil, 0, err
 	}
 
@@ -177,8 +178,8 @@ func (r *nDCStateRebuilderImpl) rebuild(
 
 func (r *nDCStateRebuilderImpl) initializeBuilders(
 	domainEntry *cache.DomainCacheEntry,
-) (mutableState, stateBuilder) {
-	resetMutableStateBuilder := newMutableStateBuilderWithVersionHistories(
+) (execution.MutableState, stateBuilder) {
+	resetMutableStateBuilder := execution.NewMutableStateBuilderWithVersionHistories(
 		r.shard,
 		r.shard.GetEventsCache(),
 		r.logger,
@@ -188,8 +189,8 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 		r.shard,
 		r.logger,
 		resetMutableStateBuilder,
-		func(mutableState mutableState) mutableStateTaskGenerator {
-			return newMutableStateTaskGenerator(r.shard.GetDomainCache(), r.logger, mutableState)
+		func(mutableState execution.MutableState) execution.MutableStateTaskGenerator {
+			return execution.NewMutableStateTaskGenerator(r.shard.GetDomainCache(), r.logger, mutableState)
 		},
 	)
 	return resetMutableStateBuilder, stateBuilder

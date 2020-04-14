@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -52,7 +53,7 @@ type (
 		scope                int
 		shard                shard.Context
 		historyService       *historyEngineImpl
-		cache                *historyCache
+		cache                *execution.Cache
 		executionManager     persistence.ExecutionManager
 		status               int32
 		shutdownWG           sync.WaitGroup
@@ -105,7 +106,7 @@ func newTimerQueueProcessorBase(
 			workerCount: config.TimerTaskWorkerCount(),
 			queueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
 		}
-		taskProcessor = newTaskProcessor(options, shard, historyService.historyCache, logger)
+		taskProcessor = newTaskProcessor(options, shard, historyService.executionCache, logger)
 	}
 
 	base := &timerQueueProcessorBase{
@@ -113,7 +114,7 @@ func newTimerQueueProcessorBase(
 		shard:                shard,
 		historyService:       historyService,
 		timerProcessor:       timerProcessor,
-		cache:                historyService.historyCache,
+		cache:                historyService.executionCache,
 		executionManager:     shard.GetExecutionManager(),
 		status:               common.DaemonStatusInitialized,
 		shutdownCh:           make(chan struct{}),

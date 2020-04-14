@@ -29,6 +29,7 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/execution"
 )
 
 type (
@@ -150,13 +151,13 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.getMutableState().CloseTransactionAsSnapshot(
 		now,
-		transactionPolicyPassive,
+		execution.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
 	}
 
-	targetWorkflowHistorySize, err := targetWorkflow.getContext().persistFirstWorkflowEvents(
+	targetWorkflowHistorySize, err := targetWorkflow.getContext().PersistFirstWorkflowEvents(
 		targetWorkflowEventsSeq[0],
 	)
 	if err != nil {
@@ -172,7 +173,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		if err != nil {
 			return err
 		}
-		return targetWorkflow.getContext().createWorkflowExecution(
+		return targetWorkflow.getContext().CreateWorkflowExecution(
 			targetWorkflowSnapshot,
 			targetWorkflowHistorySize,
 			now,
@@ -186,7 +187,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	createMode := persistence.CreateWorkflowModeBrandNew
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	return targetWorkflow.getContext().createWorkflowExecution(
+	return targetWorkflow.getContext().CreateWorkflowExecution(
 		targetWorkflowSnapshot,
 		targetWorkflowHistorySize,
 		now,
@@ -209,7 +210,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	if err != nil {
 		return err
 	}
-	if targetWorkflowPolicy != transactionPolicyPassive {
+	if targetWorkflowPolicy != execution.TransactionPolicyPassive {
 		return &shared.InternalServiceError{
 			Message: "nDCTransactionMgrForNewWorkflow createAsZombie encounter target workflow policy not being passive",
 		}
@@ -223,14 +224,14 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 
-	targetWorkflowHistorySize, err := targetWorkflow.getContext().persistFirstWorkflowEvents(
+	targetWorkflowHistorySize, err := targetWorkflow.getContext().PersistFirstWorkflowEvents(
 		targetWorkflowEventsSeq[0],
 	)
 	if err != nil {
 		return err
 	}
 
-	if err := targetWorkflow.getContext().reapplyEvents(
+	if err := targetWorkflow.getContext().ReapplyEvents(
 		targetWorkflowEventsSeq,
 	); err != nil {
 		return err
@@ -239,7 +240,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	createMode := persistence.CreateWorkflowModeZombie
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	err = targetWorkflow.getContext().createWorkflowExecution(
+	err = targetWorkflow.getContext().CreateWorkflowExecution(
 		targetWorkflowSnapshot,
 		targetWorkflowHistorySize,
 		now,
@@ -275,13 +276,13 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 		return err
 	}
 
-	return currentWorkflow.getContext().updateWorkflowExecutionWithNew(
+	return currentWorkflow.getContext().UpdateWorkflowExecutionWithNew(
 		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetWorkflow.getContext(),
 		targetWorkflow.getMutableState(),
 		currentWorkflowPolicy,
-		transactionPolicyPassive.ptr(),
+		execution.TransactionPolicyPassive.Ptr(),
 	)
 }
 

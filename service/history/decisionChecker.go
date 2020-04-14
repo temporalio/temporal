@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/execution"
 )
 
 type (
@@ -56,7 +57,7 @@ type (
 		historyCountLimitError int
 
 		completedID    int64
-		mutableState   mutableState
+		mutableState   execution.MutableState
 		executionStats *persistence.ExecutionStats
 		metricsScope   metrics.Scope
 		logger         log.Logger
@@ -93,7 +94,7 @@ func newWorkflowSizeChecker(
 	historyCountLimitWarn int,
 	historyCountLimitError int,
 	completedID int64,
-	mutableState mutableState,
+	mutableState execution.MutableState,
 	executionStats *persistence.ExecutionStats,
 	metricsScope metrics.Scope,
 	logger log.Logger,

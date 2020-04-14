@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,9 +20,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutableStateDecisionTaskManager_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutable_state_decision_task_manager_mock.go -self_package github.com/uber/cadence/service/history/execution
 
-package history
+package execution
 
 import (
 	"fmt"
@@ -46,16 +46,16 @@ type (
 			attempt int64,
 			scheduleTimestamp int64,
 			originalScheduledTimestamp int64,
-		) (*decisionInfo, error)
-		ReplicateTransientDecisionTaskScheduled() (*decisionInfo, error)
+		) (*DecisionInfo, error)
+		ReplicateTransientDecisionTaskScheduled() (*DecisionInfo, error)
 		ReplicateDecisionTaskStartedEvent(
-			decision *decisionInfo,
+			decision *DecisionInfo,
 			version int64,
 			scheduleID int64,
 			startedID int64,
 			requestID string,
 			timestamp int64,
-		) (*decisionInfo, error)
+		) (*DecisionInfo, error)
 		ReplicateDecisionTaskCompletedEvent(event *workflow.HistoryEvent) error
 		ReplicateDecisionTaskFailedEvent() error
 		ReplicateDecisionTaskTimedOutEvent(timeoutType workflow.TimeoutType) error
@@ -64,14 +64,14 @@ type (
 		AddDecisionTaskScheduledEventAsHeartbeat(
 			bypassTaskGeneration bool,
 			originalScheduledTimestamp int64,
-		) (*decisionInfo, error)
-		AddDecisionTaskScheduledEvent(bypassTaskGeneration bool) (*decisionInfo, error)
+		) (*DecisionInfo, error)
+		AddDecisionTaskScheduledEvent(bypassTaskGeneration bool) (*DecisionInfo, error)
 		AddFirstDecisionTaskScheduled(startEvent *workflow.HistoryEvent) error
 		AddDecisionTaskStartedEvent(
 			scheduleEventID int64,
 			requestID string,
 			request *workflow.PollForDecisionTaskRequest,
-		) (*workflow.HistoryEvent, *decisionInfo, error)
+		) (*workflow.HistoryEvent, *DecisionInfo, error)
 		AddDecisionTaskCompletedEvent(
 			scheduleEventID int64,
 			startedEventID int64,
@@ -94,16 +94,16 @@ type (
 
 		FailDecision(incrementAttempt bool)
 		DeleteDecision()
-		UpdateDecision(decision *decisionInfo)
+		UpdateDecision(decision *DecisionInfo)
 
 		HasPendingDecision() bool
-		GetPendingDecision() (*decisionInfo, bool)
+		GetPendingDecision() (*DecisionInfo, bool)
 		HasInFlightDecision() bool
-		GetInFlightDecision() (*decisionInfo, bool)
+		GetInFlightDecision() (*DecisionInfo, bool)
 		HasProcessedOrPendingDecision() bool
-		GetDecisionInfo(scheduleEventID int64) (*decisionInfo, bool)
+		GetDecisionInfo(scheduleEventID int64) (*DecisionInfo, bool)
 
-		CreateTransientDecisionEvents(decision *decisionInfo, identity string) (*workflow.HistoryEvent, *workflow.HistoryEvent)
+		CreateTransientDecisionEvents(decision *DecisionInfo, identity string) (*workflow.HistoryEvent, *workflow.HistoryEvent)
 	}
 
 	mutableStateDecisionTaskManagerImpl struct {
@@ -125,7 +125,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 	attempt int64,
 	scheduleTimestamp int64,
 	originalScheduledTimestamp int64,
-) (*decisionInfo, error) {
+) (*DecisionInfo, error) {
 
 	// set workflow state to running, since decision is scheduled
 	// NOTE: for zombie workflow, should not change the state
@@ -139,11 +139,11 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 		}
 	}
 
-	decision := &decisionInfo{
+	decision := &DecisionInfo{
 		Version:                    version,
 		ScheduleID:                 scheduleID,
 		StartedID:                  common.EmptyEventID,
-		RequestID:                  emptyUUID,
+		RequestID:                  common.EmptyUUID,
 		DecisionTimeout:            startToCloseTimeoutSeconds,
 		TaskList:                   taskList,
 		Attempt:                    attempt,
@@ -156,7 +156,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 	return decision, nil
 }
 
-func (m *mutableStateDecisionTaskManagerImpl) ReplicateTransientDecisionTaskScheduled() (*decisionInfo, error) {
+func (m *mutableStateDecisionTaskManagerImpl) ReplicateTransientDecisionTaskScheduled() (*DecisionInfo, error) {
 	if m.HasPendingDecision() || m.msb.GetExecutionInfo().DecisionAttempt == 0 {
 		return nil, nil
 	}
@@ -171,11 +171,11 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateTransientDecisionTaskSche
 	// 2. if no failover happen during the life time of this transient decision
 	// then ReplicateDecisionTaskScheduledEvent will overwrite everything
 	// including the decision schedule ID
-	decision := &decisionInfo{
+	decision := &DecisionInfo{
 		Version:            m.msb.GetCurrentVersion(),
 		ScheduleID:         m.msb.GetNextEventID(),
 		StartedID:          common.EmptyEventID,
-		RequestID:          emptyUUID,
+		RequestID:          common.EmptyUUID,
 		DecisionTimeout:    m.msb.GetExecutionInfo().DecisionStartToCloseTimeout,
 		TaskList:           m.msb.GetExecutionInfo().TaskList,
 		Attempt:            m.msb.GetExecutionInfo().DecisionAttempt,
@@ -188,13 +188,13 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateTransientDecisionTaskSche
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskStartedEvent(
-	decision *decisionInfo,
+	decision *DecisionInfo,
 	version int64,
 	scheduleID int64,
 	startedID int64,
 	requestID string,
 	timestamp int64,
-) (*decisionInfo, error) {
+) (*DecisionInfo, error) {
 	// Replicator calls it with a nil decision info, and it is safe to always lookup the decision in this case as it
 	// does not have to deal with transient decision case.
 	var ok bool
@@ -215,7 +215,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskStartedEvent(
 	}
 
 	// Update mutable decision state
-	decision = &decisionInfo{
+	decision = &DecisionInfo{
 		Version:                    version,
 		ScheduleID:                 scheduleID,
 		StartedID:                  startedID,
@@ -284,7 +284,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduleToStartTime
 func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
 	originalScheduledTimestamp int64,
-) (*decisionInfo, error) {
+) (*DecisionInfo, error) {
 	opTag := tag.WorkflowActionDecisionTaskScheduled
 	if m.HasPendingDecision() {
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
@@ -345,7 +345,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
-		if err := m.msb.taskGenerator.generateDecisionScheduleTasks(
+		if err := m.msb.taskGenerator.GenerateDecisionScheduleTasks(
 			m.msb.unixNanoToTime(scheduleTime), // schedule time is now
 			scheduleID,
 		); err != nil {
@@ -358,7 +358,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 
 func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEvent(
 	bypassTaskGeneration bool,
-) (*decisionInfo, error) {
+) (*DecisionInfo, error) {
 	return m.AddDecisionTaskScheduledEventAsHeartbeat(bypassTaskGeneration, m.msb.timeSource.Now().UnixNano())
 }
 
@@ -383,7 +383,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddFirstDecisionTaskScheduled(
 
 	var err error
 	if decisionBackoffDuration != 0 {
-		if err = m.msb.taskGenerator.generateDelayedDecisionTasks(
+		if err = m.msb.taskGenerator.GenerateDelayedDecisionTasks(
 			m.msb.unixNanoToTime(startEvent.GetTimestamp()),
 			startEvent,
 		); err != nil {
@@ -404,7 +404,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskStartedEvent(
 	scheduleEventID int64,
 	requestID string,
 	request *workflow.PollForDecisionTaskRequest,
-) (*workflow.HistoryEvent, *decisionInfo, error) {
+) (*workflow.HistoryEvent, *DecisionInfo, error) {
 	opTag := tag.WorkflowActionDecisionTaskStarted
 	decision, ok := m.GetDecisionInfo(scheduleEventID)
 	if !ok || decision.StartedID != common.EmptyEventID {
@@ -438,7 +438,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskStartedEvent(
 
 	decision, err := m.ReplicateDecisionTaskStartedEvent(decision, m.msb.GetCurrentVersion(), scheduleID, startedID, requestID, startTime)
 	// TODO merge active & passive task generation
-	if err := m.msb.taskGenerator.generateDecisionStartTasks(
+	if err := m.msb.taskGenerator.GenerateDecisionStartTasks(
 		m.msb.unixNanoToTime(startTime), // start time is now
 		scheduleID,
 	); err != nil {
@@ -571,11 +571,11 @@ func (m *mutableStateDecisionTaskManagerImpl) FailDecision(
 	// Clear stickiness whenever decision fails
 	m.msb.ClearStickyness()
 
-	failDecisionInfo := &decisionInfo{
+	failDecisionInfo := &DecisionInfo{
 		Version:                    common.EmptyVersion,
 		ScheduleID:                 common.EmptyEventID,
 		StartedID:                  common.EmptyEventID,
-		RequestID:                  emptyUUID,
+		RequestID:                  common.EmptyUUID,
 		DecisionTimeout:            0,
 		StartedTimestamp:           0,
 		TaskList:                   "",
@@ -590,11 +590,11 @@ func (m *mutableStateDecisionTaskManagerImpl) FailDecision(
 
 // DeleteDecision deletes a decision task.
 func (m *mutableStateDecisionTaskManagerImpl) DeleteDecision() {
-	resetDecisionInfo := &decisionInfo{
+	resetDecisionInfo := &DecisionInfo{
 		Version:            common.EmptyVersion,
 		ScheduleID:         common.EmptyEventID,
 		StartedID:          common.EmptyEventID,
-		RequestID:          emptyUUID,
+		RequestID:          common.EmptyUUID,
 		DecisionTimeout:    0,
 		Attempt:            0,
 		StartedTimestamp:   0,
@@ -608,7 +608,7 @@ func (m *mutableStateDecisionTaskManagerImpl) DeleteDecision() {
 
 // UpdateDecision updates a decision task.
 func (m *mutableStateDecisionTaskManagerImpl) UpdateDecision(
-	decision *decisionInfo,
+	decision *DecisionInfo,
 ) {
 	m.msb.executionInfo.DecisionVersion = decision.Version
 	m.msb.executionInfo.DecisionScheduleID = decision.ScheduleID
@@ -637,7 +637,7 @@ func (m *mutableStateDecisionTaskManagerImpl) HasPendingDecision() bool {
 	return m.msb.executionInfo.DecisionScheduleID != common.EmptyEventID
 }
 
-func (m *mutableStateDecisionTaskManagerImpl) GetPendingDecision() (*decisionInfo, bool) {
+func (m *mutableStateDecisionTaskManagerImpl) GetPendingDecision() (*DecisionInfo, bool) {
 	if m.msb.executionInfo.DecisionScheduleID == common.EmptyEventID {
 		return nil, false
 	}
@@ -650,7 +650,7 @@ func (m *mutableStateDecisionTaskManagerImpl) HasInFlightDecision() bool {
 	return m.msb.executionInfo.DecisionStartedID > 0
 }
 
-func (m *mutableStateDecisionTaskManagerImpl) GetInFlightDecision() (*decisionInfo, bool) {
+func (m *mutableStateDecisionTaskManagerImpl) GetInFlightDecision() (*DecisionInfo, bool) {
 	if m.msb.executionInfo.DecisionScheduleID == common.EmptyEventID ||
 		m.msb.executionInfo.DecisionStartedID == common.EmptyEventID {
 		return nil, false
@@ -667,7 +667,7 @@ func (m *mutableStateDecisionTaskManagerImpl) HasProcessedOrPendingDecision() bo
 // GetDecisionInfo returns details about the in-progress decision task
 func (m *mutableStateDecisionTaskManagerImpl) GetDecisionInfo(
 	scheduleEventID int64,
-) (*decisionInfo, bool) {
+) (*DecisionInfo, bool) {
 	decision := m.getDecisionInfo()
 	if scheduleEventID == decision.ScheduleID {
 		return decision, true
@@ -676,7 +676,7 @@ func (m *mutableStateDecisionTaskManagerImpl) GetDecisionInfo(
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) CreateTransientDecisionEvents(
-	decision *decisionInfo,
+	decision *DecisionInfo,
 	identity string,
 ) (*workflow.HistoryEvent, *workflow.HistoryEvent) {
 	tasklist := m.msb.executionInfo.TaskList
@@ -699,12 +699,12 @@ func (m *mutableStateDecisionTaskManagerImpl) CreateTransientDecisionEvents(
 	return scheduledEvent, startedEvent
 }
 
-func (m *mutableStateDecisionTaskManagerImpl) getDecisionInfo() *decisionInfo {
+func (m *mutableStateDecisionTaskManagerImpl) getDecisionInfo() *DecisionInfo {
 	taskList := m.msb.executionInfo.TaskList
 	if m.msb.IsStickyTaskListEnabled() {
 		taskList = m.msb.executionInfo.StickyTaskList
 	}
-	return &decisionInfo{
+	return &DecisionInfo{
 		Version:                    m.msb.executionInfo.DecisionVersion,
 		ScheduleID:                 m.msb.executionInfo.DecisionScheduleID,
 		StartedID:                  m.msb.executionInfo.DecisionStartedID,

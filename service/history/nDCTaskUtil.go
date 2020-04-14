@@ -28,6 +28,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -65,13 +66,13 @@ func verifyTaskVersion(
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTransferTask(
-	context workflowExecutionContext,
+	context execution.Context,
 	transferTask *persistence.TransferTaskInfo,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) (mutableState, error) {
+) (execution.MutableState, error) {
 
-	msBuilder, err := context.loadWorkflowExecution()
+	msBuilder, err := context.LoadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
@@ -90,9 +91,9 @@ func loadMutableStateForTransferTask(
 
 	if transferTask.ScheduleID >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
-		context.clear()
+		context.Clear()
 
-		msBuilder, err = context.loadWorkflowExecution()
+		msBuilder, err = context.LoadWorkflowExecution()
 		if err != nil {
 			return nil, err
 		}
@@ -110,13 +111,13 @@ func loadMutableStateForTransferTask(
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
-	context workflowExecutionContext,
+	context execution.Context,
 	timerTask *persistence.TimerTaskInfo,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) (mutableState, error) {
+) (execution.MutableState, error) {
 
-	msBuilder, err := context.loadWorkflowExecution()
+	msBuilder, err := context.LoadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
@@ -135,9 +136,9 @@ func loadMutableStateForTimerTask(
 
 	if timerTask.EventID >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
-		context.clear()
+		context.Clear()
 
-		msBuilder, err = context.loadWorkflowExecution()
+		msBuilder, err = context.LoadWorkflowExecution()
 		if err != nil {
 			return nil, err
 		}

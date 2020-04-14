@@ -31,17 +31,18 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/execution"
 )
 
 type (
 	nDCWorkflow interface {
-		getContext() workflowExecutionContext
-		getMutableState() mutableState
-		getReleaseFn() releaseWorkflowExecutionFunc
+		getContext() execution.Context
+		getMutableState() execution.MutableState
+		getReleaseFn() execution.ReleaseFunc
 		getVectorClock() (int64, int64, error)
 		happensAfter(that nDCWorkflow) (bool, error)
 		revive() error
-		suppressBy(incomingWorkflow nDCWorkflow) (transactionPolicy, error)
+		suppressBy(incomingWorkflow nDCWorkflow) (execution.TransactionPolicy, error)
 		flushBufferedEvents() error
 	}
 
@@ -50,9 +51,9 @@ type (
 		clusterMetadata cluster.Metadata
 
 		ctx          ctx.Context
-		context      workflowExecutionContext
-		mutableState mutableState
-		releaseFn    releaseWorkflowExecutionFunc
+		context      execution.Context
+		mutableState execution.MutableState
+		releaseFn    execution.ReleaseFunc
 	}
 )
 
@@ -60,9 +61,9 @@ func newNDCWorkflow(
 	ctx ctx.Context,
 	domainCache cache.DomainCache,
 	clusterMetadata cluster.Metadata,
-	context workflowExecutionContext,
-	mutableState mutableState,
-	releaseFn releaseWorkflowExecutionFunc,
+	context execution.Context,
+	mutableState execution.MutableState,
+	releaseFn execution.ReleaseFunc,
 ) *nDCWorkflowImpl {
 
 	return &nDCWorkflowImpl{
@@ -76,15 +77,15 @@ func newNDCWorkflow(
 	}
 }
 
-func (r *nDCWorkflowImpl) getContext() workflowExecutionContext {
+func (r *nDCWorkflowImpl) getContext() execution.Context {
 	return r.context
 }
 
-func (r *nDCWorkflowImpl) getMutableState() mutableState {
+func (r *nDCWorkflowImpl) getMutableState() execution.MutableState {
 	return r.mutableState
 }
 
-func (r *nDCWorkflowImpl) getReleaseFn() releaseWorkflowExecutionFunc {
+func (r *nDCWorkflowImpl) getReleaseFn() execution.ReleaseFunc {
 	return r.releaseFn
 }
 
@@ -143,7 +144,7 @@ func (r *nDCWorkflowImpl) revive() error {
 
 func (r *nDCWorkflowImpl) suppressBy(
 	incomingWorkflow nDCWorkflow,
-) (transactionPolicy, error) {
+) (execution.TransactionPolicy, error) {
 
 	// NOTE: READ BEFORE MODIFICATION
 	//
@@ -154,11 +155,11 @@ func (r *nDCWorkflowImpl) suppressBy(
 
 	lastWriteVersion, lastEventTaskID, err := r.getVectorClock()
 	if err != nil {
-		return transactionPolicyActive, err
+		return execution.TransactionPolicyActive, err
 	}
 	incomingLastWriteVersion, incomingLastEventTaskID, err := incomingWorkflow.getVectorClock()
 	if err != nil {
-		return transactionPolicyActive, err
+		return execution.TransactionPolicyActive, err
 	}
 
 	if workflowHappensAfter(
@@ -166,23 +167,23 @@ func (r *nDCWorkflowImpl) suppressBy(
 		lastEventTaskID,
 		incomingLastWriteVersion,
 		incomingLastEventTaskID) {
-		return transactionPolicyActive, &shared.InternalServiceError{
+		return execution.TransactionPolicyActive, &shared.InternalServiceError{
 			Message: "nDCWorkflow cannot suppress workflow by older workflow",
 		}
 	}
 
 	// if workflow is in zombie or finished state, keep as is
 	if !r.mutableState.IsWorkflowExecutionRunning() {
-		return transactionPolicyPassive, nil
+		return execution.TransactionPolicyPassive, nil
 	}
 
 	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster == lastWriteCluster {
-		return transactionPolicyActive, r.terminateWorkflow(lastWriteVersion, incomingLastWriteVersion)
+		return execution.TransactionPolicyActive, r.terminateWorkflow(lastWriteVersion, incomingLastWriteVersion)
 	}
-	return transactionPolicyPassive, r.zombiefyWorkflow()
+	return execution.TransactionPolicyPassive, r.zombiefyWorkflow()
 }
 
 func (r *nDCWorkflowImpl) flushBufferedEvents() error {

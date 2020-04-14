@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package execution
 
 import (
 	"context"
@@ -40,9 +40,11 @@ import (
 )
 
 type (
-	releaseWorkflowExecutionFunc func(err error)
+	// ReleaseFunc releases workflow execution context
+	ReleaseFunc func(err error)
 
-	historyCache struct {
+	// Cache caches workflow execution context
+	Cache struct {
 		cache.Cache
 		shard            shard.Context
 		executionManager persistence.ExecutionManager
@@ -53,21 +55,25 @@ type (
 	}
 )
 
-var noopReleaseFn releaseWorkflowExecutionFunc = func(err error) {}
+var (
+	// NoopReleaseFn is an no-op implementation for the ReleaseFunc type
+	NoopReleaseFn ReleaseFunc = func(err error) {}
+)
 
 const (
 	cacheNotReleased int32 = 0
 	cacheReleased    int32 = 1
 )
 
-func newHistoryCache(shard shard.Context) *historyCache {
+// NewCache creates a new workflow execution context cache
+func NewCache(shard shard.Context) *Cache {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
 	opts.InitialCapacity = config.HistoryCacheInitialSize()
 	opts.TTL = config.HistoryCacheTTL()
 	opts.Pin = true
 
-	return &historyCache{
+	return &Cache{
 		Cache:            cache.New(config.HistoryCacheMaxSize(), opts),
 		shard:            shard,
 		executionManager: shard.GetExecutionManager(),
@@ -77,11 +83,12 @@ func newHistoryCache(shard shard.Context) *historyCache {
 	}
 }
 
-func (c *historyCache) getOrCreateCurrentWorkflowExecution(
+// GetOrCreateCurrentWorkflowExecution gets or creates workflow execution context for the current run
+func (c *Cache) GetOrCreateCurrentWorkflowExecution(
 	ctx context.Context,
 	domainID string,
 	workflowID string,
-) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
+) (Context, ReleaseFunc, error) {
 
 	scope := metrics.HistoryCacheGetOrCreateCurrentScope
 	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
@@ -104,12 +111,13 @@ func (c *historyCache) getOrCreateCurrentWorkflowExecution(
 	)
 }
 
-// For analyzing mutableState, we have to try get workflowExecutionContext from cache and also load from database
-func (c *historyCache) getAndCreateWorkflowExecution(
+// GetAndCreateWorkflowExecution is for analyzing mutableState, it will try getting Context from cache
+// and also load from database
+func (c *Cache) GetAndCreateWorkflowExecution(
 	ctx context.Context,
 	domainID string,
 	execution workflow.WorkflowExecution,
-) (workflowExecutionContext, workflowExecutionContext, releaseWorkflowExecutionFunc, bool, error) {
+) (Context, Context, ReleaseFunc, bool, error) {
 
 	scope := metrics.HistoryCacheGetAndCreateScope
 	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
@@ -122,13 +130,13 @@ func (c *historyCache) getAndCreateWorkflowExecution(
 	}
 
 	key := definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId())
-	contextFromCache, cacheHit := c.Get(key).(workflowExecutionContext)
+	contextFromCache, cacheHit := c.Get(key).(Context)
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
-	releaseFunc := noopReleaseFn
+	releaseFunc := NoopReleaseFn
 	// If cache hit, we need to lock the cache to prevent race condition
 	if cacheHit {
-		if err := contextFromCache.lock(ctx); err != nil {
+		if err := contextFromCache.Lock(ctx); err != nil {
 			// ctx is done before lock can be acquired
 			c.Release(key)
 			c.metricsClient.IncCounter(metrics.HistoryCacheGetAndCreateScope, metrics.CacheFailures)
@@ -141,23 +149,25 @@ func (c *historyCache) getAndCreateWorkflowExecution(
 	}
 
 	// Note, the one loaded from DB is not put into cache and don't affect any behavior
-	contextFromDB := newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger)
+	contextFromDB := NewContext(domainID, execution, c.shard, c.executionManager, c.logger)
 	return contextFromCache, contextFromDB, releaseFunc, cacheHit, nil
 }
 
-func (c *historyCache) getOrCreateWorkflowExecutionForBackground(
+// GetOrCreateWorkflowExecutionForBackground gets or creates workflow execution context with background context
+func (c *Cache) GetOrCreateWorkflowExecutionForBackground(
 	domainID string,
 	execution workflow.WorkflowExecution,
-) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
+) (Context, ReleaseFunc, error) {
 
-	return c.getOrCreateWorkflowExecution(context.Background(), domainID, execution)
+	return c.GetOrCreateWorkflowExecution(context.Background(), domainID, execution)
 }
 
-func (c *historyCache) getOrCreateWorkflowExecution(
+// GetOrCreateWorkflowExecution gets or creates workflow execution context
+func (c *Cache) GetOrCreateWorkflowExecution(
 	ctx context.Context,
 	domainID string,
 	execution workflow.WorkflowExecution,
-) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
+) (Context, ReleaseFunc, error) {
 
 	scope := metrics.HistoryCacheGetOrCreateScope
 	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
@@ -178,38 +188,38 @@ func (c *historyCache) getOrCreateWorkflowExecution(
 	)
 }
 
-func (c *historyCache) getOrCreateWorkflowExecutionInternal(
+func (c *Cache) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	domainID string,
 	execution workflow.WorkflowExecution,
 	scope int,
 	forceClearContext bool,
-) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
+) (Context, ReleaseFunc, error) {
 
 	// Test hook for disabling the cache
 	if c.disabled {
-		return newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger), noopReleaseFn, nil
+		return NewContext(domainID, execution, c.shard, c.executionManager, c.logger), NoopReleaseFn, nil
 	}
 
 	key := definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId())
-	workflowCtx, cacheHit := c.Get(key).(workflowExecutionContext)
+	workflowCtx, cacheHit := c.Get(key).(Context)
 	if !cacheHit {
 		c.metricsClient.IncCounter(scope, metrics.CacheMissCounter)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger)
+		workflowCtx = NewContext(domainID, execution, c.shard, c.executionManager, c.logger)
 		elem, err := c.PutIfNotExist(key, workflowCtx)
 		if err != nil {
 			c.metricsClient.IncCounter(scope, metrics.CacheFailures)
 			return nil, nil, err
 		}
-		workflowCtx = elem.(workflowExecutionContext)
+		workflowCtx = elem.(Context)
 	}
 
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(key, workflowCtx, forceClearContext)
 
-	if err := workflowCtx.lock(ctx); err != nil {
+	if err := workflowCtx.Lock(ctx); err != nil {
 		// ctx is done before lock can be acquired
 		c.Release(key)
 		c.metricsClient.IncCounter(scope, metrics.CacheFailures)
@@ -219,7 +229,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 	return workflowCtx, releaseFunc, nil
 }
 
-func (c *historyCache) validateWorkflowExecutionInfo(
+func (c *Cache) validateWorkflowExecutionInfo(
 	domainID string,
 	execution *workflow.WorkflowExecution,
 ) error {
@@ -246,9 +256,9 @@ func (c *historyCache) validateWorkflowExecutionInfo(
 	return nil
 }
 
-func (c *historyCache) makeReleaseFunc(
+func (c *Cache) makeReleaseFunc(
 	key definition.WorkflowIdentifier,
-	context workflowExecutionContext,
+	context Context,
 	forceClearContext bool,
 ) func(error) {
 
@@ -256,23 +266,23 @@ func (c *historyCache) makeReleaseFunc(
 	return func(err error) {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
 			if rec := recover(); rec != nil {
-				context.clear()
-				context.unlock()
+				context.Clear()
+				context.Unlock()
 				c.Release(key)
 				panic(rec)
 			} else {
 				if err != nil || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
-					context.clear()
+					context.Clear()
 				}
-				context.unlock()
+				context.Unlock()
 				c.Release(key)
 			}
 		}
 	}
 }
 
-func (c *historyCache) getCurrentExecutionWithRetry(
+func (c *Cache) getCurrentExecutionWithRetry(
 	request *persistence.GetCurrentExecutionRequest,
 ) (*persistence.GetCurrentExecutionResponse, error) {
 

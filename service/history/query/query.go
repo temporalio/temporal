@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package history
+package query
 
 import (
 	"sync/atomic"
@@ -31,9 +31,12 @@ import (
 )
 
 const (
-	queryTerminationTypeCompleted queryTerminationType = iota
-	queryTerminationTypeUnblocked
-	queryTerminationTypeFailed
+	// TerminationTypeCompleted means a query reaches its termination state because it has been completed
+	TerminationTypeCompleted TerminationType = iota
+	// TerminationTypeUnblocked means a query reaches its termination state because it has been unblocked
+	TerminationTypeUnblocked
+	// TerminationTypeFailed means a query reaches its termination state because it has failed
+	TerminationTypeFailed
 )
 
 var (
@@ -43,14 +46,22 @@ var (
 )
 
 type (
-	queryTerminationType int
+	// TerminationType is the type of a query's termination state
+	TerminationType int
+
+	// TerminationState describes a query's termination state
+	TerminationState struct {
+		TerminationType TerminationType
+		QueryResult     *shared.WorkflowQueryResult
+		Failure         error
+	}
 
 	query interface {
 		getQueryID() string
 		getQueryTermCh() <-chan struct{}
 		getQueryInput() *shared.WorkflowQuery
-		getTerminationState() (*queryTerminationState, error)
-		setTerminationState(*queryTerminationState) error
+		getTerminationState() (*TerminationState, error)
+		setTerminationState(*TerminationState) error
 	}
 
 	queryImpl struct {
@@ -59,12 +70,6 @@ type (
 		termCh     chan struct{}
 
 		terminationState atomic.Value
-	}
-
-	queryTerminationState struct {
-		queryTerminationType queryTerminationType
-		queryResult          *shared.WorkflowQueryResult
-		failure              error
 	}
 )
 
@@ -88,15 +93,15 @@ func (q *queryImpl) getQueryInput() *shared.WorkflowQuery {
 	return q.queryInput
 }
 
-func (q *queryImpl) getTerminationState() (*queryTerminationState, error) {
+func (q *queryImpl) getTerminationState() (*TerminationState, error) {
 	ts := q.terminationState.Load()
 	if ts == nil {
 		return nil, errQueryNotInTerminalState
 	}
-	return ts.(*queryTerminationState), nil
+	return ts.(*TerminationState), nil
 }
 
-func (q *queryImpl) setTerminationState(terminationState *queryTerminationState) error {
+func (q *queryImpl) setTerminationState(terminationState *TerminationState) error {
 	if err := q.validateTerminationState(terminationState); err != nil {
 		return err
 	}
@@ -110,17 +115,17 @@ func (q *queryImpl) setTerminationState(terminationState *queryTerminationState)
 }
 
 func (q *queryImpl) validateTerminationState(
-	terminationState *queryTerminationState,
+	terminationState *TerminationState,
 ) error {
 	if terminationState == nil {
 		return errTerminationStateInvalid
 	}
-	switch terminationState.queryTerminationType {
-	case queryTerminationTypeCompleted:
-		if terminationState.queryResult == nil || terminationState.failure != nil {
+	switch terminationState.TerminationType {
+	case TerminationTypeCompleted:
+		if terminationState.QueryResult == nil || terminationState.Failure != nil {
 			return errTerminationStateInvalid
 		}
-		queryResult := terminationState.queryResult
+		queryResult := terminationState.QueryResult
 		validAnswered := queryResult.GetResultType().Equals(shared.QueryResultTypeAnswered) &&
 			queryResult.Answer != nil &&
 			queryResult.ErrorMessage == nil
@@ -131,13 +136,13 @@ func (q *queryImpl) validateTerminationState(
 			return errTerminationStateInvalid
 		}
 		return nil
-	case queryTerminationTypeUnblocked:
-		if terminationState.queryResult != nil || terminationState.failure != nil {
+	case TerminationTypeUnblocked:
+		if terminationState.QueryResult != nil || terminationState.Failure != nil {
 			return errTerminationStateInvalid
 		}
 		return nil
-	case queryTerminationTypeFailed:
-		if terminationState.queryResult != nil || terminationState.failure == nil {
+	case TerminationTypeFailed:
+		if terminationState.QueryResult != nil || terminationState.Failure == nil {
 			return errTerminationStateInvalid
 		}
 		return nil

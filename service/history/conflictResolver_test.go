@@ -43,6 +43,7 @@ import (
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -63,7 +64,7 @@ type (
 		logger           log.Logger
 		mockExecutionMgr *mocks.ExecutionManager
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
-		mockContext      *workflowExecutionContextImpl
+		mockContext      execution.Context
 
 		conflictResolver *conflictResolverImpl
 	}
@@ -122,7 +123,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	}
 	s.mockShard.SetEngine(h)
 
-	s.mockContext = newWorkflowExecutionContext(testDomainID, shared.WorkflowExecution{
+	s.mockContext = execution.NewContext(testDomainID, shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(testRunID),
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -146,8 +147,8 @@ func (s *conflictResolverSuite) TestReset() {
 	startTime := time.Now()
 	version := int64(12)
 
-	domainID := s.mockContext.domainID
-	execution := s.mockContext.workflowExecution
+	domainID := s.mockContext.GetDomainID()
+	workflowExecution := *s.mockContext.GetExecution()
 	nextEventID := int64(2)
 	branchToken := []byte("some random branch token")
 
@@ -183,13 +184,12 @@ func (s *conflictResolverSuite) TestReset() {
 		Size:             int(historySize),
 	}, nil)
 
-	s.mockContext.updateCondition = int64(59)
 	createRequestID := uuid.New()
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:                    domainID,
-		WorkflowID:                  execution.GetWorkflowId(),
-		RunID:                       execution.GetRunId(),
+		WorkflowID:                  workflowExecution.GetWorkflowId(),
+		RunID:                       workflowExecution.GetRunId(),
 		ParentDomainID:              "",
 		ParentWorkflowID:            "",
 		ParentRunID:                 "",
@@ -208,7 +208,7 @@ func (s *conflictResolverSuite) TestReset() {
 		DecisionVersion:             common.EmptyVersion,
 		DecisionScheduleID:          common.EmptyEventID,
 		DecisionStartedID:           common.EmptyEventID,
-		DecisionRequestID:           emptyUUID,
+		DecisionRequestID:           common.EmptyUUID,
 		DecisionTimeout:             0,
 		DecisionAttempt:             0,
 		DecisionStartedTimestamp:    0,
@@ -259,7 +259,6 @@ func (s *conflictResolverSuite) TestReset() {
 				TransferTasks:       nil,
 				ReplicationTasks:    nil,
 				TimerTasks:          nil,
-				Condition:           s.mockContext.updateCondition,
 			},
 			Encoding: common.EncodingType(s.mockShard.GetConfig().EventEncodingType(domainID)),
 		}, input)
@@ -267,7 +266,7 @@ func (s *conflictResolverSuite) TestReset() {
 	})).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID:  domainID,
-		Execution: execution,
+		Execution: workflowExecution,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo:  &persistence.WorkflowExecutionInfo{},
@@ -280,6 +279,6 @@ func (s *conflictResolverSuite) TestReset() {
 		&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil,
 	), nil).AnyTimes()
 
-	_, err := s.conflictResolver.reset(prevRunID, prevLastWriteVersion, prevState, createRequestID, nextEventID-1, executionInfo, s.mockContext.updateCondition)
+	_, err := s.conflictResolver.reset(prevRunID, prevLastWriteVersion, prevState, createRequestID, nextEventID-1, executionInfo, 0)
 	s.Nil(err)
 }

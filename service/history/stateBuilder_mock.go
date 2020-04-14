@@ -33,6 +33,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	shared "github.com/uber/cadence/.gen/go/shared"
+	execution "github.com/uber/cadence/service/history/execution"
 )
 
 // MockstateBuilder is a mock of stateBuilder interface
@@ -59,16 +60,16 @@ func (m *MockstateBuilder) EXPECT() *MockstateBuilderMockRecorder {
 }
 
 // applyEvents mocks base method
-func (m *MockstateBuilder) applyEvents(domainID, requestID string, execution shared.WorkflowExecution, history, newRunHistory []*shared.HistoryEvent, newRunNDC bool) (mutableState, error) {
+func (m *MockstateBuilder) applyEvents(domainID, requestID string, workflowExecution shared.WorkflowExecution, history, newRunHistory []*shared.HistoryEvent, newRunNDC bool) (execution.MutableState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "applyEvents", domainID, requestID, execution, history, newRunHistory, newRunNDC)
-	ret0, _ := ret[0].(mutableState)
+	ret := m.ctrl.Call(m, "applyEvents", domainID, requestID, workflowExecution, history, newRunHistory, newRunNDC)
+	ret0, _ := ret[0].(execution.MutableState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // applyEvents indicates an expected call of applyEvents
-func (mr *MockstateBuilderMockRecorder) applyEvents(domainID, requestID, execution, history, newRunHistory, newRunNDC interface{}) *gomock.Call {
+func (mr *MockstateBuilderMockRecorder) applyEvents(domainID, requestID, workflowExecution, history, newRunHistory, newRunNDC interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "applyEvents", reflect.TypeOf((*MockstateBuilder)(nil).applyEvents), domainID, requestID, execution, history, newRunHistory, newRunNDC)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "applyEvents", reflect.TypeOf((*MockstateBuilder)(nil).applyEvents), domainID, requestID, workflowExecution, history, newRunHistory, newRunNDC)
 }

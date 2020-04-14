@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/execution"
 )
 
 type (
@@ -49,9 +50,9 @@ type (
 		failDecisionCause                 *workflow.DecisionTaskFailedCause
 		failMessage                       *string
 		activityNotStartedCancelled       bool
-		continueAsNewBuilder              mutableState
+		continueAsNewBuilder              execution.MutableState
 		stopProcessing                    bool // should stop processing any more decisions
-		mutableState                      mutableState
+		mutableState                      execution.MutableState
 
 		// validation
 		attrValidator    *decisionAttrValidator
@@ -68,7 +69,7 @@ func newDecisionTaskHandler(
 	identity string,
 	decisionTaskCompletedID int64,
 	domainEntry *cache.DomainCacheEntry,
-	mutableState mutableState,
+	mutableState execution.MutableState,
 	attrValidator *decisionAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,

@@ -60,6 +60,10 @@ const (
 	warnPendingTasks = 2000
 )
 
+var (
+	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
+)
+
 func newQueueAckMgr(shard shard.Context, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
 
 	return &queueAckMgrImpl{

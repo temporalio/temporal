@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -53,7 +54,7 @@ type (
 	}
 
 	nDCActivityReplicatorImpl struct {
-		historyCache    *historyCache
+		executionCache  *execution.Cache
 		clusterMetadata cluster.Metadata
 		logger          log.Logger
 	}
@@ -61,12 +62,12 @@ type (
 
 func newNDCActivityReplicator(
 	shard shard.Context,
-	historyCache *historyCache,
+	executionCache *execution.Cache,
 	logger log.Logger,
 ) *nDCActivityReplicatorImpl {
 
 	return &nDCActivityReplicatorImpl{
-		historyCache:    historyCache,
+		executionCache:  executionCache,
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		logger:          logger.WithTags(tag.ComponentHistoryReplicator),
 	}
@@ -83,12 +84,12 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// no sync activity task will be sent when active side fail / timeout activity,
 	// since standby side does not have activity retry timer
 	domainID := request.GetDomainId()
-	execution := workflow.WorkflowExecution{
+	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
 		RunId:      request.RunId,
 	}
 
-	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
+	context, release, err := r.executionCache.GetOrCreateWorkflowExecution(ctx, domainID, workflowExecution)
 	if err != nil {
 		// for get workflow execution context, with valid run id
 		// err will not be of type EntityNotExistsError
@@ -96,7 +97,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := context.loadWorkflowExecution()
+	mutableState, err := context.LoadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
 			return err
@@ -113,8 +114,8 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	scheduleID := request.GetScheduledId()
 	shouldApply, err := r.shouldApplySyncActivity(
 		domainID,
-		execution.GetWorkflowId(),
-		execution.GetRunId(),
+		workflowExecution.GetWorkflowId(),
+		workflowExecution.GetRunId(),
 		scheduleID,
 		version,
 		mutableState,
@@ -183,10 +184,10 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 
 	// passive logic need to explicitly call create timer
 	now := time.Unix(0, eventTime)
-	if _, err := newTimerSequence(
+	if _, err := execution.NewTimerSequence(
 		clock.NewEventTimeSource().Update(now),
 		mutableState,
-	).createNextActivityTimer(); err != nil {
+	).CreateNextActivityTimer(); err != nil {
 		return err
 	}
 
@@ -195,12 +196,12 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		updateMode = persistence.UpdateWorkflowModeBypassCurrent
 	}
 
-	return context.updateWorkflowExecutionWithNew(
+	return context.UpdateWorkflowExecutionWithNew(
 		now,
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow
-		transactionPolicyPassive,
+		execution.TransactionPolicyPassive,
 		nil,
 	)
 }
@@ -211,7 +212,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 	runID string,
 	scheduleID int64,
 	activityVersion int64,
-	mutableState mutableState,
+	mutableState execution.MutableState,
 	incomingRawVersionHistory *workflow.VersionHistory,
 ) (bool, error) {
 

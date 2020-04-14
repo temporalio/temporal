@@ -101,7 +101,7 @@ func (s *taskProcessorSuite) SetupTest() {
 		queueSize:   s.mockShard.GetConfig().TimerTaskBatchSize() * s.mockShard.GetConfig().TimerTaskWorkerCount(),
 		workerCount: s.mockShard.GetConfig().TimerTaskWorkerCount(),
 	}
-	s.taskProcessor = newTaskProcessor(options, s.mockShard, h.historyCache, s.logger)
+	s.taskProcessor = newTaskProcessor(options, s.mockShard, h.executionCache, s.logger)
 }
 
 func (s *taskProcessorSuite) TearDownTest() {

@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/worker/archiver"
 )
@@ -45,7 +46,7 @@ type (
 	transferQueueTaskExecutorBase struct {
 		shard          shard.Context
 		historyService *historyEngineImpl
-		cache          *historyCache
+		cache          *execution.Cache
 		logger         log.Logger
 		metricsClient  metrics.Client
 		matchingClient matching.Client
@@ -64,7 +65,7 @@ func newTransferQueueTaskExecutorBase(
 	return &transferQueueTaskExecutorBase{
 		shard:          shard,
 		historyService: historyService,
-		cache:          historyService.historyCache,
+		cache:          historyService.executionCache,
 		logger:         logger,
 		metricsClient:  metricsClient,
 		matchingClient: shard.GetService().GetMatchingClient(),
@@ -326,7 +327,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 // Argument startEvent is to save additional call of msBuilder.GetStartEvent
 func getWorkflowExecutionTimestamp(
-	msBuilder mutableState,
+	msBuilder execution.MutableState,
 	startEvent *workflow.HistoryEvent,
 ) time.Time {
 	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support

@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,12 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination workflowExecutionContext_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go -self_package github.com/uber/cadence/service/history/execution
 
-package history
+package execution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -45,35 +46,43 @@ const (
 	defaultRemoteCallTimeout = 30 * time.Second
 )
 
+var (
+	// ErrConflict is exported temporarily for integration test
+	ErrConflict = errors.New("conditional update failed")
+)
+
 type (
-	workflowExecutionContext interface {
-		getDomainName() string
-		getDomainID() string
-		getExecution() *workflow.WorkflowExecution
+	// Context is the processing context for all operations on workflow execution
+	Context interface {
+		GetDomainName() string
+		GetDomainID() string
+		GetExecution() *workflow.WorkflowExecution
 
-		loadWorkflowExecution() (mutableState, error)
-		loadWorkflowExecutionForReplication(incomingVersion int64) (mutableState, error)
-		loadExecutionStats() (*persistence.ExecutionStats, error)
-		clear()
+		GetWorkflowExecution() MutableState
+		SetWorkflowExecution(mutableState MutableState)
+		LoadWorkflowExecution() (MutableState, error)
+		LoadWorkflowExecutionForReplication(incomingVersion int64) (MutableState, error)
+		LoadExecutionStats() (*persistence.ExecutionStats, error)
+		Clear()
 
-		lock(ctx context.Context) error
-		unlock()
+		Lock(ctx context.Context) error
+		Unlock()
 
-		getHistorySize() int64
-		setHistorySize(size int64)
+		GetHistorySize() int64
+		SetHistorySize(size int64)
 
-		reapplyEvents(
+		ReapplyEvents(
 			eventBatches []*persistence.WorkflowEvents,
 		) error
 
-		persistFirstWorkflowEvents(
+		PersistFirstWorkflowEvents(
 			workflowEvents *persistence.WorkflowEvents,
 		) (int64, error)
-		persistNonFirstWorkflowEvents(
+		PersistNonFirstWorkflowEvents(
 			workflowEvents *persistence.WorkflowEvents,
 		) (int64, error)
 
-		createWorkflowExecution(
+		CreateWorkflowExecution(
 			newWorkflow *persistence.WorkflowSnapshot,
 			historySize int64,
 			now time.Time,
@@ -81,48 +90,48 @@ type (
 			prevRunID string,
 			prevLastWriteVersion int64,
 		) error
-		conflictResolveWorkflowExecution(
+		ConflictResolveWorkflowExecution(
 			now time.Time,
 			conflictResolveMode persistence.ConflictResolveWorkflowMode,
-			resetMutableState mutableState,
-			newContext workflowExecutionContext,
-			newMutableState mutableState,
-			currentContext workflowExecutionContext,
-			currentMutableState mutableState,
-			currentTransactionPolicy *transactionPolicy,
+			resetMutableState MutableState,
+			newContext Context,
+			newMutableState MutableState,
+			currentContext Context,
+			currentMutableState MutableState,
+			currentTransactionPolicy *TransactionPolicy,
 			workflowCAS *persistence.CurrentWorkflowCAS,
 		) error
-		updateWorkflowExecutionAsActive(
+		UpdateWorkflowExecutionAsActive(
 			now time.Time,
 		) error
-		updateWorkflowExecutionWithNewAsActive(
+		UpdateWorkflowExecutionWithNewAsActive(
 			now time.Time,
-			newContext workflowExecutionContext,
-			newMutableState mutableState,
+			newContext Context,
+			newMutableState MutableState,
 		) error
-		updateWorkflowExecutionAsPassive(
+		UpdateWorkflowExecutionAsPassive(
 			now time.Time,
 		) error
-		updateWorkflowExecutionWithNewAsPassive(
+		UpdateWorkflowExecutionWithNewAsPassive(
 			now time.Time,
-			newContext workflowExecutionContext,
-			newMutableState mutableState,
+			newContext Context,
+			newMutableState MutableState,
 		) error
-		updateWorkflowExecutionWithNew(
+		UpdateWorkflowExecutionWithNew(
 			now time.Time,
 			updateMode persistence.UpdateWorkflowMode,
-			newContext workflowExecutionContext,
-			newMutableState mutableState,
-			currentWorkflowTransactionPolicy transactionPolicy,
-			newWorkflowTransactionPolicy *transactionPolicy,
+			newContext Context,
+			newMutableState MutableState,
+			currentWorkflowTransactionPolicy TransactionPolicy,
+			newWorkflowTransactionPolicy *TransactionPolicy,
 		) error
 
-		resetWorkflowExecution(
-			currMutableState mutableState,
+		ResetWorkflowExecution(
+			currMutableState MutableState,
 			updateCurr bool,
 			closeTask persistence.Task,
 			cleanupTask persistence.Task,
-			newMutableState mutableState,
+			newMutableState MutableState,
 			newHistorySize int64,
 			newTransferTasks []persistence.Task,
 			newTimerTasks []persistence.Task,
@@ -135,7 +144,7 @@ type (
 )
 
 type (
-	workflowExecutionContextImpl struct {
+	contextImpl struct {
 		domainID          string
 		workflowExecution workflow.WorkflowExecution
 		shard             shard.Context
@@ -146,26 +155,27 @@ type (
 		timeSource        clock.TimeSource
 
 		mutex           locks.Mutex
-		mutableState    mutableState
+		mutableState    MutableState
 		stats           *persistence.ExecutionStats
 		updateCondition int64
 	}
 )
 
-var _ workflowExecutionContext = (*workflowExecutionContextImpl)(nil)
+var _ Context = (*contextImpl)(nil)
 
 var (
 	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
 )
 
-func newWorkflowExecutionContext(
+// NewContext creates a new workflow execution context
+func NewContext(
 	domainID string,
 	execution workflow.WorkflowExecution,
 	shard shard.Context,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
-) *workflowExecutionContextImpl {
-	return &workflowExecutionContextImpl{
+) Context {
+	return &contextImpl{
 		domainID:          domainID,
 		workflowExecution: execution,
 		shard:             shard,
@@ -181,15 +191,15 @@ func newWorkflowExecutionContext(
 	}
 }
 
-func (c *workflowExecutionContextImpl) lock(ctx context.Context) error {
+func (c *contextImpl) Lock(ctx context.Context) error {
 	return c.mutex.Lock(ctx)
 }
 
-func (c *workflowExecutionContextImpl) unlock() {
+func (c *contextImpl) Unlock() {
 	c.mutex.Unlock()
 }
 
-func (c *workflowExecutionContextImpl) clear() {
+func (c *contextImpl) Clear() {
 	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
 	c.mutableState = nil
 	c.stats = &persistence.ExecutionStats{
@@ -197,15 +207,15 @@ func (c *workflowExecutionContextImpl) clear() {
 	}
 }
 
-func (c *workflowExecutionContextImpl) getDomainID() string {
+func (c *contextImpl) GetDomainID() string {
 	return c.domainID
 }
 
-func (c *workflowExecutionContextImpl) getExecution() *workflow.WorkflowExecution {
+func (c *contextImpl) GetExecution() *workflow.WorkflowExecution {
 	return &c.workflowExecution
 }
 
-func (c *workflowExecutionContextImpl) getDomainName() string {
+func (c *contextImpl) GetDomainName() string {
 	domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
 	if err != nil {
 		return ""
@@ -213,25 +223,25 @@ func (c *workflowExecutionContextImpl) getDomainName() string {
 	return domainEntry.GetInfo().Name
 }
 
-func (c *workflowExecutionContextImpl) getHistorySize() int64 {
+func (c *contextImpl) GetHistorySize() int64 {
 	return c.stats.HistorySize
 }
 
-func (c *workflowExecutionContextImpl) setHistorySize(size int64) {
+func (c *contextImpl) SetHistorySize(size int64) {
 	c.stats.HistorySize = size
 }
 
-func (c *workflowExecutionContextImpl) loadExecutionStats() (*persistence.ExecutionStats, error) {
-	_, err := c.loadWorkflowExecution()
+func (c *contextImpl) LoadExecutionStats() (*persistence.ExecutionStats, error) {
+	_, err := c.LoadWorkflowExecution()
 	if err != nil {
 		return nil, err
 	}
 	return c.stats, nil
 }
 
-func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
+func (c *contextImpl) LoadWorkflowExecutionForReplication(
 	incomingVersion int64,
-) (mutableState, error) {
+) (MutableState, error) {
 
 	domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
 	if err != nil {
@@ -247,7 +257,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 			return nil, err
 		}
 
-		c.mutableState = newMutableStateBuilder(
+		c.mutableState = NewMutableStateBuilder(
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,
@@ -262,7 +272,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 		// finally emit execution and session stats
 		emitWorkflowExecutionStats(
 			c.metricsClient,
-			c.getDomainName(),
+			c.GetDomainName(),
 			response.MutableStateStats,
 			c.stats.HistorySize,
 		)
@@ -287,7 +297,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 			return c.mutableState, nil
 		}
 
-		if err = c.updateWorkflowExecutionAsActive(
+		if err = c.UpdateWorkflowExecutionAsActive(
 			c.shard.GetTimeSource().Now(),
 		); err != nil {
 			return nil, err
@@ -306,7 +316,17 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 	return c.mutableState, nil
 }
 
-func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, error) {
+// GetWorkflowExecution should only be used in tests
+func (c *contextImpl) GetWorkflowExecution() MutableState {
+	return c.mutableState
+}
+
+// SetWorkflowExecution should only be used in tests
+func (c *contextImpl) SetWorkflowExecution(mutableState MutableState) {
+	c.mutableState = mutableState
+}
+
+func (c *contextImpl) LoadWorkflowExecution() (MutableState, error) {
 
 	domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
 	if err != nil {
@@ -322,7 +342,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			return nil, err
 		}
 
-		c.mutableState = newMutableStateBuilder(
+		c.mutableState = NewMutableStateBuilder(
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,
@@ -337,7 +357,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		// finally emit execution and session stats
 		emitWorkflowExecutionStats(
 			c.metricsClient,
-			c.getDomainName(),
+			c.GetDomainName(),
 			response.MutableStateStats,
 			c.stats.HistorySize,
 		)
@@ -351,7 +371,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		return c.mutableState, nil
 	}
 
-	if err = c.updateWorkflowExecutionAsActive(
+	if err = c.UpdateWorkflowExecutionAsActive(
 		c.shard.GetTimeSource().Now(),
 	); err != nil {
 		return nil, err
@@ -370,7 +390,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 	return c.mutableState, nil
 }
 
-func (c *workflowExecutionContextImpl) createWorkflowExecution(
+func (c *contextImpl) CreateWorkflowExecution(
 	newWorkflow *persistence.WorkflowSnapshot,
 	historySize int64,
 	now time.Time,
@@ -381,7 +401,7 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 
 	defer func() {
 		if retError != nil {
-			c.clear()
+			c.Clear()
 		}
 	}()
 
@@ -394,8 +414,8 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 		NewWorkflowSnapshot: *newWorkflow,
 	}
 
-	historySize += c.getHistorySize()
-	c.setHistorySize(historySize)
+	historySize += c.GetHistorySize()
+	c.SetHistorySize(historySize)
 	createRequest.NewWorkflowSnapshot.ExecutionStats = &persistence.ExecutionStats{
 		HistorySize: historySize,
 	}
@@ -413,40 +433,40 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 	return nil
 }
 
-func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
+func (c *contextImpl) ConflictResolveWorkflowExecution(
 	now time.Time,
 	conflictResolveMode persistence.ConflictResolveWorkflowMode,
-	resetMutableState mutableState,
-	newContext workflowExecutionContext,
-	newMutableState mutableState,
-	currentContext workflowExecutionContext,
-	currentMutableState mutableState,
-	currentTransactionPolicy *transactionPolicy,
+	resetMutableState MutableState,
+	newContext Context,
+	newMutableState MutableState,
+	currentContext Context,
+	currentMutableState MutableState,
+	currentTransactionPolicy *TransactionPolicy,
 	workflowCAS *persistence.CurrentWorkflowCAS,
 ) (retError error) {
 
 	defer func() {
 		if retError != nil {
-			c.clear()
+			c.Clear()
 		}
 	}()
 
 	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
 		now,
-		transactionPolicyPassive,
+		TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
 	}
-	resetHistorySize := c.getHistorySize()
+	resetHistorySize := c.GetHistorySize()
 	for _, workflowEvents := range resetWorkflowEventsSeq {
-		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
+		eventsSize, err := c.PersistNonFirstWorkflowEvents(workflowEvents)
 		if err != nil {
 			return err
 		}
 		resetHistorySize += eventsSize
 	}
-	c.setHistorySize(resetHistorySize)
+	c.SetHistorySize(resetHistorySize)
 	resetWorkflow.ExecutionStats = &persistence.ExecutionStats{
 		HistorySize: resetHistorySize,
 	}
@@ -457,25 +477,25 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 
 		defer func() {
 			if retError != nil {
-				newContext.clear()
+				newContext.Clear()
 			}
 		}()
 
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
 			now,
-			transactionPolicyPassive,
+			TransactionPolicyPassive,
 		)
 		if err != nil {
 			return err
 		}
-		newWorkflowSizeSize := newContext.getHistorySize()
+		newWorkflowSizeSize := newContext.GetHistorySize()
 		startEvents := newWorkflowEventsSeq[0]
-		eventsSize, err := c.persistFirstWorkflowEvents(startEvents)
+		eventsSize, err := c.PersistFirstWorkflowEvents(startEvents)
 		if err != nil {
 			return err
 		}
 		newWorkflowSizeSize += eventsSize
-		newContext.setHistorySize(newWorkflowSizeSize)
+		newContext.SetHistorySize(newWorkflowSizeSize)
 		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
@@ -487,7 +507,7 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 
 		defer func() {
 			if retError != nil {
-				currentContext.clear()
+				currentContext.Clear()
 			}
 		}()
 
@@ -498,15 +518,15 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		if err != nil {
 			return err
 		}
-		currentWorkflowSize := currentContext.getHistorySize()
+		currentWorkflowSize := currentContext.GetHistorySize()
 		for _, workflowEvents := range currentWorkflowEventsSeq {
-			eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
+			eventsSize, err := c.PersistNonFirstWorkflowEvents(workflowEvents)
 			if err != nil {
 				return err
 			}
 			currentWorkflowSize += eventsSize
 		}
-		currentContext.setHistorySize(currentWorkflowSize)
+		currentContext.SetHistorySize(currentWorkflowSize)
 		currentWorkflow.ExecutionStats = &persistence.ExecutionStats{
 			HistorySize: currentWorkflowSize,
 		}
@@ -575,82 +595,82 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 		)
 	}
 
-	c.clear() // TODO when 2DC is deprecated remove this line
+	c.Clear() // TODO when 2DC is deprecated remove this line
 	return nil
 }
 
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionAsActive(
+func (c *contextImpl) UpdateWorkflowExecutionAsActive(
 	now time.Time,
 ) error {
 
-	return c.updateWorkflowExecutionWithNew(
+	return c.UpdateWorkflowExecutionWithNew(
 		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
-		transactionPolicyActive,
+		TransactionPolicyActive,
 		nil,
 	)
 }
 
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewAsActive(
+func (c *contextImpl) UpdateWorkflowExecutionWithNewAsActive(
 	now time.Time,
-	newContext workflowExecutionContext,
-	newMutableState mutableState,
+	newContext Context,
+	newMutableState MutableState,
 ) error {
 
-	return c.updateWorkflowExecutionWithNew(
-		now,
-		persistence.UpdateWorkflowModeUpdateCurrent,
-		newContext,
-		newMutableState,
-		transactionPolicyActive,
-		transactionPolicyActive.ptr(),
-	)
-}
-
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionAsPassive(
-	now time.Time,
-) error {
-
-	return c.updateWorkflowExecutionWithNew(
-		now,
-		persistence.UpdateWorkflowModeUpdateCurrent,
-		nil,
-		nil,
-		transactionPolicyPassive,
-		nil,
-	)
-}
-
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNewAsPassive(
-	now time.Time,
-	newContext workflowExecutionContext,
-	newMutableState mutableState,
-) error {
-
-	return c.updateWorkflowExecutionWithNew(
+	return c.UpdateWorkflowExecutionWithNew(
 		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		newContext,
 		newMutableState,
-		transactionPolicyPassive,
-		transactionPolicyPassive.ptr(),
+		TransactionPolicyActive,
+		TransactionPolicyActive.Ptr(),
 	)
 }
 
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
+func (c *contextImpl) UpdateWorkflowExecutionAsPassive(
+	now time.Time,
+) error {
+
+	return c.UpdateWorkflowExecutionWithNew(
+		now,
+		persistence.UpdateWorkflowModeUpdateCurrent,
+		nil,
+		nil,
+		TransactionPolicyPassive,
+		nil,
+	)
+}
+
+func (c *contextImpl) UpdateWorkflowExecutionWithNewAsPassive(
+	now time.Time,
+	newContext Context,
+	newMutableState MutableState,
+) error {
+
+	return c.UpdateWorkflowExecutionWithNew(
+		now,
+		persistence.UpdateWorkflowModeUpdateCurrent,
+		newContext,
+		newMutableState,
+		TransactionPolicyPassive,
+		TransactionPolicyPassive.Ptr(),
+	)
+}
+
+func (c *contextImpl) UpdateWorkflowExecutionWithNew(
 	now time.Time,
 	updateMode persistence.UpdateWorkflowMode,
-	newContext workflowExecutionContext,
-	newMutableState mutableState,
-	currentWorkflowTransactionPolicy transactionPolicy,
-	newWorkflowTransactionPolicy *transactionPolicy,
+	newContext Context,
+	newMutableState MutableState,
+	currentWorkflowTransactionPolicy TransactionPolicy,
+	newWorkflowTransactionPolicy *TransactionPolicy,
 ) (retError error) {
 
 	defer func() {
 		if retError != nil {
-			c.clear()
+			c.Clear()
 		}
 	}()
 
@@ -662,15 +682,15 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		return err
 	}
 
-	currentWorkflowSize := c.getHistorySize()
+	currentWorkflowSize := c.GetHistorySize()
 	for _, workflowEvents := range currentWorkflowEventsSeq {
-		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
+		eventsSize, err := c.PersistNonFirstWorkflowEvents(workflowEvents)
 		if err != nil {
 			return err
 		}
 		currentWorkflowSize += eventsSize
 	}
-	c.setHistorySize(currentWorkflowSize)
+	c.SetHistorySize(currentWorkflowSize)
 	currentWorkflow.ExecutionStats = &persistence.ExecutionStats{
 		HistorySize: currentWorkflowSize,
 	}
@@ -681,7 +701,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 
 		defer func() {
 			if retError != nil {
-				newContext.clear()
+				newContext.Clear()
 			}
 		}()
 
@@ -692,14 +712,14 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		if err != nil {
 			return err
 		}
-		newWorkflowSizeSize := newContext.getHistorySize()
+		newWorkflowSizeSize := newContext.GetHistorySize()
 		startEvents := newWorkflowEventsSeq[0]
-		eventsSize, err := c.persistFirstWorkflowEvents(startEvents)
+		eventsSize, err := c.PersistFirstWorkflowEvents(startEvents)
 		if err != nil {
 			return err
 		}
 		newWorkflowSizeSize += eventsSize
-		newContext.setHistorySize(newWorkflowSizeSize)
+		newContext.SetHistorySize(newWorkflowSizeSize)
 		newWorkflow.ExecutionStats = &persistence.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
 		}
@@ -769,7 +789,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	}
 
 	// finally emit session stats
-	domainName := c.getDomainName()
+	domainName := c.GetDomainName()
 	emitWorkflowHistoryStats(
 		c.metricsClient,
 		domainName,
@@ -792,7 +812,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	return nil
 }
 
-func (c *workflowExecutionContextImpl) notifyTasks(
+func (c *contextImpl) notifyTasks(
 	transferTasks []persistence.Task,
 	replicationTasks []persistence.Task,
 	timerTasks []persistence.Task,
@@ -802,7 +822,7 @@ func (c *workflowExecutionContextImpl) notifyTasks(
 	c.engine.NotifyNewTimerTasks(timerTasks)
 }
 
-func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
+func (c *contextImpl) mergeContinueAsNewReplicationTasks(
 	updateMode persistence.UpdateWorkflowMode,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
@@ -850,7 +870,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	return nil
 }
 
-func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
+func (c *contextImpl) PersistFirstWorkflowEvents(
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
 
@@ -884,7 +904,7 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 	return int64(size), err
 }
 
-func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
+func (c *contextImpl) PersistNonFirstWorkflowEvents(
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
 
@@ -913,7 +933,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 	return int64(size), err
 }
 
-func (c *workflowExecutionContextImpl) appendHistoryV2EventsWithRetry(
+func (c *contextImpl) appendHistoryV2EventsWithRetry(
 	domainID string,
 	execution workflow.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
@@ -934,7 +954,7 @@ func (c *workflowExecutionContextImpl) appendHistoryV2EventsWithRetry(
 	return int64(resp), err
 }
 
-func (c *workflowExecutionContextImpl) createWorkflowExecutionWithRetry(
+func (c *contextImpl) createWorkflowExecutionWithRetry(
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
 
@@ -970,7 +990,7 @@ func (c *workflowExecutionContextImpl) createWorkflowExecutionWithRetry(
 	}
 }
 
-func (c *workflowExecutionContextImpl) getWorkflowExecutionWithRetry(
+func (c *contextImpl) getWorkflowExecutionWithRetry(
 	request *persistence.GetWorkflowExecutionRequest,
 ) (*persistence.GetWorkflowExecutionResponse, error) {
 
@@ -1006,7 +1026,7 @@ func (c *workflowExecutionContextImpl) getWorkflowExecutionWithRetry(
 	}
 }
 
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithRetry(
+func (c *contextImpl) updateWorkflowExecutionWithRetry(
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
 
@@ -1045,13 +1065,13 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithRetry(
 // this reset is more complex than "resetMutableState", it involes currentMutableState and newMutableState:
 // 1. append history to new run
 // 2. append history to current run if current run is not closed
-// 3. update mutableState(terminate current run if not closed) and create new run
-func (c *workflowExecutionContextImpl) resetWorkflowExecution(
-	currMutableState mutableState,
+// 3. update MutableState(terminate current run if not closed) and create new run
+func (c *contextImpl) ResetWorkflowExecution(
+	currMutableState MutableState,
 	updateCurr bool,
 	closeTask persistence.Task,
 	cleanupTask persistence.Task,
-	newMutableState mutableState,
+	newMutableState MutableState,
 	newHistorySize int64,
 	newTransferTasks []persistence.Task,
 	newTimerTasks []persistence.Task,
@@ -1102,7 +1122,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 		if err != nil {
 			return err
 		}
-		size, retError = c.persistNonFirstWorkflowEvents(&persistence.WorkflowEvents{
+		size, retError = c.PersistNonFirstWorkflowEvents(&persistence.WorkflowEvents{
 			DomainID:    currentExecutionInfo.DomainID,
 			WorkflowID:  currentExecutionInfo.WorkflowID,
 			RunID:       currentExecutionInfo.RunID,
@@ -1121,7 +1141,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 		c.shard.GetTimeSource().Now(),
 		// the reason to use passive policy is because this resetWorkflowExecution function
 		// mostly handcraft all parameters to be persisted
-		transactionPolicyPassive,
+		TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
@@ -1132,7 +1152,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 		}
 	}
 	for _, workflowEvents := range workflowEventsSeq {
-		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
+		eventsSize, err := c.PersistNonFirstWorkflowEvents(workflowEvents)
 		if err != nil {
 			return err
 		}
@@ -1220,7 +1240,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	return nil
 }
 
-func (c *workflowExecutionContextImpl) updateWorkflowExecutionEventReapply(
+func (c *contextImpl) updateWorkflowExecutionEventReapply(
 	updateMode persistence.UpdateWorkflowMode,
 	eventBatch1 []*persistence.WorkflowEvents,
 	eventBatch2 []*persistence.WorkflowEvents,
@@ -1233,10 +1253,10 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionEventReapply(
 	var eventBatches []*persistence.WorkflowEvents
 	eventBatches = append(eventBatches, eventBatch1...)
 	eventBatches = append(eventBatches, eventBatch2...)
-	return c.reapplyEvents(eventBatches)
+	return c.ReapplyEvents(eventBatches)
 }
 
-func (c *workflowExecutionContextImpl) conflictResolveEventReapply(
+func (c *contextImpl) conflictResolveEventReapply(
 	conflictResolveMode persistence.ConflictResolveWorkflowMode,
 	eventBatch1 []*persistence.WorkflowEvents,
 	eventBatch2 []*persistence.WorkflowEvents,
@@ -1249,10 +1269,10 @@ func (c *workflowExecutionContextImpl) conflictResolveEventReapply(
 	var eventBatches []*persistence.WorkflowEvents
 	eventBatches = append(eventBatches, eventBatch1...)
 	eventBatches = append(eventBatches, eventBatch2...)
-	return c.reapplyEvents(eventBatches)
+	return c.ReapplyEvents(eventBatches)
 }
 
-func (c *workflowExecutionContextImpl) reapplyEvents(
+func (c *contextImpl) ReapplyEvents(
 	eventBatches []*persistence.WorkflowEvents,
 ) error {
 

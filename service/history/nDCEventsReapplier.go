@@ -31,13 +31,14 @@ import (
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/service/history/execution"
 )
 
 type (
 	nDCEventsReapplier interface {
 		reapplyEvents(
 			ctx ctx.Context,
-			msBuilder mutableState,
+			msBuilder execution.MutableState,
 			historyEvents []*workflow.HistoryEvent,
 			runID string,
 		) ([]*workflow.HistoryEvent, error)
@@ -62,7 +63,7 @@ func newNDCEventsReapplier(
 
 func (r *nDCEventsReapplierImpl) reapplyEvents(
 	ctx ctx.Context,
-	msBuilder mutableState,
+	msBuilder execution.MutableState,
 	historyEvents []*workflow.HistoryEvent,
 	runID string,
 ) ([]*workflow.HistoryEvent, error) {

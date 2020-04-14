@@ -29,6 +29,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -42,19 +43,19 @@ type (
 			replayEventID int64,
 			info *persistence.WorkflowExecutionInfo,
 			updateCondition int64,
-		) (mutableState, error)
+		) (execution.MutableState, error)
 	}
 
 	conflictResolverImpl struct {
 		shard           shard.Context
 		clusterMetadata cluster.Metadata
-		context         workflowExecutionContext
+		context         execution.Context
 		historyV2Mgr    persistence.HistoryManager
 		logger          log.Logger
 	}
 )
 
-func newConflictResolver(shard shard.Context, context workflowExecutionContext, historyV2Mgr persistence.HistoryManager,
+func newConflictResolver(shard shard.Context, context execution.Context, historyV2Mgr persistence.HistoryManager,
 	logger log.Logger) *conflictResolverImpl {
 
 	return &conflictResolverImpl{
@@ -74,10 +75,10 @@ func (r *conflictResolverImpl) reset(
 	replayEventID int64,
 	info *persistence.WorkflowExecutionInfo,
 	updateCondition int64,
-) (mutableState, error) {
+) (execution.MutableState, error) {
 
-	domainID := r.context.getDomainID()
-	execution := *r.context.getExecution()
+	domainID := r.context.GetDomainID()
+	workflowExecution := *r.context.GetExecution()
 	startTime := info.StartTimestamp
 	branchToken := info.BranchToken // in 2DC world branch token is stored in execution info
 	replayNextEventID := replayEventID + 1
@@ -88,7 +89,7 @@ func (r *conflictResolverImpl) reset(
 	}
 
 	var nextPageToken []byte
-	var resetMutableStateBuilder *mutableStateBuilder
+	var resetMutableStateBuilder execution.MutableState
 	var sBuilder stateBuilder
 	var history []*shared.HistoryEvent
 	var totalSize int64
@@ -96,7 +97,7 @@ func (r *conflictResolverImpl) reset(
 	eventsToApply := replayNextEventID - common.FirstEventID
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
 		var size int
-		history, size, _, nextPageToken, err = r.getHistory(domainID, execution, common.FirstEventID, replayNextEventID, nextPageToken, branchToken)
+		history, size, _, nextPageToken, err = r.getHistory(domainID, workflowExecution, common.FirstEventID, replayNextEventID, nextPageToken, branchToken)
 		if err != nil {
 			r.logError("Conflict resolution err getting history.", err)
 			return nil, err
@@ -117,7 +118,7 @@ func (r *conflictResolverImpl) reset(
 
 		firstEvent := history[0]
 		if firstEvent.GetEventId() == common.FirstEventID {
-			resetMutableStateBuilder = newMutableStateBuilderWithReplicationState(
+			resetMutableStateBuilder = execution.NewMutableStateBuilderWithReplicationState(
 				r.shard,
 				r.shard.GetEventsCache(),
 				r.logger,
@@ -128,13 +129,13 @@ func (r *conflictResolverImpl) reset(
 				r.shard,
 				r.logger,
 				resetMutableStateBuilder,
-				func(mutableState mutableState) mutableStateTaskGenerator {
-					return newMutableStateTaskGenerator(r.shard.GetDomainCache(), r.logger, mutableState)
+				func(mutableState execution.MutableState) execution.MutableStateTaskGenerator {
+					return execution.NewMutableStateTaskGenerator(r.shard.GetDomainCache(), r.logger, mutableState)
 				},
 			)
 		}
 
-		_, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil, false)
+		_, err = sBuilder.applyEvents(domainID, requestID, workflowExecution, history, nil, false)
 		if err != nil {
 			r.logError("Conflict resolution err applying events.", err)
 			return nil, err
@@ -149,17 +150,17 @@ func (r *conflictResolverImpl) reset(
 	}
 
 	// reset branchToken to the original one(it has been set to a wrong branchToken in applyEvents for startEvent)
-	resetMutableStateBuilder.executionInfo.BranchToken = branchToken // in 2DC world branch token is stored in execution info
+	resetMutableStateBuilder.GetExecutionInfo().BranchToken = branchToken // in 2DC world branch token is stored in execution info
 
-	resetMutableStateBuilder.executionInfo.StartTimestamp = startTime
+	resetMutableStateBuilder.GetExecutionInfo().StartTimestamp = startTime
 	// the last updated time is not important here, since this should be updated with event time afterwards
-	resetMutableStateBuilder.executionInfo.LastUpdatedTimestamp = startTime
+	resetMutableStateBuilder.GetExecutionInfo().LastUpdatedTimestamp = startTime
 
 	// close the rebuild transaction on reset mutable state, since we do not want oo write the
 	// events used in the replay to be persisted again
 	_, _, err = resetMutableStateBuilder.CloseTransactionAsSnapshot(
 		startTime,
-		transactionPolicyPassive,
+		execution.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return nil, err
@@ -172,8 +173,8 @@ func (r *conflictResolverImpl) reset(
 	}
 
 	r.logger.Info("All events applied for execution.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
-	r.context.setHistorySize(totalSize)
-	if err := r.context.conflictResolveWorkflowExecution(
+	r.context.SetHistorySize(totalSize)
+	if err := r.context.ConflictResolveWorkflowExecution(
 		startTime,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		resetMutableStateBuilder,
@@ -190,7 +191,7 @@ func (r *conflictResolverImpl) reset(
 	); err != nil {
 		r.logError("Conflict resolution err reset workflow.", err)
 	}
-	return r.context.loadWorkflowExecution()
+	return r.context.LoadWorkflowExecution()
 }
 
 func (r *conflictResolverImpl) getHistory(domainID string, execution shared.WorkflowExecution, firstEventID,

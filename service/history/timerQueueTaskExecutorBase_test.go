@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/worker/archiver"
 )
@@ -48,8 +49,8 @@ type (
 
 		controller                   *gomock.Controller
 		mockShard                    *shard.TestContext
-		mockWorkflowExecutionContext *MockworkflowExecutionContext
-		mockMutableState             *MockmutableState
+		mockWorkflowExecutionContext *execution.MockContext
+		mockMutableState             *execution.MockMutableState
 
 		mockExecutionManager  *mocks.ExecutionManager
 		mockVisibilityManager *mocks.VisibilityManager
@@ -77,8 +78,8 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockWorkflowExecutionContext = NewMockworkflowExecutionContext(s.controller)
-	s.mockMutableState = NewMockmutableState(s.controller)
+	s.mockWorkflowExecutionContext = execution.NewMockContext(s.controller)
+	s.mockMutableState = execution.NewMockMutableState(s.controller)
 
 	config := config.NewForTest()
 	s.mockShard = shard.NewTestContext(
@@ -131,7 +132,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 		WorkflowId: &task.WorkflowID,
 		RunId:      &task.RunID,
 	}
-	ctx := newWorkflowExecutionContext(task.DomainID, executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
+	ctx := execution.NewContext(task.DomainID, executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
@@ -145,10 +146,10 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
-	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistence.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().LoadExecutionStats().Return(&persistence.ExecutionStats{
 		HistorySize: 1024,
 	}, nil).Times(1)
-	s.mockWorkflowExecutionContext.EXPECT().clear().Times(1)
+	s.mockWorkflowExecutionContext.EXPECT().Clear().Times(1)
 
 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil).Times(1)
@@ -170,7 +171,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
-	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistence.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().LoadExecutionStats().Return(&persistence.ExecutionStats{
 		HistorySize: 1024 * 1024 * 1024,
 	}, nil).Times(1)
 

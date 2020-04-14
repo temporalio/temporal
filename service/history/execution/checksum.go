@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package execution
 
 import (
 	"fmt"
@@ -32,7 +32,7 @@ const (
 	mutableStateChecksumPayloadV1 = 1
 )
 
-func generateMutableStateChecksum(ms mutableState) (checksum.Checksum, error) {
+func generateMutableStateChecksum(ms MutableState) (checksum.Checksum, error) {
 	payload := newMutableStateChecksumPayload(ms)
 	csum, err := checksum.GenerateCRC32(payload, mutableStateChecksumPayloadV1)
 	if err != nil {
@@ -42,7 +42,7 @@ func generateMutableStateChecksum(ms mutableState) (checksum.Checksum, error) {
 }
 
 func verifyMutableStateChecksum(
-	ms mutableState,
+	ms MutableState,
 	csum checksum.Checksum,
 ) error {
 	if csum.Version != mutableStateChecksumPayloadV1 {
@@ -52,7 +52,7 @@ func verifyMutableStateChecksum(
 	return checksum.Verify(payload, csum)
 }
 
-func newMutableStateChecksumPayload(ms mutableState) *checksumgen.MutableStateChecksumPayload {
+func newMutableStateChecksumPayload(ms MutableState) *checksumgen.MutableStateChecksumPayload {
 	executionInfo := ms.GetExecutionInfo()
 	replicationState := ms.GetReplicationState()
 	payload := &checksumgen.MutableStateChecksumPayload{

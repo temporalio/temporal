@@ -34,6 +34,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	shared "github.com/uber/cadence/.gen/go/shared"
+	execution "github.com/uber/cadence/service/history/execution"
 )
 
 // MocknDCEventsReapplier is a mock of nDCEventsReapplier interface
@@ -60,7 +61,7 @@ func (m *MocknDCEventsReapplier) EXPECT() *MocknDCEventsReapplierMockRecorder {
 }
 
 // reapplyEvents mocks base method
-func (m *MocknDCEventsReapplier) reapplyEvents(ctx context.Context, msBuilder mutableState, historyEvents []*shared.HistoryEvent, runID string) ([]*shared.HistoryEvent, error) {
+func (m *MocknDCEventsReapplier) reapplyEvents(ctx context.Context, msBuilder execution.MutableState, historyEvents []*shared.HistoryEvent, runID string) ([]*shared.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "reapplyEvents", ctx, msBuilder, historyEvents, runID)
 	ret0, _ := ret[0].([]*shared.HistoryEvent)

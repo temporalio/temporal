@@ -25,11 +25,9 @@ import (
 	"fmt"
 	"math"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -46,6 +44,7 @@ import (
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -123,14 +122,13 @@ func (s *resetorSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
 		currentClusterName:   s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:                s.mockShard,
 		clusterMetadata:      s.mockClusterMetadata,
 		executionManager:     s.mockExecutionMgr,
 		historyV2Mgr:         s.mockHistoryV2Mgr,
-		historyCache:         historyCache,
+		executionCache:       execution.NewCache(s.mockShard),
 		logger:               s.logger,
 		metricsClient:        s.mockShard.GetMetricsClient(),
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
@@ -236,7 +234,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
-	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
+	compareCurrExeInfo := execution.CopyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
 		ExecutionStats: &p.ExecutionStats{},
@@ -1510,7 +1508,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
-	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
+	compareCurrExeInfo := execution.CopyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
 		ExecutionStats:   &p.ExecutionStats{},
@@ -2079,7 +2077,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.ReplicationTasks))
 	s.Equal(p.ReplicationTaskTypeHistory, resetReq.CurrentWorkflowMutation.ReplicationTasks[0].GetType())
 
-	compareRepState := copyReplicationState(forkRepState)
+	compareRepState := execution.CopyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
@@ -2815,7 +2813,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
-	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
+	compareCurrExeInfo := execution.CopyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
 		ExecutionStats:   &p.ExecutionStats{},
@@ -3370,7 +3368,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.Equal(1, len(resetReq.NewWorkflowSnapshot.ReplicationTasks))
 	s.Equal(p.ReplicationTaskTypeHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
 
-	compareRepState := copyReplicationState(forkRepState)
+	compareRepState := execution.CopyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
@@ -3492,7 +3490,7 @@ func (s *resetorSuite) TestApplyReset() {
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
-	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
+	compareCurrExeInfo := execution.CopyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
 		ExecutionStats:   &p.ExecutionStats{},
@@ -4053,7 +4051,7 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.ActivityInfos))
 	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.NewWorkflowSnapshot.ActivityInfos)
 
-	compareRepState := copyReplicationState(forkRepState)
+	compareRepState := execution.CopyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
@@ -4072,122 +4070,4 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Empty(resetReq.NewWorkflowSnapshot.SignalInfos)
 	s.Empty(resetReq.NewWorkflowSnapshot.SignalRequestedIDs)
 	s.Equal(0, len(resetReq.NewWorkflowSnapshot.RequestCancelInfos))
-}
-
-func TestFindAutoResetPoint(t *testing.T) {
-	timeSource := clock.NewRealTimeSource()
-
-	// case 1: nil
-	_, pt := FindAutoResetPoint(timeSource, nil, nil)
-	assert.Nil(t, pt)
-
-	// case 2: empty
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{}, &workflow.ResetPoints{})
-	assert.Nil(t, pt)
-
-	pt0 := &workflow.ResetPointInfo{
-		BinaryChecksum: common.StringPtr("abc"),
-		Resettable:     common.BoolPtr(true),
-	}
-	pt1 := &workflow.ResetPointInfo{
-		BinaryChecksum: common.StringPtr("def"),
-		Resettable:     common.BoolPtr(true),
-	}
-	pt3 := &workflow.ResetPointInfo{
-		BinaryChecksum: common.StringPtr("ghi"),
-		Resettable:     common.BoolPtr(false),
-	}
-
-	expiredNowNano := time.Now().UnixNano() - int64(time.Hour)
-	notExpiredNowNano := time.Now().UnixNano() + int64(time.Hour)
-	pt4 := &workflow.ResetPointInfo{
-		BinaryChecksum:   common.StringPtr("expired"),
-		Resettable:       common.BoolPtr(true),
-		ExpiringTimeNano: common.Int64Ptr(expiredNowNano),
-	}
-
-	pt5 := &workflow.ResetPointInfo{
-		BinaryChecksum:   common.StringPtr("notExpired"),
-		Resettable:       common.BoolPtr(true),
-		ExpiringTimeNano: common.Int64Ptr(notExpiredNowNano),
-	}
-
-	// case 3: two intersection
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
-			"abc": {},
-			"def": {},
-		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
-			pt0, pt1, pt3,
-		},
-	})
-	assert.Equal(t, pt.String(), pt0.String())
-
-	// case 4: one intersection
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
-			"none":    {},
-			"def":     {},
-			"expired": {},
-		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
-			pt4, pt0, pt1, pt3,
-		},
-	})
-	assert.Equal(t, pt.String(), pt1.String())
-
-	// case 4: no intersection
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
-			"none1": {},
-			"none2": {},
-		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
-			pt0, pt1, pt3,
-		},
-	})
-	assert.Nil(t, pt)
-
-	// case 5: not resettable
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
-			"none1": {},
-			"ghi":   {},
-		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
-			pt0, pt1, pt3,
-		},
-	})
-	assert.Nil(t, pt)
-
-	// case 6: one intersection of expired
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
-			"none":    {},
-			"expired": {},
-		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
-			pt0, pt1, pt3, pt4, pt5,
-		},
-	})
-	assert.Nil(t, pt)
-
-	// case 7: one intersection of not expired
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
-			"none":       {},
-			"notExpired": {},
-		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
-			pt0, pt1, pt3, pt4, pt5,
-		},
-	})
-	assert.Equal(t, pt.String(), pt5.String())
 }

@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -47,8 +48,8 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.TestContext
-		mockContext         *MockworkflowExecutionContext
-		mockMutableState    *MockmutableState
+		mockContext         *execution.MockContext
+		mockMutableState    *execution.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
@@ -73,8 +74,8 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockContext = NewMockworkflowExecutionContext(s.controller)
-	s.mockMutableState = NewMockmutableState(s.controller)
+	s.mockContext = execution.NewMockContext(s.controller)
+	s.mockMutableState = execution.NewMockMutableState(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -182,7 +183,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastWriteVersion, true).Return(nil).Times(1)
-	decisionInfo := &decisionInfo{
+	decisionInfo := &execution.DecisionInfo{
 		ScheduleID: 1234,
 		StartedID:  2345,
 	}
@@ -206,7 +207,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	s.mockContext.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
+	s.mockContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
 	ctx := ctx.Background()
 

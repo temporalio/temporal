@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -47,8 +48,8 @@ type (
 
 		controller              *gomock.Controller
 		mockShard               *shard.TestContext
-		mockBaseMutableState    *MockmutableState
-		mockRebuiltMutableState *MockmutableState
+		mockBaseMutableState    *execution.MockMutableState
+		mockRebuiltMutableState *execution.MockMutableState
 		mockTransactionMgr      *MocknDCTransactionMgr
 		mockStateBuilder        *MocknDCStateRebuilder
 
@@ -59,7 +60,7 @@ type (
 		domainName string
 		workflowID string
 		baseRunID  string
-		newContext workflowExecutionContext
+		newContext execution.Context
 		newRunID   string
 
 		nDCWorkflowResetter *nDCWorkflowResetterImpl
@@ -75,8 +76,8 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockBaseMutableState = NewMockmutableState(s.controller)
-	s.mockRebuiltMutableState = NewMockmutableState(s.controller)
+	s.mockBaseMutableState = execution.NewMockMutableState(s.controller)
+	s.mockRebuiltMutableState = execution.NewMockMutableState(s.controller)
 	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
 	s.mockStateBuilder = NewMocknDCStateRebuilder(s.controller)
 
@@ -98,7 +99,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.domainName = "some random domain name"
 	s.workflowID = "some random workflow ID"
 	s.baseRunID = uuid.New()
-	s.newContext = newWorkflowExecutionContext(
+	s.newContext = execution.NewContext(
 		s.domainID,
 		shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(s.workflowID),
@@ -196,7 +197,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	)
 	s.NoError(err)
 	s.Equal(s.mockRebuiltMutableState, rebuiltMutableState)
-	s.Equal(s.newContext.getHistorySize(), rebuiltHistorySize)
+	s.Equal(s.newContext.GetHistorySize(), rebuiltHistorySize)
 	s.True(mockBaseWorkflowReleaseFnCalled)
 }
 
