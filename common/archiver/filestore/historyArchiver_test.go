@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +36,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
@@ -67,8 +71,8 @@ type historyArchiverSuite struct {
 	container          *archiver.HistoryBootstrapContainer
 	testArchivalURI    archiver.URI
 	testGetDirectory   string
-	historyBatchesV1   []*commonproto.History
-	historyBatchesV100 []*commonproto.History
+	historyBatchesV1   []*eventpb.History
+	historyBatchesV100 []*eventpb.History
 }
 
 func TestHistoryArchiverSuite(t *testing.T) {
@@ -205,9 +209,9 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*commonproto.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -269,9 +273,9 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBatches := []*commonproto.History{
+	historyBatches := []*eventpb.History{
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -285,7 +289,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			},
 		},
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
 					Timestamp: time.Now().UnixNano(),
@@ -451,7 +455,7 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 		PageSize:             1,
 		CloseFailoverVersion: &testCloseFailoverVersion,
 	}
-	var combinedHistory []*commonproto.History
+	var combinedHistory []*eventpb.History
 
 	URI, err := archiver.NewURI("file://" + s.testGetDirectory)
 	s.NoError(err)
@@ -537,9 +541,9 @@ func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.H
 }
 
 func (s *historyArchiverSuite) setupHistoryDirectory() {
-	s.historyBatchesV1 = []*commonproto.History{
+	s.historyBatchesV1 = []*eventpb.History{
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
 					Timestamp: time.Now().UnixNano(),
@@ -549,9 +553,9 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 		},
 	}
 
-	s.historyBatchesV100 = []*commonproto.History{
+	s.historyBatchesV100 = []*eventpb.History{
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
 					Timestamp: time.Now().UnixNano(),
@@ -565,7 +569,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			},
 		},
 		{
-			Events: []*commonproto.HistoryEvent{
+			Events: []*eventpb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
 					Timestamp: time.Now().UnixNano(),
@@ -579,7 +583,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 	s.writeHistoryBatchesForGetTest(s.historyBatchesV100, testCloseFailoverVersion)
 }
 
-func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*commonproto.History, version int64) {
+func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*eventpb.History, version int64) {
 	data, err := encodeHistories(historyBatches)
 	s.Require().NoError(err)
 	filename := constructHistoryFilename(testNamespaceID, testWorkflowID, testRunID, version)

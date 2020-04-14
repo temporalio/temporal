@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,13 +31,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	replicationpb "go.temporal.io/temporal-proto/replication"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common"
@@ -187,16 +192,16 @@ func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Nil() {
 // test merging bad binaries
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Overriding() {
 	out := s.handler.mergeBadBinaries(
-		map[string]*commonproto.BadBinaryInfo{
+		map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason0"},
 		},
-		map[string]*commonproto.BadBinaryInfo{
+		map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason2"},
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equal(commonproto.BadBinaries{
-		Binaries: map[string]*commonproto.BadBinaryInfo{
+	assert.True(s.T(), proto.Equal(&out, &namespacepb.BadBinaries{
+		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason2", CreatedTimeNano: nowInt64},
 		},
 	}))
@@ -204,16 +209,16 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Overriding() {
 
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Adding() {
 	out := s.handler.mergeBadBinaries(
-		map[string]*commonproto.BadBinaryInfo{
+		map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason0"},
 		},
-		map[string]*commonproto.BadBinaryInfo{
+		map[string]*namespacepb.BadBinaryInfo{
 			"k1": {Reason: "reason2"},
 		}, nowInt64,
 	)
 
-	expected := commonproto.BadBinaries{
-		Binaries: map[string]*commonproto.BadBinaryInfo{
+	expected := namespacepb.BadBinaries{
+		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason0"},
 			"k1": {Reason: "reason2", CreatedTimeNano: nowInt64},
 		},
@@ -223,17 +228,17 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Adding() {
 
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Merging() {
 	out := s.handler.mergeBadBinaries(
-		map[string]*commonproto.BadBinaryInfo{
+		map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason0"},
 		},
-		map[string]*commonproto.BadBinaryInfo{
+		map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason1"},
 			"k1": {Reason: "reason2"},
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equal(commonproto.BadBinaries{
-		Binaries: map[string]*commonproto.BadBinaryInfo{
+	assert.True(s.T(), proto.Equal(&out, &namespacepb.BadBinaries{
+		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason1", CreatedTimeNano: nowInt64},
 			"k1": {Reason: "reason2", CreatedTimeNano: nowInt64},
 		},
@@ -243,14 +248,14 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Merging() {
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Nil() {
 	out := s.handler.mergeBadBinaries(
 		nil,
-		map[string]*commonproto.BadBinaryInfo{
+		map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason1"},
 			"k1": {Reason: "reason2"},
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equal(commonproto.BadBinaries{
-		Binaries: map[string]*commonproto.BadBinaryInfo{
+	assert.True(s.T(), proto.Equal(&out, &namespacepb.BadBinaries{
+		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason1", CreatedTimeNano: nowInt64},
 			"k1": {Reason: "reason2", CreatedTimeNano: nowInt64},
 		},
@@ -266,10 +271,10 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	data1 := map[string]string{"some random key 1": "some random value 1"}
 	isGlobalNamespace1 := false
 	activeClusterName1 := s.ClusterMetadata.GetCurrentClusterName()
-	var cluster1 []*commonproto.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
-		cluster1 = append(cluster1, &commonproto.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+	var cluster1 []*replicationpb.ClusterReplicationConfiguration
+	for _, name := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+		cluster1 = append(cluster1, &replicationpb.ClusterReplicationConfiguration{
+			ClusterName: name,
 		})
 	}
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
@@ -292,12 +297,12 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	data2 := map[string]string{"some random key 2": "some random value 2"}
 	isGlobalNamespace2 := true
 	activeClusterName2 := ""
-	var cluster2 []*commonproto.ClusterReplicationConfiguration
+	var cluster2 []*replicationpb.ClusterReplicationConfiguration
 	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 		if clusterName != s.ClusterMetadata.GetCurrentClusterName() {
 			activeClusterName2 = clusterName
 		}
-		cluster2 = append(cluster2, &commonproto.ClusterReplicationConfiguration{
+		cluster2 = append(cluster2, &replicationpb.ClusterReplicationConfiguration{
 			ClusterName: clusterName,
 		})
 	}
@@ -336,24 +341,24 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	delete(namespaces, common.SystemLocalNamespace)
 	s.Equal(map[string]*workflowservice.DescribeNamespaceResponse{
 		namespace1: &workflowservice.DescribeNamespaceResponse{
-			NamespaceInfo: &commonproto.NamespaceInfo{
+			NamespaceInfo: &namespacepb.NamespaceInfo{
 				Name:        namespace1,
-				Status:      enums.NamespaceStatusRegistered,
+				Status:      namespacepb.NamespaceStatus_Registered,
 				Description: description1,
 				OwnerEmail:  email1,
 				Data:        data1,
 				Id:          "",
 			},
-			Configuration: &commonproto.NamespaceConfiguration{
+			Configuration: &namespacepb.NamespaceConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention1,
 				EmitMetric:                             &types.BoolValue{Value: emitMetric1},
-				HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
+				HistoryArchivalStatus:                  namespacepb.ArchivalStatus_Disabled,
 				HistoryArchivalURI:                     "",
-				VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
+				VisibilityArchivalStatus:               namespacepb.ArchivalStatus_Disabled,
 				VisibilityArchivalURI:                  "",
-				BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
+				BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},
-			ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+			ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 				ActiveClusterName: activeClusterName1,
 				Clusters:          cluster1,
 			},
@@ -361,24 +366,24 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			IsGlobalNamespace: isGlobalNamespace1,
 		},
 		namespace2: &workflowservice.DescribeNamespaceResponse{
-			NamespaceInfo: &commonproto.NamespaceInfo{
+			NamespaceInfo: &namespacepb.NamespaceInfo{
 				Name:        namespace2,
-				Status:      enums.NamespaceStatusRegistered,
+				Status:      namespacepb.NamespaceStatus_Registered,
 				Description: description2,
 				OwnerEmail:  email2,
 				Data:        data2,
 				Id:          "",
 			},
-			Configuration: &commonproto.NamespaceConfiguration{
+			Configuration: &namespacepb.NamespaceConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention2,
 				EmitMetric:                             &types.BoolValue{Value: emitMetric2},
-				HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
+				HistoryArchivalStatus:                  namespacepb.ArchivalStatus_Disabled,
 				HistoryArchivalURI:                     "",
-				VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
+				VisibilityArchivalStatus:               namespacepb.ArchivalStatus_Disabled,
 				VisibilityArchivalURI:                  "",
-				BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
+				BadBinaries:                            &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 			},
-			ReplicationConfiguration: &commonproto.NamespaceReplicationConfiguration{
+			ReplicationConfiguration: &replicationpb.NamespaceReplicationConfiguration{
 				ActiveClusterName: activeClusterName2,
 				Clusters:          cluster2,
 			},
@@ -414,7 +419,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 
 	updateRequest := &workflowservice.UpdateNamespaceRequest{
 		Name: namespace,
-		Configuration: &commonproto.NamespaceConfiguration{
+		Configuration: &namespacepb.NamespaceConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: int32(-1),
 		},
 	}

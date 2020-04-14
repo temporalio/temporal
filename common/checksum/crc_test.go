@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +33,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	commonproto "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common"
 )
@@ -39,8 +43,8 @@ func TestCRC32OverThrift(t *testing.T) {
 	// iteration order is not guaranteed in Go and
 	// so, each call to thrift encode will result in
 	// different set of serialized bytes
-	obj := &commonproto.WorkflowExecutionInfo{
-		Execution: &commonproto.WorkflowExecution{
+	obj := &executionpb.WorkflowExecutionInfo{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: uuid.New(),
 			RunId:      uuid.New(),
 		},

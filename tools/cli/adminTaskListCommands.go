@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,8 +32,7 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 )
 
@@ -38,16 +41,16 @@ func AdminDescribeTaskList(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	taskList := getRequiredOption(c, FlagTaskList)
-	taskListType := enums.TaskListTypeDecision
+	taskListType := tasklistpb.TaskListType_Decision
 	if strings.ToLower(c.String(FlagTaskListType)) == "activity" {
-		taskListType = enums.TaskListTypeActivity
+		taskListType = tasklistpb.TaskListType_Activity
 	}
 
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &workflowservice.DescribeTaskListRequest{
 		Namespace:             namespace,
-		TaskList:              &commonproto.TaskList{Name: taskList},
+		TaskList:              &tasklistpb.TaskList{Name: taskList},
 		TaskListType:          taskListType,
 		IncludeTaskListStatus: true,
 	}
@@ -71,7 +74,7 @@ func AdminDescribeTaskList(c *cli.Context) {
 	printPollerInfo(pollers, taskListType)
 }
 
-func printTaskListStatus(taskListStatus *commonproto.TaskListStatus) {
+func printTaskListStatus(taskListStatus *tasklistpb.TaskListStatus) {
 	taskIDBlock := taskListStatus.GetTaskIdBlock()
 
 	table := tablewriter.NewWriter(os.Stdout)
@@ -88,11 +91,11 @@ func printTaskListStatus(taskListStatus *commonproto.TaskListStatus) {
 	table.Render()
 }
 
-func printPollerInfo(pollers []*commonproto.PollerInfo, taskListType enums.TaskListType) {
+func printPollerInfo(pollers []*tasklistpb.PollerInfo, taskListType tasklistpb.TaskListType) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	if taskListType == enums.TaskListTypeActivity {
+	if taskListType == tasklistpb.TaskListType_Activity {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
 		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})

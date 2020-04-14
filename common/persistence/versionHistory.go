@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,9 +28,9 @@ import (
 	"bytes"
 	"fmt"
 
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -49,7 +53,7 @@ func NewVersionHistoryItem(
 
 // NewVersionHistoryItemFromProto create a new version history item from thrift object
 func NewVersionHistoryItemFromProto(
-	input *commonproto.VersionHistoryItem,
+	input *eventgenpb.VersionHistoryItem,
 ) *VersionHistoryItem {
 
 	if input == nil {
@@ -66,9 +70,9 @@ func (item *VersionHistoryItem) Duplicate() *VersionHistoryItem {
 }
 
 // ToProto returns proto format of version history item
-func (item *VersionHistoryItem) ToProto() *commonproto.VersionHistoryItem {
+func (item *VersionHistoryItem) ToProto() *eventgenpb.VersionHistoryItem {
 
-	return &commonproto.VersionHistoryItem{
+	return &eventgenpb.VersionHistoryItem{
 		EventId: item.EventID,
 		Version: item.Version,
 	}
@@ -113,7 +117,7 @@ func NewVersionHistory(
 
 // NewVersionHistoryFromProto create a new version history from thrift object
 func NewVersionHistoryFromProto(
-	input *commonproto.VersionHistory,
+	input *eventgenpb.VersionHistory,
 ) *VersionHistory {
 
 	if input == nil {
@@ -134,16 +138,16 @@ func (v *VersionHistory) Duplicate() *VersionHistory {
 }
 
 // ToProto returns proto format of version history
-func (v *VersionHistory) ToProto() *commonproto.VersionHistory {
+func (v *VersionHistory) ToProto() *eventgenpb.VersionHistory {
 
 	token := make([]byte, len(v.BranchToken))
 	copy(token, v.BranchToken)
-	var items []*commonproto.VersionHistoryItem
+	var items []*eventgenpb.VersionHistoryItem
 	for _, item := range v.Items {
 		items = append(items, item.ToProto())
 	}
 
-	pHistory := &commonproto.VersionHistory{
+	pHistory := &eventgenpb.VersionHistory{
 		BranchToken: token,
 		Items:       items,
 	}
@@ -379,7 +383,7 @@ func NewVersionHistories(
 
 // NewVersionHistoriesFromProto create a new version histories from thrift object
 func NewVersionHistoriesFromProto(
-	input *commonproto.VersionHistories,
+	input *eventgenpb.VersionHistories,
 ) *VersionHistories {
 
 	if input == nil {
@@ -422,15 +426,15 @@ func (h *VersionHistories) Duplicate() *VersionHistories {
 }
 
 // ToProto return thrift format of version histories
-func (h *VersionHistories) ToProto() *commonproto.VersionHistories {
+func (h *VersionHistories) ToProto() *eventgenpb.VersionHistories {
 
 	currentVersionHistoryIndex := h.CurrentVersionHistoryIndex
-	var histories []*commonproto.VersionHistory
+	var histories []*eventgenpb.VersionHistory
 	for _, history := range h.Histories {
 		histories = append(histories, history.ToProto())
 	}
 
-	return &commonproto.VersionHistories{
+	return &eventgenpb.VersionHistories{
 		CurrentVersionHistoryIndex: int32(currentVersionHistoryIndex),
 		Histories:                  histories,
 	}

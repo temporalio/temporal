@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,8 +34,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -271,7 +275,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockMutableState.EXPECT().AddDecisionTaskFailedEvent(
 		inFlightDecision.ScheduleID,
 		inFlightDecision.StartedID,
-		enums.DecisionTaskFailedCauseFailoverCloseDecision,
+		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
 		[]byte(nil),
 		identityHistoryService,
 		"",
@@ -279,12 +283,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 		"",
 		"",
 		int64(0),
-	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
+	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
 
 	s.mockMutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		lastEventID+1, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity,
-	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
+	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(1)
@@ -308,7 +312,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		RunID:           s.runID,
 		LastEventTaskID: lastEventTaskID,
 		State:           persistence.WorkflowStateRunning,
-		Status:          enums.WorkflowExecutionStatusRunning,
+		Status:          executionpb.WorkflowExecutionStatus_Running,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	nDCWorkflow := newNDCWorkflow(
@@ -355,5 +359,5 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
 	s.Equal(persistence.WorkflowStateZombie, executionInfo.State)
-	s.EqualValues(enums.WorkflowExecutionStatusRunning, executionInfo.Status)
+	s.EqualValues(executionpb.WorkflowExecutionStatus_Running, executionInfo.Status)
 }

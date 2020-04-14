@@ -1,6 +1,8 @@
-// The MIT License (MIT)
+// The MIT License
 //
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -9,23 +11,23 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 
 package history
 
 import (
 	"sync"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -45,10 +47,10 @@ type (
 		getFailedIDs() []string
 
 		getQueryTermCh(string) (<-chan struct{}, error)
-		getQueryInput(string) (*commonproto.WorkflowQuery, error)
+		getQueryInput(string) (*querypb.WorkflowQuery, error)
 		getTerminationState(string) (*queryTerminationState, error)
 
-		bufferQuery(queryInput *commonproto.WorkflowQuery) (string, <-chan struct{})
+		bufferQuery(queryInput *querypb.WorkflowQuery) (string, <-chan struct{})
 		setTerminationState(string, *queryTerminationState) error
 		removeQuery(id string)
 	}
@@ -130,7 +132,7 @@ func (r *queryRegistryImpl) getQueryTermCh(id string) (<-chan struct{}, error) {
 	return q.getQueryTermCh(), nil
 }
 
-func (r *queryRegistryImpl) getQueryInput(id string) (*commonproto.WorkflowQuery, error) {
+func (r *queryRegistryImpl) getQueryInput(id string) (*querypb.WorkflowQuery, error) {
 	r.RLock()
 	defer r.RUnlock()
 	q, err := r.getQueryNoLock(id)
@@ -150,7 +152,7 @@ func (r *queryRegistryImpl) getTerminationState(id string) (*queryTerminationSta
 	return q.getTerminationState()
 }
 
-func (r *queryRegistryImpl) bufferQuery(queryInput *commonproto.WorkflowQuery) (string, <-chan struct{}) {
+func (r *queryRegistryImpl) bufferQuery(queryInput *querypb.WorkflowQuery) (string, <-chan struct{}) {
 	r.Lock()
 	defer r.Unlock()
 	q := newQuery(queryInput)

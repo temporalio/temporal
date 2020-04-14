@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -31,9 +35,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -150,13 +156,13 @@ func (s *engine3Suite) TearDownTest() {
 
 func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&p.NamespaceInfo{ID: testNamespaceID}, &p.NamespaceConfig{Retention: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
 	namespaceID := testNamespaceID
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -190,7 +196,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
-			TaskList: &commonproto.TaskList{
+			TaskList: &tasklistpb.TaskList{
 				Name: stickyTl,
 			},
 			Identity: identity,
@@ -208,9 +214,9 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt
-	expectedResponse.WorkflowExecutionTaskList = &commonproto.TaskList{
+	expectedResponse.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: enums.TaskListKindNormal,
+		Kind: tasklistpb.TaskListKind_Normal,
 	}
 	expectedResponse.BranchToken = msBuilder.GetExecutionInfo().BranchToken
 
@@ -219,13 +225,13 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	s.NotNil(response)
 	expectedResponse.StartedTimestamp = response.StartedTimestamp
 	expectedResponse.ScheduledTimestamp = 0
-	expectedResponse.Queries = make(map[string]*commonproto.WorkflowQuery)
+	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
 
 func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&p.NamespaceInfo{ID: testNamespaceID}, &p.NamespaceConfig{Retention: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -245,8 +251,8 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,
@@ -259,7 +265,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&p.NamespaceInfo{ID: testNamespaceID}, &p.NamespaceConfig{Retention: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -305,7 +311,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&p.NamespaceInfo{ID: testNamespaceID}, &p.NamespaceConfig{Retention: 1}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID}, &persistenceblobs.NamespaceConfig{RetentionDays: 1}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -327,8 +333,8 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			Namespace:                           namespaceID,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: taskList},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			ExecutionStartToCloseTimeoutSeconds: 1,
 			TaskStartToCloseTimeoutSeconds:      2,
 			Identity:                            identity,

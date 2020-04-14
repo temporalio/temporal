@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,8 +33,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -194,7 +197,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockMutableState.EXPECT().AddDecisionTaskFailedEvent(
 		decisionInfo.ScheduleID,
 		decisionInfo.StartedID,
-		enums.DecisionTaskFailedCauseFailoverCloseDecision,
+		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
 		[]byte(nil),
 		identityHistoryService,
 		"",
@@ -202,7 +205,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 		"",
 		"",
 		int64(0),
-	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
+	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()

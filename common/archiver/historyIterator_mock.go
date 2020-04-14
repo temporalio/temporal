@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +33,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 
-	archiver "github.com/temporalio/temporal/.gen/proto/archiver"
+	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
 )
 
 // MockHistoryIterator is a mock of HistoryIterator interface
@@ -56,10 +60,10 @@ func (m *MockHistoryIterator) EXPECT() *MockHistoryIteratorMockRecorder {
 }
 
 // Next mocks base method
-func (m *MockHistoryIterator) Next() (*archiver.HistoryBlob, error) {
+func (m *MockHistoryIterator) Next() (*archivergenpb.HistoryBlob, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Next")
-	ret0, _ := ret[0].(*archiver.HistoryBlob)
+	ret0, _ := ret[0].(*archivergenpb.HistoryBlob)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

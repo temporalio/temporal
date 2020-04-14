@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,8 +30,8 @@ import (
 	"time"
 
 	"go.temporal.io/temporal"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
@@ -193,10 +197,10 @@ func triggerResetActivity(ctx context.Context, namespace string, baseWE workflow
 		return workflow.Execution{}, err
 	}
 	for _, event := range events {
-		if event.GetEventType() == enums.EventTypeDecisionTaskCompleted {
+		if event.GetEventType() == eventpb.EventType_DecisionTaskCompleted {
 			resetEventID = event.GetEventId()
 		}
-		if event.GetEventType() == enums.EventTypeSignalExternalWorkflowExecutionInitiated {
+		if event.GetEventType() == eventpb.EventType_SignalExternalWorkflowExecutionInitiated {
 			seenTrigger = true
 			break
 		}
@@ -208,7 +212,7 @@ func triggerResetActivity(ctx context.Context, namespace string, baseWE workflow
 
 	req := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: baseWE.ID,
 			RunId:      baseWE.RunID,
 		},
@@ -229,7 +233,7 @@ func verifyResetActivity(ctx context.Context, namespace string, newWE workflow.E
 
 	resp, err := svClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: newWE.ID,
 			RunId:      newWE.RunID,
 		},
@@ -237,7 +241,7 @@ func verifyResetActivity(ctx context.Context, namespace string, newWE workflow.E
 	if err != nil {
 		return err
 	}
-	if resp.WorkflowExecutionInfo.GetStatus() == enums.WorkflowExecutionStatusRunning || resp.WorkflowExecutionInfo.GetStatus() != enums.WorkflowExecutionStatusCompleted {
+	if resp.WorkflowExecutionInfo.GetStatus() == executionpb.WorkflowExecutionStatus_Running || resp.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatus_Completed {
 		return fmt.Errorf("new execution triggered by reset is not completed")
 	}
 	return nil

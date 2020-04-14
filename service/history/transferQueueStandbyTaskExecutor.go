@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,8 +27,8 @@ package history
 import (
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -177,7 +181,7 @@ func (t *transferQueueStandbyTaskExecutor) processDecisionTask(
 		if decisionInfo.StartedID == common.EmptyEventID {
 			return newPushDecisionToMatchingInfo(
 				decisionTimeout,
-				commonproto.TaskList{Name: transferTask.TaskList},
+				tasklistpb.TaskList{Name: transferTask.TaskList},
 			), nil
 		}
 

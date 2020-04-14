@@ -1,6 +1,8 @@
-// The MIT License (MIT)
+// The MIT License
 //
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -9,16 +11,16 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 
 package history
 
@@ -28,8 +30,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	querypb "go.temporal.io/temporal-proto/query"
 )
 
 type QueryRegistrySuite struct {
@@ -50,7 +51,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	ids := make([]string, 100, 100)
 	termChans := make([]<-chan struct{}, 100, 100)
 	for i := 0; i < 100; i++ {
-		ids[i], termChans[i] = qr.bufferQuery(&commonproto.WorkflowQuery{})
+		ids[i], termChans[i] = qr.bufferQuery(&querypb.WorkflowQuery{})
 	}
 	s.assertBufferedState(qr, ids...)
 	s.assertHasQueries(qr, true, false, false, false)
@@ -60,8 +61,8 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	for i := 0; i < 25; i++ {
 		err := qr.setTerminationState(ids[i], &queryTerminationState{
 			queryTerminationType: queryTerminationTypeCompleted,
-			queryResult: &commonproto.WorkflowQueryResult{
-				ResultType: enums.QueryResultTypeAnswered,
+			queryResult: &querypb.WorkflowQueryResult{
+				ResultType: querypb.QueryResultType_Answered,
 				Answer:     []byte{1, 2, 3},
 			},
 		})
@@ -109,7 +110,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 		case 0:
 			s.Equal(errQueryNotExists, qr.setTerminationState(ids[i], &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult:          &commonproto.WorkflowQueryResult{},
+				queryResult:          &querypb.WorkflowQueryResult{},
 			}))
 		case 1:
 			s.Equal(errQueryNotExists, qr.setTerminationState(ids[i], &queryTerminationState{

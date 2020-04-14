@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,12 +32,12 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -134,19 +138,19 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: commonproto.WorkflowExecution{
+		Execution: executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
-		&persistence.NamespaceConfig{Retention: 1},
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
+		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 		1234,
@@ -178,7 +182,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -188,13 +192,13 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
-		&persistence.NamespaceConfig{Retention: 1},
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
+		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 		version,
@@ -226,7 +230,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -238,13 +242,13 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
-		&persistence.NamespaceConfig{Retention: 1},
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
+		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 		version,
@@ -276,7 +280,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -328,23 +332,23 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
-		&persistence.NamespaceConfig{Retention: 1},
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
+		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 		version,
 		nil,
 	), nil).AnyTimes()
 
-	s.mockProducer.On("Publish", &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
+	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
+		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
 				WorkflowId:         workflowID,
 				RunId:              runID,
@@ -389,7 +393,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		namespaceID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -441,22 +445,22 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: namespaceID, Name: namespace},
-		&persistence.NamespaceConfig{Retention: 1},
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
+		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 		version,
 		nil,
 	), nil).AnyTimes()
-	s.mockProducer.On("Publish", &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
+	s.mockProducer.On("Publish", &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
+		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId:        namespaceID,
 				WorkflowId:         workflowID,
 				RunId:              runID,
@@ -496,11 +500,11 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 		ShardID:       &shardID,
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*commonproto.HistoryEvent{
+		HistoryEvents: []*eventpb.HistoryEvent{
 			{
 				EventId: int64(1),
-				// EventType:  enums.EventTypeWorkflowExecutionStarted,
-				// Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{}},
+				// EventType:  eventpb.EventType_WorkflowExecutionStarted,
+				// Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 			},
 		},
 		NextPageToken:    []byte{},

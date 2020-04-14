@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,10 +31,9 @@ import (
 
 	"github.com/urfave/cli"
 
-	"go.temporal.io/temporal-proto/enums"
-
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/collection"
@@ -84,7 +87,7 @@ func AdminGetDLQMessages(c *cli.Context) {
 			ErrorAndExit(fmt.Sprintf("fail to read dlq message. Last read message id: %v", lastReadMessageID), err)
 		}
 
-		task := item.(*replication.ReplicationTask)
+		task := item.(*replicationgenpb.ReplicationTask)
 		encoder := codec.NewJSONPBIndentEncoder(" ")
 		taskStr, err := encoder.Encode(task)
 		if err != nil {
@@ -159,16 +162,16 @@ func AdminMergeDLQMessages(c *cli.Context) {
 	fmt.Println("Successfully merged all messages.")
 }
 
-func toQueueType(dlqType string) enums.DLQType {
+func toQueueType(dlqType string) commongenpb.DLQType {
 	switch dlqType {
 	case "namespace":
-		return enums.DLQTypeNamespace
+		return commongenpb.DLQType_Namespace
 	case "history":
-		return enums.DLQTypeReplication
+		return commongenpb.DLQType_Replication
 	default:
 		ErrorAndExit("The queue type is not supported.", fmt.Errorf("the queue type is not supported. Type: %v", dlqType))
 	}
-	return enums.DLQTypeNamespace
+	return commongenpb.DLQType_Namespace
 }
 
 func confirmOrExit(message string) {

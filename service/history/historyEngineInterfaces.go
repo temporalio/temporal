@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +30,7 @@ import (
 	"github.com/gogo/protobuf/types"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/persistence"
@@ -51,11 +55,11 @@ type (
 			ctx context.Context,
 			pollingCluster string,
 			lastReadTaskID int64,
-		) (*replication.ReplicationMessages, error)
+		) (*replicationgenpb.ReplicationMessages, error)
 		getTask(
 			ctx context.Context,
-			taskInfo *replication.ReplicationTaskInfo,
-		) (*replication.ReplicationTask, error)
+			taskInfo *replicationgenpb.ReplicationTaskInfo,
+		) (*replicationgenpb.ReplicationTask, error)
 	}
 
 	queueAckMgr interface {

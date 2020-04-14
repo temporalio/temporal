@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,6 +25,7 @@
 package common
 
 import (
+	"math"
 	"time"
 )
 
@@ -58,4 +63,14 @@ func StringPtr(v string) *string {
 func TimeNowNanosPtr() *int64 {
 	v := time.Now().UnixNano()
 	return &v
+}
+
+// Int32Ceil return the int32 ceil of a float64
+func Int32Ceil(v float64) int32 {
+	return int32(math.Ceil(v))
+}
+
+// Int64Ceil return the int64 ceil of a float64
+func Int64Ceil(v float64) int64 {
+	return int64(math.Ceil(v))
 }

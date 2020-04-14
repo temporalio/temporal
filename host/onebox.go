@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,11 +30,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
-	"go.temporal.io/temporal-proto/enums"
-	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"
 	"google.golang.org/grpc"
@@ -700,26 +701,8 @@ func (c *cadenceImpl) startWorkerIndexer(params *resource.BootstrapParams, servi
 }
 
 func (c *cadenceImpl) createSystemNamespace() error {
-
-	_, err := c.metadataMgr.CreateNamespace(&persistence.CreateNamespaceRequest{
-		Info: &persistence.NamespaceInfo{
-			ID:          uuid.New(),
-			Name:        "temporal-system",
-			Status:      persistence.NamespaceStatusRegistered,
-			Description: "Cadence system namespace",
-		},
-		Config: &persistence.NamespaceConfig{
-			Retention:                1,
-			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
-			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
-		},
-		ReplicationConfig: &persistence.NamespaceReplicationConfig{},
-		FailoverVersion:   common.EmptyVersion,
-	})
+	err := c.metadataMgr.InitializeSystemNamespaces(c.clusterMetadata.GetCurrentClusterName())
 	if err != nil {
-		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); ok {
-			return nil
-		}
 		return fmt.Errorf("failed to create temporal-system namespace: %v", err)
 	}
 	return nil

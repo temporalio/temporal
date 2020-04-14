@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +30,7 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
@@ -95,7 +99,7 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 			Memo:          p.NewDataBlob([]byte(source[definition.Memo].(string)), common.EncodingType(source[definition.Encoding].(string))),
 		}
 		record.CloseTime = time.Unix(0, closeTime)
-		statusEnum := enums.WorkflowExecutionStatus(status)
+		statusEnum := executionpb.WorkflowExecutionStatus(status)
 		record.Status = &statusEnum
 		record.HistoryLength = historyLen
 	}

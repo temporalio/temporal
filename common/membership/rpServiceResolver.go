@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -314,14 +318,14 @@ func BuildBroadcastHostPort(listenerPeerInfo tchannel.LocalPeerInfo, broadcastAd
 		return "", ringpop.ErrEphemeralAddress
 	}
 
+	// Parse listener hostport
+	listenerIpString, port, err := net.SplitHostPort(listenerPeerInfo.HostPort)
+	if err != nil {
+		return "", err
+	}
+
 	// Broadcast IP override
 	if broadcastAddress != "" {
-		// Parse listener hostport
-		_, port, err := net.SplitHostPort(listenerPeerInfo.HostPort)
-		if err != nil {
-			return "", err
-		}
-
 		// Parse supplied broadcastAddress override
 		ip := net.ParseIP(broadcastAddress)
 		if ip == nil || ip.To4() == nil {
@@ -330,6 +334,15 @@ func BuildBroadcastHostPort(listenerPeerInfo tchannel.LocalPeerInfo, broadcastAd
 
 		// If no errors, use the parsed IP with the port from our listener
 		return ip.To4().String() + ":" + port, nil
+	}
+
+	listenerIp := net.ParseIP(listenerIpString)
+	if listenerIp == nil {
+		return "", errors.New("unable to parse listenerIp")
+	}
+
+	if listenerIp.IsUnspecified() {
+		return "", errors.New("broadcastAddress required when listening on all interfaces (0.0.0.0/[::])")
 	}
 
 	return listenerPeerInfo.HostPort, nil

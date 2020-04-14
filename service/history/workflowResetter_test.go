@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,8 +32,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -179,7 +182,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		WorkflowID:  s.workflowID,
 		RunID:       s.resetRunID,
 		BranchToken: []byte("some random reset branch token"),
-		Events: []*commonproto.HistoryEvent{{
+		Events: []*eventpb.HistoryEvent{{
 			EventId: 123,
 		}},
 	}}
@@ -291,7 +294,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 			Details:  activity1.Details,
 			Identity: activity1.StartedIdentity,
 		},
-	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
+	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 
 	err := s.workflowResetter.failInflightActivity(mutableState, terminateReason)
 	s.NoError(err)
@@ -334,7 +337,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	mutableState.EXPECT().AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
 		decision.StartedID,
-		enums.DecisionTaskFailedCauseForceCloseDecision,
+		eventpb.DecisionTaskFailedCause_ForceCloseDecision,
 		([]byte)(nil),
 		identityHistoryService,
 		"",
@@ -342,14 +345,14 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		"",
 		"",
 		int64(0),
-	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
+	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 	mutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
 	mutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		nextEventID,
 		terminateReason,
 		([]byte)(nil),
 		identityHistoryService,
-	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
+	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 
 	err := s.workflowResetter.terminateWorkflow(mutableState, terminateReason)
 	s.NoError(err)
@@ -366,56 +369,56 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	newNextEventID := int64(6)
 	newBranchToken := []byte("some random new branch token")
 
-	baseEvent1 := &commonproto.HistoryEvent{
+	baseEvent1 := &eventpb.HistoryEvent{
 		EventId:    124,
-		EventType:  enums.EventTypeDecisionTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskScheduled,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
 	}
-	baseEvent2 := &commonproto.HistoryEvent{
+	baseEvent2 := &eventpb.HistoryEvent{
 		EventId:    125,
-		EventType:  enums.EventTypeDecisionTaskStarted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskStarted,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{}},
 	}
-	baseEvent3 := &commonproto.HistoryEvent{
+	baseEvent3 := &eventpb.HistoryEvent{
 		EventId:    126,
-		EventType:  enums.EventTypeDecisionTaskCompleted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskCompleted,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{}},
 	}
-	baseEvent4 := &commonproto.HistoryEvent{
+	baseEvent4 := &eventpb.HistoryEvent{
 		EventId:   127,
-		EventType: enums.EventTypeWorkflowExecutionContinuedAsNew,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &commonproto.WorkflowExecutionContinuedAsNewEventAttributes{
+		EventType: eventpb.EventType_WorkflowExecutionContinuedAsNew,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
 			NewExecutionRunId: newRunID,
 		}},
 	}
 
-	newEvent1 := &commonproto.HistoryEvent{
+	newEvent1 := &eventpb.HistoryEvent{
 		EventId:    1,
-		EventType:  enums.EventTypeWorkflowExecutionStarted,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{}},
+		EventType:  eventpb.EventType_WorkflowExecutionStarted,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 	}
-	newEvent2 := &commonproto.HistoryEvent{
+	newEvent2 := &eventpb.HistoryEvent{
 		EventId:    2,
-		EventType:  enums.EventTypeDecisionTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskScheduled,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
 	}
-	newEvent3 := &commonproto.HistoryEvent{
+	newEvent3 := &eventpb.HistoryEvent{
 		EventId:    3,
-		EventType:  enums.EventTypeDecisionTaskStarted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskStarted,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{}},
 	}
-	newEvent4 := &commonproto.HistoryEvent{
+	newEvent4 := &eventpb.HistoryEvent{
 		EventId:    4,
-		EventType:  enums.EventTypeDecisionTaskCompleted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskCompleted,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{}},
 	}
-	newEvent5 := &commonproto.HistoryEvent{
+	newEvent5 := &eventpb.HistoryEvent{
 		EventId:    5,
-		EventType:  enums.EventTypeWorkflowExecutionFailed,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &commonproto.WorkflowExecutionFailedEventAttributes{}},
+		EventType:  eventpb.EventType_WorkflowExecutionFailed,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &eventpb.WorkflowExecutionFailedEventAttributes{}},
 	}
 
-	baseEvents := []*commonproto.HistoryEvent{baseEvent1, baseEvent2, baseEvent3, baseEvent4}
+	baseEvents := []*eventpb.HistoryEvent{baseEvent1, baseEvent2, baseEvent3, baseEvent4}
 	shardId := s.mockShard.GetShardID()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   baseBranchToken,
@@ -425,11 +428,11 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       []*commonproto.History{{Events: baseEvents}},
+		History:       []*eventpb.History{{Events: baseEvents}},
 		NextPageToken: nil,
 	}, nil).Once()
 
-	newEvents := []*commonproto.HistoryEvent{newEvent1, newEvent2, newEvent3, newEvent4, newEvent5}
+	newEvents := []*eventpb.HistoryEvent{newEvent1, newEvent2, newEvent3, newEvent4, newEvent5}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   newBranchToken,
 		MinEventID:    newFirstEventID,
@@ -438,7 +441,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       []*commonproto.History{{Events: newEvents}},
+		History:       []*eventpb.History{{Events: newEvents}},
 		NextPageToken: nil,
 	}, nil).Once()
 
@@ -473,34 +476,34 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	branchToken := []byte("some random branch token")
 
 	newRunID := uuid.New()
-	event1 := &commonproto.HistoryEvent{
+	event1 := &eventpb.HistoryEvent{
 		EventId:    1,
-		EventType:  enums.EventTypeWorkflowExecutionStarted,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{}},
+		EventType:  eventpb.EventType_WorkflowExecutionStarted,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 	}
-	event2 := &commonproto.HistoryEvent{
+	event2 := &eventpb.HistoryEvent{
 		EventId:    2,
-		EventType:  enums.EventTypeDecisionTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskScheduled,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
 	}
-	event3 := &commonproto.HistoryEvent{
+	event3 := &eventpb.HistoryEvent{
 		EventId:    3,
-		EventType:  enums.EventTypeDecisionTaskStarted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskStarted,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{}},
 	}
-	event4 := &commonproto.HistoryEvent{
+	event4 := &eventpb.HistoryEvent{
 		EventId:    4,
-		EventType:  enums.EventTypeDecisionTaskCompleted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskCompleted,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{}},
 	}
-	event5 := &commonproto.HistoryEvent{
+	event5 := &eventpb.HistoryEvent{
 		EventId:   5,
-		EventType: enums.EventTypeWorkflowExecutionContinuedAsNew,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &commonproto.WorkflowExecutionContinuedAsNewEventAttributes{
+		EventType: eventpb.EventType_WorkflowExecutionContinuedAsNew,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
 			NewExecutionRunId: newRunID,
 		}},
 	}
-	events := []*commonproto.HistoryEvent{event1, event2, event3, event4, event5}
+	events := []*eventpb.HistoryEvent{event1, event2, event3, event4, event5}
 	shardId := s.mockShard.GetShardID()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
@@ -510,7 +513,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       []*commonproto.History{{Events: events}},
+		History:       []*eventpb.History{{Events: events}},
 		NextPageToken: nil,
 	}, nil).Once()
 
@@ -528,41 +531,41 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 
 func (s *workflowResetterSuite) TestReapplyEvents() {
 
-	event1 := &commonproto.HistoryEvent{
+	event1 := &eventpb.HistoryEvent{
 		EventId:   101,
-		EventType: enums.EventTypeWorkflowExecutionSignaled,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
 			Input:      []byte("some random signal input"),
 			Identity:   "some random signal identity",
 		}},
 	}
-	event2 := &commonproto.HistoryEvent{
+	event2 := &eventpb.HistoryEvent{
 		EventId:    102,
-		EventType:  enums.EventTypeDecisionTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskScheduled,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
 	}
-	event3 := &commonproto.HistoryEvent{
+	event3 := &eventpb.HistoryEvent{
 		EventId:   103,
-		EventType: enums.EventTypeWorkflowExecutionSignaled,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "another random signal name",
 			Input:      []byte("another random signal input"),
 			Identity:   "another random signal identity",
 		}},
 	}
-	events := []*commonproto.HistoryEvent{event1, event2, event3}
+	events := []*eventpb.HistoryEvent{event1, event2, event3}
 
 	mutableState := NewMockmutableState(s.controller)
 
 	for _, event := range events {
-		if event.GetEventType() == enums.EventTypeWorkflowExecutionSignaled {
+		if event.GetEventType() == eventpb.EventType_WorkflowExecutionSignaled {
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
 			mutableState.EXPECT().AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),
 				attr.GetInput(),
 				attr.GetIdentity(),
-			).Return(&commonproto.HistoryEvent{}, nil).Times(1)
+			).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 		}
 	}
 
@@ -575,33 +578,33 @@ func (s *workflowResetterSuite) TestPagination() {
 	nextEventID := int64(101)
 	branchToken := []byte("some random branch token")
 
-	event1 := &commonproto.HistoryEvent{
+	event1 := &eventpb.HistoryEvent{
 		EventId:    1,
-		EventType:  enums.EventTypeWorkflowExecutionStarted,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{}},
+		EventType:  eventpb.EventType_WorkflowExecutionStarted,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{}},
 	}
-	event2 := &commonproto.HistoryEvent{
+	event2 := &eventpb.HistoryEvent{
 		EventId:    2,
-		EventType:  enums.EventTypeDecisionTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskScheduled,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}},
 	}
-	event3 := &commonproto.HistoryEvent{
+	event3 := &eventpb.HistoryEvent{
 		EventId:    3,
-		EventType:  enums.EventTypeDecisionTaskStarted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskStarted,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &eventpb.DecisionTaskStartedEventAttributes{}},
 	}
-	event4 := &commonproto.HistoryEvent{
+	event4 := &eventpb.HistoryEvent{
 		EventId:    4,
-		EventType:  enums.EventTypeDecisionTaskCompleted,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{}},
+		EventType:  eventpb.EventType_DecisionTaskCompleted,
+		Attributes: &eventpb.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &eventpb.DecisionTaskCompletedEventAttributes{}},
 	}
-	event5 := &commonproto.HistoryEvent{
+	event5 := &eventpb.HistoryEvent{
 		EventId:    5,
-		EventType:  enums.EventTypeActivityTaskScheduled,
-		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
+		EventType:  eventpb.EventType_ActivityTaskScheduled,
+		Attributes: &eventpb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &eventpb.ActivityTaskScheduledEventAttributes{}},
 	}
-	history1 := []*commonproto.History{{[]*commonproto.HistoryEvent{event1, event2, event3}}}
-	history2 := []*commonproto.History{{[]*commonproto.HistoryEvent{event4, event5}}}
+	history1 := []*eventpb.History{{[]*eventpb.HistoryEvent{event1, event2, event3}}}
+	history2 := []*eventpb.History{{[]*eventpb.HistoryEvent{event4, event5}}}
 	history := append(history1, history2...)
 	pageToken := []byte("some random token")
 
@@ -634,11 +637,11 @@ func (s *workflowResetterSuite) TestPagination() {
 	paginationFn := s.workflowResetter.getPaginationFn(firstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)
 
-	var result []*commonproto.History
+	var result []*eventpb.History
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		result = append(result, item.(*commonproto.History))
+		result = append(result, item.(*eventpb.History))
 	}
 
 	s.Equal(history, result)

@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +28,7 @@ import (
 	"errors"
 	"sync/atomic"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -40,7 +44,7 @@ type (
 	}
 
 	writeTaskRequest struct {
-		execution  *commonproto.WorkflowExecution
+		execution  *executionpb.WorkflowExecution
 		taskInfo   *persistenceblobs.TaskInfo
 		responseCh chan<- *writeTaskResponse
 	}
@@ -95,7 +99,7 @@ func (w *taskWriter) isStopped() bool {
 	return atomic.LoadInt64(&w.stopped) == 1
 }
 
-func (w *taskWriter) appendTask(execution *commonproto.WorkflowExecution,
+func (w *taskWriter) appendTask(execution *executionpb.WorkflowExecution,
 	taskInfo *persistenceblobs.TaskInfo) (*persistence.CreateTasksResponse, error) {
 
 	if w.isStopped() {

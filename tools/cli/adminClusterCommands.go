@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +32,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/urfave/cli"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 )
@@ -55,8 +59,8 @@ func AdminAddSearchAttribute(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &adminservice.AddSearchAttributeRequest{
-		SearchAttribute: map[string]enums.IndexedValueType{
-			key: enums.IndexedValueType(valType),
+		SearchAttribute: map[string]commonpb.IndexedValueType{
+			key: commonpb.IndexedValueType(valType),
 		},
 		SecurityToken: c.String(FlagSecurityToken),
 	}

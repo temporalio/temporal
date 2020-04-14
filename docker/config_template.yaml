@@ -84,7 +84,7 @@ server:
     ringpop:
         name: temporal
         maxJoinDuration: 30s
-        broadcastAddress: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+        broadcastAddress: {{ default .Env.TEMPORAL_BROADCAST_ADDRESS "" }}
 
 services:
     frontend:

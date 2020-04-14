@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,10 +32,9 @@ import (
 	"time"
 
 	"github.com/olivere/elastic"
-	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/indexer"
+	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
@@ -181,21 +184,21 @@ func (p *indexProcessor) process(kafkaMsg messaging.Message) error {
 	return p.addMessageToES(indexMsg, kafkaMsg, logger)
 }
 
-func (p *indexProcessor) deserialize(payload []byte) (*indexer.Message, error) {
-	var msg indexer.Message
+func (p *indexProcessor) deserialize(payload []byte) (*indexergenpb.Message, error) {
+	var msg indexergenpb.Message
 	if err := msg.Unmarshal(payload); err != nil {
 		return nil, err
 	}
 	return &msg, nil
 }
 
-func (p *indexProcessor) addMessageToES(indexMsg *indexer.Message, kafkaMsg messaging.Message, logger log.Logger) error {
+func (p *indexProcessor) addMessageToES(indexMsg *indexergenpb.Message, kafkaMsg messaging.Message, logger log.Logger) error {
 	docID := indexMsg.GetWorkflowId() + esDocIDDelimiter + indexMsg.GetRunId()
 
 	var keyToKafkaMsg string
 	var req elastic.BulkableRequest
 	switch indexMsg.GetMessageType() {
-	case enums.MessageTypeIndex:
+	case indexergenpb.MessageType_Index:
 		keyToKafkaMsg = fmt.Sprintf("%v-%v", kafkaMsg.Partition(), kafkaMsg.Offset())
 		doc := p.generateESDoc(indexMsg, keyToKafkaMsg)
 		req = elastic.NewBulkIndexRequest().
@@ -205,7 +208,7 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexer.Message, kafkaMsg mess
 			VersionType(versionTypeExternal).
 			Version(indexMsg.GetVersion()).
 			Doc(doc)
-	case enums.MessageTypeDelete:
+	case indexergenpb.MessageType_Delete:
 		keyToKafkaMsg = docID
 		req = elastic.NewBulkDeleteRequest().
 			Index(p.esIndexName).
@@ -223,7 +226,7 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexer.Message, kafkaMsg mess
 	return nil
 }
 
-func (p *indexProcessor) generateESDoc(msg *indexer.Message, keyToKafkaMsg string) map[string]interface{} {
+func (p *indexProcessor) generateESDoc(msg *indexergenpb.Message, keyToKafkaMsg string) map[string]interface{} {
 	doc := p.dumpFieldsToMap(msg.Fields)
 	fulfillDoc(doc, msg, keyToKafkaMsg)
 	return doc
@@ -239,7 +242,7 @@ func (p *indexProcessor) decodeSearchAttrBinary(bytes []byte, key string) interf
 	return val
 }
 
-func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexer.Field) map[string]interface{} {
+func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexergenpb.Field) map[string]interface{} {
 	doc := make(map[string]interface{})
 	attr := make(map[string]interface{})
 	for k, v := range fields {
@@ -250,13 +253,13 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexer.Field) map[s
 		}
 
 		switch v.GetType() {
-		case enums.FieldTypeString:
+		case indexergenpb.FieldType_String:
 			doc[k] = v.GetStringData()
-		case enums.FieldTypeInt:
+		case indexergenpb.FieldType_Int:
 			doc[k] = v.GetIntData()
-		case enums.FieldTypeBool:
+		case indexergenpb.FieldType_Bool:
 			doc[k] = v.GetBoolData()
-		case enums.FieldTypeBinary:
+		case indexergenpb.FieldType_Binary:
 			if k == definition.Memo {
 				doc[k] = v.GetBinaryData()
 			} else { // custom search attributes
@@ -281,7 +284,7 @@ func (p *indexProcessor) isValidFieldToES(field string) bool {
 	return false
 }
 
-func fulfillDoc(doc map[string]interface{}, msg *indexer.Message, keyToKafkaMsg string) {
+func fulfillDoc(doc map[string]interface{}, msg *indexergenpb.Message, keyToKafkaMsg string) {
 	doc[definition.NamespaceID] = msg.GetNamespaceId()
 	doc[definition.WorkflowID] = msg.GetWorkflowId()
 	doc[definition.RunID] = msg.GetRunId()

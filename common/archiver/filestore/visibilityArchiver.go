@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +34,8 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
@@ -322,13 +327,13 @@ func matchQuery(record *archiverproto.ArchiveVisibilityRequest, query *parsedQue
 	return true
 }
 
-func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *commonproto.WorkflowExecutionInfo {
-	return &commonproto.WorkflowExecutionInfo{
-		Execution: &commonproto.WorkflowExecution{
+func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *executionpb.WorkflowExecutionInfo {
+	return &executionpb.WorkflowExecutionInfo{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
 			RunId:      record.GetRunId(),
 		},
-		Type: &commonproto.WorkflowType{
+		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
 		StartTime: &types.Int64Value{
@@ -339,7 +344,7 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *com
 		Status:        record.Status,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,
-		SearchAttributes: &commonproto.SearchAttributes{
+		SearchAttributes: &commonpb.SearchAttributes{
 			IndexedFields: archiver.ConvertSearchAttrToBytes(record.SearchAttributes),
 		},
 	}

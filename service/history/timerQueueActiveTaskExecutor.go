@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,9 +29,12 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -183,7 +190,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
-	isHeartBeatTask := task.TimeoutType == int32(enums.TimeoutTypeHeartbeat)
+	isHeartBeatTask := task.TimeoutType == int32(eventpb.TimeoutType_Heartbeat)
 	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
 	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTimestamp)
 	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibility <= goVisibilityTS.Unix() {
@@ -287,7 +294,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	}
 
 	scheduleDecision := false
-	switch timerTypeFromProto(enums.TimeoutType(task.TimeoutType)) {
+	switch timerTypeFromProto(eventpb.TimeoutType(task.TimeoutType)) {
 	case timerTypeStartToClose:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			mutableState.GetExecutionInfo().NamespaceID,
@@ -418,14 +425,14 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 			if err != nil {
 				return serviceerror.NewInternal("unable to re-schedule activity across namespace.")
 			}
-			targetNamespaceID = namespaceEntry.GetInfo().ID
+			targetNamespaceID = primitives.UUIDString(namespaceEntry.GetInfo().Id)
 		}
 	}
 
-	execution := &commonproto.WorkflowExecution{
+	execution := &executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      primitives.UUIDString(task.GetRunId())}
-	taskList := &commonproto.TaskList{
+	taskList := &tasklistpb.TaskList{
 		Name: activityInfo.TaskList,
 	}
 	scheduleToStartTimeout := activityInfo.ScheduleToStartTimeout
@@ -477,14 +484,14 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	timeoutReason := timerTypeToReason(timerTypeStartToClose)
 	backoffInterval := mutableState.GetRetryBackoffDuration(timeoutReason)
-	continueAsNewInitiator := enums.ContinueAsNewInitiatorRetryPolicy
+	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_Retry
 	if backoffInterval == backoff.NoBackoff {
 		// check if a cron backoff is needed
 		backoffInterval, err = mutableState.GetCronBackoffDuration()
 		if err != nil {
 			return err
 		}
-		continueAsNewInitiator = enums.ContinueAsNewInitiatorCronSchedule
+		continueAsNewInitiator = commonpb.ContinueAsNewInitiator_CronSchedule
 	}
 	if backoffInterval == backoff.NoBackoff {
 		if err := timeoutWorkflow(mutableState, eventBatchFirstEventID); err != nil {
@@ -503,7 +510,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	continueAsnewAttributes := &commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes{
+	continueAsnewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 		WorkflowType:                        startAttributes.WorkflowType,
 		TaskList:                            startAttributes.TaskList,
 		Input:                               startAttributes.Input,
@@ -533,7 +540,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		t.shard.GetTimeSource().Now(),
 		newWorkflowExecutionContext(
 			newExecutionInfo.NamespaceID,
-			commonproto.WorkflowExecution{
+			executionpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowID,
 				RunId:      newExecutionInfo.RunID,
 			},

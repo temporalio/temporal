@@ -23,10 +23,12 @@ syntax = "proto3";
 package matchingservice;
 option go_package = "github.com/temporalio/temporal/.gen/proto/matchingservice";
 
-import "enums/enums.proto";
-import "common/common.proto";
-import "common/decision.proto";
-import "common/workflow_execution.proto";
+import "common/server_enum.proto";
+import "common/message.proto";
+import "execution/message.proto";
+import "event/server_message.proto";
+import "tasklist/message.proto";
+import "query/message.proto";
 
 // TODO: remove this dependency
 import "workflowservice/request_response.proto";
@@ -40,7 +42,7 @@ message PollForDecisionTaskRequest {
 
 message PollForDecisionTaskResponse {
     bytes taskToken = 1;
-    common.WorkflowExecution workflowExecution = 2;
+    execution.WorkflowExecution workflowExecution = 2;
     common.WorkflowType workflowType = 3;
     int64 previousStartedEventId = 4;
     int64 startedEventId = 5;
@@ -48,14 +50,14 @@ message PollForDecisionTaskResponse {
     int64 nextEventId = 7;
     int64 backlogCountHint = 8;
     bool stickyExecutionEnabled = 9;
-    common.WorkflowQuery query = 10;
-    common.TransientDecisionInfo decisionInfo = 11;
-    common.TaskList workflowExecutionTaskList = 12;
+    query.WorkflowQuery query = 10;
+    event.TransientDecisionInfo decisionInfo = 11;
+    tasklist.TaskList workflowExecutionTaskList = 12;
     int32 eventStoreVersion = 13;
     bytes branchToken = 14;
     int64 scheduledTimestamp = 15;
     int64 startedTimestamp = 16;
-    map<string, common.WorkflowQuery> queries = 17;
+    map<string, query.WorkflowQuery> queries = 17;
 }
 
 message PollForActivityTaskRequest {
@@ -67,7 +69,7 @@ message PollForActivityTaskRequest {
 
 message PollForActivityTaskResponse {
     bytes taskToken = 1;
-    common.WorkflowExecution workflowExecution = 2;
+    execution.WorkflowExecution workflowExecution = 2;
     string activityId = 3;
     common.ActivityType activityType = 4;
     bytes input = 5;
@@ -86,12 +88,12 @@ message PollForActivityTaskResponse {
 
 message AddDecisionTaskRequest {
     string namespaceId = 1;
-    common.WorkflowExecution execution = 2;
-    common.TaskList taskList = 3;
+    execution.WorkflowExecution execution = 2;
+    tasklist.TaskList taskList = 3;
     int64 scheduleId = 4;
     int32 scheduleToStartTimeoutSeconds = 5;
     string forwardedFrom = 6;
-    enums.TaskSource source = 7;
+    common.TaskSource source = 7;
 }
 
 message AddDecisionTaskResponse {
@@ -99,13 +101,13 @@ message AddDecisionTaskResponse {
 
 message AddActivityTaskRequest {
     string namespaceId = 1;
-    common.WorkflowExecution execution = 2;
+    execution.WorkflowExecution execution = 2;
     string sourceNamespaceId = 3;
-    common.TaskList taskList = 4;
+    tasklist.TaskList taskList = 4;
     int64 scheduleId = 5;
     int32 scheduleToStartTimeoutSeconds = 6;
     string forwardedFrom = 7;
-    enums.TaskSource source = 8;
+    common.TaskSource source = 8;
 }
 
 message AddActivityTaskResponse {
@@ -113,19 +115,19 @@ message AddActivityTaskResponse {
 
 message QueryWorkflowRequest {
     string namespaceId = 1;
-    common.TaskList taskList = 2;
+    tasklist.TaskList taskList = 2;
     workflowservice.QueryWorkflowRequest queryRequest = 3;
     string forwardedFrom = 4;
 }
 
 message QueryWorkflowResponse {
     bytes queryResult = 1;
-    common.QueryRejected queryRejected = 2;
+    query.QueryRejected queryRejected = 2;
 }
 
 message RespondQueryTaskCompletedRequest {
     string namespaceId = 1;
-    common.TaskList taskList = 2;
+    tasklist.TaskList taskList = 2;
     string taskId = 3;
     workflowservice.RespondQueryTaskCompletedRequest completedRequest = 4;
 }
@@ -136,7 +138,7 @@ message RespondQueryTaskCompletedResponse {
 message CancelOutstandingPollRequest {
     string namespaceId = 1;
     int32 taskListType = 2;
-    common.TaskList taskList = 3;
+    tasklist.TaskList taskList = 3;
     string pollerId = 4;
 }
 
@@ -149,16 +151,16 @@ message DescribeTaskListRequest {
 }
 
 message DescribeTaskListResponse {
-    repeated common.PollerInfo pollers = 1;
-    common.TaskListStatus taskListStatus = 2;
+    repeated tasklist.PollerInfo pollers = 1;
+    tasklist.TaskListStatus taskListStatus = 2;
 }
 
 message ListTaskListPartitionsRequest {
     string namespace = 1;
-    common.TaskList taskList = 2;
+    tasklist.TaskList taskList = 2;
 }
 
 message ListTaskListPartitionsResponse {
-    repeated common.TaskListPartitionMetadata activityTaskListPartitions = 1;
-    repeated common.TaskListPartitionMetadata decisionTaskListPartitions = 2;
+    repeated tasklist.TaskListPartitionMetadata activityTaskListPartitions = 1;
+    repeated tasklist.TaskListPartitionMetadata decisionTaskListPartitions = 2;
 }

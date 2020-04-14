@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +33,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal/activity"
 
 	"go.temporal.io/temporal"
@@ -98,7 +102,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_ExpireRetryTimeout()
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
-	timeoutErr := workflow.NewTimeoutError(enums.TimeoutTypeStartToClose)
+	timeoutErr := workflow.NewTimeoutError(eventpb.TimeoutType_StartToClose)
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(timeoutErr)

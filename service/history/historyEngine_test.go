@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -33,18 +37,24 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/.gen/proto/token"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -87,35 +97,39 @@ type (
 
 var testVersion = int64(1234)
 var testNamespaceID = "deadbeef-0123-4567-890a-bcdef0123456"
+var testNamespaceUUID = primitives.MustParseUUID(testNamespaceID)
 var testNamespace = "some random namespace name"
 var testParentNamespaceID = "deadbeef-0123-4567-890a-bcdef0123457"
+var testParentNamespaceUUID = primitives.MustParseUUID(testParentNamespaceID)
 var testParentNamespace = "some random parent namespace name"
 var testTargetNamespaceID = "deadbeef-0123-4567-890a-bcdef0123458"
+var testTargetNamespaceUUID = primitives.MustParseUUID(testTargetNamespaceID)
 var testTargetNamespace = "some random target namespace name"
 var testChildNamespaceID = "deadbeef-0123-4567-890a-bcdef0123459"
+var testChildNamespaceUUID = primitives.MustParseUUID(testChildNamespaceID)
 var testChildNamespace = "some random child namespace name"
 var testWorkflowID = "random-workflow-id"
 var testRunID = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
 var testLocalNamespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(
-	&persistence.NamespaceInfo{ID: testNamespaceID, Name: testNamespace},
-	&persistence.NamespaceConfig{Retention: 1},
+	&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID, Name: testNamespace},
+	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 	cluster.TestCurrentClusterName,
 	nil,
 )
 
 var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistence.NamespaceInfo{ID: testNamespaceID, Name: testNamespace},
-	&persistence.NamespaceConfig{
-		Retention:                1,
-		VisibilityArchivalStatus: enums.ArchivalStatusEnabled,
+	&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID, Name: testNamespace},
+	&persistenceblobs.NamespaceConfig{
+		RetentionDays:            1,
+		VisibilityArchivalStatus: namespacepb.ArchivalStatus_Enabled,
 		VisibilityArchivalURI:    "test:///visibility/archival",
 	},
-	&persistence.NamespaceReplicationConfig{
+	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
-		Clusters: []*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
+		Clusters: []string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
 		},
 	},
 	testVersion,
@@ -123,13 +137,13 @@ var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalParentNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistence.NamespaceInfo{ID: testParentNamespaceID, Name: testParentNamespace},
-	&persistence.NamespaceConfig{Retention: 1},
-	&persistence.NamespaceReplicationConfig{
+	&persistenceblobs.NamespaceInfo{Id: testParentNamespaceUUID, Name: testParentNamespace},
+	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
-		Clusters: []*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
+		Clusters: []string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
 		},
 	},
 	testVersion,
@@ -137,13 +151,13 @@ var testGlobalParentNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalTargetNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistence.NamespaceInfo{ID: testTargetNamespaceID, Name: testTargetNamespace},
-	&persistence.NamespaceConfig{Retention: 1},
-	&persistence.NamespaceReplicationConfig{
+	&persistenceblobs.NamespaceInfo{Id: testTargetNamespaceUUID, Name: testTargetNamespace},
+	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
-		Clusters: []*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
+		Clusters: []string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
 		},
 	},
 	testVersion,
@@ -151,13 +165,13 @@ var testGlobalTargetNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalChildNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistence.NamespaceInfo{ID: testChildNamespaceID, Name: testChildNamespace},
-	&persistence.NamespaceConfig{Retention: 1},
-	&persistence.NamespaceReplicationConfig{
+	&persistenceblobs.NamespaceInfo{Id: testChildNamespaceUUID, Name: testChildNamespace},
+	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
-		Clusters: []*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
+		Clusters: []string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
 		},
 	},
 	testVersion,
@@ -265,7 +279,7 @@ func (s *engineSuite) TearDownTest() {
 func (s *engineSuite) TestGetMutableStateSync() {
 	ctx := context.Background()
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "test-get-workflow-execution-event-id",
 		RunId:      testRunID,
 	}
@@ -294,7 +308,7 @@ func (s *engineSuite) TestGetMutableStateSync() {
 func (s *engineSuite) TestGetMutableState_IntestRunID() {
 	ctx := context.Background()
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "test-get-workflow-execution-event-id",
 		RunId:      "run-id-not-valid-uuid",
 	}
@@ -309,7 +323,7 @@ func (s *engineSuite) TestGetMutableState_IntestRunID() {
 func (s *engineSuite) TestGetMutableState_EmptyRunID() {
 	ctx := context.Background()
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "test-get-workflow-execution-event-id",
 	}
 
@@ -325,7 +339,7 @@ func (s *engineSuite) TestGetMutableState_EmptyRunID() {
 func (s *engineSuite) TestGetMutableStateLongPoll() {
 	ctx := context.Background()
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "test-get-workflow-execution-event-id",
 		RunId:      testRunID,
 	}
@@ -346,7 +360,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	waitGroup := &sync.WaitGroup{}
 	waitGroup.Add(1)
 	asycWorkflowUpdate := func(delay time.Duration) {
-		tt := &token.Task{
+		tt := &tokengenpb.Task{
 			WorkflowId: execution.WorkflowId,
 			RunId:      primitives.MustParseUUID(execution.RunId),
 			ScheduleId: 2,
@@ -396,7 +410,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 	ctx := context.Background()
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "test-get-workflow-execution-event-id",
 		RunId:      testRunID,
 	}
@@ -420,7 +434,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 	asyncBranchTokenUpdate := func(delay time.Duration) {
 		timer := time.NewTimer(delay)
 		<-timer.C
-		newExecution := &commonproto.WorkflowExecution{
+		newExecution := &executionpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
 		}
@@ -432,7 +446,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			int64(1),
 			[]byte{1},
 			persistence.WorkflowStateCreated,
-			enums.WorkflowExecutionStatusRunning))
+			executionpb.WorkflowExecutionStatus_Running))
 	}
 
 	// return immediately, since the expected next event ID appears
@@ -460,7 +474,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 	ctx := context.Background()
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "test-get-workflow-execution-event-id",
 		RunId:      testRunID,
 	}
@@ -492,7 +506,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnNotEnabled() {
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
-			QueryConsistencyLevel: enums.QueryConsistencyLevelStrong,
+			QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -507,7 +521,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnNotEnabled() {
 }
 
 func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "TestQueryWorkflow_RejectBasedOnCompleted",
 		RunId:      testRunID,
 	}
@@ -529,19 +543,19 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:            &execution,
-			Query:                &commonproto.WorkflowQuery{},
-			QueryRejectCondition: enums.QueryRejectConditionNotOpen,
+			Query:                &querypb.WorkflowQuery{},
+			QueryRejectCondition: querypb.QueryRejectCondition_NotOpen,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.Equal(enums.WorkflowExecutionStatusCompleted, resp.GetResponse().GetQueryRejected().GetStatus())
+	s.Equal(executionpb.WorkflowExecutionStatus_Completed, resp.GetResponse().GetQueryRejected().GetStatus())
 }
 
 func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "TestQueryWorkflow_RejectBasedOnFailed",
 		RunId:      testRunID,
 	}
@@ -563,33 +577,33 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:            &execution,
-			Query:                &commonproto.WorkflowQuery{},
-			QueryRejectCondition: enums.QueryRejectConditionNotOpen,
+			Query:                &querypb.WorkflowQuery{},
+			QueryRejectCondition: querypb.QueryRejectCondition_NotOpen,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.Equal(enums.WorkflowExecutionStatusFailed, resp.GetResponse().GetQueryRejected().GetStatus())
+	s.Equal(executionpb.WorkflowExecutionStatus_Failed, resp.GetResponse().GetQueryRejected().GetStatus())
 
 	request = &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:            &execution,
-			Query:                &commonproto.WorkflowQuery{},
-			QueryRejectCondition: enums.QueryRejectConditionNotCompletedCleanly,
+			Query:                &querypb.WorkflowQuery{},
+			QueryRejectCondition: querypb.QueryRejectCondition_NotCompletedCleanly,
 		},
 	}
 	resp, err = s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.Equal(enums.WorkflowExecutionStatusFailed, resp.GetResponse().GetQueryRejected().GetStatus())
+	s.Equal(executionpb.WorkflowExecutionStatus_Failed, resp.GetResponse().GetQueryRejected().GetStatus())
 }
 
 func (s *engineSuite) TestQueryWorkflow_FirstDecisionNotCompleted() {
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "TestQueryWorkflow_FirstDecisionNotCompleted",
 		RunId:      testRunID,
 	}
@@ -608,7 +622,7 @@ func (s *engineSuite) TestQueryWorkflow_FirstDecisionNotCompleted() {
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution: &execution,
-			Query:     &commonproto.WorkflowQuery{},
+			Query:     &querypb.WorkflowQuery{},
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -617,7 +631,7 @@ func (s *engineSuite) TestQueryWorkflow_FirstDecisionNotCompleted() {
 }
 
 func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "TestQueryWorkflow_DirectlyThroughMatching",
 		RunId:      testRunID,
 	}
@@ -641,10 +655,10 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution: &execution,
-			Query:     &commonproto.WorkflowQuery{},
+			Query:     &querypb.WorkflowQuery{},
 			// since workflow is open this filter does not reject query
-			QueryRejectCondition:  enums.QueryRejectConditionNotOpen,
-			QueryConsistencyLevel: enums.QueryConsistencyLevelEventual,
+			QueryRejectCondition:  querypb.QueryRejectCondition_NotOpen,
+			QueryConsistencyLevel: querypb.QueryConsistencyLevel_Eventual,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -655,7 +669,7 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 }
 
 func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Timeout() {
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "TestQueryWorkflow_DecisionTaskDispatch_Timeout",
 		RunId:      testRunID,
 	}
@@ -676,10 +690,10 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Timeout() {
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution: &execution,
-			Query:     &commonproto.WorkflowQuery{},
+			Query:     &querypb.WorkflowQuery{},
 			// since workflow is open this filter does not reject query
-			QueryRejectCondition:  enums.QueryRejectConditionNotOpen,
-			QueryConsistencyLevel: enums.QueryConsistencyLevelStrong,
+			QueryRejectCondition:  querypb.QueryRejectCondition_NotOpen,
+			QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
 		},
 	}
 
@@ -710,7 +724,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Timeout() {
 }
 
 func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "TestQueryWorkflow_ConsistentQueryBufferFull",
 		RunId:      testRunID,
 	}
@@ -734,7 +748,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	loadedMS, err := ctx.loadWorkflowExecution()
 	s.NoError(err)
 	qr := newQueryRegistry()
-	qr.bufferQuery(&commonproto.WorkflowQuery{})
+	qr.bufferQuery(&querypb.WorkflowQuery{})
 	loadedMS.(*mutableStateBuilder).queryRegistry = qr
 	release(nil)
 
@@ -742,8 +756,8 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:             &execution,
-			Query:                 &commonproto.WorkflowQuery{},
-			QueryConsistencyLevel: enums.QueryConsistencyLevelStrong,
+			Query:                 &querypb.WorkflowQuery{},
+			QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
 		},
 	}
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
@@ -752,7 +766,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 }
 
 func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "TestQueryWorkflow_DecisionTaskDispatch_Complete",
 		RunId:      testRunID,
 	}
@@ -780,10 +794,10 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 		qr := builder.GetQueryRegistry()
 		buffered := qr.getBufferedIDs()
 		for _, id := range buffered {
-			resultType := enums.QueryResultTypeAnswered
+			resultType := querypb.QueryResultType_Answered
 			completedTerminationState := &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult: &commonproto.WorkflowQueryResult{
+				queryResult: &querypb.WorkflowQueryResult{
 					ResultType: resultType,
 					Answer:     answer,
 				},
@@ -800,8 +814,8 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:             &execution,
-			Query:                 &commonproto.WorkflowQuery{},
-			QueryConsistencyLevel: enums.QueryConsistencyLevelStrong,
+			Query:                 &querypb.WorkflowQuery{},
+			QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
 		},
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
@@ -819,7 +833,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 }
 
 func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Unblocked() {
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "TestQueryWorkflow_DecisionTaskDispatch_Unblocked",
 		RunId:      testRunID,
 	}
@@ -859,8 +873,8 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Unblocked() {
 		NamespaceId: testNamespaceID,
 		Request: &workflowservice.QueryWorkflowRequest{
 			Execution:             &execution,
-			Query:                 &commonproto.WorkflowQuery{},
-			QueryConsistencyLevel: enums.QueryConsistencyLevelStrong,
+			Query:                 &querypb.WorkflowQuery{},
+			QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
 		},
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
@@ -899,7 +913,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(testRunID),
 		ScheduleId: 2,
@@ -922,7 +936,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(testRunID),
 		ScheduleId: 2,
@@ -944,13 +958,13 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -985,12 +999,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -1023,12 +1037,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -1058,7 +1072,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -1095,19 +1109,19 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent2 := addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(we.GetRunId()),
 		ScheduleId: di2.ScheduleID,
 	}
 	taskToken, _ := tt.Marshal()
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeScheduleActivityTask,
-		Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+		Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    activity3ID,
-			ActivityType:                  &commonproto.ActivityType{Name: activity3Type},
-			TaskList:                      &commonproto.TaskList{Name: tl},
+			ActivityType:                  &commonpb.ActivityType{Name: activity3Type},
+			TaskList:                      &tasklistpb.TaskList{Name: tl},
 			Input:                         activity3Input,
 			ScheduleToCloseTimeoutSeconds: 100,
 			ScheduleToStartTimeoutSeconds: 10,
@@ -1170,8 +1184,8 @@ func (s *engineSuite) TestValidateSignalRequest() {
 	input := []byte("input")
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:                          "ID",
-		WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-		TaskList:                            &commonproto.TaskList{Name: "taskptr"},
+		WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+		TaskList:                            &tasklistpb.TaskList{Name: "taskptr"},
 		Input:                               input,
 		ExecutionStartToCloseTimeoutSeconds: 10,
 		TaskStartToCloseTimeoutSeconds:      10,
@@ -1183,12 +1197,12 @@ func (s *engineSuite) TestValidateSignalRequest() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -1204,12 +1218,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeScheduleActivityTask,
-		Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+		Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    "activity1",
-			ActivityType:                  &commonproto.ActivityType{Name: "activity_type1"},
-			TaskList:                      &commonproto.TaskList{Name: tl},
+			ActivityType:                  &commonpb.ActivityType{Name: "activity_type1"},
+			TaskList:                      &tasklistpb.TaskList{Name: tl},
 			Input:                         input,
 			ScheduleToCloseTimeoutSeconds: 100,
 			ScheduleToStartTimeoutSeconds: 10,
@@ -1243,7 +1257,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -1280,16 +1294,16 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	addActivityTaskCompletedEvent(msBuilder, activity2ScheduledEvent.EventId,
 		activity2StartedEvent.EventId, activity2Result, identity)
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: di2.ScheduleID,
 	}
 	taskToken, _ := tt.Marshal()
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-		Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+		Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 			Result: workflowResult,
 		}},
 	}}
@@ -1327,7 +1341,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -1365,16 +1379,16 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	addActivityTaskCompletedEvent(msBuilder, activity2ScheduledEvent.EventId,
 		activity2StartedEvent.EventId, activity2Result, identity)
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: di2.ScheduleID,
 	}
 	taskToken, _ := tt.Marshal()
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeFailWorkflowExecution,
-		Attributes: &commonproto.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &commonproto.FailWorkflowExecutionDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
+		Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
 			Reason:  reason,
 			Details: details,
 		}},
@@ -1413,7 +1427,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -1440,7 +1454,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: di2.ScheduleID,
@@ -1448,8 +1462,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 	taskToken, _ := tt.Marshal()
 
 	// Decision with nil attributes
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 	}}
 
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
@@ -1498,6 +1512,9 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		// will use ScheduleToClose for ScheduleToStart and StartToClose
 		{7, 0, 0, 0,
 			7, 7, 7, false},
+		// Only StartToClose timeout
+		{0, 0, 7, 0,
+			workflowTimeout, workflowTimeout, 7, false},
 		// No ScheduleToClose timeout, ScheduleToStart or StartToClose, expect error return
 		{0, 0, 0, 0,
 			0, 0, 0, true},
@@ -1522,7 +1539,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		{0, workflowTimeout + 1, 0, 0,
 			0, 0, 0, true},
 		{0, 0, workflowTimeout + 1, 0,
-			0, 0, 0, true},
+			workflowTimeout, workflowTimeout, workflowTimeout, false},
 		{0, 0, 0, workflowTimeout + 1,
 			0, 0, 0, true},
 		// No ScheduleToClose timeout, will use ScheduleToStart + StartToClose, but exceed limit
@@ -1531,12 +1548,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 	}
 
 	for _, iVar := range testIterationVariables {
-		we := commonproto.WorkflowExecution{
+		we := executionpb.WorkflowExecution{
 			WorkflowId: "wId",
 			RunId:      testRunID,
 		}
 		tl := "testTaskList"
-		tt := &token.Task{
+		tt := &tokengenpb.Task{
 			WorkflowId: "wId",
 			RunId:      primitives.MustParseUUID(we.GetRunId()),
 			ScheduleId: 2,
@@ -1552,12 +1569,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		di := addDecisionTaskScheduledEvent(msBuilder)
 		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-		decisions := []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeScheduleActivityTask,
-			Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+		decisions := []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+			Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 				ActivityId:                    "activity1",
-				ActivityType:                  &commonproto.ActivityType{Name: "activity_type1"},
-				TaskList:                      &commonproto.TaskList{Name: tl},
+				ActivityType:                  &commonpb.ActivityType{Name: "activity_type1"},
+				TaskList:                      &tasklistpb.TaskList{Name: tl},
 				Input:                         input,
 				ScheduleToCloseTimeoutSeconds: iVar.scheduleToClose,
 				ScheduleToStartTimeoutSeconds: iVar.scheduleToStart,
@@ -1611,12 +1628,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	namespaceID := uuid.New()
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(we.GetRunId()),
 		ScheduleId: 2,
@@ -1625,11 +1642,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	identity := "testIdentity"
 	executionContext := []byte("context")
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: namespaceID, Name: testNamespace},
-		&persistence.NamespaceConfig{
-			Retention: 2,
-			BadBinaries: commonproto.BadBinaries{
-				Binaries: map[string]*commonproto.BadBinaryInfo{
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: testNamespace},
+		&persistenceblobs.NamespaceConfig{
+			RetentionDays: 2,
+			BadBinaries: &namespacepb.BadBinaries{
+				Binaries: map[string]*namespacepb.BadBinaryInfo{
 					"test-bad-binary": {},
 				},
 			},
@@ -1645,7 +1662,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	var decisions []*commonproto.Decision
+	var decisions []*decisionpb.Decision
 
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: createMutableState(msBuilder)}
@@ -1677,12 +1694,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDecision() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(we.GetRunId()),
 		ScheduleId: 2,
@@ -1698,12 +1715,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeScheduleActivityTask,
-		Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
+		Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    "activity1",
-			ActivityType:                  &commonproto.ActivityType{Name: "activity_type1"},
-			TaskList:                      &commonproto.TaskList{Name: tl},
+			ActivityType:                  &commonpb.ActivityType{Name: "activity_type1"},
+			TaskList:                      &tasklistpb.TaskList{Name: tl},
 			Input:                         input,
 			ScheduleToCloseTimeoutSeconds: 100,
 			ScheduleToStartTimeoutSeconds: 10,
@@ -1750,12 +1767,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 
 func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatTimeout() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -1771,7 +1788,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatTimeout(
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = time.Now().Add(-time.Hour).UnixNano()
 
-	decisions := []*commonproto.Decision{}
+	decisions := []*decisionpb.Decision{}
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -1795,12 +1812,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatTimeout(
 
 func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeout() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -1816,7 +1833,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = time.Now().Add(-time.Minute).UnixNano()
 
-	decisions := []*commonproto.Decision{}
+	decisions := []*decisionpb.Decision{}
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -1840,12 +1857,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 
 func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeout_ZeroOrignalScheduledTime() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -1861,7 +1878,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = 0
 
-	decisions := []*commonproto.Decision{}
+	decisions := []*decisionpb.Decision{}
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -1885,12 +1902,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -1906,9 +1923,9 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-		Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+		Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 			Result: workflowResult,
 		}},
 	}}
@@ -1940,12 +1957,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -1962,9 +1979,9 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeFailWorkflowExecution,
-		Attributes: &commonproto.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &commonproto.FailWorkflowExecutionDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
+		Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
 			Reason:  reason,
 			Details: details,
 		}},
@@ -1997,12 +2014,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSuccess() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -2017,11 +2034,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeSignalExternalWorkflowExecution,
-		Attributes: &commonproto.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &commonproto.SignalExternalWorkflowExecutionDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_SignalExternalWorkflowExecution,
+		Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
 			Namespace: testNamespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: we.WorkflowId,
 				RunId:      we.RunId,
 			},
@@ -2055,12 +2072,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithAbandonPolicy() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -2075,13 +2092,13 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithAban
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	abandon := enums.ParentClosePolicyAbandon
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeStartChildWorkflowExecution,
-		Attributes: &commonproto.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+	abandon := commonpb.ParentClosePolicy_Abandon
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_StartChildWorkflowExecution,
+		Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 			Namespace:  testNamespace,
 			WorkflowId: "child-workflow-id",
-			WorkflowType: &commonproto.WorkflowType{
+			WorkflowType: &commonpb.WorkflowType{
 				Name: "child-workflow-type",
 			},
 			ParentClosePolicy: abandon,
@@ -2116,17 +2133,17 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithAban
 		break
 	}
 	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowID)
-	s.Equal(enums.ParentClosePolicyAbandon, enums.ParentClosePolicy(executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy))
+	s.Equal(commonpb.ParentClosePolicy_Abandon, commonpb.ParentClosePolicy(executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy))
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerminatePolicy() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -2141,13 +2158,13 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	terminate := enums.ParentClosePolicyTerminate
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeStartChildWorkflowExecution,
-		Attributes: &commonproto.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+	terminate := commonpb.ParentClosePolicy_Terminate
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_StartChildWorkflowExecution,
+		Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 			Namespace:  testNamespace,
 			WorkflowId: "child-workflow-id",
-			WorkflowType: &commonproto.WorkflowType{
+			WorkflowType: &commonpb.WorkflowType{
 				Name: "child-workflow-type",
 			},
 			ParentClosePolicy: terminate,
@@ -2182,18 +2199,18 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 		break
 	}
 	s.Equal("child-workflow-id", executionBuilder.GetPendingChildExecutionInfos()[childID].StartedWorkflowID)
-	s.Equal(enums.ParentClosePolicyTerminate, enums.ParentClosePolicy(executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy))
+	s.Equal(commonpb.ParentClosePolicy_Terminate, commonpb.ParentClosePolicy(executionBuilder.GetPendingChildExecutionInfos()[childID].ParentClosePolicy))
 }
 
 // RunID Invalid is no longer possible form this scope.
 /*func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFailed() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      "invalid run id",
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.GetWorkflowId(),
 		RunId:      primitives.MustParseUUID(we.GetRunId()),
 		ScheduleId: 2,
@@ -2208,11 +2225,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeSignalExternalWorkflowExecution,
-		Attributes: &commonproto.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &commonproto.SignalExternalWorkflowExecutionDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_SignalExternalWorkflowExecution,
+		Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
 			Namespace: testNamespaceID,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: we.WorkflowId,
 				RunId:      we.RunId,
 			},
@@ -2236,12 +2253,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFailed_UnKnownNamespace() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -2257,11 +2274,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeSignalExternalWorkflowExecution,
-		Attributes: &commonproto.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &commonproto.SignalExternalWorkflowExecutionDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_SignalExternalWorkflowExecution,
+		Attributes: &decisionpb.Decision_SignalExternalWorkflowExecutionDecisionAttributes{SignalExternalWorkflowExecutionDecisionAttributes: &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
 			Namespace: foreignNamespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: we.WorkflowId,
 				RunId:      we.RunId,
 			},
@@ -2311,7 +2328,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(testRunID),
 		ScheduleId: 2,
@@ -2334,7 +2351,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		ScheduleId: 2,
 	}
@@ -2356,7 +2373,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(testRunID),
 		ScheduleId: 2,
@@ -2378,13 +2395,13 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tasklist := "testTaskList"
 	identity := "testIdentity"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 	}
@@ -2413,13 +2430,13 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 		ActivityId: "aid",
 	}
 	taskToken, _ := tt.Marshal()
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -2449,12 +2466,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -2498,12 +2515,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -2548,12 +2565,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -2594,12 +2611,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -2666,12 +2683,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -2716,12 +2733,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -2775,7 +2792,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -2786,7 +2803,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		ScheduleId: common.EmptyEventID,
 		ActivityId: activityID,
@@ -2854,7 +2871,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(testRunID),
 		ScheduleId: 2,
@@ -2878,7 +2895,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		ScheduleId: 2,
 	}
@@ -2901,7 +2918,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(testRunID),
 		ScheduleId: 2,
@@ -2924,12 +2941,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 
 func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 	}
 	taskToken, _ := tt.Marshal()
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -2959,13 +2976,13 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 
 func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 		ActivityId: "aid",
 	}
 	taskToken, _ := tt.Marshal()
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -2995,12 +3012,12 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -3042,12 +3059,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -3094,12 +3111,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -3138,12 +3155,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -3217,12 +3234,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -3265,12 +3282,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -3326,7 +3343,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -3338,7 +3355,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	activityInput := []byte("input1")
 	failReason := "failed"
 	failDetails := []byte("fail details.")
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		ScheduleId: common.EmptyEventID,
 		ActivityId: activityID,
@@ -3390,12 +3407,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 
 func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -3438,12 +3455,12 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 
 func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -3492,7 +3509,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 
 func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -3501,7 +3518,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: common.EmptyEventID,
@@ -3541,12 +3558,12 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -3586,12 +3603,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 5,
@@ -3646,7 +3663,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -3655,7 +3672,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		ScheduleId: common.EmptyEventID,
 		ActivityId: activityID,
@@ -3708,7 +3725,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		ScheduleId: 2,
 	}
@@ -3730,7 +3747,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 	}
@@ -3758,7 +3775,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
 		ScheduleId: common.EmptyEventID,
 		ActivityId: "aid",
@@ -3787,12 +3804,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotScheduled() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -3807,9 +3824,9 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeRequestCancelActivityTask,
-		Attributes: &commonproto.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &commonproto.RequestCancelActivityTaskDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
+		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
 			ActivityId: activityID,
 		}},
 	}}
@@ -3840,12 +3857,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 6,
@@ -3871,9 +3888,9 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeRequestCancelActivityTask,
-		Attributes: &commonproto.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &commonproto.RequestCancelActivityTaskDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
+		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
 			ActivityId: activityID,
 		}},
 	}}
@@ -3906,12 +3923,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 7,
@@ -3938,9 +3955,9 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeRequestCancelActivityTask,
-		Attributes: &commonproto.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &commonproto.RequestCancelActivityTaskDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
+		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
 			ActivityId: activityID,
 		}},
 	}}
@@ -3969,12 +3986,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 6,
@@ -3998,16 +4015,16 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
 
-	decisions := []*commonproto.Decision{
+	decisions := []*decisionpb.Decision{
 		{
-			DecisionType: enums.DecisionTypeRequestCancelActivityTask,
-			Attributes: &commonproto.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &commonproto.RequestCancelActivityTaskDecisionAttributes{
+			DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
+			Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
 				ActivityId: activityID,
 			}},
 		},
 		{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: workflowResult,
 			}},
 		},
@@ -4039,12 +4056,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 7,
@@ -4071,9 +4088,9 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeRequestCancelActivityTask,
-		Attributes: &commonproto.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &commonproto.RequestCancelActivityTaskDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
+		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
 			ActivityId: activityID,
 		}},
 	}}
@@ -4102,7 +4119,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	// Try recording activity heartbeat
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
-	att := &token.Task{
+	att := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(we.GetRunId()),
 		ScheduleId: 5,
@@ -4144,12 +4161,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 7,
@@ -4176,9 +4193,9 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeRequestCancelActivityTask,
-		Attributes: &commonproto.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &commonproto.RequestCancelActivityTaskDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
+		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
 			ActivityId: activityID,
 		}},
 	}}
@@ -4207,7 +4224,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	// Try recording activity heartbeat
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
-	att := &token.Task{
+	att := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(we.GetRunId()),
 		ScheduleId: 5,
@@ -4248,12 +4265,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 }
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWithQueries() {
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 7,
@@ -4280,9 +4297,9 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeRequestCancelActivityTask,
-		Attributes: &commonproto.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &commonproto.RequestCancelActivityTaskDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
+		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
 			ActivityId: activityID,
 		}},
 	}}
@@ -4298,20 +4315,20 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	loadedMS, err := ctx.loadWorkflowExecution()
 	s.NoError(err)
 	qr := newQueryRegistry()
-	id1, _ := qr.bufferQuery(&commonproto.WorkflowQuery{})
-	id2, _ := qr.bufferQuery(&commonproto.WorkflowQuery{})
-	id3, _ := qr.bufferQuery(&commonproto.WorkflowQuery{})
+	id1, _ := qr.bufferQuery(&querypb.WorkflowQuery{})
+	id2, _ := qr.bufferQuery(&querypb.WorkflowQuery{})
+	id3, _ := qr.bufferQuery(&querypb.WorkflowQuery{})
 	loadedMS.(*mutableStateBuilder).queryRegistry = qr
 	release(nil)
-	result1 := &commonproto.WorkflowQueryResult{
-		ResultType: enums.QueryResultTypeAnswered,
+	result1 := &querypb.WorkflowQueryResult{
+		ResultType: querypb.QueryResultType_Answered,
 		Answer:     []byte{1, 2, 3},
 	}
-	result2 := &commonproto.WorkflowQueryResult{
-		ResultType:   enums.QueryResultTypeFailed,
+	result2 := &querypb.WorkflowQueryResult{
+		ResultType:   querypb.QueryResultType_Failed,
 		ErrorMessage: "error reason",
 	}
-	queryResults := map[string]*commonproto.WorkflowQueryResult{
+	queryResults := map[string]*querypb.WorkflowQueryResult{
 		id1: result1,
 		id2: result2,
 	}
@@ -4352,7 +4369,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	// Try recording activity heartbeat
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
-	att := &token.Task{
+	att := &tokengenpb.Task{
 		WorkflowId: "wId",
 		RunId:      primitives.MustParseUUID(we.GetRunId()),
 		ScheduleId: 5,
@@ -4398,12 +4415,12 @@ func (s *engineSuite) constructCallContext(featureVersion string) context.Contex
 
 func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -4422,9 +4439,9 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeStartTimer,
-		Attributes: &commonproto.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &commonproto.StartTimerDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_StartTimer,
+		Attributes: &decisionpb.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &decisionpb.StartTimerDecisionAttributes{
 			TimerId:                   timerID,
 			StartToFireTimeoutSeconds: 1,
 		}},
@@ -4451,7 +4468,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	// Try to add the same timer ID again.
 	di2 := addDecisionTaskScheduledEvent(executionBuilder)
 	addDecisionTaskStartedEvent(executionBuilder, di2.ScheduleID, tl, identity)
-	tt2 := &token.Task{
+	tt2 := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: di2.ScheduleID,
@@ -4466,7 +4483,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Run(func(arguments mock.Arguments) {
 		req := arguments.Get(0).(*persistence.AppendHistoryNodesRequest)
 		decTaskIndex := len(req.Events) - 1
-		if decTaskIndex >= 0 && req.Events[decTaskIndex].EventType == enums.EventTypeDecisionTaskFailed {
+		if decTaskIndex >= 0 && req.Events[decTaskIndex].EventType == eventpb.EventType_DecisionTaskFailed {
 			decisionFailedEvent = true
 		}
 	}).Once()
@@ -4496,12 +4513,12 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 
 func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 6,
@@ -4525,9 +4542,9 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeCancelTimer,
-		Attributes: &commonproto.Decision_CancelTimerDecisionAttributes{CancelTimerDecisionAttributes: &commonproto.CancelTimerDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_CancelTimer,
+		Attributes: &decisionpb.Decision_CancelTimerDecisionAttributes{CancelTimerDecisionAttributes: &decisionpb.CancelTimerDecisionAttributes{
 			TimerId: timerID,
 		}},
 	}}
@@ -4556,12 +4573,12 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 
 func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 2,
@@ -4580,9 +4597,9 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeCancelTimer,
-		Attributes: &commonproto.Decision_CancelTimerDecisionAttributes{CancelTimerDecisionAttributes: &commonproto.CancelTimerDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_CancelTimer,
+		Attributes: &decisionpb.Decision_CancelTimerDecisionAttributes{CancelTimerDecisionAttributes: &decisionpb.CancelTimerDecisionAttributes{
 			TimerId: timerID,
 		}},
 	}}
@@ -4611,12 +4628,12 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 
 func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() {
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	tt := &token.Task{
+	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
 		ScheduleId: 6,
@@ -4644,9 +4661,9 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.True(len(gwmsResponse.State.BufferedEvents) > 0)
 
-	decisions := []*commonproto.Decision{{
-		DecisionType: enums.DecisionTypeCancelTimer,
-		Attributes: &commonproto.Decision_CancelTimerDecisionAttributes{CancelTimerDecisionAttributes: &commonproto.CancelTimerDecisionAttributes{
+	decisions := []*decisionpb.Decision{{
+		DecisionType: decisionpb.DecisionType_CancelTimer,
+		Attributes: &decisionpb.Decision_CancelTimerDecisionAttributes{CancelTimerDecisionAttributes: &decisionpb.CancelTimerDecisionAttributes{
 			TimerId: timerID,
 		}},
 	}}
@@ -4683,7 +4700,7 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -4724,7 +4741,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wId2",
 		RunId:      testRunID,
 	}
@@ -4768,7 +4785,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
-	we := &commonproto.WorkflowExecution{
+	we := &executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -4806,7 +4823,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	err := s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -4834,7 +4851,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	s.Nil(err)
 }
 
-func (s *engineSuite) getBuilder(testNamespaceID string, we commonproto.WorkflowExecution) mutableState {
+func (s *engineSuite) getBuilder(testNamespaceID string, we executionpb.WorkflowExecution) mutableState {
 	context, release, err := s.mockHistoryEngine.historyCache.getOrCreateWorkflowExecutionForBackground(testNamespaceID, we)
 	if err != nil {
 		return nil
@@ -4845,7 +4862,7 @@ func (s *engineSuite) getBuilder(testNamespaceID string, we commonproto.Workflow
 }
 
 func (s *engineSuite) getActivityScheduledEvent(msBuilder mutableState,
-	scheduleID int64) *commonproto.HistoryEvent {
+	scheduleID int64) *eventpb.HistoryEvent {
 	event, _ := msBuilder.GetActivityScheduledEvent(scheduleID)
 	return event
 }
@@ -4854,14 +4871,14 @@ func (s *engineSuite) printHistory(builder mutableState) string {
 	return builder.GetHistoryBuilder().GetHistory().String()
 }
 
-func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowExecution commonproto.WorkflowExecution,
+func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowExecution executionpb.WorkflowExecution,
 	workflowType, taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
-	parentInfo *commonproto.ParentExecutionInfo, identity string) *commonproto.HistoryEvent {
+	parentInfo *executiongenpb.ParentExecutionInfo, identity string) *eventpb.HistoryEvent {
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:                          workflowExecution.WorkflowId,
-		WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-		TaskList:                            &commonproto.TaskList{Name: taskList},
+		WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+		TaskList:                            &tasklistpb.TaskList{Name: taskList},
 		Input:                               input,
 		ExecutionStartToCloseTimeoutSeconds: executionStartToCloseTimeout,
 		TaskStartToCloseTimeoutSeconds:      taskStartToCloseTimeout,
@@ -4880,9 +4897,9 @@ func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowEx
 	return event
 }
 
-func addWorkflowExecutionStartedEvent(builder mutableState, workflowExecution commonproto.WorkflowExecution,
+func addWorkflowExecutionStartedEvent(builder mutableState, workflowExecution executionpb.WorkflowExecution,
 	workflowType, taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
-	identity string) *commonproto.HistoryEvent {
+	identity string) *eventpb.HistoryEvent {
 	return addWorkflowExecutionStartedEventWithParent(builder, workflowExecution, workflowType, taskList, input,
 		executionStartToCloseTimeout, taskStartToCloseTimeout, nil, identity)
 }
@@ -4893,14 +4910,14 @@ func addDecisionTaskScheduledEvent(builder mutableState) *decisionInfo {
 }
 
 func addDecisionTaskStartedEvent(builder mutableState, scheduleID int64, taskList,
-	identity string) *commonproto.HistoryEvent {
+	identity string) *eventpb.HistoryEvent {
 	return addDecisionTaskStartedEventWithRequestID(builder, scheduleID, testRunID, taskList, identity)
 }
 
 func addDecisionTaskStartedEventWithRequestID(builder mutableState, scheduleID int64, requestID string,
-	taskList, identity string) *commonproto.HistoryEvent {
+	taskList, identity string) *eventpb.HistoryEvent {
 	event, _, _ := builder.AddDecisionTaskStartedEvent(scheduleID, requestID, &workflowservice.PollForDecisionTaskRequest{
-		TaskList: &commonproto.TaskList{Name: taskList},
+		TaskList: &tasklistpb.TaskList{Name: taskList},
 		Identity: identity,
 	})
 
@@ -4908,7 +4925,7 @@ func addDecisionTaskStartedEventWithRequestID(builder mutableState, scheduleID i
 }
 
 func addDecisionTaskCompletedEvent(builder mutableState, scheduleID, startedID int64, context []byte,
-	identity string) *commonproto.HistoryEvent {
+	identity string) *eventpb.HistoryEvent {
 	event, _ := builder.AddDecisionTaskCompletedEvent(scheduleID, startedID, &workflowservice.RespondDecisionTaskCompletedRequest{
 		ExecutionContext: context,
 		Identity:         identity,
@@ -4920,13 +4937,13 @@ func addDecisionTaskCompletedEvent(builder mutableState, scheduleID, startedID i
 }
 
 func addActivityTaskScheduledEvent(builder mutableState, decisionCompletedID int64, activityID, activityType,
-	taskList string, input []byte, timeout, queueTimeout, heartbeatTimeout int32) (*commonproto.HistoryEvent,
+	taskList string, input []byte, timeout, queueTimeout, heartbeatTimeout int32) (*eventpb.HistoryEvent,
 	*persistence.ActivityInfo) {
 
-	event, ai, _ := builder.AddActivityTaskScheduledEvent(decisionCompletedID, &commonproto.ScheduleActivityTaskDecisionAttributes{
+	event, ai, _ := builder.AddActivityTaskScheduledEvent(decisionCompletedID, &decisionpb.ScheduleActivityTaskDecisionAttributes{
 		ActivityId:                    activityID,
-		ActivityType:                  &commonproto.ActivityType{Name: activityType},
-		TaskList:                      &commonproto.TaskList{Name: taskList},
+		ActivityType:                  &commonpb.ActivityType{Name: activityType},
+		TaskList:                      &tasklistpb.TaskList{Name: taskList},
 		Input:                         input,
 		ScheduleToCloseTimeoutSeconds: timeout,
 		ScheduleToStartTimeoutSeconds: queueTimeout,
@@ -4947,13 +4964,13 @@ func addActivityTaskScheduledEventWithRetry(
 	scheduleToStartTimeout int32,
 	startToCloseTimeout int32,
 	heartbeatTimeout int32,
-	retryPolicy *commonproto.RetryPolicy,
-) (*commonproto.HistoryEvent, *persistence.ActivityInfo) {
+	retryPolicy *commonpb.RetryPolicy,
+) (*eventpb.HistoryEvent, *persistence.ActivityInfo) {
 
-	event, ai, _ := builder.AddActivityTaskScheduledEvent(decisionCompletedID, &commonproto.ScheduleActivityTaskDecisionAttributes{
+	event, ai, _ := builder.AddActivityTaskScheduledEvent(decisionCompletedID, &decisionpb.ScheduleActivityTaskDecisionAttributes{
 		ActivityId:                    activityID,
-		ActivityType:                  &commonproto.ActivityType{Name: activityType},
-		TaskList:                      &commonproto.TaskList{Name: taskList},
+		ActivityType:                  &commonpb.ActivityType{Name: activityType},
+		TaskList:                      &tasklistpb.TaskList{Name: taskList},
 		Input:                         input,
 		ScheduleToCloseTimeoutSeconds: scheduleToCloseTimeout,
 		ScheduleToStartTimeoutSeconds: scheduleToStartTimeout,
@@ -4965,14 +4982,14 @@ func addActivityTaskScheduledEventWithRetry(
 	return event, ai
 }
 
-func addActivityTaskStartedEvent(builder mutableState, scheduleID int64, identity string) *commonproto.HistoryEvent {
+func addActivityTaskStartedEvent(builder mutableState, scheduleID int64, identity string) *eventpb.HistoryEvent {
 	ai, _ := builder.GetActivityInfo(scheduleID)
 	event, _ := builder.AddActivityTaskStartedEvent(ai, scheduleID, testRunID, identity)
 	return event
 }
 
 func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID int64, result []byte,
-	identity string) *commonproto.HistoryEvent {
+	identity string) *eventpb.HistoryEvent {
 	event, _ := builder.AddActivityTaskCompletedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskCompletedRequest{
 		Result:   result,
 		Identity: identity,
@@ -4982,7 +4999,7 @@ func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID i
 }
 
 func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, reason string, details []byte,
-	identity string) *commonproto.HistoryEvent {
+	identity string) *eventpb.HistoryEvent {
 	event, _ := builder.AddActivityTaskFailedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskFailedRequest{
 		Reason:   reason,
 		Details:  details,
@@ -4993,24 +5010,24 @@ func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int6
 }
 
 func addTimerStartedEvent(builder mutableState, decisionCompletedEventID int64, timerID string,
-	timeOut int64) (*commonproto.HistoryEvent, *persistenceblobs.TimerInfo) {
+	timeOut int64) (*eventpb.HistoryEvent, *persistenceblobs.TimerInfo) {
 	event, ti, _ := builder.AddTimerStartedEvent(decisionCompletedEventID,
-		&commonproto.StartTimerDecisionAttributes{
+		&decisionpb.StartTimerDecisionAttributes{
 			TimerId:                   timerID,
 			StartToFireTimeoutSeconds: timeOut,
 		})
 	return event, ti
 }
 
-func addTimerFiredEvent(mutableState mutableState, timerID string) *commonproto.HistoryEvent {
+func addTimerFiredEvent(mutableState mutableState, timerID string) *eventpb.HistoryEvent {
 	event, _ := mutableState.AddTimerFiredEvent(timerID)
 	return event
 }
 
 func addRequestCancelInitiatedEvent(builder mutableState, decisionCompletedEventID int64,
-	cancelRequestID, namespace, workflowID, runID string) (*commonproto.HistoryEvent, *persistenceblobs.RequestCancelInfo) {
+	cancelRequestID, namespace, workflowID, runID string) (*eventpb.HistoryEvent, *persistenceblobs.RequestCancelInfo) {
 	event, rci, _ := builder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID,
-		cancelRequestID, &commonproto.RequestCancelExternalWorkflowExecutionDecisionAttributes{
+		cancelRequestID, &decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes{
 			Namespace:  namespace,
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -5019,17 +5036,17 @@ func addRequestCancelInitiatedEvent(builder mutableState, decisionCompletedEvent
 	return event, rci
 }
 
-func addCancelRequestedEvent(builder mutableState, initiatedID int64, namespace, workflowID, runID string) *commonproto.HistoryEvent {
+func addCancelRequestedEvent(builder mutableState, initiatedID int64, namespace, workflowID, runID string) *eventpb.HistoryEvent {
 	event, _ := builder.AddExternalWorkflowExecutionCancelRequested(initiatedID, namespace, workflowID, runID)
 	return event
 }
 
 func addRequestSignalInitiatedEvent(builder mutableState, decisionCompletedEventID int64,
-	signalRequestID, namespace, workflowID, runID, signalName string, input, control []byte) (*commonproto.HistoryEvent, *persistenceblobs.SignalInfo) {
+	signalRequestID, namespace, workflowID, runID, signalName string, input, control []byte) (*eventpb.HistoryEvent, *persistenceblobs.SignalInfo) {
 	event, si, _ := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, signalRequestID,
-		&commonproto.SignalExternalWorkflowExecutionDecisionAttributes{
+		&decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
 			Namespace: namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -5041,22 +5058,22 @@ func addRequestSignalInitiatedEvent(builder mutableState, decisionCompletedEvent
 	return event, si
 }
 
-func addSignaledEvent(builder mutableState, initiatedID int64, namespace, workflowID, runID string, control []byte) *commonproto.HistoryEvent {
+func addSignaledEvent(builder mutableState, initiatedID int64, namespace, workflowID, runID string, control []byte) *eventpb.HistoryEvent {
 	event, _ := builder.AddExternalWorkflowExecutionSignaled(initiatedID, namespace, workflowID, runID, control)
 	return event
 }
 
 func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, decisionCompletedID int64,
 	createRequestID, namespace, workflowID, workflowType, tasklist string, input []byte,
-	executionStartToCloseTimeout, taskStartToCloseTimeout int32) (*commonproto.HistoryEvent,
+	executionStartToCloseTimeout, taskStartToCloseTimeout int32) (*eventpb.HistoryEvent,
 	*persistence.ChildExecutionInfo) {
 
 	event, cei, _ := builder.AddStartChildWorkflowExecutionInitiatedEvent(decisionCompletedID, createRequestID,
-		&commonproto.StartChildWorkflowExecutionDecisionAttributes{
+		&decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 			Namespace:                           namespace,
 			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-			TaskList:                            &commonproto.TaskList{Name: tasklist},
+			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                            &tasklistpb.TaskList{Name: tasklist},
 			Input:                               input,
 			ExecutionStartToCloseTimeoutSeconds: executionStartToCloseTimeout,
 			TaskStartToCloseTimeoutSeconds:      taskStartToCloseTimeout,
@@ -5066,29 +5083,29 @@ func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, decision
 }
 
 func addChildWorkflowExecutionStartedEvent(builder mutableState, initiatedID int64, namespace, workflowID, runID string,
-	workflowType string) *commonproto.HistoryEvent {
+	workflowType string) *eventpb.HistoryEvent {
 	event, _ := builder.AddChildWorkflowExecutionStartedEvent(
 		namespace,
-		&commonproto.WorkflowExecution{
+		&executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		&commonproto.WorkflowType{Name: workflowType},
+		&commonpb.WorkflowType{Name: workflowType},
 		initiatedID,
-		&commonproto.Header{},
+		&commonpb.Header{},
 	)
 	return event
 }
 
-func addChildWorkflowExecutionCompletedEvent(builder mutableState, initiatedID int64, childExecution *commonproto.WorkflowExecution,
-	attributes *commonproto.WorkflowExecutionCompletedEventAttributes) *commonproto.HistoryEvent {
+func addChildWorkflowExecutionCompletedEvent(builder mutableState, initiatedID int64, childExecution *executionpb.WorkflowExecution,
+	attributes *eventpb.WorkflowExecutionCompletedEventAttributes) *eventpb.HistoryEvent {
 	event, _ := builder.AddChildWorkflowExecutionCompletedEvent(initiatedID, childExecution, attributes)
 	return event
 }
 
 func addCompleteWorkflowEvent(builder mutableState, decisionCompletedEventID int64,
-	result []byte) *commonproto.HistoryEvent {
-	event, _ := builder.AddCompletedWorkflowEvent(decisionCompletedEventID, &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+	result []byte) *eventpb.HistoryEvent {
+	event, _ := builder.AddCompletedWorkflowEvent(decisionCompletedEventID, &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 		Result: result,
 	})
 	return event
@@ -5099,8 +5116,8 @@ func addFailWorkflowEvent(
 	decisionCompletedEventID int64,
 	reason string,
 	details []byte,
-) *commonproto.HistoryEvent {
-	event, _ := builder.AddFailWorkflowEvent(decisionCompletedEventID, &commonproto.FailWorkflowExecutionDecisionAttributes{
+) *eventpb.HistoryEvent {
+	event, _ := builder.AddFailWorkflowEvent(decisionCompletedEventID, &decisionpb.FailWorkflowExecutionDecisionAttributes{
 		Reason:  reason,
 		Details: details,
 	})
@@ -5157,7 +5174,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	}
 
 	builder.FlushBufferedEvents() // nolint:errcheck
-	var bufferedEvents []*commonproto.HistoryEvent
+	var bufferedEvents []*eventpb.HistoryEvent
 	if len(builder.bufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.bufferedEvents...)
 	}
@@ -5240,7 +5257,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 	}
 }
 
-func copyHistoryEvent(source *commonproto.HistoryEvent) *commonproto.HistoryEvent {
+func copyHistoryEvent(source *eventpb.HistoryEvent) *eventpb.HistoryEvent {
 	if source == nil {
 		return nil
 	}
@@ -5250,7 +5267,7 @@ func copyHistoryEvent(source *commonproto.HistoryEvent) *commonproto.HistoryEven
 		panic(err)
 	}
 
-	result := &commonproto.HistoryEvent{}
+	result := &eventpb.HistoryEvent{}
 	err = result.Unmarshal(bytes)
 	if err != nil {
 		panic(err)
@@ -5351,11 +5368,11 @@ func copyChildInfo(sourceInfo *persistence.ChildExecutionInfo) *persistence.Chil
 }
 
 func copyReplicationState(source *persistence.ReplicationState) *persistence.ReplicationState {
-	var lastReplicationInfo map[string]*replication.ReplicationInfo
+	var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
 	if source.LastReplicationInfo != nil {
-		lastReplicationInfo = map[string]*replication.ReplicationInfo{}
+		lastReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{}
 		for k, v := range source.LastReplicationInfo {
-			lastReplicationInfo[k] = &replication.ReplicationInfo{
+			lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{
 				Version:     v.Version,
 				LastEventId: v.LastEventId,
 			}

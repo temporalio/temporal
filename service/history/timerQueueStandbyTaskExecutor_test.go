@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -31,8 +35,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -176,7 +182,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TearDownTest() {
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -195,8 +201,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -229,7 +235,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeUserTimer,
-		TimeoutType:         int32(enums.TimeoutTypeStartToClose),
+		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -257,7 +263,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -270,8 +276,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -303,7 +309,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeUserTimer,
-		TimeoutType:         int32(enums.TimeoutTypeStartToClose),
+		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -320,7 +326,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multiple() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -333,8 +339,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -370,7 +376,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeUserTimer,
-		TimeoutType:         int32(enums.TimeoutTypeStartToClose),
+		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -387,7 +393,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -400,8 +406,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -437,7 +443,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeActivityTimeout,
-		TimeoutType:         int32(enums.TimeoutTypeScheduleToClose),
+		TimeoutType:         int32(eventpb.TimeoutType_ScheduleToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -465,7 +471,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -478,8 +484,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -516,7 +522,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeActivityTimeout,
-		TimeoutType:         int32(enums.TimeoutTypeScheduleToClose),
+		TimeoutType:         int32(eventpb.TimeoutType_ScheduleToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -533,7 +539,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple_CanUpdate() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -546,8 +552,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -593,7 +599,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeActivityTimeout,
-		TimeoutType:         int32(enums.TimeoutTypeHeartbeat),
+		TimeoutType:         int32(eventpb.TimeoutType_Heartbeat),
 		VisibilityTimestamp: protoTime,
 		EventId:             scheduleEvent2.GetEventId(),
 	}
@@ -647,7 +653,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -660,8 +666,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending(
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -682,7 +688,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending(
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeDecisionTimeout,
-		TimeoutType:         int32(enums.TimeoutTypeStartToClose),
+		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTime,
 		EventId:             di.ScheduleID,
 	}
@@ -710,7 +716,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending(
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_ScheduleToStartTimer() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -726,7 +732,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Schedule
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeDecisionTimeout,
-		TimeoutType:         int32(enums.TimeoutTypeScheduleToStart),
+		TimeoutType:         int32(eventpb.TimeoutType_ScheduleToStart),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             decisionScheduleID,
 	}
@@ -738,7 +744,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Schedule
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Success() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -751,8 +757,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Success(
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -774,7 +780,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Success(
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeDecisionTimeout,
-		TimeoutType:         int32(enums.TimeoutTypeStartToClose),
+		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTime,
 		EventId:             di.ScheduleID,
 	}
@@ -789,7 +795,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Success(
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pending() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -802,8 +808,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -847,7 +853,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Success() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -860,8 +866,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -893,7 +899,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -906,8 +912,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -930,7 +936,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeWorkflowTimeout,
-		TimeoutType:         int32(enums.TimeoutTypeStartToClose),
+		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 	}
 
@@ -957,7 +963,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -970,8 +976,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -994,7 +1000,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeWorkflowTimeout,
-		TimeoutType:         int32(enums.TimeoutTypeStartToClose),
+		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 	}
 
@@ -1008,7 +1014,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1021,8 +1027,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
-				TaskList:                            &commonproto.TaskList{Name: taskListName},
+				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
 				ExecutionStartToCloseTimeoutSeconds: 2,
 				TaskStartToCloseTimeoutSeconds:      1,
 			},
@@ -1039,7 +1045,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeActivityRetryTimer,
-		TimeoutType:         int32(enums.TimeoutTypeStartToClose),
+		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 	}
 

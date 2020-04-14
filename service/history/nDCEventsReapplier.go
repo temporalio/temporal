@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,8 +29,7 @@ package history
 import (
 	"context"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/definition"
@@ -39,9 +42,9 @@ type (
 		reapplyEvents(
 			ctx context.Context,
 			msBuilder mutableState,
-			historyEvents []*commonproto.HistoryEvent,
+			historyEvents []*eventpb.HistoryEvent,
 			runID string,
-		) ([]*commonproto.HistoryEvent, error)
+		) ([]*eventpb.HistoryEvent, error)
 	}
 
 	nDCEventsReapplierImpl struct {
@@ -64,14 +67,14 @@ func newNDCEventsReapplier(
 func (r *nDCEventsReapplierImpl) reapplyEvents(
 	_ context.Context,
 	msBuilder mutableState,
-	historyEvents []*commonproto.HistoryEvent,
+	historyEvents []*eventpb.HistoryEvent,
 	runID string,
-) ([]*commonproto.HistoryEvent, error) {
+) ([]*eventpb.HistoryEvent, error) {
 
-	var reappliedEvents []*commonproto.HistoryEvent
+	var reappliedEvents []*eventpb.HistoryEvent
 	for _, event := range historyEvents {
 		switch event.GetEventType() {
-		case enums.EventTypeWorkflowExecutionSignaled:
+		case eventpb.EventType_WorkflowExecutionSignaled:
 			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 			if msBuilder.IsResourceDuplicated(dedupResource) {
 				// skip already applied event

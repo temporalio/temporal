@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence"
@@ -87,7 +91,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 	s.cache = newHistoryCache(s.mockShard)
 
 	namespaceID := "test_namespace_id"
-	execution1 := commonproto.WorkflowExecution{
+	execution1 := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -101,7 +105,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 	s.Equal(mockMS1, context.(*workflowExecutionContextImpl).mutableState)
 	release(nil)
 
-	execution2 := commonproto.WorkflowExecution{
+	execution2 := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -115,7 +119,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(2)
 	namespaceID := "test_namespace_id"
 	s.cache = newHistoryCache(s.mockShard)
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.New(),
 	}
@@ -123,7 +127,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 	context, release, err := s.cache.getOrCreateWorkflowExecutionForBackground(namespaceID, we)
 	s.Nil(err)
 
-	we2 := commonproto.WorkflowExecution{
+	we2 := executionpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.New(),
 	}
@@ -150,7 +154,7 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := "test_namespace_id"
 	s.cache = newHistoryCache(s.mockShard)
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-clear",
 		RunId:      uuid.New(),
 	}
@@ -181,7 +185,7 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := "test_namespace_id"
 	s.cache = newHistoryCache(s.mockShard)
-	we := commonproto.WorkflowExecution{
+	we := executionpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.New(),
 	}

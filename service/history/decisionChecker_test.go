@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,15 +30,17 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -91,13 +97,13 @@ func (s *decisionAttrValidatorSuite) TearDownTest() {
 
 func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
@@ -106,16 +112,16 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).AnyTimes()
 
-	var attributes *commonproto.SignalExternalWorkflowExecutionDecisionAttributes
+	var attributes *decisionpb.SignalExternalWorkflowExecutionDecisionAttributes
 
 	err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.")
 
-	attributes = &commonproto.SignalExternalWorkflowExecutionDecisionAttributes{}
+	attributes = &decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{}
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "Execution is nil on decision.")
 
-	attributes.Execution = &commonproto.WorkflowExecution{}
+	attributes.Execution = &executionpb.WorkflowExecution{}
 	attributes.Execution.WorkflowId = "workflow-id"
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "SignalName is not set on decision.")
@@ -136,16 +142,16 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 
 func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
 	namespace := "testNamespace"
-	var attributes *commonproto.UpsertWorkflowSearchAttributesDecisionAttributes
+	var attributes *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes
 
 	err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.")
 
-	attributes = &commonproto.UpsertWorkflowSearchAttributesDecisionAttributes{}
+	attributes = &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "SearchAttributes is not set on decision.")
 
-	attributes.SearchAttributes = &commonproto.SearchAttributes{}
+	attributes.SearchAttributes = &commonpb.SearchAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "IndexedFields is empty on decision.")
 
@@ -156,13 +162,13 @@ func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes(
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
@@ -177,17 +183,17 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_SameCluster() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestCurrentClusterName}},
+			Clusters:          []string{ cluster.TestCurrentClusterName },
 		},
 		1234,
 		nil,
@@ -202,17 +208,17 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffec
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_DiffCluster() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestAlternativeClusterName}},
+			Clusters:          []string{ cluster.TestAlternativeClusterName },
 		},
 		1234,
 		nil,
@@ -227,19 +233,19 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffec
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 		1234,
@@ -255,17 +261,17 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGloba
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_SameCluster() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestCurrentClusterName}},
+			Clusters:          []string{ cluster.TestCurrentClusterName },
 		},
 		1234,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
@@ -280,17 +286,17 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_DiffCluster() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestAlternativeClusterName}},
+			Clusters:          []string{ cluster.TestAlternativeClusterName },
 		},
 		1234,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
@@ -305,21 +311,21 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_SameCluster() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestCurrentClusterName}},
+			Clusters:          []string{ cluster.TestCurrentClusterName },
 		},
 		1234,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestCurrentClusterName}},
+			Clusters:          []string{ cluster.TestCurrentClusterName },
 		},
 		5678,
 		nil,
@@ -334,21 +340,21 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_DiffCluster() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestCurrentClusterName}},
+			Clusters:          []string{ cluster.TestCurrentClusterName },
 		},
 		1234,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: cluster.TestAlternativeClusterName}},
+			Clusters:          []string{ cluster.TestAlternativeClusterName },
 		},
 		5678,
 		nil,
@@ -363,25 +369,25 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToGlobal() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
 			},
 		},
 		5678,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 		1234,
@@ -397,20 +403,20 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 		1234,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
 		nil,
@@ -425,25 +431,25 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLoca
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffectiveLocal() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 		5678,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
 			},
 		},
 		1234,
@@ -459,26 +465,26 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffe
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_DiffNamespace() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestAlternativeClusterName},
-				{ClusterName: cluster.TestCurrentClusterName},
+			Clusters: []string{
+				cluster.TestAlternativeClusterName,
+				cluster.TestCurrentClusterName,
 			},
 		},
 		1234,
 		nil,
 	)
 	targetNamespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistenceblobs.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
-		&persistence.NamespaceReplicationConfig{
+		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: cluster.TestCurrentClusterName},
-				{ClusterName: cluster.TestAlternativeClusterName},
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 		1234,
@@ -500,22 +506,22 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlob
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateTaskListName() {
-	taskList := func(name string) *commonproto.TaskList {
-		return &commonproto.TaskList{Name: name, Kind: enums.TaskListKindNormal}
+	taskList := func(name string) *tasklistpb.TaskList {
+		return &tasklistpb.TaskList{Name: name, Kind: tasklistpb.TaskListKind_Normal}
 	}
 
 	testCases := []struct {
 		defaultVal  string
-		input       *commonproto.TaskList
-		output      *commonproto.TaskList
+		input       *tasklistpb.TaskList
+		output      *tasklistpb.TaskList
 		isOutputErr bool
 	}{
-		{"tl-1", nil, &commonproto.TaskList{Name: "tl-1"}, false},
+		{"tl-1", nil, &tasklistpb.TaskList{Name: "tl-1"}, false},
 		{"", taskList("tl-1"), taskList("tl-1"), false},
 		{"tl-1", taskList("tl-1"), taskList("tl-1"), false},
 		{"", taskList("/tl-1"), taskList("/tl-1"), false},
 		{"", taskList("/__temporal_sys"), taskList("/__temporal_sys"), false},
-		{"", nil, &commonproto.TaskList{}, true},
+		{"", nil, &tasklistpb.TaskList{}, true},
 		{"", taskList(""), taskList(""), true},
 		{"", taskList(reservedTaskListPrefix), taskList(reservedTaskListPrefix), true},
 		{"tl-1", taskList(reservedTaskListPrefix), taskList(reservedTaskListPrefix), true},

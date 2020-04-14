@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +32,7 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"
 
@@ -66,8 +70,8 @@ func DescribeBatchJob(c *cli.Context) {
 	}
 
 	output := map[string]interface{}{}
-	if wf.WorkflowExecutionInfo.GetStatus() != enums.WorkflowExecutionStatusRunning {
-		if wf.WorkflowExecutionInfo.GetStatus() != enums.WorkflowExecutionStatusCompleted {
+	if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatus_Running {
+		if wf.WorkflowExecutionInfo.GetStatus() != executionpb.WorkflowExecutionStatus_Completed {
 			output["msg"] = "batch job stopped status: " + wf.WorkflowExecutionInfo.GetStatus().String()
 		} else {
 			output["msg"] = "batch job is finished successfully"
@@ -111,7 +115,7 @@ func ListBatchJobs(c *cli.Context) {
 			"operator":  string(wf.SearchAttributes.IndexedFields["Operator"]),
 		}
 
-		if wf.GetStatus() != enums.WorkflowExecutionStatusRunning {
+		if wf.GetStatus() != executionpb.WorkflowExecutionStatus_Running {
 			job["status"] = wf.GetStatus().String()
 			job["closeTime"] = convertTime(wf.GetCloseTime().GetValue(), false)
 		} else {

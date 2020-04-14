@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,8 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	querypb "go.temporal.io/temporal-proto/query"
 
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -110,11 +113,11 @@ func (s *DecisionHandlerSuite) TestHandleBufferedQueries_QueryTooLarge() {
 	s.assertQueryCounts(s.queryRegistry, 0, 5, 0, 5)
 }
 
-func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize int) map[string]*commonproto.WorkflowQueryResult {
-	results := make(map[string]*commonproto.WorkflowQueryResult)
+func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize int) map[string]*querypb.WorkflowQueryResult {
+	results := make(map[string]*querypb.WorkflowQueryResult)
 	for _, id := range ids {
-		results[id] = &commonproto.WorkflowQueryResult{
-			ResultType: enums.QueryResultTypeAnswered,
+		results[id] = &querypb.WorkflowQueryResult{
+			ResultType: querypb.QueryResultType_Answered,
 			Answer:     make([]byte, resultSize, resultSize),
 		}
 	}
@@ -124,7 +127,7 @@ func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize in
 func (s *DecisionHandlerSuite) constructQueryRegistry(numQueries int) queryRegistry {
 	queryRegistry := newQueryRegistry()
 	for i := 0; i < numQueries; i++ {
-		queryRegistry.bufferQuery(&commonproto.WorkflowQuery{})
+		queryRegistry.bufferQuery(&querypb.WorkflowQuery{})
 	}
 	return queryRegistry
 }

@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -85,7 +89,7 @@ func (pdb *db) DeleteMessage(queueType persistence.QueueType, messageID int) (sq
 
 // InsertAckLevel inserts ack level
 func (pdb *db) InsertAckLevel(queueType persistence.QueueType, messageID int, clusterName string) error {
-	clusterAckLevels := map[string]int{clusterName: messageID}
+	clusterAckLevels := map[string]int{clusterName: messageID }
 	data, err := json.Marshal(clusterAckLevels)
 	if err != nil {
 		return err

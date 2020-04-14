@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,15 +34,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -172,11 +175,9 @@ func (s *replicationTaskExecutorSuite) TestFilterTask() {
 		Return(cache.NewGlobalNamespaceCacheEntryForTest(
 			nil,
 			nil,
-			&persistence.NamespaceReplicationConfig{
-				Clusters: []*persistence.ClusterReplicationConfig{
-					{
-						ClusterName: "test",
-					},
+			&persistenceblobs.NamespaceReplicationConfig{
+				Clusters: []string{
+	"test",
 				}},
 			0,
 			s.clusterMetadata,
@@ -207,10 +208,10 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
+		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -241,10 +242,10 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeHistory,
-		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replication.HistoryTaskAttributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskType_HistoryTask,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
 				NamespaceId:  namespaceID,
 				WorkflowId:   workflowID,
 				RunId:        runID,
@@ -256,7 +257,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 	}
 	request := &historyservice.ReplicateEventsRequest{
 		NamespaceId: namespaceID,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -278,10 +279,10 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 	namespaceID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeHistoryV2,
-		Attributes: &replication.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replication.HistoryTaskV2Attributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskType_HistoryV2Task,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -290,7 +291,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 	}
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: namespaceID,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

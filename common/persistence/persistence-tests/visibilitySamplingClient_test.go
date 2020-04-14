@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,8 +30,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -50,7 +53,7 @@ type VisibilitySamplingSuite struct {
 var (
 	testNamespaceUUID     = "fb15e4b5-356f-466d-8c6d-a29223e5c536"
 	testNamespace         = "test-namespace"
-	testWorkflowExecution = commonproto.WorkflowExecution{
+	testWorkflowExecution = executionpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
@@ -103,14 +106,14 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 		Namespace:        testNamespace,
 		Execution:        testWorkflowExecution,
 		WorkflowTypeName: testWorkflowTypeName,
-		Status:           enums.WorkflowExecutionStatusCompleted,
+		Status:           executionpb.WorkflowExecutionStatus_Completed,
 	}
 	request2 := &p.RecordWorkflowExecutionClosedRequest{
 		NamespaceID:      testNamespaceUUID,
 		Namespace:        testNamespace,
 		Execution:        testWorkflowExecution,
 		WorkflowTypeName: testWorkflowTypeName,
-		Status:           enums.WorkflowExecutionStatusFailed,
+		Status:           executionpb.WorkflowExecutionStatus_Failed,
 	}
 
 	s.persistence.On("RecordWorkflowExecutionClosed", request).Return(nil).Once()
@@ -250,7 +253,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByStatus() {
 	}
 	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: req,
-		Status:                        enums.WorkflowExecutionStatusFailed,
+		Status:                        executionpb.WorkflowExecutionStatus_Failed,
 	}
 	s.persistence.On("ListClosedWorkflowExecutionsByStatus", request).Return(nil, nil).Once()
 	_, err := s.client.ListClosedWorkflowExecutionsByStatus(request)

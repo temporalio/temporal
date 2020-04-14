@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +28,7 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -404,7 +408,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 func (m *historyV2ManagerImpl) readHistoryBranch(
 	byBatch bool,
 	request *ReadHistoryBranchRequest,
-) ([]*commonproto.HistoryEvent, []*commonproto.History, []byte, int, int64, error) {
+) ([]*eventpb.HistoryEvent, []*eventpb.History, []byte, int, int64, error) {
 
 	dataBlobs, token, dataSize, logger, err := m.readRawHistoryBranch(request)
 	if err != nil {
@@ -412,8 +416,8 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	}
 	defaultLastEventID := request.MinEventID - 1
 
-	historyEvents := make([]*commonproto.HistoryEvent, 0, request.PageSize)
-	historyEventBatches := make([]*commonproto.History, 0, request.PageSize)
+	historyEvents := make([]*eventpb.HistoryEvent, 0, request.PageSize)
+	historyEventBatches := make([]*eventpb.History, 0, request.PageSize)
 	// first_event_id of the last batch
 	lastFirstEventID := common.EmptyEventID
 
@@ -468,7 +472,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 		token.LastEventVersion = firstEvent.GetVersion()
 		token.LastEventID = lastEvent.GetEventId()
 		if byBatch {
-			historyEventBatches = append(historyEventBatches, &commonproto.History{Events: events})
+			historyEventBatches = append(historyEventBatches, &eventpb.History{Events: events})
 		} else {
 			historyEvents = append(historyEvents, events...)
 		}

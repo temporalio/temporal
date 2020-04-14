@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,8 +31,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 )
 
 type (
@@ -39,14 +43,14 @@ type (
 )
 
 var (
-	historyEvent = &commonproto.HistoryEvent{
+	historyEvent = &eventpb.HistoryEvent{
 		Version:   1234,
 		EventId:   130,
 		Timestamp: 112345132134,
-		EventType: enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated,
-		Attributes: &commonproto.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &commonproto.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
+		EventType: eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated,
+		Attributes: &eventpb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &eventpb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 			Namespace: "some random target namespace",
-			WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowExecution: &executionpb.WorkflowExecution{
 				WorkflowId: "some random target workflow ID",
 				RunId:      "some random target run ID",
 			},
@@ -54,7 +58,7 @@ var (
 			Control:           []byte("some random control"),
 		}},
 	}
-	encodedHistoryEvent = `{"eventId":"130","timestamp":"112345132134","eventType":"EventTypeRequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"c29tZSByYW5kb20gY29udHJvbA==","childWorkflowOnly":true}}`
+	encodedHistoryEvent = `{"eventId":"130","timestamp":"112345132134","eventType":"RequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"c29tZSByYW5kb20gY29udHJvbA==","childWorkflowOnly":true}}`
 )
 
 func TestJSONPBEncoderSuite(t *testing.T) {
@@ -76,14 +80,14 @@ func (s *jsonpbEncoderSuite) TestEncode() {
 }
 
 func (s *jsonpbEncoderSuite) TestDecode() {
-	var val commonproto.HistoryEvent
+	var val eventpb.HistoryEvent
 	err := s.encoder.Decode([]byte(encodedHistoryEvent), &val)
 	s.Nil(err)
 	s.EqualValues(val, *historyEvent)
 }
 
 func (s *jsonpbEncoderSuite) TestEncodeSlice() {
-	var historyEvents []*commonproto.HistoryEvent
+	var historyEvents []*eventpb.HistoryEvent
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
@@ -96,7 +100,7 @@ func (s *jsonpbEncoderSuite) TestEncodeSlice() {
 func (s *jsonpbEncoderSuite) TestDecodeSlice() {
 	historyEventsJSON := fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", encodedHistoryEvent)
 
-	var historyEvents []*commonproto.HistoryEvent
+	var historyEvents []*eventpb.HistoryEvent
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)
 	historyEvents = append(historyEvents, historyEvent)

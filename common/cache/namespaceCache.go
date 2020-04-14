@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,9 +34,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	"github.com/gogo/protobuf/proto"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -40,6 +46,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 // ReplicationPolicy is the namespace's replication policy,
@@ -123,9 +130,9 @@ type (
 	NamespaceCacheEntry struct {
 		clusterMetadata cluster.Metadata
 		sync.RWMutex
-		info                        *persistence.NamespaceInfo
-		config                      *persistence.NamespaceConfig
-		replicationConfig           *persistence.NamespaceReplicationConfig
+		info                        *persistenceblobs.NamespaceInfo
+		config                      *persistenceblobs.NamespaceConfig
+		replicationConfig           *persistenceblobs.NamespaceReplicationConfig
 		configVersion               int64
 		failoverVersion             int64
 		isGlobalNamespace           bool
@@ -181,9 +188,9 @@ func newNamespaceCacheEntry(
 
 // NewGlobalNamespaceCacheEntryForTest returns an entry with test data
 func NewGlobalNamespaceCacheEntryForTest(
-	info *persistence.NamespaceInfo,
-	config *persistence.NamespaceConfig,
-	repConfig *persistence.NamespaceReplicationConfig,
+	info *persistenceblobs.NamespaceInfo,
+	config *persistenceblobs.NamespaceConfig,
+	repConfig *persistenceblobs.NamespaceReplicationConfig,
 	failoverVersion int64,
 	clusterMetadata cluster.Metadata,
 ) *NamespaceCacheEntry {
@@ -200,8 +207,8 @@ func NewGlobalNamespaceCacheEntryForTest(
 
 // NewLocalNamespaceCacheEntryForTest returns an entry with test data
 func NewLocalNamespaceCacheEntryForTest(
-	info *persistence.NamespaceInfo,
-	config *persistence.NamespaceConfig,
+	info *persistenceblobs.NamespaceInfo,
+	config *persistenceblobs.NamespaceConfig,
 	targetCluster string,
 	clusterMetadata cluster.Metadata,
 ) *NamespaceCacheEntry {
@@ -210,9 +217,9 @@ func NewLocalNamespaceCacheEntryForTest(
 		info:              info,
 		config:            config,
 		isGlobalNamespace: false,
-		replicationConfig: &persistence.NamespaceReplicationConfig{
+		replicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: targetCluster,
-			Clusters:          []*persistence.ClusterReplicationConfig{{ClusterName: targetCluster}},
+			Clusters:          []string{ targetCluster },
 		},
 		failoverVersion: common.EmptyVersion,
 		clusterMetadata: clusterMetadata,
@@ -221,10 +228,10 @@ func NewLocalNamespaceCacheEntryForTest(
 
 // NewNamespaceCacheEntryForTest returns an entry with test data
 func NewNamespaceCacheEntryForTest(
-	info *persistence.NamespaceInfo,
-	config *persistence.NamespaceConfig,
+	info *persistenceblobs.NamespaceInfo,
+	config *persistenceblobs.NamespaceConfig,
 	isGlobalNamespace bool,
-	repConfig *persistence.NamespaceReplicationConfig,
+	repConfig *persistenceblobs.NamespaceReplicationConfig,
 	failoverVersion int64,
 	clusterMetadata cluster.Metadata,
 ) *NamespaceCacheEntry {
@@ -367,7 +374,7 @@ func (c *namespaceCache) GetNamespaceID(
 	if err != nil {
 		return "", err
 	}
-	return entry.info.ID, nil
+	return primitives.UUIDString(entry.info.Id), nil
 }
 
 // GetNamespaceName returns namespace name given the namespace id
@@ -451,8 +458,8 @@ func (c *namespaceCache) refreshNamespacesLocked() error {
 	newCacheNameToID := newNamespaceCache()
 	newCacheByID := newNamespaceCache()
 	for _, namespace := range c.GetAllNamespace() {
-		newCacheNameToID.Put(namespace.info.Name, namespace.info.ID)
-		newCacheByID.Put(namespace.info.ID, namespace)
+		newCacheNameToID.Put(namespace.info.Name, primitives.UUIDString(namespace.info.Id))
+		newCacheByID.Put(primitives.UUIDString(namespace.info.Id), namespace)
 	}
 
 UpdateLoop:
@@ -465,11 +472,11 @@ UpdateLoop:
 			// will be loaded into cache in the next refresh
 			break UpdateLoop
 		}
-		prevEntry, nextEntry, err := c.updateIDToNamespaceCache(newCacheByID, namespace.info.ID, namespace)
+		prevEntry, nextEntry, err := c.updateIDToNamespaceCache(newCacheByID, primitives.UUIDString(namespace.info.Id), namespace)
 		if err != nil {
 			return err
 		}
-		c.updateNameToIDCache(newCacheNameToID, nextEntry.info.Name, nextEntry.info.ID)
+		c.updateNameToIDCache(newCacheNameToID, nextEntry.info.Name, primitives.UUIDString(nextEntry.info.Id))
 
 		if prevEntry != nil {
 			prevEntries = append(prevEntries, prevEntry)
@@ -493,7 +500,7 @@ func (c *namespaceCache) checkNamespaceExists(
 	id string,
 ) error {
 
-	_, err := c.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: name, ID: id})
+	_, err := c.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: name, ID: primitives.MustParseUUID(id)})
 	return err
 }
 
@@ -658,57 +665,32 @@ func (c *namespaceCache) buildEntryFromRecord(
 	// this is a shallow copy, but since the record is generated by persistence
 	// and only accessible here, it would be fine
 	newEntry := newNamespaceCacheEntry(c.clusterMetadata)
-	newEntry.info = record.Info
-	newEntry.config = record.Config
-	newEntry.replicationConfig = record.ReplicationConfig
-	newEntry.configVersion = record.ConfigVersion
-	newEntry.failoverVersion = record.FailoverVersion
+	newEntry.info = record.Namespace.Info
+	newEntry.config = record.Namespace.Config
+	newEntry.replicationConfig = record.Namespace.ReplicationConfig
+	newEntry.configVersion = record.Namespace.ConfigVersion
+	newEntry.failoverVersion = record.Namespace.FailoverVersion
 	newEntry.isGlobalNamespace = record.IsGlobalNamespace
-	newEntry.failoverNotificationVersion = record.FailoverNotificationVersion
+	newEntry.failoverNotificationVersion = record.Namespace.FailoverNotificationVersion
 	newEntry.notificationVersion = record.NotificationVersion
 	newEntry.initialized = true
 	return newEntry
 }
 
-func copyResetBinary(bins commonproto.BadBinaries) commonproto.BadBinaries {
-	newbins := make(map[string]*commonproto.BadBinaryInfo, len(bins.Binaries))
-	for k, v := range bins.Binaries {
-		newbins[k] = v
-	}
-	return commonproto.BadBinaries{
-		Binaries: newbins,
-	}
-}
-
 func (entry *NamespaceCacheEntry) duplicate() *NamespaceCacheEntry {
 	// this is a deep copy
 	result := newNamespaceCacheEntry(entry.clusterMetadata)
-	result.info = &persistence.NamespaceInfo{
-		ID:          entry.info.ID,
-		Name:        entry.info.Name,
-		Status:      entry.info.Status,
-		Description: entry.info.Description,
-		OwnerEmail:  entry.info.OwnerEmail,
+	result.info = proto.Clone(entry.info).(*persistenceblobs.NamespaceInfo)
+	if result.info.Data == nil {
+		result.info.Data = make(map[string]string, 0)
 	}
-	result.info.Data = map[string]string{}
-	for k, v := range entry.info.Data {
-		result.info.Data[k] = v
+
+	result.config = proto.Clone(entry.config).(*persistenceblobs.NamespaceConfig)
+	if result.config.BadBinaries == nil || result.config.BadBinaries.Binaries == nil{
+		result.config.BadBinaries.Binaries = make(map[string]*namespacepb.BadBinaryInfo, 0)
 	}
-	result.config = &persistence.NamespaceConfig{
-		Retention:                entry.config.Retention,
-		EmitMetric:               entry.config.EmitMetric,
-		HistoryArchivalStatus:    entry.config.HistoryArchivalStatus,
-		HistoryArchivalURI:       entry.config.HistoryArchivalURI,
-		VisibilityArchivalStatus: entry.config.VisibilityArchivalStatus,
-		VisibilityArchivalURI:    entry.config.VisibilityArchivalURI,
-		BadBinaries:              copyResetBinary(entry.config.BadBinaries),
-	}
-	result.replicationConfig = &persistence.NamespaceReplicationConfig{
-		ActiveClusterName: entry.replicationConfig.ActiveClusterName,
-	}
-	for _, clusterName := range entry.replicationConfig.Clusters {
-		result.replicationConfig.Clusters = append(result.replicationConfig.Clusters, &*clusterName)
-	}
+
+	result.replicationConfig = proto.Clone(entry.replicationConfig).(*persistenceblobs.NamespaceReplicationConfig)
 	result.configVersion = entry.configVersion
 	result.failoverVersion = entry.failoverVersion
 	result.isGlobalNamespace = entry.isGlobalNamespace
@@ -719,17 +701,17 @@ func (entry *NamespaceCacheEntry) duplicate() *NamespaceCacheEntry {
 }
 
 // GetInfo return the namespace info
-func (entry *NamespaceCacheEntry) GetInfo() *persistence.NamespaceInfo {
+func (entry *NamespaceCacheEntry) GetInfo() *persistenceblobs.NamespaceInfo {
 	return entry.info
 }
 
 // GetConfig return the namespace config
-func (entry *NamespaceCacheEntry) GetConfig() *persistence.NamespaceConfig {
+func (entry *NamespaceCacheEntry) GetConfig() *persistenceblobs.NamespaceConfig {
 	return entry.config
 }
 
 // GetReplicationConfig return the namespace replication config
-func (entry *NamespaceCacheEntry) GetReplicationConfig() *persistence.NamespaceReplicationConfig {
+func (entry *NamespaceCacheEntry) GetReplicationConfig() *persistenceblobs.NamespaceReplicationConfig {
 	return entry.replicationConfig
 }
 
@@ -810,7 +792,7 @@ func CreateNamespaceCacheEntry(
 	namespace string,
 ) *NamespaceCacheEntry {
 
-	return &NamespaceCacheEntry{info: &persistence.NamespaceInfo{Name: namespace}}
+	return &NamespaceCacheEntry{info: &persistenceblobs.NamespaceInfo{Name: namespace}}
 }
 
 // SampleRetentionKey is key to specify sample retention
@@ -827,13 +809,13 @@ func (entry *NamespaceCacheEntry) GetRetentionDays(
 	if entry.IsSampledForLongerRetention(workflowID) {
 		if sampledRetentionValue, ok := entry.info.Data[SampleRetentionKey]; ok {
 			sampledRetentionDays, err := strconv.Atoi(sampledRetentionValue)
-			if err != nil || sampledRetentionDays < int(entry.config.Retention) {
-				return entry.config.Retention
+			if err != nil || sampledRetentionDays < int(entry.config.RetentionDays) {
+				return entry.config.RetentionDays
 			}
 			return int32(sampledRetentionDays)
 		}
 	}
-	return entry.config.Retention
+	return entry.config.RetentionDays
 }
 
 // IsSampledForLongerRetentionEnabled return whether sample for longer retention is enabled or not

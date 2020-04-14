@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,11 +29,14 @@ import (
 	"fmt"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -107,14 +114,14 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().Id
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
 		RunId:      req.WorkflowExecution.RunId,
 	}
 
-	return handler.historyEngine.updateWorkflowExecutionWithAction(ctx, namespaceID, execution,
+	return handler.historyEngine.updateWorkflowExecutionWithAction(ctx, primitives.UUIDString(namespaceID), execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -149,9 +156,9 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().Id
 
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
 		RunId:      req.WorkflowExecution.RunId,
 	}
@@ -160,7 +167,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	requestID := req.GetRequestId()
 
 	var resp *historyservice.RecordDecisionTaskStartedResponse
-	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, namespaceID, execution,
+	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, primitives.UUIDString(namespaceID), execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -190,7 +197,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			if decision.StartedID != common.EmptyEventID {
 				// If decision is started as part of the current request scope then return a positive response
 				if decision.RequestID == requestID {
-					resp, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordDecisionTaskStartedResponse(primitives.UUIDString(namespaceID), mutableState, decision, req.PollRequest.GetIdentity())
 					if err != nil {
 						return nil, err
 					}
@@ -209,7 +216,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 				return nil, serviceerror.NewInternal("Unable to add DecisionTaskStarted event to history.")
 			}
 
-			resp, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordDecisionTaskStartedResponse(primitives.UUIDString(namespaceID), mutableState, decision, req.PollRequest.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -231,7 +238,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().Id
 
 	request := req.FailedRequest
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
@@ -239,12 +246,12 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 		return ErrDeserializingToken
 	}
 
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
-	return handler.historyEngine.updateWorkflowExecution(ctx, namespaceID, workflowExecution, true,
+	return handler.historyEngine.updateWorkflowExecution(ctx, primitives.UUIDString(namespaceID), workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -271,7 +278,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().Id
 
 	request := req.CompleteRequest
 	token, err0 := handler.tokenSerializer.Deserialize(request.TaskToken)
@@ -279,7 +286,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 		return nil, ErrDeserializingToken
 	}
 
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
@@ -289,7 +296,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	clientFeatureVersion := clientHeaders[1]
 	clientImpl := clientHeaders[2]
 
-	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, workflowExecution)
+	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, primitives.UUIDString(namespaceID), workflowExecution)
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +343,7 @@ Update_History_Loop:
 
 		decisionHeartbeating := request.GetForceCreateNewDecisionTask() && len(request.Decisions) == 0
 		var decisionHeartbeatTimeout bool
-		var completedEvent *commonproto.HistoryEvent
+		var completedEvent *eventpb.HistoryEvent
 		if decisionHeartbeating {
 			namespace := namespaceEntry.GetInfo().Name
 			timeout := handler.config.DecisionHeartbeatTimeout(namespace)
@@ -385,9 +392,9 @@ Update_History_Loop:
 		executionInfo.ClientImpl = clientImpl
 
 		binChecksum := request.GetBinaryChecksum()
-		if _, ok := namespaceEntry.GetConfig().BadBinaries.Binaries[binChecksum]; ok {
+		if _, ok := namespaceEntry.GetConfig().GetBadBinaries().GetBinaries()[binChecksum]; ok {
 			failDecision = &failDecisionInfo{
-				cause:   enums.DecisionTaskFailedCauseBadBinary,
+				cause:   eventpb.DecisionTaskFailedCause_BadBinary,
 				message: fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum),
 			}
 		} else {
@@ -445,7 +452,7 @@ Update_History_Loop:
 			handler.logger.Info("Failing the decision.", tag.WorkflowDecisionFailCause(int64(failDecision.cause)),
 				tag.WorkflowID(token.GetWorkflowId()),
 				tag.WorkflowRunIDBytes(token.GetRunId()),
-				tag.WorkflowNamespaceID(namespaceID))
+				tag.WorkflowNamespaceIDBytes(namespaceID))
 			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, []byte(failDecision.message), request)
 			if err != nil {
 				return nil, err
@@ -479,7 +486,7 @@ Update_History_Loop:
 				// start the new decision task if request asked to do so
 				// TODO: replace the poll request
 				_, _, err := msBuilder.AddDecisionTaskStartedEvent(newDecision.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflowservice.PollForDecisionTaskRequest{
-					TaskList: &commonproto.TaskList{Name: newDecision.TaskList},
+					TaskList: &tasklistpb.TaskList{Name: newDecision.TaskList},
 					Identity: request.Identity,
 				})
 				if err != nil {
@@ -497,7 +504,7 @@ Update_History_Loop:
 				handler.shard.GetTimeSource().Now(),
 				newWorkflowExecutionContext(
 					continueAsNewExecutionInfo.NamespaceID,
-					commonproto.WorkflowExecution{
+					executionpb.WorkflowExecution{
 						WorkflowId: continueAsNewExecutionInfo.WorkflowID,
 						RunId:      continueAsNewExecutionInfo.RunID,
 					},
@@ -557,7 +564,7 @@ Update_History_Loop:
 		resp = &historyservice.RespondDecisionTaskCompletedResponse{}
 		if request.GetReturnNewDecisionTask() && createNewDecisionTask {
 			decision, _ := msBuilder.GetDecisionInfo(newDecisionTaskScheduledID)
-			resp.StartedResponse, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, msBuilder, decision, request.GetIdentity())
+			resp.StartedResponse, err = handler.createRecordDecisionTaskStartedResponse(primitives.UUIDString(namespaceID), msBuilder, decision, request.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -592,9 +599,9 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	response.StickyExecutionEnabled = msBuilder.IsStickyTaskListEnabled()
 	response.NextEventId = msBuilder.GetNextEventID()
 	response.Attempt = decision.Attempt
-	response.WorkflowExecutionTaskList = &commonproto.TaskList{
+	response.WorkflowExecutionTaskList = &tasklistpb.TaskList{
 		Name: executionInfo.TaskList,
-		Kind: enums.TaskListKindNormal,
+		Kind: tasklistpb.TaskListKind_Normal,
 	}
 	response.ScheduledTimestamp = decision.ScheduledTimestamp
 	response.StartedTimestamp = decision.StartedTimestamp
@@ -603,7 +610,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 		// This decision is retried from mutable state
 		// Also return schedule and started which are not written to history yet
 		scheduledEvent, startedEvent := msBuilder.CreateTransientDecisionEvents(decision, identity)
-		response.DecisionInfo = &commonproto.TransientDecisionInfo{}
+		response.DecisionInfo = &eventgenpb.TransientDecisionInfo{}
 		response.DecisionInfo.ScheduledEvent = scheduledEvent
 		response.DecisionInfo.StartedEvent = startedEvent
 	}
@@ -615,7 +622,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 
 	qr := msBuilder.GetQueryRegistry()
 	buffered := qr.getBufferedIDs()
-	queries := make(map[string]*commonproto.WorkflowQuery)
+	queries := make(map[string]*querypb.WorkflowQuery)
 	for _, id := range buffered {
 		input, err := qr.getQueryInput(id)
 		if err != nil {
@@ -627,13 +634,13 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	return response, nil
 }
 
-func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*commonproto.WorkflowQueryResult, createNewDecisionTask bool, namespaceEntry *cache.NamespaceCacheEntry, decisionHeartbeating bool) {
+func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewDecisionTask bool, namespaceEntry *cache.NamespaceCacheEntry, decisionHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.hasBufferedQuery() {
 		return
 	}
 
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := namespaceEntry.GetInfo().Id
 	namespace := namespaceEntry.GetInfo().Name
 	workflowID := msBuilder.GetExecutionInfo().WorkflowID
 	runID := msBuilder.GetExecutionInfo().RunID
@@ -655,7 +662,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 			len(result.GetAnswer()),
 			sizeLimitWarn,
 			sizeLimitError,
-			namespaceID,
+			primitives.UUIDString(namespaceID),
 			workflowID,
 			runID,
 			scope,

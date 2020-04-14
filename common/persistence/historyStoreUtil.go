@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,7 +27,7 @@ package persistence
 import (
 	"fmt"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 )
@@ -31,8 +35,8 @@ import (
 // ReadFullPageV2Events reads a full page of history events from HistoryManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history events, the size
 // of data read, the next page token, and an error if present.
-func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*commonproto.HistoryEvent, int, []byte, error) {
-	var historyEvents []*commonproto.HistoryEvent
+func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*eventpb.HistoryEvent, int, []byte, error) {
+	var historyEvents []*eventpb.HistoryEvent
 	size := int(0)
 	for {
 		response, err := historyV2Mgr.ReadHistoryBranch(req)
@@ -51,8 +55,8 @@ func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchReq
 // ReadFullPageV2EventsByBatch reads a full page of history events by batch from HistoryManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history batches, the size
 // of data read, the next page token, and an error if present.
-func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*commonproto.History, int, []byte, error) {
-	historyBatches := []*commonproto.History{}
+func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*eventpb.History, int, []byte, error) {
+	historyBatches := []*eventpb.History{}
 	eventsRead := 0
 	size := 0
 	for {

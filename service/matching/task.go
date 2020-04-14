@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,9 +25,9 @@
 package matching
 
 import (
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/primitives"
@@ -54,7 +58,7 @@ type (
 		query            *queryTaskInfo   // non-nil for a query task that's locally sync matched
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
 		namespace        string
-		source           enums.TaskSource
+		source           commongenpb.TaskSource
 		forwardedFrom    string     // name of the child partition this task is forwarded from (empty if not forwarded)
 		responseC        chan error // non-nil only where there is a caller waiting for response (sync-match)
 		backlogCountHint int64
@@ -64,7 +68,7 @@ type (
 func newInternalTask(
 	info *persistenceblobs.AllocatedTaskInfo,
 	completionFunc func(*persistenceblobs.AllocatedTaskInfo, error),
-	source enums.TaskSource,
+	source commongenpb.TaskSource,
 	forwardedFrom string,
 	forSyncMatch bool,
 ) *internalTask {
@@ -116,10 +120,10 @@ func (task *internalTask) isForwarded() bool {
 	return task.forwardedFrom != ""
 }
 
-func (task *internalTask) workflowExecution() *commonproto.WorkflowExecution {
+func (task *internalTask) workflowExecution() *executionpb.WorkflowExecution {
 	switch {
 	case task.event != nil:
-		return &commonproto.WorkflowExecution{WorkflowId: task.event.Data.GetWorkflowId(), RunId: primitives.UUIDString(task.event.Data.GetRunId())}
+		return &executionpb.WorkflowExecution{WorkflowId: task.event.Data.GetWorkflowId(), RunId: primitives.UUIDString(task.event.Data.GetRunId())}
 	case task.query != nil:
 		return task.query.request.GetQueryRequest().GetExecution()
 	case task.started != nil && task.started.decisionTaskInfo != nil:
@@ -127,7 +131,7 @@ func (task *internalTask) workflowExecution() *commonproto.WorkflowExecution {
 	case task.started != nil && task.started.activityTaskInfo != nil:
 		return task.started.activityTaskInfo.WorkflowExecution
 	}
-	return &commonproto.WorkflowExecution{}
+	return &executionpb.WorkflowExecution{}
 }
 
 // pollForDecisionResponse returns the poll response for a decision task that is

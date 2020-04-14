@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +33,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -912,7 +916,7 @@ func (c *clientImpl) GetReplicationMessages(
 	wg.Wait()
 	close(respChan)
 
-	response := &historyservice.GetReplicationMessagesResponse{MessagesByShard: make(map[int32]*replication.ReplicationMessages)}
+	response := &historyservice.GetReplicationMessagesResponse{MessagesByShard: make(map[int32]*replicationgenpb.ReplicationMessages)}
 	for resp := range respChan {
 		for shardID, tasks := range resp.MessagesByShard {
 			response.MessagesByShard[shardID] = tasks

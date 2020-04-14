@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 )
 
 // MockReplicatorQueueProcessor is a mock of ReplicatorQueueProcessor interface
@@ -81,19 +85,19 @@ func (mr *MockReplicatorQueueProcessorMockRecorder) Stop() *gomock.Call {
 }
 
 // getTasks mocks base method
-func (m *MockReplicatorQueueProcessor) getTasks(arg0 context.Context, arg1 string, arg2 int64) (*replication.ReplicationMessages, error) {
+func (m *MockReplicatorQueueProcessor) getTasks(arg0 context.Context, arg1 string, arg2 int64) (*replicationgenpb.ReplicationMessages, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getTasks", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*replication.ReplicationMessages)
+	ret0, _ := ret[0].(*replicationgenpb.ReplicationMessages)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // getTasks mocks base method
-func (m *MockReplicatorQueueProcessor) getTask(arg0 context.Context, arg1 *replication.ReplicationTaskInfo) (*replication.ReplicationTask, error) {
+func (m *MockReplicatorQueueProcessor) getTask(arg0 context.Context, arg1 *replicationgenpb.ReplicationTaskInfo) (*replicationgenpb.ReplicationTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getTask", arg0, arg1)
-	ret0, _ := ret[0].(*replication.ReplicationTask)
+	ret0, _ := ret[0].(*replicationgenpb.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

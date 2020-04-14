@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,8 +29,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -228,7 +232,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 	}()
 
 	switch task.getFirstEvent().GetEventType() {
-	case enums.EventTypeWorkflowExecutionStarted:
+	case eventpb.EventType_WorkflowExecutionStarted:
 		return r.applyStartEvents(ctx, context, releaseFn, task)
 
 	default:
@@ -427,7 +431,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newContext := newWorkflowExecutionContext(
 			newExecutionInfo.NamespaceID,
-			commonproto.WorkflowExecution{
+			executionpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowID,
 				RunId:      newExecutionInfo.RunID,
 			},

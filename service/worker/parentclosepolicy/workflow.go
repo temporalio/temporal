@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,8 +29,8 @@ import (
 	"time"
 
 	"go.temporal.io/temporal"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
@@ -54,7 +58,7 @@ type (
 	RequestDetail struct {
 		WorkflowID string
 		RunID      string
-		Policy     enums.ParentClosePolicy
+		Policy     commonpb.ParentClosePolicy
 	}
 
 	// Request defines the request for parent close policy
@@ -103,15 +107,15 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 	for _, execution := range request.Executions {
 		var err error
 		switch execution.Policy {
-		case enums.ParentClosePolicyAbandon:
+		case commonpb.ParentClosePolicy_Abandon:
 			//no-op
 			continue
-		case enums.ParentClosePolicyTerminate:
+		case commonpb.ParentClosePolicy_Terminate:
 			_, err = client.TerminateWorkflowExecution(nil, &historyservice.TerminateWorkflowExecutionRequest{
 				NamespaceId: request.NamespaceID,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 					Namespace: request.Namespace,
-					WorkflowExecution: &commonproto.WorkflowExecution{
+					WorkflowExecution: &executionpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 						RunId:      execution.RunID,
 					},
@@ -119,12 +123,12 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					Identity: processorWFTypeName,
 				},
 			})
-		case enums.ParentClosePolicyRequestCancel:
+		case commonpb.ParentClosePolicy_RequestCancel:
 			_, err = client.RequestCancelWorkflowExecution(nil, &historyservice.RequestCancelWorkflowExecutionRequest{
 				NamespaceId: request.NamespaceID,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 					Namespace: request.Namespace,
-					WorkflowExecution: &commonproto.WorkflowExecution{
+					WorkflowExecution: &executionpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 						RunId:      execution.RunID,
 					},

@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -300,37 +304,8 @@ func (s *Service) ensureSystemNamespaceExists() {
 	case nil:
 		// noop
 	case *serviceerror.NotFound:
-		s.GetLogger().Info("temporal-system namespace does not exist, attempting to register namespace")
-		s.registerSystemNamespace()
+		s.GetLogger().Fatal("temporal-system namespace does not exist", tag.Error(err))
 	default:
 		s.GetLogger().Fatal("failed to verify if temporal system namespace exists", tag.Error(err))
-	}
-}
-
-func (s *Service) registerSystemNamespace() {
-
-	currentClusterName := s.GetClusterMetadata().GetCurrentClusterName()
-	_, err := s.GetMetadataManager().CreateNamespace(&persistence.CreateNamespaceRequest{
-		Info: &persistence.NamespaceInfo{
-			ID:          common.SystemNamespaceID,
-			Name:        common.SystemLocalNamespace,
-			Description: "Temporal internal system namespace",
-		},
-		Config: &persistence.NamespaceConfig{
-			Retention:  common.SystemNamespaceRetentionDays,
-			EmitMetric: true,
-		},
-		ReplicationConfig: &persistence.NamespaceReplicationConfig{
-			ActiveClusterName: currentClusterName,
-			Clusters:          persistence.GetOrUseDefaultClusters(currentClusterName, nil),
-		},
-		IsGlobalNamespace: false,
-		FailoverVersion:   common.EmptyVersion,
-	})
-	if err != nil {
-		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); ok {
-			return
-		}
-		s.GetLogger().Fatal("failed to register system namespace", tag.Error(err))
 	}
 }

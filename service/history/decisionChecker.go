@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,8 +29,10 @@ import (
 	"strings"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -133,7 +139,7 @@ func (c *workflowSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 		return false, nil
 	}
 
-	attributes := &commonproto.FailWorkflowExecutionDecisionAttributes{
+	attributes := &decisionpb.FailWorkflowExecutionDecisionAttributes{
 		Reason:  common.FailureReasonDecisionBlobSizeExceedsLimit,
 		Details: []byte(message),
 	}
@@ -158,7 +164,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
 
-		attributes := &commonproto.FailWorkflowExecutionDecisionAttributes{
+		attributes := &decisionpb.FailWorkflowExecutionDecisionAttributes{
 			Reason:  common.FailureReasonSizeExceedsLimit,
 			Details: []byte("Workflow history size / count exceeds limit."),
 		}
@@ -186,7 +192,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 	namespaceID string,
 	targetNamespaceID string,
-	attributes *commonproto.ScheduleActivityTaskDecisionAttributes,
+	attributes *decisionpb.ScheduleActivityTaskDecisionAttributes,
 	wfTimeout int32,
 ) error {
 
@@ -236,20 +242,6 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 		return serviceerror.NewInvalidArgument("A valid timeout may not be negative.")
 	}
 
-	// ensure activity timeout never larger than workflow timeout
-	if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
-		attributes.ScheduleToCloseTimeoutSeconds = wfTimeout
-	}
-	if attributes.GetScheduleToStartTimeoutSeconds() > wfTimeout {
-		attributes.ScheduleToStartTimeoutSeconds = wfTimeout
-	}
-	if attributes.GetStartToCloseTimeoutSeconds() > wfTimeout {
-		attributes.StartToCloseTimeoutSeconds = wfTimeout
-	}
-	if attributes.GetHeartbeatTimeoutSeconds() > wfTimeout {
-		attributes.HeartbeatTimeoutSeconds = wfTimeout
-	}
-
 	validScheduleToClose := attributes.GetScheduleToCloseTimeoutSeconds() > 0
 	validScheduleToStart := attributes.GetScheduleToStartTimeoutSeconds() > 0
 	validStartToClose := attributes.GetStartToCloseTimeoutSeconds() > 0
@@ -261,15 +253,37 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 		if !validStartToClose {
 			attributes.StartToCloseTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
 		}
-	} else if validScheduleToStart && validStartToClose {
-		attributes.ScheduleToCloseTimeoutSeconds = attributes.GetScheduleToStartTimeoutSeconds() + attributes.GetStartToCloseTimeoutSeconds()
-		if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
+	} else if validStartToClose {
+		// We are in !validScheduleToClose due to the first if above
+		if validScheduleToStart {
+			attributes.ScheduleToCloseTimeoutSeconds = attributes.GetScheduleToStartTimeoutSeconds() + attributes.GetStartToCloseTimeoutSeconds()
+		} else {
+			attributes.ScheduleToStartTimeoutSeconds = wfTimeout
 			attributes.ScheduleToCloseTimeoutSeconds = wfTimeout
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
-		return serviceerror.NewInvalidArgument("A valid ScheduleToCloseTimeout is not set on decision.")
+		return serviceerror.NewInvalidArgument("A valid StartToClose or ScheduleToCloseTimeout is not set on decision.")
 	}
+	// ensure activity timeout never larger than workflow timeout
+	if wfTimeout > 0 {
+		if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
+			attributes.ScheduleToCloseTimeoutSeconds = wfTimeout
+		}
+		if attributes.GetScheduleToStartTimeoutSeconds() > wfTimeout {
+			attributes.ScheduleToStartTimeoutSeconds = wfTimeout
+		}
+		if attributes.GetStartToCloseTimeoutSeconds() > wfTimeout {
+			attributes.StartToCloseTimeoutSeconds = wfTimeout
+		}
+		if attributes.GetHeartbeatTimeoutSeconds() > wfTimeout {
+			attributes.HeartbeatTimeoutSeconds = wfTimeout
+		}
+	}
+	if attributes.GetHeartbeatTimeoutSeconds() > attributes.GetScheduleToCloseTimeoutSeconds() {
+		attributes.HeartbeatTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
+	}
+
 	// ensure activity's SCHEDULE_TO_START and SCHEDULE_TO_CLOSE is as long as expiration on retry policy
 	p := attributes.RetryPolicy
 	if p != nil {
@@ -288,7 +302,7 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 }
 
 func (v *decisionAttrValidator) validateTimerScheduleAttributes(
-	attributes *commonproto.StartTimerDecisionAttributes,
+	attributes *decisionpb.StartTimerDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -307,7 +321,7 @@ func (v *decisionAttrValidator) validateTimerScheduleAttributes(
 }
 
 func (v *decisionAttrValidator) validateActivityCancelAttributes(
-	attributes *commonproto.RequestCancelActivityTaskDecisionAttributes,
+	attributes *decisionpb.RequestCancelActivityTaskDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -323,7 +337,7 @@ func (v *decisionAttrValidator) validateActivityCancelAttributes(
 }
 
 func (v *decisionAttrValidator) validateTimerCancelAttributes(
-	attributes *commonproto.CancelTimerDecisionAttributes,
+	attributes *decisionpb.CancelTimerDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -339,7 +353,7 @@ func (v *decisionAttrValidator) validateTimerCancelAttributes(
 }
 
 func (v *decisionAttrValidator) validateRecordMarkerAttributes(
-	attributes *commonproto.RecordMarkerDecisionAttributes,
+	attributes *decisionpb.RecordMarkerDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -356,7 +370,7 @@ func (v *decisionAttrValidator) validateRecordMarkerAttributes(
 }
 
 func (v *decisionAttrValidator) validateCompleteWorkflowExecutionAttributes(
-	attributes *commonproto.CompleteWorkflowExecutionDecisionAttributes,
+	attributes *decisionpb.CompleteWorkflowExecutionDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -366,7 +380,7 @@ func (v *decisionAttrValidator) validateCompleteWorkflowExecutionAttributes(
 }
 
 func (v *decisionAttrValidator) validateFailWorkflowExecutionAttributes(
-	attributes *commonproto.FailWorkflowExecutionDecisionAttributes,
+	attributes *decisionpb.FailWorkflowExecutionDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -379,7 +393,7 @@ func (v *decisionAttrValidator) validateFailWorkflowExecutionAttributes(
 }
 
 func (v *decisionAttrValidator) validateCancelWorkflowExecutionAttributes(
-	attributes *commonproto.CancelWorkflowExecutionDecisionAttributes,
+	attributes *decisionpb.CancelWorkflowExecutionDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -391,7 +405,7 @@ func (v *decisionAttrValidator) validateCancelWorkflowExecutionAttributes(
 func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
-	attributes *commonproto.RequestCancelExternalWorkflowExecutionDecisionAttributes,
+	attributes *decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes,
 ) error {
 
 	if err := v.validateCrossNamespaceCall(
@@ -424,7 +438,7 @@ func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttribute
 func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
-	attributes *commonproto.SignalExternalWorkflowExecutionDecisionAttributes,
+	attributes *decisionpb.SignalExternalWorkflowExecutionDecisionAttributes,
 ) error {
 
 	if err := v.validateCrossNamespaceCall(
@@ -463,7 +477,7 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 
 func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(
 	namespace string,
-	attributes *commonproto.UpsertWorkflowSearchAttributesDecisionAttributes,
+	attributes *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -482,7 +496,7 @@ func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(
 }
 
 func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
-	attributes *commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes,
+	attributes *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes,
 	executionInfo *persistence.WorkflowExecutionInfo,
 ) error {
 
@@ -492,7 +506,7 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 
 	// Inherit workflow type from previous execution if not provided on decision
 	if attributes.WorkflowType == nil || attributes.WorkflowType.GetName() == "" {
-		attributes.WorkflowType = &commonproto.WorkflowType{Name: executionInfo.WorkflowTypeName}
+		attributes.WorkflowType = &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName}
 	}
 
 	if len(attributes.WorkflowType.GetName()) > v.maxIDLengthLimit {
@@ -531,7 +545,7 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	namespaceID string,
 	targetNamespaceID string,
-	attributes *commonproto.StartChildWorkflowExecutionDecisionAttributes,
+	attributes *decisionpb.StartChildWorkflowExecutionDecisionAttributes,
 	parentInfo *persistence.WorkflowExecutionInfo,
 ) error {
 
@@ -595,12 +609,12 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 }
 
 func (v *decisionAttrValidator) validatedTaskList(
-	taskList *commonproto.TaskList,
+	taskList *tasklistpb.TaskList,
 	defaultVal string,
-) (*commonproto.TaskList, error) {
+) (*tasklistpb.TaskList, error) {
 
 	if taskList == nil {
-		taskList = &commonproto.TaskList{}
+		taskList = &tasklistpb.TaskList{}
 	}
 
 	if taskList.GetName() == "" {
@@ -654,7 +668,7 @@ func (v *decisionAttrValidator) validateCrossNamespaceCall(
 	// one is local namespace, another one is global namespace or both global namespace
 	// treat global namespace with one replication cluster as local namespace
 	if len(namespaceClusters) == 1 && len(targetNamespaceClusters) == 1 {
-		if *namespaceClusters[0] == *targetNamespaceClusters[0] {
+		if namespaceClusters[0] == targetNamespaceClusters[0] {
 			return nil
 		}
 		return v.createCrossNamespaceCallError(namespaceEntry, targetNamespaceEntry)

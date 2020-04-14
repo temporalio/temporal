@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +29,7 @@ package history
 import (
 	"time"
 
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -200,7 +204,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForWorkflowClose(
 
 	executionInfo := mutableState.GetExecutionInfo()
 
-	if executionInfo.Status != enums.WorkflowExecutionStatusRunning {
+	if executionInfo.Status != executionpb.WorkflowExecutionStatus_Running {
 		return taskGenerator.generateWorkflowCloseTasks(
 			now,
 		)
@@ -222,7 +226,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 
 	executionInfo := mutableState.GetExecutionInfo()
 
-	if executionInfo.Status == enums.WorkflowExecutionStatusRunning {
+	if executionInfo.Status == executionpb.WorkflowExecutionStatus_Running {
 		return taskGenerator.generateRecordWorkflowStartedTasks(
 			now,
 			startEvent,

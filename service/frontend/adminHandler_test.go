@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +30,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/golang/mock/gomock"
@@ -34,8 +38,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -82,7 +86,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.namespace = "some random namespace name"
-	s.namespaceID = "some random namespace ID"
+	s.namespaceID = "deadd0d0-c001-face-d00d-000000000000"
 
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
@@ -110,35 +114,35 @@ func (s *adminHandlerSuite) TearDownTest() {
 
 func (s *adminHandlerSuite) Test_ConvertIndexedValueTypeToESDataType() {
 	tests := []struct {
-		input    enums.IndexedValueType
+		input    commonpb.IndexedValueType
 		expected string
 	}{
 		{
-			input:    enums.IndexedValueTypeString,
+			input:    commonpb.IndexedValueType_String,
 			expected: "text",
 		},
 		{
-			input:    enums.IndexedValueTypeKeyword,
+			input:    commonpb.IndexedValueType_Keyword,
 			expected: "keyword",
 		},
 		{
-			input:    enums.IndexedValueTypeInt,
+			input:    commonpb.IndexedValueType_Int,
 			expected: "long",
 		},
 		{
-			input:    enums.IndexedValueTypeDouble,
+			input:    commonpb.IndexedValueType_Double,
 			expected: "double",
 		},
 		{
-			input:    enums.IndexedValueTypeBool,
+			input:    commonpb.IndexedValueType_Bool,
 			expected: "boolean",
 		},
 		{
-			input:    enums.IndexedValueTypeDatetime,
+			input:    commonpb.IndexedValueType_Datetime,
 			expected: "date",
 		},
 		{
-			input:    enums.IndexedValueType(-1),
+			input:    commonpb.IndexedValueType(-1),
 			expected: "",
 		},
 	}
@@ -154,7 +158,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "",
 				RunId:      uuid.New(),
 			},
@@ -173,7 +177,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      "runID",
 			},
@@ -192,7 +196,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
 			},
@@ -212,7 +216,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamesp
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
 			},
@@ -239,7 +243,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 		NextEventId:        11,
 		CurrentBranchToken: branchToken,
 		VersionHistories:   versionHistories,
-		ReplicationInfo:    make(map[string]*replication.ReplicationInfo),
+		ReplicationInfo:    make(map[string]*replicationgenpb.ReplicationInfo),
 	}
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
 
@@ -251,7 +255,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
 			},
@@ -278,14 +282,14 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAnd
 		NextEventId:        11,
 		CurrentBranchToken: branchToken,
 		VersionHistories:   versionHistories,
-		ReplicationInfo:    make(map[string]*replication.ReplicationInfo),
+		ReplicationInfo:    make(map[string]*replicationgenpb.ReplicationInfo),
 	}
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
 
 	resp, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
 			},
@@ -311,7 +315,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistories := persistence.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
 		},
@@ -344,7 +348,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistories := persistence.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
 		},
@@ -377,7 +381,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistories := persistence.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
 		},
@@ -415,7 +419,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	s.NoError(err)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
 		},
@@ -462,7 +466,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name: "no advanced config",
 			Request: &adminservice.AddSearchAttributeRequest{
-				SearchAttribute: map[string]enums.IndexedValueType{
+				SearchAttribute: map[string]commonpb.IndexedValueType{
 					"CustomKeywordField": 1,
 				},
 			},
@@ -484,7 +488,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	handler.params.ESClient = esClient
 
 	mockValidAttr := map[string]interface{}{
-		"testkey": enums.IndexedValueTypeKeyword,
+		"testkey": commonpb.IndexedValueType_Keyword,
 	}
 	dynamicConfig.EXPECT().GetMapValue(dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys()).
 		Return(mockValidAttr, nil).AnyTimes()
@@ -493,7 +497,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name: "reserved key",
 			Request: &adminservice.AddSearchAttributeRequest{
-				SearchAttribute: map[string]enums.IndexedValueType{
+				SearchAttribute: map[string]commonpb.IndexedValueType{
 					"WorkflowId": 1,
 				},
 			},
@@ -502,7 +506,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name: "key already whitelisted",
 			Request: &adminservice.AddSearchAttributeRequest{
-				SearchAttribute: map[string]enums.IndexedValueType{
+				SearchAttribute: map[string]commonpb.IndexedValueType{
 					"testkey": 1,
 				},
 			},
@@ -518,14 +522,14 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	dcUpdateTest := test{
 		Name: "dynamic config update failed",
 		Request: &adminservice.AddSearchAttributeRequest{
-			SearchAttribute: map[string]enums.IndexedValueType{
+			SearchAttribute: map[string]commonpb.IndexedValueType{
 				"testkey2": 1,
 			},
 		},
 		Expected: &serviceerror.Internal{Message: "Failed to update dynamic config, err: error."},
 	}
 	dynamicConfig.EXPECT().UpdateValue(dynamicconfig.ValidSearchAttributes, map[string]interface{}{
-		"testkey":  enums.IndexedValueTypeKeyword,
+		"testkey":  commonpb.IndexedValueType_Keyword,
 		"testkey2": 1,
 	}).Return(errors.New("error"))
 
@@ -539,7 +543,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	convertFailedTest := test{
 		Name: "unknown value type",
 		Request: &adminservice.AddSearchAttributeRequest{
-			SearchAttribute: map[string]enums.IndexedValueType{
+			SearchAttribute: map[string]commonpb.IndexedValueType{
 				"testkey3": -1,
 			},
 		},
@@ -554,7 +558,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	esErrorTest := test{
 		Name: "es error",
 		Request: &adminservice.AddSearchAttributeRequest{
-			SearchAttribute: map[string]enums.IndexedValueType{
+			SearchAttribute: map[string]commonpb.IndexedValueType{
 				"testkey4": 1,
 			},
 		},

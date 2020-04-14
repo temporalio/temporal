@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,8 +31,8 @@ import (
 	"math/rand"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	sdkclient "go.temporal.io/temporal/client"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
@@ -73,9 +77,9 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		Status             enums.WorkflowExecutionStatus
+		Status             executionpb.WorkflowExecutionStatus
 		HistoryLength      int64
-		Memo               *commonproto.Memo
+		Memo               *commonpb.Memo
 		SearchAttributes   map[string][]byte
 		VisibilityURI      string
 

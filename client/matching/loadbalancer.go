@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,8 +29,7 @@ import (
 	"math/rand"
 	"strings"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -44,7 +47,7 @@ type (
 		// performed
 		PickWritePartition(
 			namespaceID string,
-			taskList commonproto.TaskList,
+			taskList tasklistpb.TaskList,
 			taskListType int32,
 			forwardedFrom string,
 		) string
@@ -54,7 +57,7 @@ type (
 		// forwardedFrom is non-empty, no load balancing should be done.
 		PickReadPartition(
 			namespaceID string,
-			taskList commonproto.TaskList,
+			taskList tasklistpb.TaskList,
 			taskListType int32,
 			forwardedFrom string,
 		) string
@@ -86,7 +89,7 @@ func NewLoadBalancer(
 
 func (lb *defaultLoadBalancer) PickWritePartition(
 	namespaceID string,
-	taskList commonproto.TaskList,
+	taskList tasklistpb.TaskList,
 	taskListType int32,
 	forwardedFrom string,
 ) string {
@@ -95,7 +98,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 
 func (lb *defaultLoadBalancer) PickReadPartition(
 	namespaceID string,
-	taskList commonproto.TaskList,
+	taskList tasklistpb.TaskList,
 	taskListType int32,
 	forwardedFrom string,
 ) string {
@@ -104,13 +107,13 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 
 func (lb *defaultLoadBalancer) pickPartition(
 	namespaceID string,
-	taskList commonproto.TaskList,
+	taskList tasklistpb.TaskList,
 	taskListType int32,
 	forwardedFrom string,
 	nPartitions dynamicconfig.IntPropertyFnWithTaskListInfoFilters,
 ) string {
 
-	if forwardedFrom != "" || taskList.GetKind() == enums.TaskListKindSticky {
+	if forwardedFrom != "" || taskList.GetKind() == tasklistpb.TaskListKind_Sticky {
 		return taskList.GetName()
 	}
 

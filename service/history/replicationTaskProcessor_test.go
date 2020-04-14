@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,14 +33,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -153,7 +157,7 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
 		Timestamp:     now.UnixNano(),
 	}).Return(nil).Times(1)
 
-	err := s.replicationTaskProcessor.handleSyncShardStatus(&replication.SyncShardStatus{
+	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationgenpb.SyncShardStatus{
 		Timestamp: now.UnixNano(),
 	})
 	s.NoError(err)
@@ -163,9 +167,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 	namespaceID := uuid.NewRandom()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom()
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
+		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
 			RunId:       runID.String(),
@@ -189,9 +193,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 	namespaceID := uuid.NewRandom()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom()
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeHistory,
-		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &replication.HistoryTaskAttributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskType_HistoryTask,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
 			RunId:       runID.String(),
@@ -215,7 +219,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	namespaceID := uuid.NewRandom()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom()
-	events := []*commonproto.HistoryEvent{
+	events := []*eventpb.HistoryEvent{
 		{
 			EventId: 1,
 			Version: 1,
@@ -224,14 +228,14 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	serializer := s.mockResource.GetPayloadSerializer()
 	data, err := serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
 	s.NoError(err)
-	task := &replication.ReplicationTask{
-		TaskType: enums.ReplicationTaskTypeHistoryV2,
-		Attributes: &replication.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replication.HistoryTaskV2Attributes{
+	task := &replicationgenpb.ReplicationTask{
+		TaskType: replicationgenpb.ReplicationTaskType_HistoryV2Task,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
 			RunId:       runID.String(),
-			Events: &commonproto.DataBlob{
-				EncodingType: enums.EncodingTypeProto3,
+			Events: &commonpb.DataBlob{
+				EncodingType: commonpb.EncodingType_Proto3,
 				Data:         data.Data,
 			},
 		}},

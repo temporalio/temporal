@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -26,7 +30,7 @@ import (
 	"errors"
 	"path/filepath"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
@@ -223,7 +227,7 @@ func (h *historyArchiver) Get(ctx context.Context, URI archiver.URI, request *ar
 	}
 
 	response := &archiver.GetHistoryResponse{}
-	response.HistoryBatches = []*commonproto.History{}
+	response.HistoryBatches = []*eventpb.History{}
 	numOfEvents := 0
 	encoder := codec.NewJSONPBEncoder()
 
@@ -320,7 +324,7 @@ func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIte
 	return historyBlob, nil
 }
 
-func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*commonproto.History, isLast bool) bool {
+func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*eventpb.History, isLast bool) bool {
 	lastBatch := historyBatches[len(historyBatches)-1].Events
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()

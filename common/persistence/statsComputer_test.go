@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +29,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type (
@@ -61,14 +67,14 @@ func (s *statsComputerSuite) createRequest() *InternalUpdateWorkflowExecutionReq
 func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 	ms := s.createRequest()
 	namespaceID := "A"
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: "test-workflow-id",
 		RunId:      "run_id",
 	}
-	workflowType := &commonproto.WorkflowType{
+	workflowType := &commonpb.WorkflowType{
 		Name: "test-workflow-type-name",
 	}
-	taskList := &commonproto.TaskList{
+	taskList := &tasklistpb.TaskList{
 		Name: "test-tasklist",
 	}
 

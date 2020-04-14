@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,9 +30,11 @@ import (
 	"context"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common/cache"
@@ -72,8 +78,8 @@ type (
 	}
 
 	historyBatch struct {
-		versionHistory *commonproto.VersionHistory
-		rawEventBatch  *commonproto.DataBlob
+		versionHistory *eventgenpb.VersionHistory
+		rawEventBatch  *commonpb.DataBlob
 	}
 )
 
@@ -191,13 +197,13 @@ func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
 	namespaceID string,
 	workflowID string,
 	runID string,
-	historyBlob *commonproto.DataBlob,
-	versionHistoryItems []*commonproto.VersionHistoryItem,
+	historyBlob *commonpb.DataBlob,
+	versionHistoryItems []*eventgenpb.VersionHistoryItem,
 ) *historyservice.ReplicateEventsV2Request {
 
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: namespaceID,
-		WorkflowExecution: &commonproto.WorkflowExecution{
+		WorkflowExecution: &executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -241,7 +247,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	defer cancel()
 	response, err := n.adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

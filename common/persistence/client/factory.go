@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -210,7 +214,7 @@ func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 		return nil, err
 	}
 
-	result := p.NewMetadataManagerImpl(store, f.logger)
+	result := p.NewMetadataManagerImpl(store, f.logger, f.clusterName)
 	if ds.ratelimit != nil {
 		result = p.NewMetadataPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}

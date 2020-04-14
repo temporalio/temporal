@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,8 +31,8 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	filterpb "go.temporal.io/temporal-proto/filter"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
@@ -91,8 +95,8 @@ func listMyWorkflow(client cadenceClient, wfID string, scope tally.Scope) error 
 	endTime := time.Now().UnixNano() + int64(timeSkewToleranceDuration)
 	request := &workflowservice.ListOpenWorkflowExecutionsRequest{
 		MaximumPageSize: pageSz,
-		Filters:         &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &commonproto.WorkflowExecutionFilter{WorkflowId: wfID}},
-		StartTimeFilter: &commonproto.StartTimeFilter{
+		Filters:         &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{WorkflowId: wfID}},
+		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: startTime,
 			LatestTime:   endTime,
 		},
@@ -123,13 +127,13 @@ func listMyWorkflow(client cadenceClient, wfID string, scope tally.Scope) error 
 	return nil
 }
 
-func getMyHistory(client cadenceClient, execInfo workflow.Execution, scope tally.Scope) ([]*commonproto.HistoryEvent, error) {
+func getMyHistory(client cadenceClient, execInfo workflow.Execution, scope tally.Scope) ([]*eventpb.HistoryEvent, error) {
 	scope.Counter(getWorkflowHistoryCount).Inc(1)
 	sw := scope.Timer(getWorkflowHistoryLatency).Start()
 	defer sw.Stop()
 
-	var events []*commonproto.HistoryEvent
-	iter := client.GetWorkflowHistory(context.Background(), execInfo.ID, execInfo.RunID, false, enums.HistoryEventFilterTypeAllEvent)
+	var events []*eventpb.HistoryEvent
+	iter := client.GetWorkflowHistory(context.Background(), execInfo.ID, execInfo.RunID, false, filterpb.HistoryEventFilterType_AllEvent)
 
 	for iter.HasNext() {
 		event, err := iter.Next()

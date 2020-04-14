@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +33,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/resource"
@@ -85,7 +89,7 @@ func (s *replicationTaskFetcherSuite) TearDownTest() {
 
 func (s *replicationTaskFetcherSuite) TestGetMessages() {
 	requestByShard := make(map[int32]*request)
-	token := &replication.ReplicationToken{
+	token := &replicationgenpb.ReplicationToken{
 		ShardId:                0,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
@@ -94,13 +98,13 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 		token: token,
 	}
 	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
-		Tokens: []*replication.ReplicationToken{
+		Tokens: []*replicationgenpb.ReplicationToken{
 			token,
 		},
 		ClusterName: "active",
 	}
-	messageByShared := make(map[int32]*replication.ReplicationMessages)
-	messageByShared[0] = &replication.ReplicationMessages{}
+	messageByShared := make(map[int32]*replicationgenpb.ReplicationMessages)
+	messageByShared[0] = &replicationgenpb.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
 		MessagesByShard: messageByShared,
 	}
@@ -112,24 +116,24 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 
 func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
 	requestByShard := make(map[int32]*request)
-	token := &replication.ReplicationToken{
+	token := &replicationgenpb.ReplicationToken{
 		ShardId:                0,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
 	}
-	respChan := make(chan *replication.ReplicationMessages, 1)
+	respChan := make(chan *replicationgenpb.ReplicationMessages, 1)
 	requestByShard[0] = &request{
 		token:    token,
 		respChan: respChan,
 	}
 	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
-		Tokens: []*replication.ReplicationToken{
+		Tokens: []*replicationgenpb.ReplicationToken{
 			token,
 		},
 		ClusterName: "active",
 	}
-	messageByShared := make(map[int32]*replication.ReplicationMessages)
-	messageByShared[0] = &replication.ReplicationMessages{}
+	messageByShared := make(map[int32]*replicationgenpb.ReplicationMessages)
+	messageByShared[0] = &replicationgenpb.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
 		MessagesByShard: messageByShared,
 	}

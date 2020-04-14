@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common"
 )
@@ -151,21 +155,21 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "ExecutionStatus = \"Completed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enums.WorkflowExecutionStatusCompleted),
+				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Completed),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'continuedasnew'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enums.WorkflowExecutionStatusContinuedAsNew),
+				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_ContinuedAsNew),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'Failed' and ExecutionStatus = \"Failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enums.WorkflowExecutionStatusFailed),
+				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
 			},
 		},
 		{
@@ -296,7 +300,7 @@ func (s *queryParserSuite) TestParse() {
 				earliestCloseTime: 2000,
 				latestCloseTime:   9999,
 				runID:             common.StringPtr("random runID"),
-				status:            toWorkflowExecutionStatusPtr(enums.WorkflowExecutionStatusFailed),
+				status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
 			},
 		},
 		{

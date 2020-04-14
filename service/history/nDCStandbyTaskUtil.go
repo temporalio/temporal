@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +28,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -117,7 +121,7 @@ type (
 
 	pushDecisionToMatchingInfo struct {
 		decisionScheduleToStartTimeout int32
-		tasklist                       commonproto.TaskList
+		tasklist                       tasklistpb.TaskList
 	}
 )
 
@@ -153,7 +157,7 @@ func newPushActivityToMatchingInfo(
 
 func newPushDecisionToMatchingInfo(
 	decisionScheduleToStartTimeout int32,
-	tasklist commonproto.TaskList,
+	tasklist tasklistpb.TaskList,
 ) *pushDecisionToMatchingInfo {
 
 	return &pushDecisionToMatchingInfo{

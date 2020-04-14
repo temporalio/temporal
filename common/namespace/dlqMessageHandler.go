@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,7 +29,7 @@ package namespace
 import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -34,7 +38,7 @@ import (
 type (
 	// DLQMessageHandler is the interface handles namespace DLQ messages
 	DLQMessageHandler interface {
-		Read(lastMessageID int, pageSize int, pageToken []byte) ([]*replication.ReplicationTask, []byte, error)
+		Read(lastMessageID int, pageSize int, pageToken []byte) ([]*replicationgenpb.ReplicationTask, []byte, error)
 		Purge(lastMessageID int) error
 		Merge(lastMessageID int, pageSize int, pageToken []byte) ([]byte, error)
 	}
@@ -64,7 +68,7 @@ func (d *dlqMessageHandlerImpl) Read(
 	lastMessageID int,
 	pageSize int,
 	pageToken []byte,
-) ([]*replication.ReplicationTask, []byte, error) {
+) ([]*replicationgenpb.ReplicationTask, []byte, error) {
 
 	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
 	if err != nil {

@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,23 +30,18 @@ import (
 	"strings"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
-
-	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
 	"github.com/gogo/protobuf/types"
-
-	"github.com/temporalio/temporal/common/primitives"
+	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
-	"github.com/temporalio/temporal/common/checksum"
-
-	"github.com/pborman/uuid"
-
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/checksum"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 // Namespace status
@@ -223,7 +222,7 @@ type (
 		StartRequestID   string
 		RunID            string
 		State            int
-		Status           enums.WorkflowExecutionStatus
+		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
 
@@ -272,14 +271,14 @@ type (
 		ParentRunID                        string
 		InitiatedID                        int64
 		CompletionEventBatchID             int64
-		CompletionEvent                    *commonproto.HistoryEvent
+		CompletionEvent                    *eventpb.HistoryEvent
 		TaskList                           string
 		WorkflowTypeName                   string
 		WorkflowTimeout                    int32
 		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
-		Status                             enums.WorkflowExecutionStatus
+		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
 		NextEventID                        int64
@@ -304,7 +303,7 @@ type (
 		ClientLibraryVersion               string
 		ClientFeatureVersion               string
 		ClientImpl                         string
-		AutoResetPoints                    *commonproto.ResetPoints
+		AutoResetPoints                    *executionpb.ResetPoints
 		Memo                               map[string][]byte
 		SearchAttributes                   map[string][]byte
 		// for retry
@@ -334,7 +333,7 @@ type (
 		StartVersion        int64
 		LastWriteVersion    int64
 		LastWriteEventID    int64
-		LastReplicationInfo map[string]*replication.ReplicationInfo
+		LastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.
@@ -517,7 +516,7 @@ type (
 
 		// TODO when 2DC is deprecated remove these 2 attributes
 		ResetWorkflow       bool
-		LastReplicationInfo map[string]*replication.ReplicationInfo
+		LastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
 	}
 
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters
@@ -557,7 +556,7 @@ type (
 		ExecutionInfo       *WorkflowExecutionInfo
 		ExecutionStats      *ExecutionStats
 		ReplicationState    *ReplicationState
-		BufferedEvents      []*commonproto.HistoryEvent
+		BufferedEvents      []*eventpb.HistoryEvent
 		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
 	}
@@ -567,10 +566,10 @@ type (
 		Version                  int64
 		ScheduleID               int64
 		ScheduledEventBatchID    int64
-		ScheduledEvent           *commonproto.HistoryEvent
+		ScheduledEvent           *eventpb.HistoryEvent
 		ScheduledTime            time.Time
 		StartedID                int64
-		StartedEvent             *commonproto.HistoryEvent
+		StartedEvent             *eventpb.HistoryEvent
 		StartedTime              time.Time
 		NamespaceID              string
 		ActivityID               string
@@ -607,15 +606,15 @@ type (
 		Version               int64
 		InitiatedID           int64
 		InitiatedEventBatchID int64
-		InitiatedEvent        *commonproto.HistoryEvent
+		InitiatedEvent        *eventpb.HistoryEvent
 		StartedID             int64
 		StartedWorkflowID     string
 		StartedRunID          string
-		StartedEvent          *commonproto.HistoryEvent
+		StartedEvent          *eventpb.HistoryEvent
 		CreateRequestID       string
 		Namespace             string
 		WorkflowTypeName      string
-		ParentClosePolicy     enums.ParentClosePolicy
+		ParentClosePolicy     commonpb.ParentClosePolicy
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -658,7 +657,7 @@ type (
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
 	GetWorkflowExecutionRequest struct {
 		NamespaceID string
-		Execution   commonproto.WorkflowExecution
+		Execution   executionpb.WorkflowExecution
 	}
 
 	// GetWorkflowExecutionResponse is the response to GetworkflowExecutionRequest
@@ -678,7 +677,7 @@ type (
 		StartRequestID   string
 		RunID            string
 		State            int
-		Status           enums.WorkflowExecutionStatus
+		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
 
@@ -752,7 +751,7 @@ type (
 		WorkflowID  string
 		RunID       string
 		BranchToken []byte
-		Events      []*commonproto.HistoryEvent
+		Events      []*eventpb.HistoryEvent
 	}
 
 	// WorkflowMutation is used as generic workflow execution state mutation
@@ -774,7 +773,7 @@ type (
 		DeleteSignalInfo          *int64
 		UpsertSignalRequestedIDs  []string
 		DeleteSignalRequestedID   string
-		NewBufferedEvents         []*commonproto.HistoryEvent
+		NewBufferedEvents         []*eventpb.HistoryEvent
 		ClearBufferedEvents       bool
 
 		TransferTasks    []Task
@@ -1020,87 +1019,39 @@ type (
 		NextPageToken []byte
 	}
 
-	// NamespaceInfo describes the namespace entity
-	NamespaceInfo struct {
-		ID          string
-		Name        string
-		Status      int
-		Description string
-		OwnerEmail  string
-		Data        map[string]string
-	}
-
-	// NamespaceConfig describes the namespace configuration
-	NamespaceConfig struct {
-		// NOTE: this retention is in days, not in seconds
-		Retention                int32
-		EmitMetric               bool
-		HistoryArchivalStatus    enums.ArchivalStatus
-		HistoryArchivalURI       string
-		VisibilityArchivalStatus enums.ArchivalStatus
-		VisibilityArchivalURI    string
-		BadBinaries              commonproto.BadBinaries
-	}
-
-	// NamespaceReplicationConfig describes the cross DC namespace replication configuration
-	NamespaceReplicationConfig struct {
-		ActiveClusterName string
-		Clusters          []*ClusterReplicationConfig
-	}
-
-	// ClusterReplicationConfig describes the cross DC cluster replication configuration
-	ClusterReplicationConfig struct {
-		ClusterName string
-		// Note: if adding new properties of non-primitive types, remember to update GetCopy()
-	}
-
 	// CreateNamespaceRequest is used to create the namespace
 	CreateNamespaceRequest struct {
-		Info              *NamespaceInfo
-		Config            *NamespaceConfig
-		ReplicationConfig *NamespaceReplicationConfig
+		Namespace         *persistenceblobs.NamespaceDetail
 		IsGlobalNamespace bool
-		ConfigVersion     int64
-		FailoverVersion   int64
 	}
 
 	// CreateNamespaceResponse is the response for CreateNamespace
 	CreateNamespaceResponse struct {
-		ID string
+		ID primitives.UUID
 	}
 
 	// GetNamespaceRequest is used to read namespace
 	GetNamespaceRequest struct {
-		ID   string
+		ID   primitives.UUID
 		Name string
 	}
 
 	// GetNamespaceResponse is the response for GetNamespace
 	GetNamespaceResponse struct {
-		Info                        *NamespaceInfo
-		Config                      *NamespaceConfig
-		ReplicationConfig           *NamespaceReplicationConfig
+		Namespace                   *persistenceblobs.NamespaceDetail
 		IsGlobalNamespace           bool
-		ConfigVersion               int64
-		FailoverVersion             int64
-		FailoverNotificationVersion int64
 		NotificationVersion         int64
 	}
 
 	// UpdateNamespaceRequest is used to update namespace
 	UpdateNamespaceRequest struct {
-		Info                        *NamespaceInfo
-		Config                      *NamespaceConfig
-		ReplicationConfig           *NamespaceReplicationConfig
-		ConfigVersion               int64
-		FailoverVersion             int64
-		FailoverNotificationVersion int64
+		Namespace                   *persistenceblobs.NamespaceDetail
 		NotificationVersion         int64
 	}
 
 	// DeleteNamespaceRequest is used to delete namespace entry from namespaces table
 	DeleteNamespaceRequest struct {
-		ID string
+		ID primitives.UUID
 	}
 
 	// DeleteNamespaceByNameRequest is used to delete namespace entry from namespaces_by_name table
@@ -1188,7 +1139,7 @@ type (
 		// The branch to be appended
 		BranchToken []byte
 		// The batch of events to be appended. The first eventID will become the nodeID of this batch
-		Events []*commonproto.HistoryEvent
+		Events []*eventpb.HistoryEvent
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 		// optional binary encoding type
@@ -1223,7 +1174,7 @@ type (
 	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	ReadHistoryBranchResponse struct {
 		// History events
-		HistoryEvents []*commonproto.HistoryEvent
+		HistoryEvents []*eventpb.HistoryEvent
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue
@@ -1237,7 +1188,7 @@ type (
 	// ReadHistoryBranchByBatchResponse is the response to ReadHistoryBranchRequest
 	ReadHistoryBranchByBatchResponse struct {
 		// History events by batch
-		History []*commonproto.History
+		History []*eventpb.History
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue
@@ -1520,6 +1471,7 @@ type (
 		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
 		ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error)
 		GetMetadata() (*GetMetadataResponse, error)
+		InitializeSystemNamespaces(currentClusterName string) error
 	}
 
 	// ClusterMetadataManager is used to manage cluster-wide metadata and configuration
@@ -2207,44 +2159,6 @@ func (a *SyncActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 
-// SerializeClusterConfigs makes an array of *ClusterReplicationConfig serializable
-// by flattening them into map[string]interface{}
-func SerializeClusterConfigs(replicationConfigs []*ClusterReplicationConfig) []map[string]interface{} {
-	seriaizedReplicationConfigs := []map[string]interface{}{}
-	for index := range replicationConfigs {
-		seriaizedReplicationConfigs = append(seriaizedReplicationConfigs, replicationConfigs[index].serialize())
-	}
-	return seriaizedReplicationConfigs
-}
-
-// DeserializeClusterConfigs creates an array of ClusterReplicationConfigs from an array of map representations
-func DeserializeClusterConfigs(replicationConfigs []map[string]interface{}) []*ClusterReplicationConfig {
-	deseriaizedReplicationConfigs := []*ClusterReplicationConfig{}
-	for index := range replicationConfigs {
-		deseriaizedReplicationConfig := &ClusterReplicationConfig{}
-		deseriaizedReplicationConfig.deserialize(replicationConfigs[index])
-		deseriaizedReplicationConfigs = append(deseriaizedReplicationConfigs, deseriaizedReplicationConfig)
-	}
-
-	return deseriaizedReplicationConfigs
-}
-
-func (config *ClusterReplicationConfig) serialize() map[string]interface{} {
-	output := make(map[string]interface{})
-	output["cluster_name"] = config.ClusterName
-	return output
-}
-
-func (config *ClusterReplicationConfig) deserialize(input map[string]interface{}) {
-	config.ClusterName = input["cluster_name"].(string)
-}
-
-// GetCopy return a copy of ClusterReplicationConfig
-func (config *ClusterReplicationConfig) GetCopy() *ClusterReplicationConfig {
-	res := *config
-	return &res
-}
-
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano
 func DBTimestampToUnixNano(milliseconds int64) int64 {
 	return milliseconds * 1000 * 1000 // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-3) - (-9) = 6, so multiply by 10⁶
@@ -2326,8 +2240,8 @@ func NewGetReplicationTasksFromDLQRequest(
 
 func (r *ReplicationState) GenerateVersionProto() *persistenceblobs.ReplicationVersions {
 	return &persistenceblobs.ReplicationVersions{
-		StartVersion: &types.Int64Value{Value: r.StartVersion},
-		LastWriteVersion: &types.Int64Value{ Value: r.LastWriteVersion},
+		StartVersion:     &types.Int64Value{Value: r.StartVersion},
+		LastWriteVersion: &types.Int64Value{Value: r.LastWriteVersion},
 	}
 }
 

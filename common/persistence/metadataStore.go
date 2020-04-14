@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,10 +25,14 @@
 package persistence
 
 import (
-	commonproto "go.temporal.io/temporal-proto/common"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -34,17 +42,19 @@ type (
 		serializer  PayloadSerializer
 		persistence MetadataStore
 		logger      log.Logger
+		clusterName string
 	}
 )
 
 var _ MetadataManager = (*metadataManagerImpl)(nil)
 
 //NewMetadataManagerImpl returns new MetadataManager
-func NewMetadataManagerImpl(persistence MetadataStore, logger log.Logger) MetadataManager {
+func NewMetadataManagerImpl(persistence MetadataStore, logger log.Logger, clusterName string) MetadataManager {
 	return &metadataManagerImpl{
 		serializer:  NewPayloadSerializer(),
 		persistence: persistence,
 		logger:      logger,
+		clusterName: clusterName,
 	}
 }
 
@@ -53,17 +63,16 @@ func (m *metadataManagerImpl) GetName() string {
 }
 
 func (m *metadataManagerImpl) CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error) {
-	dc, err := m.serializeNamespaceConfig(request.Config)
+	datablob, err := serialization.NamespaceDetailToBlob(request.Namespace)
 	if err != nil {
 		return nil, err
 	}
+
 	return m.persistence.CreateNamespace(&InternalCreateNamespaceRequest{
-		Info:              request.Info,
-		Config:            &dc,
-		ReplicationConfig: request.ReplicationConfig,
-		IsGlobalNamespace: request.IsGlobalNamespace,
-		ConfigVersion:     request.ConfigVersion,
-		FailoverVersion:   request.FailoverVersion,
+		ID:        request.Namespace.Info.Id,
+		Name:      request.Namespace.Info.Name,
+		IsGlobal:  request.IsGlobalNamespace,
+		Namespace: &datablob,
 	})
 }
 
@@ -72,37 +81,20 @@ func (m *metadataManagerImpl) GetNamespace(request *GetNamespaceRequest) (*GetNa
 	if err != nil {
 		return nil, err
 	}
-
-	dc, err := m.deserializeNamespaceConfig(resp.Config)
-	if err != nil {
-		return nil, err
-	}
-
-	return &GetNamespaceResponse{
-		Info:                        resp.Info,
-		Config:                      &dc,
-		ReplicationConfig:           resp.ReplicationConfig,
-		IsGlobalNamespace:           resp.IsGlobalNamespace,
-		ConfigVersion:               resp.ConfigVersion,
-		FailoverVersion:             resp.FailoverVersion,
-		FailoverNotificationVersion: resp.FailoverNotificationVersion,
-		NotificationVersion:         resp.NotificationVersion,
-	}, nil
+	return m.ConvertInternalGetResponse(resp)
 }
 
 func (m *metadataManagerImpl) UpdateNamespace(request *UpdateNamespaceRequest) error {
-	dc, err := m.serializeNamespaceConfig(request.Config)
+	datablob, err := serialization.NamespaceDetailToBlob(request.Namespace)
 	if err != nil {
 		return err
 	}
+
 	return m.persistence.UpdateNamespace(&InternalUpdateNamespaceRequest{
-		Info:                        request.Info,
-		Config:                      &dc,
-		ReplicationConfig:           request.ReplicationConfig,
-		ConfigVersion:               request.ConfigVersion,
-		FailoverVersion:             request.FailoverVersion,
-		FailoverNotificationVersion: request.FailoverNotificationVersion,
-		NotificationVersion:         request.NotificationVersion,
+		Id:                  request.Namespace.Info.Id,
+		Name:                request.Namespace.Info.Name,
+		Namespace:           &datablob,
+		NotificationVersion: request.NotificationVersion,
 	})
 }
 
@@ -114,6 +106,29 @@ func (m *metadataManagerImpl) DeleteNamespaceByName(request *DeleteNamespaceByNa
 	return m.persistence.DeleteNamespaceByName(request)
 }
 
+func (m *metadataManagerImpl) ConvertInternalGetResponse(d *InternalGetNamespaceResponse) (*GetNamespaceResponse, error) {
+	ns, err := serialization.NamespaceDetailFromBlob(FromDataBlob(d.Namespace))
+	if err != nil {
+		return nil, err
+	}
+
+	if ns.Info.Data == nil {
+		ns.Info.Data = map[string]string{}
+	}
+
+	if ns.Config.BadBinaries == nil || ns.Config.BadBinaries.Binaries == nil {
+		ns.Config.BadBinaries = &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
+	}
+
+	ns.ReplicationConfig.ActiveClusterName = GetOrUseDefaultActiveCluster(m.clusterName, ns.ReplicationConfig.ActiveClusterName)
+	ns.ReplicationConfig.Clusters = GetOrUseDefaultClusters(m.clusterName, ns.ReplicationConfig.Clusters)
+	return &GetNamespaceResponse{
+		Namespace:           ns,
+		IsGlobalNamespace:   d.IsGlobal,
+		NotificationVersion: d.NotificationVersion,
+	}, nil
+}
+
 func (m *metadataManagerImpl) ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error) {
 	resp, err := m.persistence.ListNamespaces(request)
 	if err != nil {
@@ -121,20 +136,11 @@ func (m *metadataManagerImpl) ListNamespaces(request *ListNamespacesRequest) (*L
 	}
 	namespaces := make([]*GetNamespaceResponse, 0, len(resp.Namespaces))
 	for _, d := range resp.Namespaces {
-		dc, err := m.deserializeNamespaceConfig(d.Config)
+		ret, err := m.ConvertInternalGetResponse(d)
 		if err != nil {
 			return nil, err
 		}
-		namespaces = append(namespaces, &GetNamespaceResponse{
-			Info:                        d.Info,
-			Config:                      &dc,
-			ReplicationConfig:           d.ReplicationConfig,
-			IsGlobalNamespace:           d.IsGlobalNamespace,
-			ConfigVersion:               d.ConfigVersion,
-			FailoverVersion:             d.FailoverVersion,
-			FailoverNotificationVersion: d.FailoverNotificationVersion,
-			NotificationVersion:         d.NotificationVersion,
-		})
+		namespaces = append(namespaces, ret)
 	}
 	return &ListNamespacesResponse{
 		Namespaces:    namespaces,
@@ -142,48 +148,38 @@ func (m *metadataManagerImpl) ListNamespaces(request *ListNamespacesRequest) (*L
 	}, nil
 }
 
-func (m *metadataManagerImpl) serializeNamespaceConfig(c *NamespaceConfig) (InternalNamespaceConfig, error) {
-	if c == nil {
-		return InternalNamespaceConfig{}, nil
-	}
-	if c.BadBinaries.Binaries == nil {
-		c.BadBinaries.Binaries = map[string]*commonproto.BadBinaryInfo{}
-	}
-	badBinaries, err := m.serializer.SerializeBadBinaries(&c.BadBinaries, common.EncodingTypeProto3)
-	if err != nil {
-		return InternalNamespaceConfig{}, err
-	}
-	return InternalNamespaceConfig{
-		Retention:                c.Retention,
-		EmitMetric:               c.EmitMetric,
-		HistoryArchivalStatus:    c.HistoryArchivalStatus,
-		HistoryArchivalURI:       c.HistoryArchivalURI,
-		VisibilityArchivalStatus: c.VisibilityArchivalStatus,
-		VisibilityArchivalURI:    c.VisibilityArchivalURI,
-		BadBinaries:              badBinaries,
-	}, nil
-}
+func (m *metadataManagerImpl) InitializeSystemNamespaces(currentClusterName string) error {
+	_, err := m.CreateNamespace(&CreateNamespaceRequest{
+		Namespace: &persistenceblobs.NamespaceDetail{
+			Info: &persistenceblobs.NamespaceInfo{
+				Id:          primitives.MustParseUUID(common.SystemNamespaceID),
+				Name:        common.SystemLocalNamespace,
+				Status:      namespacepb.NamespaceStatus_Registered,
+				Description: "Temporal internal system namespace",
+				Owner:       "temporal-core@temporal.io",
+			},
+			Config: &persistenceblobs.NamespaceConfig{
+				RetentionDays:            common.SystemNamespaceRetentionDays,
+				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Disabled,
+				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Disabled,
+				EmitMetric:               true,
+			},
+			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+				ActiveClusterName: currentClusterName,
+				Clusters:          GetOrUseDefaultClusters(currentClusterName, nil),
+			},
+			FailoverVersion:             common.EmptyVersion,
+			FailoverNotificationVersion: -1,
+		},
+		IsGlobalNamespace: false,
+	})
 
-func (m *metadataManagerImpl) deserializeNamespaceConfig(ic *InternalNamespaceConfig) (NamespaceConfig, error) {
-	if ic == nil {
-		return NamespaceConfig{}, nil
-	}
-	badBinaries, err := m.serializer.DeserializeBadBinaries(ic.BadBinaries)
 	if err != nil {
-		return NamespaceConfig{}, err
+		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); !ok {
+			return err
+		}
 	}
-	if badBinaries.Binaries == nil {
-		badBinaries.Binaries = map[string]*commonproto.BadBinaryInfo{}
-	}
-	return NamespaceConfig{
-		Retention:                ic.Retention,
-		EmitMetric:               ic.EmitMetric,
-		HistoryArchivalStatus:    ic.HistoryArchivalStatus,
-		HistoryArchivalURI:       ic.HistoryArchivalURI,
-		VisibilityArchivalStatus: ic.VisibilityArchivalStatus,
-		VisibilityArchivalURI:    ic.VisibilityArchivalURI,
-		BadBinaries:              *badBinaries,
-	}, nil
+	return nil
 }
 
 func (m *metadataManagerImpl) GetMetadata() (*GetMetadataResponse, error) {

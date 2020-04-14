@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -101,7 +105,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.baseRunID = uuid.New()
 	s.newContext = newWorkflowExecutionContext(
 		s.namespaceID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.newRunID,
 		},

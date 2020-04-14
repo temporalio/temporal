@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,17 +26,17 @@ package frontend
 
 import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/token"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
 func generatePaginationToken(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 	versionHistories *persistence.VersionHistories,
-) *token.RawHistoryContinuation {
+) *tokengenpb.RawHistoryContinuation {
 
 	execution := request.Execution
-	return &token.RawHistoryContinuation{
+	return &tokengenpb.RawHistoryContinuation{
 		Namespace:         request.GetNamespace(),
 		WorkflowId:        execution.GetWorkflowId(),
 		RunId:             execution.GetRunId(),
@@ -47,7 +51,7 @@ func generatePaginationToken(
 
 func validatePaginationToken(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-	token *token.RawHistoryContinuation,
+	token *tokengenpb.RawHistoryContinuation,
 ) error {
 
 	execution := request.Execution
@@ -63,7 +67,7 @@ func validatePaginationToken(
 	return nil
 }
 
-func serializeRawHistoryToken(token *token.RawHistoryContinuation) ([]byte, error) {
+func serializeRawHistoryToken(token *tokengenpb.RawHistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -71,13 +75,13 @@ func serializeRawHistoryToken(token *token.RawHistoryContinuation) ([]byte, erro
 	return token.Marshal()
 }
 
-func deserializeRawHistoryToken(bytes []byte) (*token.RawHistoryContinuation, error) {
-	token := &token.RawHistoryContinuation{}
+func deserializeRawHistoryToken(bytes []byte) (*tokengenpb.RawHistoryContinuation, error) {
+	token := &tokengenpb.RawHistoryContinuation{}
 	err := token.Unmarshal(bytes)
 	return token, err
 }
 
-func serializeHistoryToken(token *token.HistoryContinuation) ([]byte, error) {
+func serializeHistoryToken(token *tokengenpb.HistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -85,8 +89,8 @@ func serializeHistoryToken(token *token.HistoryContinuation) ([]byte, error) {
 	return token.Marshal()
 }
 
-func deserializeHistoryToken(bytes []byte) (*token.HistoryContinuation, error) {
-	token := &token.HistoryContinuation{}
+func deserializeHistoryToken(bytes []byte) (*tokengenpb.HistoryContinuation, error) {
+	token := &tokengenpb.HistoryContinuation{}
 	err := token.Unmarshal(bytes)
 	return token, err
 }

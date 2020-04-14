@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -28,8 +32,8 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
@@ -41,7 +45,7 @@ type (
 	visibilityArchivalValidator interface {
 		shouldRun() bool
 		getQuery(workflowID, runID, workflowType string, startTime, closeTime time.Time) string
-		validateExecutions([]*commonproto.WorkflowExecutionInfo) error
+		validateExecutions([]*executionpb.WorkflowExecutionInfo) error
 	}
 
 	filestoreVisibilityArchivalValidator struct {
@@ -91,7 +95,7 @@ func visibilityArchivalActivity(ctx context.Context, scheduledTimeNanos int64) e
 	}
 
 	if resp.Configuration != nil &&
-		resp.Configuration.GetVisibilityArchivalStatus() == enums.ArchivalStatusDisabled {
+		resp.Configuration.GetVisibilityArchivalStatus() == namespacepb.ArchivalStatus_Disabled {
 		return errors.New("namespace not configured for visibility archival")
 	}
 
@@ -161,8 +165,8 @@ func listarchivedWorkflow(
 	scope tally.Scope,
 	client cadenceClient,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
-) ([]*commonproto.WorkflowExecutionInfo, error) {
-	var executions []*commonproto.WorkflowExecutionInfo
+) ([]*executionpb.WorkflowExecutionInfo, error) {
+	var executions []*executionpb.WorkflowExecutionInfo
 	for {
 		select {
 		case <-ctx.Done():
@@ -216,7 +220,7 @@ func (v *filestoreVisibilityArchivalValidator) getQuery(
 }
 
 func (v *filestoreVisibilityArchivalValidator) validateExecutions(
-	executions []*commonproto.WorkflowExecutionInfo,
+	executions []*executionpb.WorkflowExecutionInfo,
 ) error {
 	if len(executions) != 1 {
 		return fmt.Errorf("listarchivedWorkflow returned %d executions, expecting 1", len(executions))

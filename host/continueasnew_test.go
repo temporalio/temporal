@@ -1,4 +1,8 @@
-// Copyright (c) 2016 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,8 +32,11 @@ import (
 
 	"github.com/pborman/uuid"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	decisionpb "go.temporal.io/temporal-proto/decision"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common/log/tag"
@@ -41,17 +48,17 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	tl := "integration-continue-as-new-workflow-test-tasklist"
 	identity := "worker1"
 
-	workflowType := &commonproto.WorkflowType{Name: wt}
+	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &commonproto.TaskList{Name: tl}
+	taskList := &tasklistpb.TaskList{Name: tl}
 
-	header := &commonproto.Header{
+	header := &commonpb.Header{
 		Fields: map[string][]byte{"tracing": []byte("sample payload")},
 	}
-	memo := &commonproto.Memo{
+	memo := &commonpb.Memo{
 		Fields: map[string][]byte{"memoKey": []byte("memoVal")},
 	}
-	searchAttr := &commonproto.SearchAttributes{
+	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string][]byte{"CustomKeywordField": []byte("1")},
 	}
 
@@ -79,20 +86,20 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	continueAsNewCount := int32(10)
 	continueAsNewCounter := int32(0)
 	var previousRunID string
-	var lastRunStartedEvent *commonproto.HistoryEvent
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	var lastRunStartedEvent *eventpb.HistoryEvent
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			previousRunID = execution.GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
-				DecisionType: enums.DecisionTypeContinueAsNewWorkflowExecution,
-				Attributes: &commonproto.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
+				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
+				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
-					TaskList:                            &commonproto.TaskList{Name: tl},
+					TaskList:                            &tasklistpb.TaskList{Name: tl},
 					Input:                               buf.Bytes(),
 					Header:                              header,
 					Memo:                                memo,
@@ -105,9 +112,9 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 
 		lastRunStartedEvent = history.Events[0]
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
 		}}, nil
@@ -145,9 +152,9 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	tl := "integration-continue-as-new-workflow-timeout-test-tasklist"
 	identity := "worker1"
 
-	workflowType := &commonproto.WorkflowType{Name: wt}
+	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &commonproto.TaskList{Name: tl}
+	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -169,18 +176,18 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	workflowComplete := false
 	continueAsNewCount := int32(1)
 	continueAsNewCounter := int32(0)
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
-				DecisionType: enums.DecisionTypeContinueAsNewWorkflowExecution,
-				Attributes: &commonproto.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
+				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
+				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
-					TaskList:                            &commonproto.TaskList{Name: tl},
+					TaskList:                            &tasklistpb.TaskList{Name: tl},
 					Input:                               buf.Bytes(),
 					ExecutionStartToCloseTimeoutSeconds: 1, // set timeout to 1
 					TaskStartToCloseTimeoutSeconds:      1,
@@ -189,9 +196,9 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		}
 
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done"),
 			}},
 		}}, nil
@@ -220,7 +227,7 @@ GetHistoryLoop:
 	for i := 0; i < 20; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: id,
 			},
 		})
@@ -228,14 +235,14 @@ GetHistoryLoop:
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
-		if lastEvent.GetEventType() != enums.EventTypeWorkflowExecutionTimedOut {
+		if lastEvent.GetEventType() != eventpb.EventType_WorkflowExecutionTimedOut {
 			s.Logger.Warn("Execution not timedout yet")
 			time.Sleep(200 * time.Millisecond)
 			continue GetHistoryLoop
 		}
 
 		timeoutEventAttributes := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		s.Equal(enums.TimeoutTypeStartToClose, timeoutEventAttributes.TimeoutType)
+		s.Equal(eventpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
 		workflowComplete = true
 		break GetHistoryLoop
 	}
@@ -248,9 +255,9 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	tl := "integration-wf-continue-as-new-task-id-tasklist"
 	identity := "worker1"
 
-	workflowType := &commonproto.WorkflowType{Name: wt}
+	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskList := &commonproto.TaskList{Name: tl}
+	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -269,19 +276,19 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	var executions []*commonproto.WorkflowExecution
+	var executions []*executionpb.WorkflowExecution
 
 	continueAsNewed := false
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 
 		executions = append(executions, execution)
 
 		if !continueAsNewed {
 			continueAsNewed = true
-			return nil, []*commonproto.Decision{{
-				DecisionType: enums.DecisionTypeContinueAsNewWorkflowExecution,
-				Attributes: &commonproto.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return nil, []*decisionpb.Decision{{
+				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
+				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
 					TaskList:                            taskList,
 					Input:                               nil,
@@ -291,9 +298,9 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 			}}, nil
 		}
 
-		return nil, []*commonproto.Decision{{
-			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*decisionpb.Decision{{
+			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("succeed"),
 			}},
 		}}, nil
@@ -338,13 +345,13 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	tl := "integration-child-workflow-with-continue-as-new-test-tasklist"
 	identity := "worker1"
 
-	parentWorkflowType := &commonproto.WorkflowType{}
+	parentWorkflowType := &commonpb.WorkflowType{}
 	parentWorkflowType.Name = wtParent
 
-	childWorkflowType := &commonproto.WorkflowType{}
+	childWorkflowType := &commonpb.WorkflowType{}
 	childWorkflowType.Name = wtChild
 
-	taskList := &commonproto.TaskList{Name: tl}
+	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -368,10 +375,10 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	childData := int32(1)
 	continueAsNewCount := int32(10)
 	continueAsNewCounter := int32(0)
-	var startedEvent *commonproto.HistoryEvent
-	var completedEvent *commonproto.HistoryEvent
-	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+	var startedEvent *eventpb.HistoryEvent
+	var completedEvent *eventpb.HistoryEvent
+	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		s.Logger.Info("Processing decision task for WorkflowId:", tag.WorkflowID(execution.GetWorkflowId()))
 
 		// Child Decider Logic
@@ -381,18 +388,18 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 				buf := new(bytes.Buffer)
 				s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-				return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
-					DecisionType: enums.DecisionTypeContinueAsNewWorkflowExecution,
-					Attributes: &commonproto.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes{
+				return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
+					DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
+					Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 						Input: buf.Bytes(),
 					}},
 				}}, nil
 			}
 
 			childComplete = true
-			return nil, []*commonproto.Decision{{
-				DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-				Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+			return nil, []*decisionpb.Decision{{
+				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 					Result: []byte("Child Done"),
 				}},
 			}}, nil
@@ -406,9 +413,9 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 				buf := new(bytes.Buffer)
 				s.Nil(binary.Write(buf, binary.LittleEndian, childData))
 
-				return nil, []*commonproto.Decision{{
-					DecisionType: enums.DecisionTypeStartChildWorkflowExecution,
-					Attributes: &commonproto.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+				return nil, []*decisionpb.Decision{{
+					DecisionType: decisionpb.DecisionType_StartChildWorkflowExecution,
+					Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
 						Namespace:    s.namespace,
 						WorkflowId:   childID,
 						WorkflowType: childWorkflowType,
@@ -417,16 +424,16 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 				}}, nil
 			} else if previousStartedEventID > 0 {
 				for _, event := range history.Events[previousStartedEventID:] {
-					if event.GetEventType() == enums.EventTypeChildWorkflowExecutionStarted {
+					if event.GetEventType() == eventpb.EventType_ChildWorkflowExecutionStarted {
 						startedEvent = event
-						return nil, []*commonproto.Decision{}, nil
+						return nil, []*decisionpb.Decision{}, nil
 					}
 
-					if event.GetEventType() == enums.EventTypeChildWorkflowExecutionCompleted {
+					if event.GetEventType() == eventpb.EventType_ChildWorkflowExecutionCompleted {
 						completedEvent = event
-						return nil, []*commonproto.Decision{{
-							DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-							Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+						return nil, []*decisionpb.Decision{{
+							DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
+							Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 								Result: []byte("Done"),
 							}},
 						}}, nil

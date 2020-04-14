@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,8 +30,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -106,12 +109,12 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 	return shardInfo, nil
 }
 
-func NamespaceInfoToBlob(info *persistenceblobs.NamespaceInfo) (DataBlob, error) {
+func NamespaceDetailToBlob(info *persistenceblobs.NamespaceDetail) (DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func NamespaceInfoFromBlob(b []byte, proto string) (*persistenceblobs.NamespaceInfo, error) {
-	result := &persistenceblobs.NamespaceInfo{}
+func NamespaceDetailFromBlob(b []byte, proto string) (*persistenceblobs.NamespaceDetail, error) {
+	result := &persistenceblobs.NamespaceDetail{}
 	return result, proto3Decode(b, proto, result)
 }
 
@@ -265,16 +268,16 @@ type DataBlob struct {
 }
 
 // ToProto convert data blob to proto representation
-func (d *DataBlob) ToProto() *commonproto.DataBlob {
+func (d *DataBlob) ToProto() *commonpb.DataBlob {
 	switch d.Encoding {
 	case common.EncodingTypeJSON:
-		return &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeJSON,
+		return &commonpb.DataBlob{
+			EncodingType: commonpb.EncodingType_JSON,
 			Data:         d.Data,
 		}
 	case common.EncodingTypeProto3:
-		return &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeProto3,
+		return &commonpb.DataBlob{
+			EncodingType: commonpb.EncodingType_Proto3,
 			Data:         d.Data,
 		}
 	default:

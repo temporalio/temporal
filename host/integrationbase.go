@@ -1,4 +1,8 @@
-// Copyright (c) 2016 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,12 +32,14 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
@@ -88,11 +94,11 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 	s.namespace = s.randomizeStr("integration-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.namespace, 1, enums.ArchivalStatusDisabled, "", enums.ArchivalStatusDisabled, ""))
+		s.registerNamespace(s.namespace, 1, namespacepb.ArchivalStatus_Disabled, "", namespacepb.ArchivalStatus_Disabled, ""))
 
 	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.foreignNamespace, 1, enums.ArchivalStatusDisabled, "", enums.ArchivalStatusDisabled, ""))
+		s.registerNamespace(s.foreignNamespace, 1, namespacepb.ArchivalStatus_Disabled, "", namespacepb.ArchivalStatus_Disabled, ""))
 
 	s.Require().NoError(s.registerArchivalNamespace())
 
@@ -146,9 +152,9 @@ func (s *IntegrationBase) tearDownSuite() {
 func (s *IntegrationBase) registerNamespace(
 	namespace string,
 	retentionDays int,
-	historyArchivalStatus enums.ArchivalStatus,
+	historyArchivalStatus namespacepb.ArchivalStatus,
 	historyArchivalURI string,
-	visibilityArchivalStatus enums.ArchivalStatus,
+	visibilityArchivalStatus namespacepb.ArchivalStatus,
 	visibilityArchivalURI string,
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(10000 * time.Second)
@@ -170,15 +176,15 @@ func (s *IntegrationBase) randomizeStr(id string) string {
 	return fmt.Sprintf("%v-%v", id, uuid.New())
 }
 
-func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *commonproto.WorkflowExecution) {
+func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *executionpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
-	history := &commonproto.History{
+	history := &eventpb.History{
 		Events: events,
 	}
 	common.PrettyPrintHistory(history, s.Logger)
 }
 
-func (s *IntegrationBase) getHistory(namespace string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
+func (s *IntegrationBase) getHistory(namespace string, execution *executionpb.WorkflowExecution) []*eventpb.HistoryEvent {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,
@@ -207,33 +213,36 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 	s.archivalNamespace = s.randomizeStr("integration-archival-enabled-namespace")
 	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
 	namespaceRequest := &persistence.CreateNamespaceRequest{
-		Info: &persistence.NamespaceInfo{
-			ID:     uuid.New(),
-			Name:   s.archivalNamespace,
-			Status: persistence.NamespaceStatusRegistered,
-		},
-		Config: &persistence.NamespaceConfig{
-			Retention:                0,
-			HistoryArchivalStatus:    enums.ArchivalStatusEnabled,
-			HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
-			VisibilityArchivalStatus: enums.ArchivalStatusEnabled,
-			VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
-			BadBinaries:              commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
-		},
-		ReplicationConfig: &persistence.NamespaceReplicationConfig{
-			ActiveClusterName: currentClusterName,
-			Clusters: []*persistence.ClusterReplicationConfig{
-				{ClusterName: currentClusterName},
+		Namespace: &persistenceblobs.NamespaceDetail{
+			Info: &persistenceblobs.NamespaceInfo{
+				Id:     uuid.NewRandom(),
+				Name:   s.archivalNamespace,
+				Status: namespacepb.NamespaceStatus_Registered,
 			},
+			Config: &persistenceblobs.NamespaceConfig{
+				RetentionDays:                0,
+				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Enabled,
+				HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
+				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Enabled,
+				VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
+				BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+			},
+			ReplicationConfig: &persistenceblobs.NamespaceReplicationConfig{
+				ActiveClusterName: currentClusterName,
+				Clusters: []string{
+					currentClusterName,
+				},
+			},
+
+			FailoverVersion: common.EmptyVersion,
 		},
 		IsGlobalNamespace: false,
-		FailoverVersion:   common.EmptyVersion,
 	}
 	response, err := s.testCluster.testBase.MetadataManager.CreateNamespace(namespaceRequest)
 
 	s.Logger.Info("Register namespace succeeded",
 		tag.WorkflowNamespace(s.archivalNamespace),
-		tag.WorkflowNamespaceID(response.ID),
+		tag.WorkflowNamespaceIDBytes(response.ID),
 	)
 	return err
 }

@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +31,8 @@ import (
 	"fmt"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -121,7 +126,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err != nil {
 		return nil, 0, err
 	}
-	firstEventBatch := batch.(*commonproto.History).Events
+	firstEventBatch := batch.(*eventpb.History).Events
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
 	)
@@ -134,7 +139,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		if err != nil {
 			return nil, 0, err
 		}
-		events := batch.(*commonproto.History).Events
+		events := batch.(*eventpb.History).Events
 		if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, events, requestID); err != nil {
 			return nil, 0, err
 		}
@@ -197,14 +202,14 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 func (r *nDCStateRebuilderImpl) applyEvents(
 	workflowIdentifier definition.WorkflowIdentifier,
 	stateBuilder stateBuilder,
-	events []*commonproto.HistoryEvent,
+	events []*eventpb.HistoryEvent,
 	requestID string,
 ) error {
 
 	_, err := stateBuilder.applyEvents(
 		workflowIdentifier.NamespaceID,
 		requestID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: workflowIdentifier.WorkflowID,
 			RunId:      workflowIdentifier.RunID,
 		},

@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +31,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.temporal.io/temporal"
-	commonproto "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
@@ -143,7 +147,7 @@ type (
 	}
 
 	taskDetail struct {
-		execution commonproto.WorkflowExecution
+		execution executionpb.WorkflowExecution
 		attempts  int
 		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
 		hbd HeartBeatDetails
@@ -348,7 +352,7 @@ func startTaskProcessor(
 					func(workflowID, runID string) error {
 						_, err := client.TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,
-							WorkflowExecution: &commonproto.WorkflowExecution{
+							WorkflowExecution: &executionpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
@@ -363,7 +367,7 @@ func startTaskProcessor(
 					func(workflowID, runID string) error {
 						_, err := client.RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,
-							WorkflowExecution: &commonproto.WorkflowExecution{
+							WorkflowExecution: &executionpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
@@ -377,7 +381,7 @@ func startTaskProcessor(
 					func(workflowID, runID string) error {
 						_, err := client.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,
-							WorkflowExecution: &commonproto.WorkflowExecution{
+							WorkflowExecution: &executionpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
@@ -418,7 +422,7 @@ func processTask(
 	applyOnChild *bool,
 	procFn func(string, string) error,
 ) error {
-	wfs := []commonproto.WorkflowExecution{task.execution}
+	wfs := []executionpb.WorkflowExecution{task.execution}
 	for len(wfs) > 0 {
 		wf := wfs[0]
 
@@ -438,7 +442,7 @@ func processTask(
 		wfs = wfs[1:]
 		resp, err := client.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: batchParams.Namespace,
-			Execution: &commonproto.WorkflowExecution{
+			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: wf.GetWorkflowId(),
 				RunId:      wf.GetRunId(),
 			},
@@ -456,7 +460,7 @@ func processTask(
 		if applyOnChild != nil && *applyOnChild && len(resp.PendingChildren) > 0 {
 			getActivityLogger(ctx).Info("Found more child workflows to process", tag.Number(int64(len(resp.PendingChildren))))
 			for _, ch := range resp.PendingChildren {
-				wfs = append(wfs, commonproto.WorkflowExecution{
+				wfs = append(wfs, executionpb.WorkflowExecution{
 					WorkflowId: ch.GetWorkflowId(),
 					RunId:      ch.GetRunId(),
 				})

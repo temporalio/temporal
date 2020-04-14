@@ -110,7 +110,7 @@ update-mockgen:
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
+	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogofaster
 	GO111MODULE=off go get -u google.golang.org/grpc
 
 update-tools: update-checkers update-mockgen update-proto-plugins
@@ -133,7 +133,7 @@ install-proto-submodule:
 protoc: $(PROTO_GEN)
 	@printf $(COLOR) "Build proto files..."
 # Run protoc separately for each directory because of different package names.
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_GEN) $(PROTO_DIR)*.proto$(NEWLINE))
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogofaster_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_GEN) $(PROTO_DIR)*.proto$(NEWLINE))
 
 # All gRPC generated service files pathes relative to PROTO_ROOT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_GEN)/%,%,$(shell find $(PROTO_GEN) -name "service.pb.go"))

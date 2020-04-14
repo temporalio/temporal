@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +31,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -107,7 +111,7 @@ type (
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error
 		ResetWorkflowExecution(request *persistence.ResetWorkflowExecutionRequest) error
-		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonproto.WorkflowExecution) (int, error)
+		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, namespaceID string, execution executionpb.WorkflowExecution) (int, error)
 	}
 
 	shardContextImpl struct {
@@ -805,7 +809,7 @@ Reset_Loop:
 }
 
 func (s *shardContextImpl) AppendHistoryV2Events(
-	request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonproto.WorkflowExecution) (int, error) {
+	request *persistence.AppendHistoryNodesRequest, namespaceID string, execution executionpb.WorkflowExecution) (int, error) {
 
 	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
@@ -1110,7 +1114,7 @@ func (s *shardContextImpl) allocateTimerIDsLocked(
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
 			s.logger.Warn("New timer generated is less than read level",
-				tag.WorkflowNamespaceID(namespaceEntry.GetInfo().ID),
+				tag.WorkflowNamespaceIDBytes(namespaceEntry.GetInfo().Id),
 				tag.WorkflowID(workflowID),
 				tag.Timestamp(ts),
 				tag.CursorTimestamp(readCursorTS),

@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +28,8 @@ import (
 	"encoding/json"
 
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
@@ -217,7 +222,7 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 	}
 
 	resp := &ListWorkflowExecutionsResponse{}
-	resp.Executions = make([]*commonproto.WorkflowExecutionInfo, len(internalResp.Executions))
+	resp.Executions = make([]*executionpb.WorkflowExecutionInfo, len(internalResp.Executions))
 	for i, execution := range internalResp.Executions {
 		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution)
 	}
@@ -226,7 +231,7 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 	return resp
 }
 
-func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{}) (*commonproto.SearchAttributes, error) {
+func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{}) (*commonpb.SearchAttributes, error) {
 	indexedFields := make(map[string][]byte)
 	var err error
 	var valBytes []byte
@@ -241,12 +246,12 @@ func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{})
 	if err != nil {
 		return nil, err
 	}
-	return &commonproto.SearchAttributes{
+	return &commonpb.SearchAttributes{
 		IndexedFields: indexedFields,
 	}, nil
 }
 
-func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo) *commonproto.WorkflowExecutionInfo {
+func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo) *executionpb.WorkflowExecutionInfo {
 	// special handling of ExecutionTime for cron or retry
 	if execution.ExecutionTime.UnixNano() == 0 {
 		execution.ExecutionTime = execution.StartTime
@@ -267,12 +272,12 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 			tag.Error(err))
 	}
 
-	convertedExecution := &commonproto.WorkflowExecutionInfo{
-		Execution: &commonproto.WorkflowExecution{
+	convertedExecution := &executionpb.WorkflowExecutionInfo{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowID,
 			RunId:      execution.RunID,
 		},
-		Type: &commonproto.WorkflowType{
+		Type: &commonpb.WorkflowType{
 			Name: execution.TypeName,
 		},
 		StartTime: &types.Int64Value{
@@ -295,7 +300,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 	return convertedExecution
 }
 
-func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *commonproto.Memo, namespaceID, wID, rID string) *serialization.DataBlob {
+func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *commonpb.Memo, namespaceID, wID, rID string) *serialization.DataBlob {
 	memo, err := v.serializer.SerializeVisibilityMemo(visibilityMemo, VisibilityEncoding)
 	if err != nil {
 		v.logger.WithTags(

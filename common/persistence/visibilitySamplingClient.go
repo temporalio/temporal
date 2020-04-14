@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,7 +27,7 @@ package persistence
 import (
 	"sync"
 
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
@@ -264,7 +268,7 @@ func (p *visibilitySamplingClient) GetName() string {
 
 func getRequestPriority(request *RecordWorkflowExecutionClosedRequest) int {
 	priority := 0
-	if request.Status == enums.WorkflowExecutionStatusCompleted {
+	if request.Status == executionpb.WorkflowExecutionStatus_Completed {
 		priority = 1 // low priority for completed workflows
 	}
 	return priority

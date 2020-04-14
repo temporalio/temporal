@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -32,8 +36,8 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
@@ -217,7 +221,7 @@ type (
 		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
-		Status                             enums.WorkflowExecutionStatus
+		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
 		NextEventID                        int64
@@ -332,7 +336,7 @@ type (
 		CreateRequestID       string
 		Namespace             string
 		WorkflowTypeName      string
-		ParentClosePolicy     enums.ParentClosePolicy
+		ParentClosePolicy     commonpb.ParentClosePolicy
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -444,7 +448,7 @@ type (
 	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface
 	InternalAppendHistoryEventsRequest struct {
 		NamespaceID       string
-		Execution         commonproto.WorkflowExecution
+		Execution         executionpb.WorkflowExecution
 		FirstEventID      int64
 		EventBatchVersion int64
 		RangeID           int64
@@ -556,7 +560,7 @@ type (
 		StartTime        time.Time
 		ExecutionTime    time.Time
 		CloseTime        time.Time
-		Status           *enums.WorkflowExecutionStatus
+		Status           *executionpb.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *serialization.DataBlob
 		SearchAttributes map[string]interface{}
@@ -601,7 +605,7 @@ type (
 		Memo               *serialization.DataBlob
 		SearchAttributes   map[string][]byte
 		CloseTimestamp     int64
-		Status             enums.WorkflowExecutionStatus
+		Status             executionpb.WorkflowExecutionStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
 	}
@@ -620,51 +624,27 @@ type (
 		SearchAttributes   map[string][]byte
 	}
 
-	// InternalNamespaceConfig describes the namespace configuration
-	InternalNamespaceConfig struct {
-		// NOTE: this retention is in days, not in seconds
-		Retention                int32
-		EmitMetric               bool                 // deprecated
-		ArchivalBucket           string               // deprecated
-		ArchivalStatus           enums.ArchivalStatus // deprecated
-		HistoryArchivalStatus    enums.ArchivalStatus
-		HistoryArchivalURI       string
-		VisibilityArchivalStatus enums.ArchivalStatus
-		VisibilityArchivalURI    string
-		BadBinaries              *serialization.DataBlob
-	}
-
 	// InternalCreateNamespaceRequest is used to create the namespace
 	InternalCreateNamespaceRequest struct {
-		Info              *NamespaceInfo
-		Config            *InternalNamespaceConfig
-		ReplicationConfig *NamespaceReplicationConfig
-		IsGlobalNamespace bool
-		ConfigVersion     int64
-		FailoverVersion   int64
+		ID					primitives.UUID
+		Name                string
+		Namespace           *serialization.DataBlob
+		IsGlobal            bool
 	}
 
 	// InternalGetNamespaceResponse is the response for GetNamespace
 	InternalGetNamespaceResponse struct {
-		Info                        *NamespaceInfo
-		Config                      *InternalNamespaceConfig
-		ReplicationConfig           *NamespaceReplicationConfig
-		IsGlobalNamespace           bool
-		ConfigVersion               int64
-		FailoverVersion             int64
-		FailoverNotificationVersion int64
-		NotificationVersion         int64
+		Namespace           *serialization.DataBlob
+		IsGlobal            bool
+		NotificationVersion int64
 	}
 
 	// InternalUpdateNamespaceRequest is used to update namespace
 	InternalUpdateNamespaceRequest struct {
-		Info                        *NamespaceInfo
-		Config                      *InternalNamespaceConfig
-		ReplicationConfig           *NamespaceReplicationConfig
-		ConfigVersion               int64
-		FailoverVersion             int64
-		FailoverNotificationVersion int64
-		NotificationVersion         int64
+		Id					primitives.UUID
+		Name                string
+		Namespace           *serialization.DataBlob
+		NotificationVersion int64
 	}
 
 	// InternalListNamespacesResponse is the response for GetNamespace
@@ -724,14 +704,14 @@ func FromDataBlob(blob *serialization.DataBlob) ([]byte, string) {
 }
 
 // NewDataBlobFromProto convert data blob from Proto representation
-func NewDataBlobFromProto(blob *commonproto.DataBlob) *serialization.DataBlob {
+func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
 	switch blob.GetEncodingType() {
-	case enums.EncodingTypeJSON:
+	case commonpb.EncodingType_JSON:
 		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeJSON,
 			Data:     blob.Data,
 		}
-	case enums.EncodingTypeProto3:
+	case commonpb.EncodingType_Proto3:
 		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeProto3,
 			Data:     blob.Data,
@@ -1040,7 +1020,7 @@ func ProtoChildExecutionInfoToInternal(rowInfo *persistenceblobs.ChildExecutionI
 		CreateRequestID:       rowInfo.GetCreateRequestId(),
 		Namespace:             rowInfo.GetNamespace(),
 		WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
-		ParentClosePolicy:     enums.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
+		ParentClosePolicy:     commonpb.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
 		InitiatedEvent:        NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.InitiatedEventEncoding)),
 		StartedEvent:          NewDataBlob(rowInfo.StartedEvent, common.EncodingType(rowInfo.StartedEventEncoding)),
 	}

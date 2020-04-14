@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,9 +30,10 @@ import (
 	"context"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
@@ -82,7 +87,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// no sync activity task will be sent when active side fail / timeout activity,
 	// since standby side does not have activity retry timer
 	namespaceID := request.GetNamespaceId()
-	execution := commonproto.WorkflowExecution{
+	execution := executionpb.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
 		RunId:      request.RunId,
 	}
@@ -211,7 +216,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 	scheduleID int64,
 	activityVersion int64,
 	mutableState mutableState,
-	incomingRawVersionHistory *commonproto.VersionHistory,
+	incomingRawVersionHistory *eventgenpb.VersionHistory,
 ) (bool, error) {
 
 	if mutableState.GetVersionHistories() != nil {

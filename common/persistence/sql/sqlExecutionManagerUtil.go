@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,11 +31,11 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -538,7 +542,7 @@ func createOrUpdateCurrentExecution(
 	workflowID string,
 	runID primitives.UUID,
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -772,7 +776,7 @@ func createReplicationTasks(
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion
 		activityScheduleID := common.EmptyEventID
-		var lastReplicationInfo map[string]*replication.ReplicationInfo
+		var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
 
 		var branchToken, newRunBranchToken []byte
 		var resetWorkflow bool
@@ -789,15 +793,15 @@ func createReplicationTasks(
 			branchToken = historyReplicationTask.BranchToken
 			newRunBranchToken = historyReplicationTask.NewRunBranchToken
 			resetWorkflow = historyReplicationTask.ResetWorkflow
-			lastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
+			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
 			for k, v := range historyReplicationTask.LastReplicationInfo {
-				lastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
+				lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
 			}
 
 		case p.ReplicationTaskTypeSyncActivity:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			lastReplicationInfo = map[string]*replication.ReplicationInfo{}
+			lastReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{}
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknown replication task: %v", task.GetType()))
@@ -966,7 +970,7 @@ func assertRunIDAndUpdateCurrentExecution(
 	previousRunID primitives.UUID,
 	createRequestID string,
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {
@@ -999,7 +1003,7 @@ func assertAndUpdateCurrentExecution(
 	previousState int,
 	createRequestID string,
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {
@@ -1074,7 +1078,7 @@ func updateCurrentExecution(
 	runID primitives.UUID,
 	createRequestID string,
 	state int,
-	status enums.WorkflowExecutionStatus,
+	status executionpb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
 ) error {

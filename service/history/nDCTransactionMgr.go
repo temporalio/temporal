@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +31,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -382,7 +386,7 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 	_, err := r.shard.GetExecutionManager().GetWorkflowExecution(
 		&persistence.GetWorkflowExecutionRequest{
 			NamespaceID: namespaceID,
-			Execution: commonproto.WorkflowExecution{
+			Execution: executionpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -433,7 +437,7 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 	weContext, release, err := r.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
-		commonproto.WorkflowExecution{
+		executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +28,7 @@ import (
 	"context"
 
 	"github.com/opentracing/opentracing-go"
-	"go.temporal.io/temporal-proto/enums"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/worker"
@@ -177,14 +181,14 @@ func (c *canaryImpl) createNamespace() error {
 	name := c.canaryNamespace
 	desc := "Namespace for running cadence canary workflows"
 	owner := "canary"
-	return c.canaryClient.createNamespace(name, desc, owner, enums.ArchivalStatusDisabled)
+	return c.canaryClient.createNamespace(name, desc, owner, namespacepb.ArchivalStatus_Disabled)
 }
 
 func (c *canaryImpl) createArchivalNamespace() error {
 	name := archivalNamespace
 	desc := "Namespace used by cadence canary workflows to verify archival"
 	owner := "canary"
-	archivalStatus := enums.ArchivalStatusEnabled
+	archivalStatus := namespacepb.ArchivalStatus_Enabled
 	return c.archivalClient.createNamespace(name, desc, owner, archivalStatus)
 }
 

@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +29,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -647,7 +651,7 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowE
 	var startTime time.Time
 	var executionTime time.Time
 	var closeTime time.Time
-	var status enums.WorkflowExecutionStatus
+	var status executionpb.WorkflowExecutionStatus
 	var historyLength int64
 	var memo []byte
 	var encoding string

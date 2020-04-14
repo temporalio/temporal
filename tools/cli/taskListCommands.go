@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,12 +27,11 @@ package cli
 import (
 	"os"
 
-	commonproto "go.temporal.io/temporal-proto/common"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	"go.temporal.io/temporal-proto/enums"
 )
 
 // DescribeTaskList show pollers info of a given tasklist
@@ -52,7 +55,7 @@ func DescribeTaskList(c *cli.Context) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	if taskListType == enums.TaskListTypeActivity {
+	if taskListType == tasklistpb.TaskListType_Activity {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
 		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})
@@ -75,7 +78,7 @@ func ListTaskListPartitions(c *cli.Context) {
 	defer cancel()
 	request := &workflowservice.ListTaskListPartitionsRequest{
 		Namespace: namespace,
-		TaskList:  &commonproto.TaskList{Name: taskList},
+		TaskList:  &tasklistpb.TaskList{Name: taskList},
 	}
 
 	response, err := frontendClient.ListTaskListPartitions(ctx, request)
@@ -90,7 +93,7 @@ func ListTaskListPartitions(c *cli.Context) {
 	}
 }
 
-func printTaskListPartitions(taskListType string, partitions []*commonproto.TaskListPartitionMetadata) {
+func printTaskListPartitions(taskListType string, partitions []*tasklistpb.TaskListPartitionMetadata) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")

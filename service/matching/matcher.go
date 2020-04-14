@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,9 +29,9 @@ import (
 	"errors"
 	"time"
 
-	"go.temporal.io/temporal-proto/enums"
 	"golang.org/x/time/rate"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/quotas"
@@ -137,7 +141,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			token.release()
 		default:
 			if !tm.isForwardingAllowed() && // we are the root partition and forwarding is not possible
-				task.source == enums.TaskSourceDbBacklog && // task was from backlog (stored in db)
+				task.source == commongenpb.TaskSource_DbBacklog && // task was from backlog (stored in db)
 				task.isForwarded() { // task came from a child partition
 				// a forwarded backlog task from a child partition, block trying
 				// to match with a poller until ctx timeout

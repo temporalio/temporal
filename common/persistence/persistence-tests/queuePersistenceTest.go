@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,9 +32,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 )
 
 type (
@@ -68,13 +71,13 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 
 	messageChan := make(chan interface{})
 
-	taskType := enums.ReplicationTaskTypeNamespace
+	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			messageChan <- &replication.ReplicationTask{
+			messageChan <- &replicationgenpb.ReplicationTask{
 				TaskType: taskType,
-				Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
-					NamespaceTaskAttributes: &replication.NamespaceTaskAttributes{
+				Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+					NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
 						Id: fmt.Sprintf("message-%v", i),
 					},
 				},
@@ -143,13 +146,13 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 
 	messageChan := make(chan interface{})
 
-	taskType := enums.ReplicationTaskTypeNamespace
+	taskType := replicationgenpb.ReplicationTaskType_NamespaceTask
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			messageChan <- &replication.ReplicationTask{
+			messageChan <- &replicationgenpb.ReplicationTask{
 				TaskType: taskType,
-				Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{
-					NamespaceTaskAttributes: &replication.NamespaceTaskAttributes{
+				Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
+					NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
 						Id: fmt.Sprintf("message-%v", i),
 					},
 				},

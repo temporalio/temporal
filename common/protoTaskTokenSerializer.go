@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,7 +25,7 @@
 package common
 
 import (
-	"github.com/temporalio/temporal/.gen/proto/token"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 )
 
 type (
@@ -33,28 +37,28 @@ func NewProtoTaskTokenSerializer() TaskTokenSerializer {
 	return &protoTaskTokenSerializer{}
 }
 
-func (j *protoTaskTokenSerializer) Serialize(taskToken *token.Task) ([]byte, error) {
+func (j *protoTaskTokenSerializer) Serialize(taskToken *tokengenpb.Task) ([]byte, error) {
 	if taskToken == nil {
 		return nil, nil
 	}
 	return taskToken.Marshal()
 }
 
-func (j *protoTaskTokenSerializer) Deserialize(data []byte) (*token.Task, error) {
-	taskToken := &token.Task{}
+func (j *protoTaskTokenSerializer) Deserialize(data []byte) (*tokengenpb.Task, error) {
+	taskToken := &tokengenpb.Task{}
 	err := taskToken.Unmarshal(data)
 	return taskToken, err
 }
 
-func (j *protoTaskTokenSerializer) SerializeQueryTaskToken(taskToken *token.QueryTask) ([]byte, error) {
+func (j *protoTaskTokenSerializer) SerializeQueryTaskToken(taskToken *tokengenpb.QueryTask) ([]byte, error) {
 	if taskToken == nil {
 		return nil, nil
 	}
 	return taskToken.Marshal()
 }
 
-func (j *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*token.QueryTask, error) {
-	taskToken := token.QueryTask{}
+func (j *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*tokengenpb.QueryTask, error) {
+	taskToken := tokengenpb.QueryTask{}
 	err := taskToken.Unmarshal(data)
 	return &taskToken, err
 }

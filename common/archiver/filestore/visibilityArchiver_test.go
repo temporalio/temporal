@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -32,8 +36,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.uber.org/zap"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
@@ -130,7 +134,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
-		Status:             enums.WorkflowExecutionStatusFailed,
+		Status:             executionpb.WorkflowExecutionStatus_Failed,
 		HistoryLength:      int64(101),
 	}
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
@@ -171,9 +175,9 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     closeTimestamp.UnixNano(),
-		Status:             enums.WorkflowExecutionStatusFailed,
+		Status:             executionpb.WorkflowExecutionStatus_Failed,
 		HistoryLength:      int64(101),
-		Memo: &commonproto.Memo{
+		Memo: &commonpb.Memo{
 			Fields: map[string][]byte{
 				"testFields": []byte{1, 2, 3},
 			},
@@ -269,11 +273,11 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				earliestCloseTime: int64(1000),
 				latestCloseTime:   int64(12345),
 				workflowTypeName:  common.StringPtr("some random type name"),
-				status:            toWorkflowExecutionStatusPtr(enums.WorkflowExecutionStatusContinuedAsNew),
+				status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_ContinuedAsNew),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp:   int64(12345),
-				Status:           enums.WorkflowExecutionStatusContinuedAsNew,
+				Status:           executionpb.WorkflowExecutionStatus_ContinuedAsNew,
 				WorkflowTypeName: "some random type name",
 			},
 			shouldMatch: true,
@@ -428,7 +432,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: int64(1),
 		latestCloseTime:   int64(10001),
-		status:            toWorkflowExecutionStatusPtr(enums.WorkflowExecutionStatusFailed),
+		status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -465,7 +469,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: int64(10),
 		latestCloseTime:   int64(10001),
-		status:            toWorkflowExecutionStatusPtr(enums.WorkflowExecutionStatusFailed),
+		status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	URI, err := archiver.NewURI("file://" + dir)
@@ -480,7 +484,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		PageSize:    1,
 		Query:       "parsed by mockParser",
 	}
-	executions := []*commonproto.WorkflowExecutionInfo{}
+	executions := []*executionpb.WorkflowExecutionInfo{}
 	for len(executions) == 0 || request.NextPageToken != nil {
 		response, err := visibilityArchiver.Query(context.Background(), URI, request)
 		s.NoError(err)
@@ -513,7 +517,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   10000,
-			Status:           enums.WorkflowExecutionStatusFailed,
+			Status:           executionpb.WorkflowExecutionStatus_Failed,
 			HistoryLength:    101,
 		},
 		{
@@ -525,7 +529,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     2,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     1000,
-			Status:             enums.WorkflowExecutionStatusFailed,
+			Status:             executionpb.WorkflowExecutionStatus_Failed,
 			HistoryLength:      123,
 		},
 		{
@@ -537,7 +541,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     10,
-			Status:             enums.WorkflowExecutionStatusContinuedAsNew,
+			Status:             executionpb.WorkflowExecutionStatus_ContinuedAsNew,
 			HistoryLength:      456,
 		},
 		{
@@ -549,7 +553,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     5,
-			Status:             enums.WorkflowExecutionStatusFailed,
+			Status:             executionpb.WorkflowExecutionStatus_Failed,
 			HistoryLength:      456,
 		},
 		{
@@ -561,7 +565,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			StartTimestamp:     3,
 			ExecutionTimestamp: 0,
 			CloseTimestamp:     10000,
-			Status:             enums.WorkflowExecutionStatusContinuedAsNew,
+			Status:             executionpb.WorkflowExecutionStatus_ContinuedAsNew,
 			HistoryLength:      456,
 		},
 	}

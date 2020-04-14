@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,11 +34,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -43,6 +49,7 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -123,7 +130,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	}
 	s.mockShard.SetEngine(h)
 
-	s.mockContext = newWorkflowExecutionContext(testNamespaceID, commonproto.WorkflowExecution{
+	s.mockContext = newWorkflowExecutionContext(testNamespaceID, executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      testRunID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
@@ -152,21 +159,21 @@ func (s *conflictResolverSuite) TestReset() {
 	nextEventID := int64(2)
 	branchToken := []byte("some random branch token")
 
-	event1 := &commonproto.HistoryEvent{
+	event1 := &eventpb.HistoryEvent{
 		EventId: 1,
 		Version: version,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonproto.WorkflowType{Name: "some random workflow type"},
-			TaskList:                            &commonproto.TaskList{Name: "some random workflow type"},
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:                        &commonpb.WorkflowType{Name: "some random workflow type"},
+			TaskList:                            &tasklistpb.TaskList{Name: "some random workflow type"},
 			Input:                               []byte("some random input"),
 			ExecutionStartToCloseTimeoutSeconds: 123,
 			TaskStartToCloseTimeoutSeconds:      233,
 			Identity:                            "some random identity",
 		}},
 	}
-	event2 := &commonproto.HistoryEvent{
+	event2 := &eventpb.HistoryEvent{
 		EventId:    2,
-		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{}}}
+		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{}}}
 
 	historySize := int64(1234567)
 	shardId := s.mockShard.GetShardID()
@@ -178,7 +185,7 @@ func (s *conflictResolverSuite) TestReset() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    []*commonproto.HistoryEvent{event1, event2},
+		HistoryEvents:    []*eventpb.HistoryEvent{event1, event2},
 		NextPageToken:    nil,
 		LastFirstEventID: event1.GetEventId(),
 		Size:             int(historySize),
@@ -200,7 +207,7 @@ func (s *conflictResolverSuite) TestReset() {
 		WorkflowTimeout:             event1.GetWorkflowExecutionStartedEventAttributes().ExecutionStartToCloseTimeoutSeconds,
 		DecisionStartToCloseTimeout: event1.GetWorkflowExecutionStartedEventAttributes().TaskStartToCloseTimeoutSeconds,
 		State:                       persistence.WorkflowStateCreated,
-		Status:                      enums.WorkflowExecutionStatusRunning,
+		Status:                      executionpb.WorkflowExecutionStatus_Running,
 		LastFirstEventID:            event1.GetEventId(),
 		NextEventID:                 nextEventID,
 		LastProcessedEvent:          common.EmptyEventID,
@@ -244,7 +251,7 @@ func (s *conflictResolverSuite) TestReset() {
 					StartVersion:     event1.GetVersion(),
 					LastWriteVersion: event1.GetVersion(),
 					LastWriteEventID: event1.GetEventId(),
-					LastReplicationInfo: map[string]*replication.ReplicationInfo{
+					LastReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{
 						sourceCluster: {
 							Version:     event1.GetVersion(),
 							LastEventId: event1.GetEventId(),
@@ -278,7 +285,7 @@ func (s *conflictResolverSuite) TestReset() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(event1.GetVersion()).Return(sourceCluster).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: namespaceID}, &persistence.NamespaceConfig{}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID)}, &persistenceblobs.NamespaceConfig{}, "", nil,
 	), nil).AnyTimes()
 
 	_, err := s.conflictResolver.reset(prevRunID, prevLastWriteVersion, prevState, createRequestID, nextEventID-1, executionInfo, s.mockContext.updateCondition)

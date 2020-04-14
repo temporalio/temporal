@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,12 +33,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -42,7 +46,6 @@ import (
 	messageMocks "github.com/temporalio/temporal/common/messaging/mocks"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/namespace"
-	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/common/task"
 	"github.com/temporalio/temporal/common/xdc"
@@ -97,13 +100,13 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockNDCResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistence.NamespaceInfo{},
-			&persistence.NamespaceConfig{},
-			&persistence.NamespaceReplicationConfig{
+			&persistenceblobs.NamespaceInfo{},
+			&persistenceblobs.NamespaceConfig{},
+			&persistenceblobs.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
-				Clusters: []*persistence.ClusterReplicationConfig{
-					{ClusterName: cluster.TestCurrentClusterName},
-					{ClusterName: cluster.TestAlternativeClusterName},
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
 				},
 			},
 			123,
@@ -159,13 +162,13 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_BadEncoding() {
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Namespace_Success() {
-	replicationAttr := &replication.NamespaceTaskAttributes{
-		NamespaceOperation: enums.NamespaceOperationUpdate,
+	replicationAttr := &replicationgenpb.NamespaceTaskAttributes{
+		NamespaceOperation: replicationgenpb.NamespaceOperation_Update,
 		Id:                 "some random namespace ID",
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeNamespace,
-		Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{NamespaceTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskType_NamespaceTask,
+		Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{NamespaceTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
@@ -177,13 +180,13 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Namespace_Success
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Namespace_FailedThenSuccess() {
-	replicationAttr := &replication.NamespaceTaskAttributes{
-		NamespaceOperation: enums.NamespaceOperationUpdate,
+	replicationAttr := &replicationgenpb.NamespaceTaskAttributes{
+		NamespaceOperation: replicationgenpb.NamespaceOperation_Update,
 		Id:                 "some random namespace ID",
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeNamespace,
-		Attributes: &replication.ReplicationTask_NamespaceTaskAttributes{NamespaceTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskType_NamespaceTask,
+		Attributes: &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{NamespaceTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
@@ -196,14 +199,14 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Namespace_FailedT
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success() {
-	replicationAttr := &replication.SyncShardStatusTaskAttributes{
+	replicationAttr := &replicationgenpb.SyncShardStatusTaskAttributes{
 		SourceCluster: "some random source cluster",
 		ShardId:       2333,
 		Timestamp:     time.Now().UnixNano(),
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeSyncShardStatus,
-		Attributes: &replication.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskType_SyncShardStatusTask,
+		Attributes: &replicationgenpb.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
@@ -222,14 +225,14 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success_Overdue() {
-	replicationAttr := &replication.SyncShardStatusTaskAttributes{
+	replicationAttr := &replicationgenpb.SyncShardStatusTaskAttributes{
 		SourceCluster: "some random source cluster",
 		ShardId:       2333,
 		Timestamp:     time.Now().Add(-2 * dropSyncShardTaskTimeThreshold).UnixNano(),
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeSyncShardStatus,
-		Attributes: &replication.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskType_SyncShardStatusTask,
+		Attributes: &replicationgenpb.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
@@ -240,14 +243,14 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedThenSuccess() {
-	replicationAttr := &replication.SyncShardStatusTaskAttributes{
+	replicationAttr := &replicationgenpb.SyncShardStatusTaskAttributes{
 		SourceCluster: "some random source cluster",
 		ShardId:       2333,
 		Timestamp:     time.Now().UnixNano(),
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeSyncShardStatus,
-		Attributes: &replication.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskType_SyncShardStatusTask,
+		Attributes: &replicationgenpb.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
@@ -267,7 +270,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedT
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Success() {
-	replicationAttr := &replication.SyncActivityTaskAttributes{
+	replicationAttr := &replicationgenpb.SyncActivityTaskAttributes{
 		NamespaceId:       "some random namespace ID",
 		WorkflowId:        "some random workflow ID",
 		RunId:             "some random run ID",
@@ -280,9 +283,9 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Succ
 		Details:           []byte("some random details"),
 		Attempt:           1048576,
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskType_SyncActivityTask,
+		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
@@ -293,7 +296,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Succ
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_FailedThenSuccess() {
-	replicationAttr := &replication.SyncActivityTaskAttributes{
+	replicationAttr := &replicationgenpb.SyncActivityTaskAttributes{
 		NamespaceId:       "some random namespace ID",
 		WorkflowId:        "some random workflow ID",
 		RunId:             "some random run ID",
@@ -306,9 +309,9 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Fail
 		Details:           []byte("some random details"),
 		Attempt:           1048576,
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskType_SyncActivityTask,
+		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
@@ -320,7 +323,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Fail
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success() {
-	replicationAttr := &replication.HistoryTaskAttributes{
+	replicationAttr := &replicationgenpb.HistoryTaskAttributes{
 		TargetClusters:  []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
 		NamespaceId:     "some random namespace ID",
 		WorkflowId:      "some random workflow ID",
@@ -328,16 +331,16 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success()
 		Version:         1394,
 		FirstEventId:    728,
 		NextEventId:     1015,
-		ReplicationInfo: map[string]*replication.ReplicationInfo{},
-		History: &commonproto.History{
-			Events: []*commonproto.HistoryEvent{{EventId: 1}},
+		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{},
+		History: &eventpb.History{
+			Events: []*eventpb.HistoryEvent{{EventId: 1}},
 		},
 		NewRunHistory: nil,
 		ResetWorkflow: true,
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeHistory,
-		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskType_HistoryTask,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
@@ -348,7 +351,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success()
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThenSuccess() {
-	replicationAttr := &replication.HistoryTaskAttributes{
+	replicationAttr := &replicationgenpb.HistoryTaskAttributes{
 		TargetClusters:  []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
 		NamespaceId:     "some random namespace ID",
 		WorkflowId:      "some random workflow ID",
@@ -356,16 +359,16 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThe
 		Version:         1394,
 		FirstEventId:    728,
 		NextEventId:     1015,
-		ReplicationInfo: map[string]*replication.ReplicationInfo{},
-		History: &commonproto.History{
-			Events: []*commonproto.HistoryEvent{{EventId: 1}},
+		ReplicationInfo: map[string]*replicationgenpb.ReplicationInfo{},
+		History: &eventpb.History{
+			Events: []*eventpb.HistoryEvent{{EventId: 1}},
 		},
 		NewRunHistory: nil,
 		ResetWorkflow: true,
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeHistory,
-		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskType_HistoryTask,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
@@ -377,7 +380,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThe
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_Success() {
-	replicationAttr := &replication.HistoryMetadataTaskAttributes{
+	replicationAttr := &replicationgenpb.HistoryMetadataTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
 		NamespaceId:    "some random namespace ID",
 		WorkflowId:     "some random workflow ID",
@@ -385,9 +388,9 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_S
 		FirstEventId:   728,
 		NextEventId:    1015,
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeHistoryMetadata,
-		Attributes: &replication.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskType_HistoryMetadataTask,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
@@ -398,7 +401,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_S
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_FailedThenSuccess() {
-	replicationAttr := &replication.HistoryMetadataTaskAttributes{
+	replicationAttr := &replicationgenpb.HistoryMetadataTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
 		NamespaceId:    "some random namespace ID",
 		WorkflowId:     "some random workflow ID",
@@ -406,9 +409,9 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_F
 		FirstEventId:   728,
 		NextEventId:    1015,
 	}
-	replicationTask := &replication.ReplicationTask{
-		TaskType:   enums.ReplicationTaskTypeHistoryMetadata,
-		Attributes: &replication.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
+	replicationTask := &replicationgenpb.ReplicationTask{
+		TaskType:   replicationgenpb.ReplicationTaskType_HistoryMetadataTask,
+		Attributes: &replicationgenpb.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)

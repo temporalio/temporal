@@ -1,6 +1,8 @@
-// The MIT License (MIT)
+// The MIT License
 //
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -9,16 +11,16 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 
 package history
 
@@ -26,8 +28,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -49,14 +50,14 @@ type (
 	query interface {
 		getQueryID() string
 		getQueryTermCh() <-chan struct{}
-		getQueryInput() *commonproto.WorkflowQuery
+		getQueryInput() *querypb.WorkflowQuery
 		getTerminationState() (*queryTerminationState, error)
 		setTerminationState(*queryTerminationState) error
 	}
 
 	queryImpl struct {
 		id         string
-		queryInput *commonproto.WorkflowQuery
+		queryInput *querypb.WorkflowQuery
 		termCh     chan struct{}
 
 		terminationState atomic.Value
@@ -64,12 +65,12 @@ type (
 
 	queryTerminationState struct {
 		queryTerminationType queryTerminationType
-		queryResult          *commonproto.WorkflowQueryResult
+		queryResult          *querypb.WorkflowQueryResult
 		failure              error
 	}
 )
 
-func newQuery(queryInput *commonproto.WorkflowQuery) query {
+func newQuery(queryInput *querypb.WorkflowQuery) query {
 	return &queryImpl{
 		id:         uuid.New(),
 		queryInput: queryInput,
@@ -85,7 +86,7 @@ func (q *queryImpl) getQueryTermCh() <-chan struct{} {
 	return q.termCh
 }
 
-func (q *queryImpl) getQueryInput() *commonproto.WorkflowQuery {
+func (q *queryImpl) getQueryInput() *querypb.WorkflowQuery {
 	return q.queryInput
 }
 
@@ -122,10 +123,10 @@ func (q *queryImpl) validateTerminationState(
 			return errTerminationStateInvalid
 		}
 		queryResult := terminationState.queryResult
-		validAnswered := queryResult.GetResultType() == enums.QueryResultTypeAnswered &&
+		validAnswered := queryResult.GetResultType() == querypb.QueryResultType_Answered &&
 			queryResult.Answer != nil &&
 			queryResult.GetErrorMessage() == ""
-		validFailed := queryResult.GetResultType() == enums.QueryResultTypeFailed &&
+		validFailed := queryResult.GetResultType() == querypb.QueryResultType_Failed &&
 			queryResult.Answer == nil &&
 			queryResult.GetErrorMessage() != ""
 		if !validAnswered && !validFailed {

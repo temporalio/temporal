@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +33,8 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
-	commonproto "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -79,7 +84,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	if len(history) == 0 {
 		ErrorAndExit("no events", nil)
 	}
-	allEvents := &commonproto.History{}
+	allEvents := &eventpb.History{}
 	totalSize := 0
 	for idx, b := range history {
 		totalSize += len(b.Data)
@@ -165,7 +170,7 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutio
 
 	resp, err := adminClient.DescribeWorkflowExecution(ctx, &adminservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -320,8 +325,7 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("readOneRow", err)
 		}
-		namespace := res["namespace"].(map[string]interface{})
-		namespaceName := namespace["name"].(string)
+		namespaceName := res["name"].(string)
 		fmt.Printf("namespace for namespaceId %v is %v \n", namespaceID, namespaceName)
 	} else {
 		tmpl := "select namespace from namespaces_by_name where name = ?"
@@ -420,7 +424,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 
 	req := &adminservice.DescribeHistoryHostRequest{}
 	if len(wid) > 0 {
-		req.ExecutionForHost = &commonproto.WorkflowExecution{WorkflowId: wid}
+		req.ExecutionForHost = &executionpb.WorkflowExecution{WorkflowId: wid}
 	}
 	if c.IsSet(FlagShardID) {
 		req.ShardIdForHost = int32(sid)
@@ -453,7 +457,7 @@ func AdminRefreshWorkflowTasks(c *cli.Context) {
 
 	_, err := adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
 		Namespace: namespace,
-		Execution: &commonproto.WorkflowExecution{
+		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},

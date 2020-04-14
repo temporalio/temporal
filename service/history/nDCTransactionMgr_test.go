@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,8 +33,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -145,7 +149,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*commonproto.HistoryEvent{{EventId: 1}},
+		Events: []*eventpb.HistoryEvent{{EventId: 1}},
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -255,7 +259,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*commonproto.HistoryEvent{{EventId: 1}},
+		Events: []*eventpb.HistoryEvent{{EventId: 1}},
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -343,8 +347,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*commonproto.HistoryEvent{{
-			EventType: enums.EventTypeWorkflowExecutionSignaled,
+		Events: []*eventpb.HistoryEvent{{
+			EventType: eventpb.EventType_WorkflowExecutionSignaled,
 		}},
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -397,8 +401,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*commonproto.HistoryEvent{{
-			EventType: enums.EventTypeWorkflowExecutionSignaled,
+		Events: []*eventpb.HistoryEvent{{
+			EventType: eventpb.EventType_WorkflowExecutionSignaled,
 		}},
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -442,7 +446,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: commonproto.WorkflowExecution{
+		Execution: executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -461,7 +465,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: commonproto.WorkflowExecution{
+		Execution: executionpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

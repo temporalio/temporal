@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,8 +32,7 @@ import (
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/definition"
@@ -68,7 +71,7 @@ func (s *VisibilityPersistenceSuite) TearDownSuite() {
 func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 	testNamespaceUUID := uuid.New()
 
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -128,7 +131,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 	testNamespaceUUID := uuid.New()
 
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test-time-skew",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -186,7 +189,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 
 	// Create 2 executions
 	startTime1 := time.Now()
-	workflowExecution1 := commonproto.WorkflowExecution{
+	workflowExecution1 := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-pagination-test1",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -202,7 +205,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 	s.Nil(err0)
 
 	startTime2 := startTime1.Add(time.Second)
-	workflowExecution2 := commonproto.WorkflowExecution{
+	workflowExecution2 := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-pagination-test2",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
@@ -260,7 +263,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 	startTime := time.Now().UnixNano()
 
 	// Create 2 executions
-	workflowExecution1 := commonproto.WorkflowExecution{
+	workflowExecution1 := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test1",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -272,7 +275,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 	})
 	s.Nil(err0)
 
-	workflowExecution2 := commonproto.WorkflowExecution{
+	workflowExecution2 := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test2",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
@@ -340,7 +343,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	startTime := time.Now().UnixNano()
 
 	// Create 2 executions
-	workflowExecution1 := commonproto.WorkflowExecution{
+	workflowExecution1 := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test1",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -352,7 +355,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	})
 	s.Nil(err0)
 
-	workflowExecution2 := commonproto.WorkflowExecution{
+	workflowExecution2 := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test2",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
@@ -420,7 +423,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 	startTime := time.Now().UnixNano()
 
 	// Create 2 executions
-	workflowExecution1 := commonproto.WorkflowExecution{
+	workflowExecution1 := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test1",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -432,7 +435,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 	})
 	s.Nil(err0)
 
-	workflowExecution2 := commonproto.WorkflowExecution{
+	workflowExecution2 := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test2",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
@@ -451,7 +454,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
 		CloseTimestamp:   time.Now().UnixNano(),
-		Status:           enums.WorkflowExecutionStatusCompleted,
+		Status:           executionpb.WorkflowExecutionStatus_Completed,
 	})
 	s.Nil(err2)
 
@@ -460,7 +463,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 		Execution:        workflowExecution2,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           enums.WorkflowExecutionStatusFailed,
+		Status:           executionpb.WorkflowExecutionStatus_Failed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -475,7 +478,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 			EarliestStartTime: startTime,
 			LatestStartTime:   startTime,
 		},
-		Status: enums.WorkflowExecutionStatusFailed,
+		Status: executionpb.WorkflowExecutionStatus_Failed,
 	})
 	s.Nil(err4)
 	s.Equal(1, len(resp.Executions))
@@ -486,7 +489,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 	testNamespaceUUID := uuid.New()
 
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "a3dbc7bf-deb1-4946-b57c-cf0615ea553f",
 	}
@@ -514,7 +517,7 @@ func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           enums.WorkflowExecutionStatusFailed,
+		Status:           executionpb.WorkflowExecutionStatus_Failed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -532,7 +535,7 @@ func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 // TestClosedWithoutStarted test
 func (s *VisibilityPersistenceSuite) TestClosedWithoutStarted() {
 	testNamespaceUUID := uuid.New()
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "1bdb0122-e8c9-4b35-b6f8-d692ab259b09",
 	}
@@ -551,7 +554,7 @@ func (s *VisibilityPersistenceSuite) TestClosedWithoutStarted() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   time.Now().Add(time.Second * -5).UnixNano(),
-		Status:           enums.WorkflowExecutionStatusFailed,
+		Status:           executionpb.WorkflowExecutionStatus_Failed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -570,7 +573,7 @@ func (s *VisibilityPersistenceSuite) TestClosedWithoutStarted() {
 func (s *VisibilityPersistenceSuite) TestMultipleUpserts() {
 	testNamespaceUUID := uuid.New()
 
-	workflowExecution := commonproto.WorkflowExecution{
+	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "a3dbc7bf-deb1-4946-b57c-cf0615ea553f",
 	}
@@ -581,7 +584,7 @@ func (s *VisibilityPersistenceSuite) TestMultipleUpserts() {
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
-		Status:           enums.WorkflowExecutionStatusFailed,
+		Status:           executionpb.WorkflowExecutionStatus_Failed,
 		CloseTimestamp:   time.Now().UnixNano(),
 		HistoryLength:    3,
 	}
@@ -619,7 +622,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 	testNamespaceUUID := uuid.New()
 	startTime := time.Now().Add(time.Second * -5).UnixNano()
 	for i := 0; i < nRows; i++ {
-		workflowExecution := commonproto.WorkflowExecution{
+		workflowExecution := executionpb.WorkflowExecution{
 			WorkflowId: uuid.New(),
 			RunId:      uuid.New(),
 		}
@@ -635,7 +638,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
 			StartTimestamp:   startTime,
-			Status:           enums.WorkflowExecutionStatusFailed,
+			Status:           executionpb.WorkflowExecutionStatus_Failed,
 			CloseTimestamp:   time.Now().UnixNano(),
 			HistoryLength:    3,
 		}
@@ -681,7 +684,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 			request: &p.UpsertWorkflowExecutionRequest{
 				NamespaceID:        "",
 				Namespace:          "",
-				Execution:          commonproto.WorkflowExecution{},
+				Execution:          executionpb.WorkflowExecution{},
 				WorkflowTypeName:   "",
 				StartTimestamp:     0,
 				ExecutionTimestamp: 0,
@@ -698,7 +701,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 			request: &p.UpsertWorkflowExecutionRequest{
 				NamespaceID:        "",
 				Namespace:          "",
-				Execution:          commonproto.WorkflowExecution{},
+				Execution:          executionpb.WorkflowExecution{},
 				WorkflowTypeName:   "",
 				StartTimestamp:     0,
 				ExecutionTimestamp: 0,
@@ -717,7 +720,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 }
 
 func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
-	req *p.RecordWorkflowExecutionClosedRequest, resp *commonproto.WorkflowExecutionInfo) {
+	req *p.RecordWorkflowExecutionClosedRequest, resp *executionpb.WorkflowExecutionInfo) {
 	s.Equal(req.Execution.RunId, resp.Execution.RunId)
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
@@ -728,13 +731,13 @@ func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
 }
 
 func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
-	req *p.RecordWorkflowExecutionStartedRequest, resp *commonproto.WorkflowExecutionInfo) {
+	req *p.RecordWorkflowExecutionStartedRequest, resp *executionpb.WorkflowExecutionInfo) {
 	s.Equal(req.Execution.GetRunId(), resp.Execution.GetRunId())
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().GetValue()))
 	s.Nil(resp.CloseTime)
-	s.Equal(resp.Status, enums.WorkflowExecutionStatusUnknown)
+	s.Equal(resp.Status, executionpb.WorkflowExecutionStatus_Unknown)
 	s.Zero(resp.HistoryLength)
 }
 

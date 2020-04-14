@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,8 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
 
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -77,10 +80,10 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 	execution := &persistence.WorkflowExecutionInfo{
 		NamespaceID: uuid.New(),
 	}
-	event := &commonproto.HistoryEvent{
+	event := &eventpb.HistoryEvent{
 		EventId:   1,
-		EventType: enums.EventTypeWorkflowExecutionSignaled,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      []byte{},
@@ -100,8 +103,8 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false).Times(1)
 	msBuilderCurrent.EXPECT().UpdateDuplicatedResource(dedupResource).Times(1)
-	events := []*commonproto.HistoryEvent{
-		{EventType: enums.EventTypeWorkflowExecutionStarted},
+	events := []*eventpb.HistoryEvent{
+		{EventType: eventpb.EventType_WorkflowExecutionStarted},
 		event,
 	}
 	appliedEvent, err := s.nDCReapplication.reapplyEvents(context.Background(), msBuilderCurrent, events, runID)
@@ -111,10 +114,10 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 	runID := uuid.New()
-	event := &commonproto.HistoryEvent{
+	event := &eventpb.HistoryEvent{
 		EventId:   1,
-		EventType: enums.EventTypeWorkflowExecutionSignaled,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      []byte{},
@@ -124,8 +127,8 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 	msBuilderCurrent := NewMockmutableState(s.controller)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(true).Times(1)
-	events := []*commonproto.HistoryEvent{
-		{EventType: enums.EventTypeWorkflowExecutionStarted},
+	events := []*eventpb.HistoryEvent{
+		{EventType: eventpb.EventType_WorkflowExecutionStarted},
 		event,
 	}
 	appliedEvent, err := s.nDCReapplication.reapplyEvents(context.Background(), msBuilderCurrent, events, runID)
@@ -138,19 +141,19 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	execution := &persistence.WorkflowExecutionInfo{
 		NamespaceID: uuid.New(),
 	}
-	event1 := &commonproto.HistoryEvent{
+	event1 := &eventpb.HistoryEvent{
 		EventId:   1,
-		EventType: enums.EventTypeWorkflowExecutionSignaled,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      []byte{},
 		}},
 	}
-	event2 := &commonproto.HistoryEvent{
+	event2 := &eventpb.HistoryEvent{
 		EventId:   2,
-		EventType: enums.EventTypeWorkflowExecutionSignaled,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      []byte{},
@@ -172,8 +175,8 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	dedupResource2 := definition.NewEventReappliedID(runID, event2.GetEventId(), event2.GetVersion())
 	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource2).Return(true).Times(1)
 	msBuilderCurrent.EXPECT().UpdateDuplicatedResource(dedupResource1).Times(1)
-	events := []*commonproto.HistoryEvent{
-		{EventType: enums.EventTypeWorkflowExecutionStarted},
+	events := []*eventpb.HistoryEvent{
+		{EventType: eventpb.EventType_WorkflowExecutionStarted},
 		event1,
 		event2,
 	}
@@ -187,10 +190,10 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	execution := &persistence.WorkflowExecutionInfo{
 		NamespaceID: uuid.New(),
 	}
-	event := &commonproto.HistoryEvent{
+	event := &eventpb.HistoryEvent{
 		EventId:   1,
-		EventType: enums.EventTypeWorkflowExecutionSignaled,
-		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+		EventType: eventpb.EventType_WorkflowExecutionSignaled,
+		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      []byte{},
@@ -209,8 +212,8 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	).Return(nil, fmt.Errorf("test")).Times(1)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false).Times(1)
-	events := []*commonproto.HistoryEvent{
-		{EventType: enums.EventTypeWorkflowExecutionStarted},
+	events := []*eventpb.HistoryEvent{
+		{EventType: eventpb.EventType_WorkflowExecutionStarted},
 		event,
 	}
 	appliedEvent, err := s.nDCReapplication.reapplyEvents(context.Background(), msBuilderCurrent, events, runID)

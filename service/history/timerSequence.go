@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +32,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/enums"
+	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -40,10 +44,10 @@ import (
 type timerType int32
 
 const (
-	timerTypeStartToClose    = timerType(enums.TimeoutTypeStartToClose)
-	timerTypeScheduleToStart = timerType(enums.TimeoutTypeScheduleToStart)
-	timerTypeScheduleToClose = timerType(enums.TimeoutTypeScheduleToClose)
-	timerTypeHeartbeat       = timerType(enums.TimeoutTypeHeartbeat)
+	timerTypeStartToClose    = timerType(eventpb.TimeoutType_StartToClose)
+	timerTypeScheduleToStart = timerType(eventpb.TimeoutType_ScheduleToStart)
+	timerTypeScheduleToClose = timerType(eventpb.TimeoutType_ScheduleToClose)
+	timerTypeHeartbeat       = timerType(eventpb.TimeoutType_Heartbeat)
 )
 
 const (
@@ -384,34 +388,34 @@ func timerTypeToTimerMask(
 
 func timerTypeToProto(
 	timerType timerType,
-) enums.TimeoutType {
+) eventpb.TimeoutType {
 
 	switch timerType {
 	case timerTypeStartToClose:
-		return enums.TimeoutTypeStartToClose
+		return eventpb.TimeoutType_StartToClose
 	case timerTypeScheduleToStart:
-		return enums.TimeoutTypeScheduleToStart
+		return eventpb.TimeoutType_ScheduleToStart
 	case timerTypeScheduleToClose:
-		return enums.TimeoutTypeScheduleToClose
+		return eventpb.TimeoutType_ScheduleToClose
 	case timerTypeHeartbeat:
-		return enums.TimeoutTypeHeartbeat
+		return eventpb.TimeoutType_Heartbeat
 	default:
 		panic(fmt.Sprintf("invalid timer type: %v", timerType))
 	}
 }
 
 func timerTypeFromProto(
-	timerType enums.TimeoutType,
+	timerType eventpb.TimeoutType,
 ) timerType {
 
 	switch timerType {
-	case enums.TimeoutTypeStartToClose:
+	case eventpb.TimeoutType_StartToClose:
 		return timerTypeStartToClose
-	case enums.TimeoutTypeScheduleToStart:
+	case eventpb.TimeoutType_ScheduleToStart:
 		return timerTypeScheduleToStart
-	case enums.TimeoutTypeScheduleToClose:
+	case eventpb.TimeoutType_ScheduleToClose:
 		return timerTypeScheduleToClose
-	case enums.TimeoutTypeHeartbeat:
+	case eventpb.TimeoutType_Heartbeat:
 		return timerTypeHeartbeat
 	default:
 		panic(fmt.Sprintf("invalid timeout type: %v", timerType))

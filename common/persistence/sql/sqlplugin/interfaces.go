@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +28,7 @@ import (
 	"database/sql"
 	"time"
 
-	"go.temporal.io/temporal-proto/enums"
+	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
@@ -76,11 +80,12 @@ type (
 
 	// NamespaceRow represents a row in namespace table
 	NamespaceRow struct {
-		ID           primitives.UUID
-		Name         string
-		Data         []byte
-		DataEncoding string
-		IsGlobal     bool
+		ID                  primitives.UUID
+		Name                string
+		Data                []byte
+		DataEncoding        string
+		IsGlobal            bool
+		NotificationVersion int64
 	}
 
 	// NamespaceFilter contains the column names within namespace table that
@@ -164,7 +169,7 @@ type (
 		RunID            primitives.UUID
 		CreateRequestID  string
 		State            int
-		Status           enums.WorkflowExecutionStatus
+		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 		StartVersion     int64
 	}

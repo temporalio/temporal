@@ -24,36 +24,36 @@ package cli;
 
 option go_package = "github.com/temporalio/temporal/.gen/proto/cli";
 
-import "common/common.proto";
-import "common/workflow_execution.proto";
-import "enums/enums.proto";
+import "common/message.proto";
+import "execution/enum.proto";
+import "execution/message.proto";
 
 message DescribeWorkflowExecutionResponse {
-    common.WorkflowExecutionConfiguration executionConfiguration = 1;
+    execution.WorkflowExecutionConfiguration executionConfiguration = 1;
     WorkflowExecutionInfo workflowExecutionInfo = 2;
     repeated PendingActivityInfo pendingActivities = 3;
-    repeated common.PendingChildExecutionInfo pendingChildren = 4;
+    repeated execution.PendingChildExecutionInfo pendingChildren = 4;
 }
 
 message WorkflowExecutionInfo {
-    common.WorkflowExecution execution = 1;
+    execution.WorkflowExecution execution = 1;
     common.WorkflowType type = 2;
     string startTime = 3;
     string closeTime = 4;
-    enums.WorkflowExecutionStatus status = 5;
+    execution.WorkflowExecutionStatus status = 5;
     int64 historyLength = 6;
     string parentNamespaceId = 7;
-    common.WorkflowExecution parentExecution = 8;
+    execution.WorkflowExecution parentExecution = 8;
     int64 executionTime = 9;
     common.Memo memo = 10;
     SearchAttributes searchAttributes = 11;
-    common.ResetPoints autoResetPoints = 12;
+    execution.ResetPoints autoResetPoints = 12;
 }
 
 message PendingActivityInfo {
     string activityId = 1;
     common.ActivityType activityType = 2;
-    enums.PendingActivityState state = 3;
+    execution.PendingActivityState state = 3;
     string heartbeatDetails = 4;
     string lastHeartbeatTimestamp = 5;
     string lastStartedTimestamp = 6;

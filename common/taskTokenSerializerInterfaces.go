@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,15 +25,15 @@
 package common
 
 import (
-	"github.com/temporalio/temporal/.gen/proto/token"
+	tokengenpb "github.com/temporalio/temporal/.gen/proto/token"
 )
 
 type (
 	// TaskTokenSerializer serializes task tokens
 	TaskTokenSerializer interface {
-		Serialize(token *token.Task) ([]byte, error)
-		Deserialize(data []byte) (*token.Task, error)
-		SerializeQueryTaskToken(token *token.QueryTask) ([]byte, error)
-		DeserializeQueryTaskToken(data []byte) (*token.QueryTask, error)
+		Serialize(token *tokengenpb.Task) ([]byte, error)
+		Deserialize(data []byte) (*tokengenpb.Task, error)
+		SerializeQueryTaskToken(token *tokengenpb.QueryTask) ([]byte, error)
+		DeserializeQueryTaskToken(data []byte) (*tokengenpb.QueryTask, error)
 	}
 )

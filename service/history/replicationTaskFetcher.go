@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +31,7 @@ import (
 	"time"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
@@ -260,8 +264,8 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 
 func (f *ReplicationTaskFetcherImpl) getMessages(
 	requestByShard map[int32]*request,
-) (map[int32]*replication.ReplicationMessages, error) {
-	var tokens []*replication.ReplicationToken
+) (map[int32]*replicationgenpb.ReplicationMessages, error) {
+	var tokens []*replicationgenpb.ReplicationToken
 	for _, request := range requestByShard {
 		tokens = append(tokens, request.token)
 	}
