@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"testing"
 	"time"
 
@@ -39,7 +40,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
@@ -352,25 +352,25 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(nil).Once()
 	branchToken2, err := p.NewHistoryBranchTokenByBranchID(treeID2, branchID2)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(nil).Once()
 	branchToken3, err := p.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(nil).Once()
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(nil).Once()
 
 	hbd, err := scvgr.Run(context.Background())
@@ -462,14 +462,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(nil).Once()
 
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(fmt.Errorf("failed to delete history")).Once()
 
 	hbd, err := scvgr.Run(context.Background())

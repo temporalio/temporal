@@ -30,6 +30,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"io"
 	"io/ioutil"
 	"os"
@@ -529,7 +530,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 		}
 
 		_, historyBatches, err := history.GetAllHistory(historyV2Mgr, nil, true,
-			minID, maxID, exeInfo.BranchToken, common.IntPtr(shardID))
+			minID, maxID, exeInfo.BranchToken, convert.IntPtr(shardID))
 
 		if err != nil {
 			ErrorAndExit("GetAllHistory error", err)
@@ -560,7 +561,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 			taskTemplate.Version = firstEvent.GetVersion()
 			taskTemplate.FirstEventId = firstEvent.GetEventId()
 			taskTemplate.NextEventId = lastEvent.GetEventId() + 1
-			task, _, err := history.GenerateReplicationTask(targets, taskTemplate, historyV2Mgr, nil, batch, common.IntPtr(shardID))
+			task, _, err := history.GenerateReplicationTask(targets, taskTemplate, historyV2Mgr, nil, batch, convert.IntPtr(shardID))
 			if err != nil {
 				ErrorAndExit("GenerateReplicationTask error", err)
 			}

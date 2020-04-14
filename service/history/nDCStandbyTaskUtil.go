@@ -25,6 +25,7 @@
 package history
 
 import (
+	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	"github.com/gogo/protobuf/types"
@@ -140,7 +141,7 @@ func newHistoryResendInfoFor2DC(
 	nextEventID int64,
 ) *historyResendInfo {
 	return &historyResendInfo{
-		nextEventID:      common.Int64Ptr(nextEventID),
+		nextEventID:      convert.Int64Ptr(nextEventID),
 		lastEventID:      common.EmptyEventID,
 		lastEventVersion: common.EmptyVersion,
 	}

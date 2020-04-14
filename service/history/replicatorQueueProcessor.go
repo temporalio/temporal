@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"errors"
+	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	commonpb "go.temporal.io/temporal-proto/common"
@@ -673,7 +674,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 					p.historyV2Mgr,
 					p.metricsClient,
 					nil,
-					common.IntPtr(p.shard.GetShardID()),
+					convert.IntPtr(p.shard.GetShardID()),
 				)
 				if err != nil {
 					return nil, err
@@ -759,7 +760,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 		MaxEventID:    nextEventID,
 		PageSize:      1,
 		NextPageToken: pageToken,
-		ShardID:       common.IntPtr(p.shard.GetShardID()),
+		ShardID:       convert.IntPtr(p.shard.GetShardID()),
 	}
 
 	for {

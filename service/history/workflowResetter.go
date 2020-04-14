@@ -29,6 +29,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
@@ -409,7 +410,7 @@ func (r *workflowResetterImpl) generateBranchToken(
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      forkNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, resetRunID),
-		ShardID:         common.IntPtr(shardID),
+		ShardID:         convert.IntPtr(shardID),
 	})
 	if err != nil {
 		return nil, err
@@ -586,7 +587,7 @@ func (r *workflowResetterImpl) getPaginationFn(
 			nextEventID,
 			paginationToken,
 			nDCDefaultPageSize,
-			common.IntPtr(r.shard.GetShardID()),
+			convert.IntPtr(r.shard.GetShardID()),
 		)
 		if err != nil {
 			return nil, nil, err

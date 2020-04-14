@@ -25,6 +25,7 @@
 package history
 
 import (
+	"github.com/temporalio/temporal/common/convert"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -824,7 +825,7 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 	}
 
 	request.Encoding = s.getDefaultEncoding(namespaceEntry)
-	request.ShardID = common.IntPtr(s.shardID)
+	request.ShardID = convert.IntPtr(s.shardID)
 	request.TransactionID = transactionID
 
 	size := 0

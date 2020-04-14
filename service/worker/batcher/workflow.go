@@ -27,6 +27,7 @@ package batcher
 import (
 	"context"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,7 +40,6 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/temporalio/temporal/client/frontend"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -225,7 +225,7 @@ func setDefaultParams(params BatchParams) BatchParams {
 		}
 	}
 	if params.TerminateParams.TerminateChildren == nil {
-		params.TerminateParams.TerminateChildren = common.BoolPtr(true)
+		params.TerminateParams.TerminateChildren = convert.BoolPtr(true)
 	}
 	return params
 }
@@ -377,7 +377,7 @@ func startTaskProcessor(
 						return err
 					})
 			case BatchTypeSignal:
-				err = processTask(ctx, limiter, task, batchParams, client, common.BoolPtr(false),
+				err = processTask(ctx, limiter, task, batchParams, client, convert.BoolPtr(false),
 					func(workflowID, runID string) error {
 						_, err := client.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,

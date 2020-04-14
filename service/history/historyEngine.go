@@ -32,6 +32,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	"github.com/gogo/protobuf/types"
@@ -820,20 +821,22 @@ func (e *historyEngineImpl) QueryWorkflow(
 		}
 	}
 
-	// query cannot be processed unless at least one decision task has finished
-	// if first decision task has not finished wait for up to a second for it to complete
-	deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
-	for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
-		<-time.After(queryFirstDecisionTaskCheckInterval)
-		mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
-		if err != nil {
-			return nil, err
+	if request.GetRequest().GetQueryConsistencyLevel() == querypb.QueryConsistencyLevel_Eventual {
+		// query cannot be processed unless at least one decision task has finished
+		// if first decision task has not finished wait for up to a second for it to complete
+		deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
+		for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
+			<-time.After(queryFirstDecisionTaskCheckInterval)
+			mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
+			if err != nil {
+				return nil, err
+			}
 		}
-	}
 
-	if mutableStateResp.GetPreviousStartedEventId() <= 0 {
-		scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
-		return nil, ErrQueryWorkflowBeforeFirstDecision
+		if mutableStateResp.GetPreviousStartedEventId() <= 0 {
+			scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
+			return nil, ErrQueryWorkflowBeforeFirstDecision
+		}
 	}
 
 	de, err := e.shard.GetNamespaceCache().GetNamespaceByID(request.GetNamespaceId())
@@ -2604,8 +2607,8 @@ func validateStartWorkflowExecutionRequest(
 	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
 		return serviceerror.NewInvalidArgument("Invalid ExecutionStartToCloseTimeoutSeconds.")
 	}
-	if request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		return serviceerror.NewInvalidArgument("Missing or invalid TaskStartToCloseTimeoutSeconds.")
+	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid TaskStartToCloseTimeoutSeconds.")
 	}
 	if request.TaskList == nil || request.TaskList.GetName() == "" {
 		return serviceerror.NewInvalidArgument("Missing Tasklist.")
@@ -2638,9 +2641,9 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 
 	executionStartToCloseTimeoutSeconds := request.GetExecutionStartToCloseTimeoutSeconds()
 	if executionStartToCloseTimeoutSeconds == 0 {
-		executionStartToCloseTimeoutSeconds = common.Int32Ceil(e.config.DefaultExecutionStartToCloseTimeout(namespace).Seconds())
+		executionStartToCloseTimeoutSeconds = convert.Int32Ceil(e.config.DefaultExecutionStartToCloseTimeout(namespace).Seconds())
 	}
-	maxWorkflowExecutionTimeout := common.Int32Ceil(e.config.MaxExecutionStartToCloseTimeout(namespace).Seconds())
+	maxWorkflowExecutionTimeout := convert.Int32Ceil(e.config.MaxExecutionStartToCloseTimeout(namespace).Seconds())
 
 	if executionStartToCloseTimeoutSeconds > maxWorkflowExecutionTimeout {
 		executionStartToCloseTimeoutSeconds = maxWorkflowExecutionTimeout
@@ -2653,9 +2656,12 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 		).IncCounter(metrics.WorkflowExecutionStartToCloseTimeoutOverrideCount)
 	}
 
-	maxDecisionStartToCloseTimeoutSeconds := common.Int32Ceil(e.config.MaxDecisionStartToClose(namespace).Seconds())
+	maxDecisionStartToCloseTimeoutSeconds := convert.Int32Ceil(e.config.MaxDecisionTaskStartToCloseTimeout(namespace).Seconds())
 
 	taskStartToCloseTimeoutSecs := request.GetTaskStartToCloseTimeoutSeconds()
+	if taskStartToCloseTimeoutSecs == 0 {
+		taskStartToCloseTimeoutSecs = convert.Int32Ceil(e.config.DefaultDecisionTaskStartToCloseTimeout(namespace).Seconds())
+	}
 	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, maxDecisionStartToCloseTimeoutSeconds)
 	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, executionStartToCloseTimeoutSeconds)
 

@@ -29,6 +29,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	eventpb "go.temporal.io/temporal-proto/event"
@@ -241,7 +242,7 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 			nextEventID,
 			paginationToken,
 			nDCDefaultPageSize,
-			common.IntPtr(r.shard.GetShardID()),
+			convert.IntPtr(r.shard.GetShardID()),
 		)
 		if err != nil {
 			return nil, nil, err

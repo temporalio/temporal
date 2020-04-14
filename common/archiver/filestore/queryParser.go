@@ -29,6 +29,7 @@ package filestore
 import (
 	"errors"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"strconv"
 	"strings"
 	"time"
@@ -149,7 +150,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowID = common.StringPtr(val)
+		parsedQuery.workflowID = convert.StringPtr(val)
 	case RunID:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -162,7 +163,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.runID = common.StringPtr(val)
+		parsedQuery.runID = convert.StringPtr(val)
 	case WorkflowType:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -175,7 +176,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowTypeName = common.StringPtr(val)
+		parsedQuery.workflowTypeName = convert.StringPtr(val)
 	case ExecutionStatus:
 		val, err := extractStringValue(valStr)
 		if err != nil {

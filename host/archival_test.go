@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"strconv"
 	"time"
 
@@ -185,7 +186,7 @@ func (s *integrationSuite) isHistoryDeleted(execution *executionpb.WorkflowExecu
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
 		TreeID:  primitives.MustParseUUID(execution.GetRunId()),
-		ShardID: common.IntPtr(shardID),
+		ShardID: convert.IntPtr(shardID),
 	}
 	for i := 0; i < retryLimit; i++ {
 		resp, err := s.testCluster.testBase.HistoryV2Mgr.GetHistoryTree(request)

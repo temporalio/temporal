@@ -27,6 +27,7 @@
 package history
 
 import (
+	"github.com/temporalio/temporal/common/convert"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -206,7 +207,7 @@ func (r *conflictResolverImpl) getHistory(namespaceID string, execution executio
 		MaxEventID:    nextEventID,
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nextPageToken,
-		ShardID:       common.IntPtr(r.shard.GetShardID()),
+		ShardID:       convert.IntPtr(r.shard.GetShardID()),
 	})
 	if err != nil {
 		return nil, 0, 0, nil, err

@@ -28,6 +28,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	executionpb "go.temporal.io/temporal-proto/execution"
@@ -90,7 +91,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRe
 		ExecutionTime:    time.Unix(0, request.ExecutionTimestamp),
 		WorkflowTypeName: request.WorkflowTypeName,
 		CloseTime:        &closeTime,
-		Status:           common.Int32Ptr(int32(request.Status)),
+		Status:           convert.Int32Ptr(int32(request.Status)),
 		HistoryLength:    &request.HistoryLength,
 		Memo:             request.Memo.Data,
 		Encoding:         string(request.Memo.GetEncoding()),
@@ -216,7 +217,7 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByStatus(request *p.Lis
 				MaxStartTime: &readLevel.Time,
 				Closed:       true,
 				RunID:        &readLevel.RunID,
-				Status:       common.Int32Ptr(int32(request.Status)),
+				Status:       convert.Int32Ptr(int32(request.Status)),
 				PageSize:     &request.PageSize,
 			})
 		})

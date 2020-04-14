@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"errors"
+	"github.com/temporalio/temporal/common/convert"
 	"testing"
 	"time"
 
@@ -406,7 +407,6 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 			Name: "task-list",
 		},
 		ExecutionStartToCloseTimeoutSeconds: 0,
-		TaskStartToCloseTimeoutSeconds:      1,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
 			BackoffCoefficient:          2,
@@ -436,7 +436,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStar
 			Name: "task-list",
 		},
 		ExecutionStartToCloseTimeoutSeconds: 1,
-		TaskStartToCloseTimeoutSeconds:      0,
+		TaskStartToCloseTimeoutSeconds:      -1,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
 			BackoffCoefficient:          2,
@@ -986,7 +986,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		MaxEventID:    nextEventID,
 		PageSize:      0,
 		NextPageToken: []byte{},
-		ShardID:       common.IntPtr(shardID),
+		ShardID:       convert.IntPtr(shardID),
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents: []*eventpb.HistoryEvent{

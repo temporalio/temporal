@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -342,7 +343,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
 	}
 
-	if request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
+	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
 		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
 	}
 
@@ -1917,7 +1918,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
 	}
 
-	if request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
+	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
 		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
 	}
 
@@ -3244,7 +3245,7 @@ func (wh *WorkflowHandler) getRawHistory(
 		MaxEventID:    nextEventID,
 		PageSize:      int(pageSize),
 		NextPageToken: nextPageToken,
-		ShardID:       common.IntPtr(shardID),
+		ShardID:       convert.IntPtr(shardID),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -3321,7 +3322,7 @@ func (wh *WorkflowHandler) getHistory(
 		MaxEventID:    nextEventID,
 		PageSize:      int(pageSize),
 		NextPageToken: nextPageToken,
-		ShardID:       common.IntPtr(shardID),
+		ShardID:       convert.IntPtr(shardID),
 	})
 	if err != nil {
 		return nil, nil, err

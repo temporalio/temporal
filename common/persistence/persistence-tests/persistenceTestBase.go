@@ -25,6 +25,7 @@
 package persistencetests
 
 import (
+	"github.com/temporalio/temporal/common/convert"
 	"math"
 	"math/rand"
 	"strings"
@@ -1330,7 +1331,7 @@ func (s *TestBase) GetTasks(namespaceID primitives.UUID, taskList string, taskTy
 		TaskList:     taskList,
 		TaskType:     taskType,
 		BatchSize:    batchSize,
-		MaxReadLevel: common.Int64Ptr(math.MaxInt64),
+		MaxReadLevel: convert.Int64Ptr(math.MaxInt64),
 	})
 
 	if err != nil {

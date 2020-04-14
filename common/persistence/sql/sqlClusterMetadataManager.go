@@ -26,6 +26,7 @@ package sql
 
 import (
 	"encoding/binary"
+	"github.com/temporalio/temporal/common/convert"
 	"net"
 	"time"
 
@@ -70,7 +71,7 @@ func (s *sqlClusterMetadataManager) InsertImmutableDataIfNotExists(request *p.In
 	// or even move to a lock mechanism, but that doesn't appear worth the extra lines of code.
 	_, err := s.db.InsertIfNotExistsIntoClusterMetadata(&sqlplugin.ClusterMetadataRow{
 		ImmutableData:         request.ImmutableClusterMetadata.Data,
-		ImmutableDataEncoding: *common.StringPtr(string(request.ImmutableClusterMetadata.Encoding)),
+		ImmutableDataEncoding: *convert.StringPtr(string(request.ImmutableClusterMetadata.Encoding)),
 	})
 
 	if err != nil {

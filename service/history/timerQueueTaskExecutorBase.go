@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"github.com/temporalio/temporal/common/convert"
 
 	executionpb "go.temporal.io/temporal-proto/execution"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
@@ -248,7 +249,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
 		}
 		return t.shard.GetHistoryManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
-			ShardID:     common.IntPtr(t.shard.GetShardID()),
+			ShardID:     convert.IntPtr(t.shard.GetShardID()),
 		})
 
 	}

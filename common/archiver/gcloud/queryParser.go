@@ -29,12 +29,11 @@ package gcloud
 import (
 	"errors"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"strconv"
 	"time"
 
 	"github.com/xwb1989/sqlparser"
-
-	"github.com/temporalio/temporal/common"
 )
 
 type (
@@ -161,7 +160,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowID = common.StringPtr(val)
+		parsedQuery.workflowID = convert.StringPtr(val)
 	case RunID:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -174,7 +173,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.runID = common.StringPtr(val)
+		parsedQuery.runID = convert.StringPtr(val)
 	case CloseTime:
 		timestamp, err := convertToTimestamp(valStr)
 		if err != nil {
@@ -206,7 +205,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowType = common.StringPtr(val)
+		parsedQuery.workflowType = convert.StringPtr(val)
 	case SearchPrecision:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -226,7 +225,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		default:
 			return fmt.Errorf("invalid value for %s: %s", SearchPrecision, val)
 		}
-		parsedQuery.searchPrecision = common.StringPtr(val)
+		parsedQuery.searchPrecision = convert.StringPtr(val)
 	default:
 		return fmt.Errorf("unknown filter name: %s", colNameStr)
 	}

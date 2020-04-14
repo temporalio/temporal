@@ -29,6 +29,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"math"
 	"time"
 
@@ -972,7 +973,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 		MinVisibilityTimestamp: &pageToken.Timestamp,
 		TaskID:                 pageToken.TaskID,
 		MaxVisibilityTimestamp: &request.MaxTimestamp,
-		PageSize:               common.IntPtr(request.BatchSize + 1),
+		PageSize:               convert.IntPtr(request.BatchSize + 1),
 	})
 
 	if err != nil && err != sql.ErrNoRows {

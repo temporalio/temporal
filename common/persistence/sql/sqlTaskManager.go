@@ -27,6 +27,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"math"
 	"time"
 
@@ -35,7 +36,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -72,7 +72,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 		ShardID:     shardID,
 		NamespaceID: &namespaceID,
 		Name:        &request.TaskList,
-		TaskType:    common.Int64Ptr(int64(request.TaskType))})
+		TaskType:    convert.Int64Ptr(int64(request.TaskType))})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			tlInfo := &persistenceblobs.TaskListInfo{
@@ -307,7 +307,7 @@ func (m *sqlTaskManager) DeleteTaskList(request *persistence.DeleteTaskListReque
 		ShardID:     m.shardID(namespaceID, request.TaskList.Name),
 		NamespaceID: &namespaceID,
 		Name:        &request.TaskList.Name,
-		TaskType:    common.Int64Ptr(int64(request.TaskList.TaskType)),
+		TaskType:    convert.Int64Ptr(int64(request.TaskList.TaskType)),
 		RangeID:     &request.RangeID,
 	})
 	if err != nil {
@@ -426,7 +426,7 @@ func (m *sqlTaskManager) shardID(namespaceID primitives.UUID, name string) int {
 
 func lockTaskList(tx sqlplugin.Tx, shardID int, namespaceID primitives.UUID, name string, taskListType int32, oldRangeID int64) error {
 	rangeID, err := tx.LockTaskLists(&sqlplugin.TaskListsFilter{
-		ShardID: shardID, NamespaceID: &namespaceID, Name: &name, TaskType: common.Int64Ptr(int64(taskListType))})
+		ShardID: shardID, NamespaceID: &namespaceID, Name: &name, TaskType: convert.Int64Ptr(int64(taskListType))})
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock task list. Error: %v", err))
 	}

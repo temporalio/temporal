@@ -28,11 +28,11 @@ package history
 
 import (
 	"context"
+	"github.com/temporalio/temporal/common/convert"
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -241,7 +241,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseBranchLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, uuid.New()),
-		ShardID:         common.IntPtr(shardID),
+		ShardID:         convert.IntPtr(shardID),
 	})
 	if err != nil {
 		return 0, err

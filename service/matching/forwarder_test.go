@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"github.com/temporalio/temporal/common/convert"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -109,7 +110,7 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
 
 	schedToStart := request.GetScheduleToStartTimeoutSeconds()
-	rewritten := common.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds())
+	rewritten := convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds())
 	t.Equal(schedToStart, rewritten)
 	t.Equal(t.taskList.name, request.GetForwardedFrom())
 }
@@ -135,7 +136,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(primitives.UUIDString(taskInfo.Data.GetRunId()), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
-	t.EqualValues(common.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds()),
+	t.EqualValues(convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds()),
 		request.GetScheduleToStartTimeoutSeconds())
 	t.Equal(t.taskList.name, request.GetForwardedFrom())
 }

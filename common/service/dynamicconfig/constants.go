@@ -68,7 +68,7 @@ var keys = map[Key]string{
 	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
 	TransactionSizeLimit:                   "system.transactionSizeLimit",
 	MinRetentionDays:                       "system.minRetentionDays",
-	MaxDecisionStartToCloseTimeout:         "system.maxDecisionStartToCloseTimeout",
+	MaxDecisionTaskStartToCloseTimeout:     "system.maxDecisionTaskStartToCloseTimeout",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
@@ -202,6 +202,7 @@ var keys = map[Key]string{
 	DefaultExecutionStartToCloseTimeout:                   "history.defaultWorkflowExecutionTimeout",
 	MaxExecutionStartToCloseTimeout:                       "history.maximumWorkflowExecutionTimeout",
 	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
+	DefaultDecisionTaskStartToCloseTimeout:                "history.defaultDecisionTaskStartToCloseTimeout",
 	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
 	NumParentClosePolicySystemWorkflows:                   "history.numParentClosePolicySystemWorkflows",
 	ReplicationTaskFetcherParallelism:                     "history.ReplicationTaskFetcherParallelism",
@@ -299,11 +300,10 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
-	// MaxDecisionStartToCloseTimeout is the maximum allowed decision start to close timeout
-	MaxDecisionStartToCloseTimeout
+	// MaxDecisionTaskStartToCloseTimeout  is the maximum allowed decision start to close timeout
+	MaxDecisionTaskStartToCloseTimeout
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
-
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
@@ -563,6 +563,8 @@ const (
 	DefaultExecutionStartToCloseTimeout
 	// Maximum allowed workflow execution timeout
 	MaxExecutionStartToCloseTimeout
+	// DefaultDecisionTaskStartToCloseTimeout for a decision task
+	DefaultDecisionTaskStartToCloseTimeout
 
 	// key for worker
 

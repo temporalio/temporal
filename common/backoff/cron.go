@@ -25,7 +25,7 @@
 package backoff
 
 import (
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	"github.com/robfig/cron"
@@ -65,7 +65,7 @@ func GetBackoffForNextSchedule(cronSchedule string, startTime time.Time, closeTi
 		nextScheduleTime = schedule.Next(nextScheduleTime)
 	}
 	backoffInterval := nextScheduleTime.Sub(closeUTCTime)
-	roundedInterval := time.Second * time.Duration(common.Int64Ceil(backoffInterval.Seconds()))
+	roundedInterval := time.Second * time.Duration(convert.Int64Ceil(backoffInterval.Seconds()))
 	return roundedInterval
 }
 
@@ -76,5 +76,5 @@ func GetBackoffForNextScheduleInSeconds(cronSchedule string, startTime time.Time
 	if backoffDuration == NoBackoff {
 		return 0
 	}
-	return common.Int32Ceil(backoffDuration.Seconds())
+	return convert.Int32Ceil(backoffDuration.Seconds())
 }

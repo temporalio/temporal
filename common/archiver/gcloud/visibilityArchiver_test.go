@@ -27,6 +27,7 @@ package gcloud
 import (
 	"context"
 	"errors"
+	"github.com/temporalio/temporal/common/convert"
 	"testing"
 	"time"
 
@@ -39,7 +40,6 @@ import (
 	"go.uber.org/zap"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/gcloud/connector/mocks"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -267,9 +267,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       int64(101),
 		searchPrecision: &dayPrecision,
-		workflowType:    common.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      common.StringPtr(testWorkflowID),
-		runID:           common.StringPtr(testRunID),
+		workflowType:    convert.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      convert.StringPtr(testWorkflowID),
+		runID:           convert.StringPtr(testRunID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -310,9 +310,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       int64(101),
 		searchPrecision: &dayPrecision,
-		workflowType:    common.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      common.StringPtr(testWorkflowID),
-		runID:           common.StringPtr(testRunID),
+		workflowType:    convert.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      convert.StringPtr(testWorkflowID),
+		runID:           convert.StringPtr(testRunID),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{

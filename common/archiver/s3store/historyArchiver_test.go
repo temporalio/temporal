@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 	"io/ioutil"
 	"sort"
 	"strconv"
@@ -176,7 +177,7 @@ func setupFsEmulation(s3cli *mocks.S3API) {
 			var nextContinuationToken *string
 			if len(objects) > start+maxKeys {
 				isTruncated = true
-				nextContinuationToken = common.StringPtr(fmt.Sprintf("%d", start+maxKeys))
+				nextContinuationToken = convert.StringPtr(fmt.Sprintf("%d", start+maxKeys))
 				objects = objects[start : start+maxKeys]
 			} else {
 				objects = objects[start:]
@@ -192,7 +193,7 @@ func setupFsEmulation(s3cli *mocks.S3API) {
 
 			if len(commonPrefixes) > start+maxKeys {
 				isTruncated = true
-				nextContinuationToken = common.StringPtr(fmt.Sprintf("%d", start+maxKeys))
+				nextContinuationToken = convert.StringPtr(fmt.Sprintf("%d", start+maxKeys))
 				commonPrefixes = commonPrefixes[start : start+maxKeys]
 			} else if len(commonPrefixes) > 0 {
 				commonPrefixes = commonPrefixes[start:]

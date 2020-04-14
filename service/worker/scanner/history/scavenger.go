@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	executionpb "go.temporal.io/temporal-proto/execution"
@@ -263,7 +264,7 @@ func (s *Scavenger) startTaskProcessor(
 						// This is a required argument but it is not needed for Cassandra.
 						// Since this scanner is only for Cassandra,
 						// we can fill any number here to let to code go through
-						ShardID: common.IntPtr(1),
+						ShardID: convert.IntPtr(1),
 					})
 					if err != nil {
 						respCh <- err

@@ -27,6 +27,7 @@ package gcloud
 import (
 	"context"
 	"errors"
+	"github.com/temporalio/temporal/common/convert"
 	"testing"
 	"time"
 
@@ -467,7 +468,7 @@ func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		PageSize:             testPageSize,
-		CloseFailoverVersion: common.Int64Ptr(-25),
+		CloseFailoverVersion: convert.Int64Ptr(-25),
 	}
 
 	h.NoError(err)

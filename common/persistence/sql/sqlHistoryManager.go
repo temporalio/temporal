@@ -27,6 +27,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"github.com/temporalio/temporal/common/convert"
 
 	"github.com/gogo/protobuf/types"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -362,7 +363,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 
 	rsp, err := m.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID:  treeID,
-		ShardID: common.IntPtr(request.ShardID),
+		ShardID: convert.IntPtr(request.ShardID),
 	})
 	if err != nil {
 		return err

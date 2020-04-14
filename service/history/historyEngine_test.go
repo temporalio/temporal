@@ -1512,6 +1512,9 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		// will use ScheduleToClose for ScheduleToStart and StartToClose
 		{7, 0, 0, 0,
 			7, 7, 7, false},
+		// Only StartToClose timeout
+		{0, 0, 7, 0,
+			workflowTimeout, workflowTimeout, 7, false},
 		// No ScheduleToClose timeout, ScheduleToStart or StartToClose, expect error return
 		{0, 0, 0, 0,
 			0, 0, 0, true},
@@ -1536,7 +1539,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		{0, workflowTimeout + 1, 0, 0,
 			0, 0, 0, true},
 		{0, 0, workflowTimeout + 1, 0,
-			0, 0, 0, true},
+			workflowTimeout, workflowTimeout, workflowTimeout, false},
 		{0, 0, 0, workflowTimeout + 1,
 			0, 0, 0, true},
 		// No ScheduleToClose timeout, will use ScheduleToStart + StartToClose, but exceed limit
