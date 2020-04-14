@@ -123,35 +123,13 @@ func newTransferQueueStandbyProcessor(
 		logger,
 	)
 
-	redispatchQueue := collection.NewConcurrentQueue()
-
-	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
-		return newTransferQueueTask(
-			shard,
-			taskInfo,
-			historyService.metricsClient.Scope(
-				getTransferTaskMetricsScope(taskInfo.GetTaskType(), false),
-			),
-			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
-			transferTaskFilter,
-			processor.taskExecutor,
-			redispatchQueue,
-			shard.GetTimeSource(),
-			options.MaxRetryCount,
-			queueAckMgr,
-		)
-	}
-
 	queueProcessorBase := newQueueProcessorBase(
 		clusterName,
 		shard,
 		options,
 		processor,
-		queueTaskProcessor,
 		queueAckMgr,
-		redispatchQueue,
 		historyService.historyCache,
-		transferQueueTaskInitializer,
 		logger,
 	)
 
