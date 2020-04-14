@@ -107,16 +107,6 @@ func newTimerQueueActiveProcessor(
 		historyService.metricsClient,
 		shard.GetConfig(),
 	)
-	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
-		metrics.TimerActiveQueueProcessorScope,
-		shard,
-		historyService,
-		timerQueueAckMgr,
-		timerGate,
-		shard.GetConfig().TimerProcessorMaxPollRPS,
-		logger,
-	)
-
 	return processor
 }
 
@@ -207,16 +197,6 @@ func newTimerQueueFailoverProcessor(
 		historyService.metricsClient,
 		shard.GetConfig(),
 	)
-	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
-		metrics.TimerActiveQueueProcessorScope,
-		shard,
-		historyService,
-		timerQueueAckMgr,
-		timerGate,
-		shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
-		logger,
-	)
-
 	return updateShardAckLevel, processor
 }
 

@@ -115,24 +115,8 @@ func newTransferQueueStandbyProcessor(
 		),
 	}
 
-	queueAckMgr := newQueueAckMgr(
-		shard,
-		options,
-		processor,
-		shard.GetTransferClusterAckLevel(clusterName),
-		logger,
-	)
-
-	queueProcessorBase := newQueueProcessorBase(
-		clusterName,
-		shard,
-		options,
-		processor,
-		queueAckMgr,
-		historyService.historyCache,
-		logger,
-	)
-
+	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(clusterName), logger)
+	queueProcessorBase := newQueueProcessorBase(clusterName, shard, options, processor, queueAckMgr, historyService.historyCache, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 

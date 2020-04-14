@@ -109,17 +109,7 @@ func newTimerQueueStandbyProcessor(
 			shard.GetConfig(),
 		),
 	}
-
-	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
-		metrics.TimerStandbyQueueProcessorScope,
-		shard,
-		historyService,
-		timerQueueAckMgr,
-		timerGate,
-		shard.GetConfig().TimerProcessorMaxPollRPS,
-		logger,
-	)
-
+	processor.timerQueueProcessorBase.timerProcessor = processor
 	return processor
 }
 
