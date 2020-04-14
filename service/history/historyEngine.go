@@ -2606,8 +2606,8 @@ func validateStartWorkflowExecutionRequest(
 	if request.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
 		return serviceerror.NewInvalidArgument("Missing or invalid ExecutionStartToCloseTimeoutSeconds.")
 	}
-	if request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		return serviceerror.NewInvalidArgument("Missing or invalid TaskStartToCloseTimeoutSeconds.")
+	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid TaskStartToCloseTimeoutSeconds.")
 	}
 	if request.TaskList == nil || request.TaskList.GetName() == "" {
 		return serviceerror.NewInvalidArgument("Missing Tasklist.")
@@ -2638,9 +2638,12 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 ) {
 
 	namespace := namespaceEntry.GetInfo().Name
-	maxDecisionStartToCloseTimeoutSeconds := int32(e.config.MaxDecisionStartToCloseSeconds(namespace))
+	maxDecisionStartToCloseTimeoutSeconds := common.Int32Ceil(e.config.MaxDecisionTaskStartToCloseTimeout(namespace).Seconds())
 
 	taskStartToCloseTimeoutSecs := request.GetTaskStartToCloseTimeoutSeconds()
+	if taskStartToCloseTimeoutSecs == 0 {
+		taskStartToCloseTimeoutSecs = common.Int32Ceil(e.config.DefaultDecisionTaskStartToCloseTimeout(namespace).Seconds())
+	}
 	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, maxDecisionStartToCloseTimeoutSeconds)
 	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, request.GetExecutionStartToCloseTimeoutSeconds())
 
