@@ -54,9 +54,10 @@ const (
 )
 
 const (
-	domainCacheInitialSize = 10 * 1024
-	domainCacheMaxSize     = 64 * 1024
-	domainCacheTTL         = 0 // 0 means infinity
+	domainCacheInitialSize        = 10 * 1024
+	domainCacheMaxSize            = 64 * 1024
+	domainCacheTTL                = 0 // 0 means infinity
+	domainCacheMinRefreshInterval = 1 * time.Second
 	// DomainCacheRefreshInterval domain cache refresh interval
 	DomainCacheRefreshInterval = 10 * time.Second
 	// DomainCacheRefreshFailureRetryInterval is the wait time
@@ -108,7 +109,8 @@ type (
 
 		// refresh lock is used to guarantee at most one
 		// coroutine is doing domain refreshment
-		refreshLock sync.Mutex
+		refreshLock     sync.Mutex
+		lastRefreshTime time.Time
 
 		callbackLock     sync.Mutex
 		prepareCallbacks map[int]PrepareCallbackFn
@@ -412,6 +414,11 @@ func (c *domainCache) refreshDomains() error {
 // this function only refresh the domains in the v2 table
 // the domains in the v1 table will be refreshed if cache is stale
 func (c *domainCache) refreshDomainsLocked() error {
+	now := c.timeSource.Now()
+	if now.Sub(c.lastRefreshTime) < domainCacheMinRefreshInterval {
+		return nil
+	}
+
 	// first load the metadata record, then load domains
 	// this can guarantee that domains in the cache are not updated more than metadata record
 	metadata, err := c.metadataMgr.GetMetadata()
@@ -484,6 +491,10 @@ UpdateLoop:
 	c.cacheByID.Store(newCacheByID)
 	c.cacheNameToID.Store(newCacheNameToID)
 	c.triggerDomainChangeCallbackLocked(prevEntries, nextEntries)
+
+	// only update last refresh time when refresh succeeded
+	c.lastRefreshTime = now
+
 	return nil
 }
 

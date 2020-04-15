@@ -23,6 +23,7 @@ package cache
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -46,10 +48,12 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		logger          log.Logger
 		clusterMetadata *mocks.ClusterMetadata
 		metadataMgr     *mocks.MetadataManager
-		domainCache     *domainCache
+
+		domainCache *domainCache
+		logger      log.Logger
+		now         time.Time
 	}
 )
 
@@ -73,6 +77,9 @@ func (s *domainCacheSuite) SetupTest() {
 	s.metadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.domainCache = NewDomainCache(s.metadataMgr, s.clusterMetadata, metricsClient, s.logger).(*domainCache)
+
+	s.now = time.Now()
+	s.domainCache.timeSource = clock.NewEventTimeSource().Update(s.now)
 }
 
 func (s *domainCacheSuite) TearDownTest() {
@@ -478,6 +485,8 @@ func (s *domainCacheSuite) TestUpdateCache_TriggerCallBack() {
 		Domains:       []*persistence.GetDomainResponse{domainRecord1New, domainRecord2New},
 		NextPageToken: nil,
 	}, nil).Once()
+
+	s.domainCache.timeSource.(*clock.EventTimeSource).Update(s.now.Add(domainCacheMinRefreshInterval))
 	s.Nil(s.domainCache.refreshDomains())
 
 	// the order matters here: the record 2 got updated first, thus with a lower notification version
