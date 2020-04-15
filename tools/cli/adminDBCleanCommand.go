@@ -30,9 +30,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
-
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 
@@ -54,9 +51,10 @@ type (
 	// ShardCleanReportHandled is the part of ShardCleanReport of executions which were read from corruption file
 	// and were attempted to be deleted
 	ShardCleanReportHandled struct {
-		TotalExecutionsCount     int64
-		SuccessfullyCleanedCount int64
-		FailedCleanedCount       int64
+		TotalExecutionsCount          int64
+		SuccessfullyCleanedCount      int64
+		FailedCleanedCount            int64
+		FailedToConfirmCorruptedCount int64
 	}
 
 	// ShardCleanReportFailure is the part of ShardCleanReport that indicates a failure to clean some or all
@@ -68,16 +66,18 @@ type (
 
 	// CleanProgressReport represents the aggregate progress of the clean job.
 	// It is periodically printed to stdout
+	// TODO: move these reports into there own file like we did for scan
 	CleanProgressReport struct {
-		NumberOfShardsFinished     int
-		TotalExecutionsCount       int64
-		SuccessfullyCleanedCount   int64
-		FailedCleanedCount         int64
-		TotalDBRequests            int64
-		DatabaseRPS                float64
-		NumberOfShardCleanFailures int64
-		ShardsPerHour              float64
-		ExecutionsPerHour          float64
+		NumberOfShardsFinished        int
+		TotalExecutionsCount          int64
+		SuccessfullyCleanedCount      int64
+		FailedCleanedCount            int64
+		FailedToConfirmCorruptedCount int64
+		TotalDBRequests               int64
+		DatabaseRPS                   float64
+		NumberOfShardCleanFailures    int64
+		ShardsPerHour                 float64
+		ExecutionsPerHour             float64
 	}
 
 	// CleanOutputDirectories are the directory paths for output of clean
@@ -109,10 +109,13 @@ func AdminDBClean(c *cli.Context) {
 		scanWorkerCount = numShards
 	}
 	inputDirectory := getRequiredOption(c, FlagInputDirectory)
+	skipHistoryChecks := c.Bool(FlagSkipHistoryChecks)
 
+	payloadSerializer := persistence.NewPayloadSerializer()
 	rateLimiter := getRateLimiter(startingRPS, targetRPS, scaleUpSeconds)
 	session := connectToCassandra(c)
 	defer session.Close()
+	historyStore := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
 	cleanOutputDirectories := createCleanOutputDirectories()
 
 	reports := make(chan *ShardCleanReport)
@@ -125,7 +128,10 @@ func AdminDBClean(c *cli.Context) {
 						session,
 						cleanOutputDirectories,
 						inputDirectory,
-						shardID)
+						shardID,
+						skipHistoryChecks,
+						payloadSerializer,
+						historyStore)
 				}
 			}
 		}(i)
@@ -152,6 +158,9 @@ func cleanShard(
 	outputDirectories *CleanOutputDirectories,
 	inputDirectory string,
 	shardID int,
+	skipHistoryChecks bool,
+	payloadSerializer persistence.PayloadSerializer,
+	historyStore persistence.HistoryStore,
 ) *ShardCleanReport {
 	outputFiles, closeFn := createShardCleanOutputFiles(shardID, outputDirectories)
 	report := &ShardCleanReport{
@@ -186,6 +195,8 @@ func cleanShard(
 		return report
 	}
 
+	checks := getChecks(skipHistoryChecks, limiter, execStore, payloadSerializer, historyStore)
+
 	scanner := bufio.NewScanner(shardCorruptedFile)
 	for scanner.Scan() {
 		if report.Handled == nil {
@@ -196,36 +207,63 @@ func cleanShard(
 			continue
 		}
 		report.Handled.TotalExecutionsCount++
-		var ce CorruptedExecution
-		err := json.Unmarshal([]byte(line), &ce)
+		var etr ExecutionToRecord
+		err := json.Unmarshal([]byte(line), &etr)
 		if err != nil {
 			report.Handled.FailedCleanedCount++
 			continue
 		}
 
+		// run checks again to confirm that the execution is still corrupted
+		cr := &CheckRequest{
+			ShardID:    etr.ShardID,
+			DomainID:   etr.DomainID,
+			WorkflowID: etr.WorkflowID,
+			RunID:      etr.RunID,
+			TreeID:     etr.TreeID,
+			BranchID:   etr.BranchID,
+			State:      etr.State,
+		}
+		confirmedCorrupted := false
+		for _, c := range checks {
+			if !c.ValidRequest(cr) {
+				continue
+			}
+			result := c.Check(cr)
+			cr.PrerequisiteCheckPayload = result.Payload
+			if result.CheckResultStatus == CheckResultCorrupted {
+				confirmedCorrupted = true
+				break
+			}
+		}
+		if !confirmedCorrupted {
+			report.Handled.FailedToConfirmCorruptedCount++
+			continue
+		}
+
 		deleteConcreteReq := &persistence.DeleteWorkflowExecutionRequest{
-			DomainID:   ce.DomainID,
-			WorkflowID: ce.WorkflowID,
-			RunID:      ce.RunID,
+			DomainID:   etr.DomainID,
+			WorkflowID: etr.WorkflowID,
+			RunID:      etr.RunID,
 		}
 		err = retryDeleteWorkflowExecution(limiter, &report.TotalDBRequests, execStore, deleteConcreteReq)
 		if err != nil {
 			report.Handled.FailedCleanedCount++
-			failedCleanWriter.Add(&ce)
+			failedCleanWriter.Add(&etr)
 			continue
 		}
 		report.Handled.SuccessfullyCleanedCount++
-		successfullyCleanWriter.Add(&ce)
+		successfullyCleanWriter.Add(&etr)
 		deleteCurrentReq := &persistence.DeleteCurrentWorkflowExecutionRequest{
-			DomainID:   ce.DomainID,
-			WorkflowID: ce.WorkflowID,
-			RunID:      ce.RunID,
+			DomainID:   etr.DomainID,
+			WorkflowID: etr.WorkflowID,
+			RunID:      etr.RunID,
 		}
 		// deleting current execution is best effort, the success or failure of the cleanup
 		// is determined above based on if the concrete execution could be deleted
 		retryDeleteCurrentWorkflowExecution(limiter, &report.TotalDBRequests, execStore, deleteCurrentReq)
 
-		// TODO: we will want to also cleanup history for corrupted workflows, this will be punted on until this is converted to a workflow
+		// TODO: also need to clean up histories of corrupted workflows
 	}
 	return report
 }
@@ -245,6 +283,7 @@ func includeShardCleanInProgressReport(report *ShardCleanReport, progressReport 
 	if report.Handled != nil {
 		progressReport.TotalExecutionsCount += report.Handled.TotalExecutionsCount
 		progressReport.FailedCleanedCount += report.Handled.FailedCleanedCount
+		progressReport.FailedToConfirmCorruptedCount += report.Handled.FailedToConfirmCorruptedCount
 		progressReport.SuccessfullyCleanedCount += report.Handled.SuccessfullyCleanedCount
 	}
 
@@ -308,40 +347,4 @@ func recordShardCleanReport(file *os.File, sdr *ShardCleanReport) {
 		ErrorAndExit("failed to marshal ShardCleanReport", err)
 	}
 	writeToFile(file, string(data))
-}
-
-func retryDeleteWorkflowExecution(
-	limiter *quotas.DynamicRateLimiter,
-	totalDBRequests *int64,
-	execStore persistence.ExecutionStore,
-	req *persistence.DeleteWorkflowExecutionRequest,
-) error {
-	op := func() error {
-		preconditionForDBCall(totalDBRequests, limiter)
-		return execStore.DeleteWorkflowExecution(req)
-	}
-
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func retryDeleteCurrentWorkflowExecution(
-	limiter *quotas.DynamicRateLimiter,
-	totalDBRequests *int64,
-	execStore persistence.ExecutionStore,
-	req *persistence.DeleteCurrentWorkflowExecutionRequest,
-) error {
-	op := func() error {
-		preconditionForDBCall(totalDBRequests, limiter)
-		return execStore.DeleteCurrentWorkflowExecution(req)
-	}
-
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	if err != nil {
-		return err
-	}
-	return nil
 }

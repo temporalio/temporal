@@ -23,11 +23,9 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"time"
 
@@ -35,47 +33,11 @@ import (
 	"github.com/urfave/cli"
 
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/codec"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/persistence"
 	cassp "github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/common/quotas"
-)
-
-type (
-	// CorruptionType indicates the type of corruption that was found
-	CorruptionType string
-	// VerificationResult is the result of running a verification
-	VerificationResult int
-)
-
-const (
-	// HistoryMissing is the CorruptionType indicating that history is missing
-	HistoryMissing CorruptionType = "history_missing"
-	// InvalidFirstEvent is the CorruptionType indicating that the first event is invalid
-	InvalidFirstEvent = "invalid_first_event"
-	// OpenExecutionInvalidCurrentExecution is the CorruptionType that indicates there is an orphan concrete execution
-	OpenExecutionInvalidCurrentExecution = "open_execution_invalid_current_execution"
-)
-
-const (
-	// VerificationResultNoCorruption indicates that no corruption was found
-	VerificationResultNoCorruption VerificationResult = iota
-	// VerificationResultDetectedCorruption indicates a corruption was found
-	VerificationResultDetectedCorruption
-	// VerificationResultCheckFailure indicates there was a failure to check corruption
-	VerificationResultCheckFailure
-)
-
-const (
-	historyPageSize = 1
-	maxDBRetries    = 10
-)
-
-var (
-	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
 )
 
 type (
@@ -93,121 +55,19 @@ type (
 		CorruptedExecutionFile    *os.File
 	}
 
-	// CorruptedExecution is the type that gets written to CorruptedExecutionFile
-	CorruptedExecution struct {
-		ShardID                    int
-		DomainID                   string
-		WorkflowID                 string
-		RunID                      string
-		NextEventID                int64
-		TreeID                     string
-		BranchID                   string
-		CloseStatus                int
-		CorruptedExceptionMetadata CorruptedExceptionMetadata
-	}
-
-	// CorruptedExceptionMetadata is the metadata for a CorruptedExecution
-	CorruptedExceptionMetadata struct {
-		CorruptionType CorruptionType
-		Note           string
-		Details        string
-	}
-
-	// ExecutionCheckFailure is the type that gets written to ExecutionCheckFailureFile
-	ExecutionCheckFailure struct {
-		ShardID    int
-		DomainID   string
-		WorkflowID string
-		RunID      string
-		Note       string
-		Details    string
-	}
-
-	// ShardScanReport is the type that gets written to ShardScanReportFile
-	ShardScanReport struct {
-		ShardID         int
-		TotalDBRequests int64
-		Scanned         *ShardScanReportExecutionsScanned
-		Failure         *ShardScanReportFailure
-	}
-
-	// ShardScanReportExecutionsScanned is the part of the ShardScanReport of executions which were scanned
-	ShardScanReportExecutionsScanned struct {
-		TotalExecutionsCount       int64
-		CorruptedExecutionsCount   int64
-		ExecutionCheckFailureCount int64
-		CorruptionTypeBreakdown    CorruptionTypeBreakdown
-		OpenCorruptions            OpenCorruptions
-	}
-
-	// ShardScanReportFailure is the part of the ShardScanReport that indicates failure to scan all or part of the shard
-	ShardScanReportFailure struct {
-		Note    string
-		Details string
-	}
-
-	// ProgressReport contains metadata about the scan for all shards which have been finished
-	// This is periodically printed to stdout
-	ProgressReport struct {
-		ShardStats     ShardStats
-		ExecutionStats ExecutionStats
-		Rates          Rates
-	}
-
-	// ShardStats breaks out shard level stats
-	ShardStats struct {
-		NumberOfShardsFinished    int
-		NumberOfShardScanFailures int
-		ShardsFailed              []int
-		MinExecutions             *int64
-		MaxExecutions             *int64
-		AverageExecutions         int64
-	}
-
-	// ExecutionStats breaks down execution level stats
-	ExecutionStats struct {
-		TotalExecutionsCount int64
-		CorruptionStats      CorruptionStats
-		CheckFailureStats    CheckFailureStats
-	}
-
-	// CorruptionStats breaks out stats regarding corrupted executions
-	CorruptionStats struct {
-		CorruptedExecutionsCount int64
-		PercentageCorrupted      float64
-		CorruptionTypeBreakdown  CorruptionTypeBreakdown
-		OpenCorruptions          OpenCorruptions
-	}
-
-	// CheckFailureStats breaks out stats regarding execution check failures
-	CheckFailureStats struct {
-		ExecutionCheckFailureCount int64
-		PercentageCheckFailure     float64
-	}
-
-	// CorruptionTypeBreakdown breaks down counts and percentages of corruption types
-	CorruptionTypeBreakdown struct {
-		TotalHistoryMissing                            int64
-		TotalInvalidFirstEvent                         int64
-		TotalOpenExecutionInvalidCurrentExecution      int64
-		PercentageHistoryMissing                       float64
-		PercentageInvalidStartEvent                    float64
-		PercentageOpenExecutionInvalidCurrentExecution float64
-	}
-
-	// OpenCorruptions breaks down the count and percentage of open workflows which are corrupted
-	OpenCorruptions struct {
-		TotalOpen      int64
-		PercentageOpen float64
-	}
-
-	// Rates indicates the rates at which the scan is progressing
-	Rates struct {
-		TimeRunning       string
-		DatabaseRPS       float64
-		TotalDBRequests   int64
-		ShardsPerHour     float64
-		ExecutionsPerHour float64
+	// ExecutionToRecord is an execution which needs to be recorded
+	ExecutionToRecord struct {
+		ShardID           int
+		DomainID          string
+		WorkflowID        string
+		RunID             string
+		TreeID            string
+		BranchID          string
+		CloseStatus       int
+		State             int
+		CheckType         CheckType
+		CheckResultStatus CheckResultStatus
+		ErrorInfo         *ErrorInfo
 	}
 )
 
@@ -225,6 +85,7 @@ func AdminDBScan(c *cli.Context) {
 	if numShards < scanWorkerCount {
 		scanWorkerCount = numShards
 	}
+	skipHistoryChecks := c.Bool(FlagSkipHistoryChecks)
 
 	payloadSerializer := persistence.NewPayloadSerializer()
 	rateLimiter := getRateLimiter(startingRPS, targetRPS, scaleUpSeconds)
@@ -246,8 +107,9 @@ func AdminDBScan(c *cli.Context) {
 						rateLimiter,
 						executionsPageSize,
 						payloadSerializer,
-						historyStore,
-						branchDecoder)
+						branchDecoder,
+						skipHistoryChecks,
+						historyStore)
 				}
 			}
 		}(i)
@@ -275,8 +137,9 @@ func scanShard(
 	limiter *quotas.DynamicRateLimiter,
 	executionsPageSize int,
 	payloadSerializer persistence.PayloadSerializer,
-	historyStore persistence.HistoryStore,
 	branchDecoder *codec.ThriftRWEncoder,
+	skipHistoryChecks bool,
+	historyStore persistence.HistoryStore,
 ) *ShardScanReport {
 	outputFiles, closeFn := createShardScanOutputFiles(shardID, scanOutputDirectories)
 	report := &ShardScanReport{
@@ -299,6 +162,8 @@ func scanShard(
 		}
 		return report
 	}
+
+	checks := getChecks(skipHistoryChecks, limiter, execStore, payloadSerializer, historyStore)
 
 	var token []byte
 	isFirstIteration := true
@@ -325,381 +190,72 @@ func scanShard(
 				report.Scanned = &ShardScanReportExecutionsScanned{}
 			}
 			report.Scanned.TotalExecutionsCount++
-			historyVerificationResult, history, historyBranch := verifyHistoryExists(
-				e,
-				branchDecoder,
-				corruptedExecutionWriter,
-				checkFailureWriter,
-				shardID,
-				limiter,
-				historyStore,
-				&report.TotalDBRequests,
-				execStore,
-				payloadSerializer)
-			switch historyVerificationResult {
-			case VerificationResultNoCorruption:
-				// nothing to do just keep checking other conditions
-			case VerificationResultDetectedCorruption:
-				report.Scanned.CorruptedExecutionsCount++
-				report.Scanned.CorruptionTypeBreakdown.TotalHistoryMissing++
-				if executionOpen(e.ExecutionInfo) {
-					report.Scanned.OpenCorruptions.TotalOpen++
-				}
-				continue
-			case VerificationResultCheckFailure:
+
+			cr, err := getCheckRequest(shardID, e, payloadSerializer, branchDecoder)
+			if err != nil {
 				report.Scanned.ExecutionCheckFailureCount++
+				checkFailureWriter.Add(&ExecutionToRecord{
+					ShardID:           shardID,
+					DomainID:          e.ExecutionInfo.DomainID,
+					WorkflowID:        e.ExecutionInfo.WorkflowID,
+					RunID:             e.ExecutionInfo.RunID,
+					CheckResultStatus: CheckResultFailed,
+					ErrorInfo: &ErrorInfo{
+						Note:    "failed to get check request",
+						Details: err.Error(),
+					},
+				})
 				continue
 			}
-
-			if history == nil || historyBranch == nil {
-				continue
-			}
-
-			firstHistoryEventVerificationResult := verifyFirstHistoryEvent(
-				e,
-				historyBranch,
-				corruptedExecutionWriter,
-				checkFailureWriter,
-				shardID,
-				payloadSerializer,
-				history)
-			switch firstHistoryEventVerificationResult {
-			case VerificationResultNoCorruption:
-				// nothing to do just keep checking other conditions
-			case VerificationResultDetectedCorruption:
-				report.Scanned.CorruptionTypeBreakdown.TotalInvalidFirstEvent++
-				report.Scanned.CorruptedExecutionsCount++
-				if executionOpen(e.ExecutionInfo) {
-					report.Scanned.OpenCorruptions.TotalOpen++
+		CheckerLoop:
+			for _, c := range checks {
+				if !c.ValidRequest(cr) {
+					continue
 				}
-				continue
-			case VerificationResultCheckFailure:
-				report.Scanned.ExecutionCheckFailureCount++
-				continue
-			}
+				result := c.Check(cr)
+				cr.PrerequisiteCheckPayload = result.Payload
 
-			currentExecutionVerificationResult := verifyCurrentExecution(
-				e,
-				corruptedExecutionWriter,
-				checkFailureWriter,
-				shardID,
-				historyBranch,
-				execStore,
-				limiter,
-				&report.TotalDBRequests)
-			switch currentExecutionVerificationResult {
-			case VerificationResultNoCorruption:
-				// nothing to do just keep checking other conditions
-			case VerificationResultDetectedCorruption:
-				report.Scanned.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution++
-				report.Scanned.CorruptedExecutionsCount++
-				if executionOpen(e.ExecutionInfo) {
-					report.Scanned.OpenCorruptions.TotalOpen++
+				etr := &ExecutionToRecord{
+					ShardID:           shardID,
+					DomainID:          e.ExecutionInfo.DomainID,
+					WorkflowID:        e.ExecutionInfo.WorkflowID,
+					RunID:             e.ExecutionInfo.RunID,
+					TreeID:            cr.TreeID,
+					BranchID:          cr.BranchID,
+					CloseStatus:       e.ExecutionInfo.CloseStatus,
+					State:             cr.State,
+					CheckType:         result.CheckType,
+					CheckResultStatus: result.CheckResultStatus,
+					ErrorInfo:         result.ErrorInfo,
 				}
-				continue
-			case VerificationResultCheckFailure:
-				report.Scanned.ExecutionCheckFailureCount++
-				continue
+
+				switch result.CheckResultStatus {
+				case CheckResultHealthy:
+					// nothing to do just keep checking other conditions
+				case CheckResultFailed:
+					report.Scanned.ExecutionCheckFailureCount++
+					checkFailureWriter.Add(etr)
+					break CheckerLoop
+				case CheckResultCorrupted:
+					report.Scanned.CorruptedExecutionsCount++
+					switch result.CheckType {
+					case CheckTypeOrphanExecution:
+						report.Scanned.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution++
+					case CheckTypeValidFirstEvent:
+						report.Scanned.CorruptionTypeBreakdown.TotalInvalidFirstEvent++
+					case CheckTypeHistoryExists:
+						report.Scanned.CorruptionTypeBreakdown.TotalHistoryMissing++
+					}
+					if executionOpen(cr) {
+						report.Scanned.OpenCorruptions.TotalOpen++
+					}
+					corruptedExecutionWriter.Add(etr)
+					break CheckerLoop
+				}
 			}
 		}
 	}
 	return report
-}
-
-func verifyHistoryExists(
-	execution *persistence.InternalListConcreteExecutionsEntity,
-	branchDecoder *codec.ThriftRWEncoder,
-	corruptedExecutionWriter BufferedWriter,
-	checkFailureWriter BufferedWriter,
-	shardID int,
-	limiter *quotas.DynamicRateLimiter,
-	historyStore persistence.HistoryStore,
-	totalDBRequests *int64,
-	execStore persistence.ExecutionStore,
-	payloadSerializer persistence.PayloadSerializer,
-) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *shared.HistoryBranch) {
-	branch, err := getHistoryBranch(execution, payloadSerializer, branchDecoder)
-	if err != nil {
-		checkFailureWriter.Add(&ExecutionCheckFailure{
-			ShardID:    shardID,
-			DomainID:   execution.ExecutionInfo.DomainID,
-			WorkflowID: execution.ExecutionInfo.WorkflowID,
-			RunID:      execution.ExecutionInfo.RunID,
-			Note:       "failed to get history branch",
-			Details:    err.Error(),
-		})
-		return VerificationResultCheckFailure, nil, nil
-	}
-	readHistoryBranchReq := &persistence.InternalReadHistoryBranchRequest{
-		TreeID:    branch.GetTreeID(),
-		BranchID:  branch.GetBranchID(),
-		MinNodeID: common.FirstEventID,
-		MaxNodeID: common.EndEventID,
-		ShardID:   shardID,
-		PageSize:  historyPageSize,
-	}
-	history, err := retryReadHistoryBranch(limiter, totalDBRequests, historyStore, readHistoryBranchReq)
-
-	ecf, stillExists := concreteExecutionStillExists(execution.ExecutionInfo, shardID, execStore, limiter, totalDBRequests)
-	if ecf != nil {
-		checkFailureWriter.Add(ecf)
-		return VerificationResultCheckFailure, nil, nil
-	}
-	if !stillExists {
-		return VerificationResultNoCorruption, nil, nil
-	}
-
-	if err != nil {
-		if err == gocql.ErrNotFound {
-			corruptedExecutionWriter.Add(&CorruptedExecution{
-				ShardID:     shardID,
-				DomainID:    execution.ExecutionInfo.DomainID,
-				WorkflowID:  execution.ExecutionInfo.WorkflowID,
-				RunID:       execution.ExecutionInfo.RunID,
-				NextEventID: execution.ExecutionInfo.NextEventID,
-				TreeID:      branch.GetTreeID(),
-				BranchID:    branch.GetBranchID(),
-				CloseStatus: execution.ExecutionInfo.CloseStatus,
-				CorruptedExceptionMetadata: CorruptedExceptionMetadata{
-					CorruptionType: HistoryMissing,
-					Note:           "detected history missing based on gocql.ErrNotFound",
-					Details:        err.Error(),
-				},
-			})
-			return VerificationResultDetectedCorruption, nil, nil
-		}
-		checkFailureWriter.Add(&ExecutionCheckFailure{
-			ShardID:    shardID,
-			DomainID:   execution.ExecutionInfo.DomainID,
-			WorkflowID: execution.ExecutionInfo.WorkflowID,
-			RunID:      execution.ExecutionInfo.RunID,
-			Note:       "failed to read history branch with error other than gocql.ErrNotFond",
-			Details:    err.Error(),
-		})
-		return VerificationResultCheckFailure, nil, nil
-	} else if history == nil || len(history.History) == 0 {
-		corruptedExecutionWriter.Add(&CorruptedExecution{
-			ShardID:     shardID,
-			DomainID:    execution.ExecutionInfo.DomainID,
-			WorkflowID:  execution.ExecutionInfo.WorkflowID,
-			RunID:       execution.ExecutionInfo.RunID,
-			NextEventID: execution.ExecutionInfo.NextEventID,
-			TreeID:      branch.GetTreeID(),
-			BranchID:    branch.GetBranchID(),
-			CloseStatus: execution.ExecutionInfo.CloseStatus,
-			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
-				CorruptionType: HistoryMissing,
-				Note:           "got empty history",
-			},
-		})
-		return VerificationResultDetectedCorruption, nil, nil
-	}
-	return VerificationResultNoCorruption, history, branch
-}
-
-func verifyFirstHistoryEvent(
-	execution *persistence.InternalListConcreteExecutionsEntity,
-	branch *shared.HistoryBranch,
-	corruptedExecutionWriter BufferedWriter,
-	checkFailureWriter BufferedWriter,
-	shardID int,
-	payloadSerializer persistence.PayloadSerializer,
-	history *persistence.InternalReadHistoryBranchResponse,
-) VerificationResult {
-	firstBatch, err := payloadSerializer.DeserializeBatchEvents(history.History[0])
-	if err != nil || len(firstBatch) == 0 {
-		checkFailureWriter.Add(&ExecutionCheckFailure{
-			ShardID:    shardID,
-			DomainID:   execution.ExecutionInfo.DomainID,
-			WorkflowID: execution.ExecutionInfo.WorkflowID,
-			RunID:      execution.ExecutionInfo.RunID,
-			Note:       "failed to deserialize batch events",
-			Details:    err.Error(),
-		})
-		return VerificationResultCheckFailure
-	} else if firstBatch[0].GetEventId() != common.FirstEventID {
-		corruptedExecutionWriter.Add(&CorruptedExecution{
-			ShardID:     shardID,
-			DomainID:    execution.ExecutionInfo.DomainID,
-			WorkflowID:  execution.ExecutionInfo.WorkflowID,
-			RunID:       execution.ExecutionInfo.RunID,
-			NextEventID: execution.ExecutionInfo.NextEventID,
-			TreeID:      branch.GetTreeID(),
-			BranchID:    branch.GetBranchID(),
-			CloseStatus: execution.ExecutionInfo.CloseStatus,
-			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
-				CorruptionType: InvalidFirstEvent,
-				Note:           "got unexpected first eventID",
-				Details:        fmt.Sprintf("expected: %v but got %v", common.FirstEventID, firstBatch[0].GetEventId()),
-			},
-		})
-		return VerificationResultDetectedCorruption
-	} else if firstBatch[0].GetEventType() != shared.EventTypeWorkflowExecutionStarted {
-		corruptedExecutionWriter.Add(&CorruptedExecution{
-			ShardID:     shardID,
-			DomainID:    execution.ExecutionInfo.DomainID,
-			WorkflowID:  execution.ExecutionInfo.WorkflowID,
-			RunID:       execution.ExecutionInfo.RunID,
-			NextEventID: execution.ExecutionInfo.NextEventID,
-			TreeID:      branch.GetTreeID(),
-			BranchID:    branch.GetBranchID(),
-			CloseStatus: execution.ExecutionInfo.CloseStatus,
-			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
-				CorruptionType: InvalidFirstEvent,
-				Note:           "got unexpected first eventType",
-				Details:        fmt.Sprintf("expected: %v but got %v", shared.EventTypeWorkflowExecutionStarted.String(), firstBatch[0].GetEventType().String()),
-			},
-		})
-		return VerificationResultDetectedCorruption
-	}
-	return VerificationResultNoCorruption
-}
-
-func verifyCurrentExecution(
-	execution *persistence.InternalListConcreteExecutionsEntity,
-	corruptedExecutionWriter BufferedWriter,
-	checkFailureWriter BufferedWriter,
-	shardID int,
-	branch *shared.HistoryBranch,
-	execStore persistence.ExecutionStore,
-	limiter *quotas.DynamicRateLimiter,
-	totalDBRequests *int64,
-) VerificationResult {
-	if !executionOpen(execution.ExecutionInfo) {
-		return VerificationResultNoCorruption
-	}
-	getCurrentExecutionRequest := &persistence.GetCurrentExecutionRequest{
-		DomainID:   execution.ExecutionInfo.DomainID,
-		WorkflowID: execution.ExecutionInfo.WorkflowID,
-	}
-	currentExecution, err := retryGetCurrentExecution(limiter, totalDBRequests, execStore, getCurrentExecutionRequest)
-
-	ecf, stillOpen := concreteExecutionStillOpen(execution.ExecutionInfo, shardID, execStore, limiter, totalDBRequests)
-	if ecf != nil {
-		checkFailureWriter.Add(ecf)
-		return VerificationResultCheckFailure
-	}
-	if !stillOpen {
-		return VerificationResultNoCorruption
-	}
-
-	if err != nil {
-		switch err.(type) {
-		case *shared.EntityNotExistsError:
-			corruptedExecutionWriter.Add(&CorruptedExecution{
-				ShardID:     shardID,
-				DomainID:    execution.ExecutionInfo.DomainID,
-				WorkflowID:  execution.ExecutionInfo.WorkflowID,
-				RunID:       execution.ExecutionInfo.RunID,
-				NextEventID: execution.ExecutionInfo.NextEventID,
-				TreeID:      branch.GetTreeID(),
-				BranchID:    branch.GetBranchID(),
-				CloseStatus: execution.ExecutionInfo.CloseStatus,
-				CorruptedExceptionMetadata: CorruptedExceptionMetadata{
-					CorruptionType: OpenExecutionInvalidCurrentExecution,
-					Note:           "execution is open without having a current execution",
-					Details:        err.Error(),
-				},
-			})
-			return VerificationResultDetectedCorruption
-		default:
-			checkFailureWriter.Add(&ExecutionCheckFailure{
-				ShardID:    shardID,
-				DomainID:   execution.ExecutionInfo.DomainID,
-				WorkflowID: execution.ExecutionInfo.WorkflowID,
-				RunID:      execution.ExecutionInfo.RunID,
-				Note:       "failed to access current execution but could not confirm that it does not exist",
-				Details:    err.Error(),
-			})
-			return VerificationResultCheckFailure
-		}
-	} else if currentExecution.RunID != execution.ExecutionInfo.RunID {
-		corruptedExecutionWriter.Add(&CorruptedExecution{
-			ShardID:     shardID,
-			DomainID:    execution.ExecutionInfo.DomainID,
-			WorkflowID:  execution.ExecutionInfo.WorkflowID,
-			RunID:       execution.ExecutionInfo.RunID,
-			NextEventID: execution.ExecutionInfo.NextEventID,
-			TreeID:      branch.GetTreeID(),
-			BranchID:    branch.GetBranchID(),
-			CloseStatus: execution.ExecutionInfo.CloseStatus,
-			CorruptedExceptionMetadata: CorruptedExceptionMetadata{
-				CorruptionType: OpenExecutionInvalidCurrentExecution,
-				Note:           "found open execution for which there exists current execution pointing at a different concrete execution",
-			},
-		})
-		return VerificationResultDetectedCorruption
-	}
-	return VerificationResultNoCorruption
-}
-
-func concreteExecutionStillExists(
-	execution *persistence.InternalWorkflowExecutionInfo,
-	shardID int,
-	execStore persistence.ExecutionStore,
-	limiter *quotas.DynamicRateLimiter,
-	totalDBRequests *int64,
-) (*ExecutionCheckFailure, bool) {
-	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
-		DomainID: execution.DomainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: &execution.WorkflowID,
-			RunId:      &execution.RunID,
-		},
-	}
-	_, err := retryGetWorkflowExecution(limiter, totalDBRequests, execStore, getConcreteExecution)
-	if err == nil {
-		return nil, true
-	}
-
-	switch err.(type) {
-	case *shared.EntityNotExistsError:
-		return nil, false
-	default:
-		return &ExecutionCheckFailure{
-			ShardID:    shardID,
-			DomainID:   execution.DomainID,
-			WorkflowID: execution.WorkflowID,
-			RunID:      execution.RunID,
-			Note:       "failed to verify that concrete execution still exists",
-			Details:    err.Error(),
-		}, false
-	}
-}
-
-func concreteExecutionStillOpen(
-	execution *persistence.InternalWorkflowExecutionInfo,
-	shardID int,
-	execStore persistence.ExecutionStore,
-	limiter *quotas.DynamicRateLimiter,
-	totalDBRequests *int64,
-) (*ExecutionCheckFailure, bool) {
-	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
-		DomainID: execution.DomainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: &execution.WorkflowID,
-			RunId:      &execution.RunID,
-		},
-	}
-	ce, err := retryGetWorkflowExecution(limiter, totalDBRequests, execStore, getConcreteExecution)
-
-	if err != nil {
-		switch err.(type) {
-		case *shared.EntityNotExistsError:
-			return nil, false
-		default:
-			return &ExecutionCheckFailure{
-				ShardID:    shardID,
-				DomainID:   execution.DomainID,
-				WorkflowID: execution.WorkflowID,
-				RunID:      execution.RunID,
-				Note:       "failed to access concrete execution to verify it is still open",
-				Details:    err.Error(),
-			}, false
-		}
-	}
-
-	return nil, executionOpen(ce.State.ExecutionInfo)
 }
 
 func deleteEmptyFiles(files ...*os.File) {
@@ -778,76 +334,6 @@ func writeToFile(file *os.File, message string) {
 	}
 }
 
-func includeShardInProgressReport(report *ShardScanReport, progressReport *ProgressReport, startTime time.Time) {
-	includeExecutionStats(report, &progressReport.ExecutionStats)
-	includeShardStats(report, &progressReport.ShardStats, progressReport.ExecutionStats.TotalExecutionsCount)
-	includeRates(report, &progressReport.Rates, startTime, progressReport.ExecutionStats.TotalExecutionsCount, progressReport.ShardStats.NumberOfShardsFinished)
-}
-
-func includeExecutionStats(report *ShardScanReport, executionStats *ExecutionStats) {
-	if report.Scanned != nil {
-		executionStats.TotalExecutionsCount += report.Scanned.TotalExecutionsCount
-		executionStats.CorruptionStats.CorruptedExecutionsCount += report.Scanned.CorruptedExecutionsCount
-		executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalHistoryMissing += report.Scanned.CorruptionTypeBreakdown.TotalHistoryMissing
-		executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution += report.Scanned.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution
-		executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalInvalidFirstEvent += report.Scanned.CorruptionTypeBreakdown.TotalInvalidFirstEvent
-		executionStats.CorruptionStats.OpenCorruptions.TotalOpen += report.Scanned.OpenCorruptions.TotalOpen
-		executionStats.CheckFailureStats.ExecutionCheckFailureCount += report.Scanned.ExecutionCheckFailureCount
-	}
-	if executionStats.TotalExecutionsCount > 0 {
-		executionStats.CorruptionStats.PercentageCorrupted = math.Round((float64(executionStats.CorruptionStats.CorruptedExecutionsCount) * 100.0) /
-			float64(executionStats.TotalExecutionsCount))
-
-		executionStats.CheckFailureStats.PercentageCheckFailure = math.Round((float64(executionStats.CheckFailureStats.ExecutionCheckFailureCount) * 100.0) /
-			float64(executionStats.TotalExecutionsCount))
-	}
-
-	if executionStats.CorruptionStats.CorruptedExecutionsCount > 0 {
-		executionStats.CorruptionStats.CorruptionTypeBreakdown.PercentageHistoryMissing = math.Round((float64(executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalHistoryMissing) * 100.0) /
-			float64(executionStats.CorruptionStats.CorruptedExecutionsCount))
-
-		executionStats.CorruptionStats.CorruptionTypeBreakdown.PercentageInvalidStartEvent = math.Round((float64(executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalInvalidFirstEvent) * 100.0) /
-			float64(executionStats.CorruptionStats.CorruptedExecutionsCount))
-
-		executionStats.CorruptionStats.CorruptionTypeBreakdown.PercentageOpenExecutionInvalidCurrentExecution = math.Round((float64(executionStats.CorruptionStats.CorruptionTypeBreakdown.TotalOpenExecutionInvalidCurrentExecution) * 100.0) /
-			float64(executionStats.CorruptionStats.CorruptedExecutionsCount))
-
-		executionStats.CorruptionStats.OpenCorruptions.PercentageOpen = math.Round((float64(executionStats.CorruptionStats.OpenCorruptions.TotalOpen) * 100.0) /
-			float64(executionStats.CorruptionStats.CorruptedExecutionsCount))
-	}
-}
-
-func includeShardStats(report *ShardScanReport, shardStats *ShardStats, totalExecutions int64) {
-	shardStats.NumberOfShardsFinished++
-	if report.Failure != nil {
-		shardStats.NumberOfShardScanFailures++
-		shardStats.ShardsFailed = append(shardStats.ShardsFailed, report.ShardID)
-	}
-	if report.Scanned != nil &&
-		(shardStats.MinExecutions == nil || *shardStats.MinExecutions > report.Scanned.TotalExecutionsCount) {
-		shardStats.MinExecutions = &report.Scanned.TotalExecutionsCount
-	}
-	if report.Scanned != nil &&
-		(shardStats.MaxExecutions == nil || *shardStats.MaxExecutions < report.Scanned.TotalExecutionsCount) {
-		shardStats.MaxExecutions = &report.Scanned.TotalExecutionsCount
-	}
-	successfullyFinishedShards := shardStats.NumberOfShardsFinished - shardStats.NumberOfShardScanFailures
-	if successfullyFinishedShards > 0 {
-		shardStats.AverageExecutions = totalExecutions / int64(successfullyFinishedShards)
-	}
-}
-
-func includeRates(report *ShardScanReport, rates *Rates, startTime time.Time, totalExecutions int64, numberOfShardsFinished int) {
-	rates.TotalDBRequests += report.TotalDBRequests
-	rates.TimeRunning = time.Now().Sub(startTime).String()
-	pastTime := time.Now().Sub(startTime)
-	hoursPast := float64(pastTime) / float64(time.Hour)
-	secondsPast := float64(pastTime) / float64(time.Second)
-	rates.ShardsPerHour = math.Round(float64(numberOfShardsFinished) / hoursPast)
-	rates.ExecutionsPerHour = math.Round(float64(totalExecutions) / hoursPast)
-	rates.DatabaseRPS = math.Round(float64(rates.TotalDBRequests) / secondsPast)
-}
-
 func getRateLimiter(startRPS int, targetRPS int, scaleUpSeconds int) *quotas.DynamicRateLimiter {
 	if startRPS >= targetRPS {
 		ErrorAndExit("startRPS is greater than target RPS", nil)
@@ -867,103 +353,25 @@ func getRateLimiter(startRPS int, targetRPS int, scaleUpSeconds int) *quotas.Dyn
 	return quotas.NewDynamicRateLimiter(rpsFn)
 }
 
-func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLimiter) {
-	*totalDBRequests = *totalDBRequests + 1
-	limiter.Wait(context.Background())
-}
-
-func executionOpen(execution *persistence.InternalWorkflowExecutionInfo) bool {
-	return execution.State == persistence.WorkflowStateCreated || execution.State == persistence.WorkflowStateRunning
-}
-
-func retryListConcreteExecutions(
-	limiter *quotas.DynamicRateLimiter,
-	totalDBRequests *int64,
-	execStore persistence.ExecutionStore,
-	req *persistence.ListConcreteExecutionsRequest,
-) (*persistence.InternalListConcreteExecutionsResponse, error) {
-	var resp *persistence.InternalListConcreteExecutionsResponse
-	op := func() error {
-		var err error
-		preconditionForDBCall(totalDBRequests, limiter)
-		resp, err = execStore.ListConcreteExecutions(req)
-		return err
-	}
-
-	var err error
-	// only  add this extra layer of retries for ListConcreteExecutions because a failure
-	// here will cause a scan over a full shard to stop while a failure on any other db will just
-	// result in one failed execution check
-	for i := 0; i < maxDBRetries; i++ {
-		err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-		if err == nil {
-			return resp, nil
-		}
-	}
-	return nil, err
-}
-
-func retryGetWorkflowExecution(
-	limiter *quotas.DynamicRateLimiter,
-	totalDBRequests *int64,
-	execStore persistence.ExecutionStore,
-	req *persistence.GetWorkflowExecutionRequest,
-) (*persistence.InternalGetWorkflowExecutionResponse, error) {
-	var resp *persistence.InternalGetWorkflowExecutionResponse
-	op := func() error {
-		var err error
-		preconditionForDBCall(totalDBRequests, limiter)
-		resp, err = execStore.GetWorkflowExecution(req)
-		return err
-	}
-
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+func getCheckRequest(
+	shardID int,
+	e *persistence.InternalListConcreteExecutionsEntity,
+	payloadSerializer persistence.PayloadSerializer,
+	branchDecoder *codec.ThriftRWEncoder,
+) (*CheckRequest, error) {
+	hb, err := getHistoryBranch(e, payloadSerializer, branchDecoder)
 	if err != nil {
 		return nil, err
 	}
-	return resp, nil
-}
-
-func retryGetCurrentExecution(
-	limiter *quotas.DynamicRateLimiter,
-	totalDBRequests *int64,
-	execStore persistence.ExecutionStore,
-	req *persistence.GetCurrentExecutionRequest,
-) (*persistence.GetCurrentExecutionResponse, error) {
-	var resp *persistence.GetCurrentExecutionResponse
-	op := func() error {
-		var err error
-		preconditionForDBCall(totalDBRequests, limiter)
-		resp, err = execStore.GetCurrentExecution(req)
-		return err
-	}
-
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-func retryReadHistoryBranch(
-	limiter *quotas.DynamicRateLimiter,
-	totalDBRequests *int64,
-	historyStore persistence.HistoryStore,
-	req *persistence.InternalReadHistoryBranchRequest,
-) (*persistence.InternalReadHistoryBranchResponse, error) {
-	var resp *persistence.InternalReadHistoryBranchResponse
-	op := func() error {
-		var err error
-		preconditionForDBCall(totalDBRequests, limiter)
-		resp, err = historyStore.ReadHistoryBranch(req)
-		return err
-	}
-
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
+	return &CheckRequest{
+		ShardID:    shardID,
+		DomainID:   e.ExecutionInfo.DomainID,
+		WorkflowID: e.ExecutionInfo.WorkflowID,
+		RunID:      e.ExecutionInfo.RunID,
+		TreeID:     hb.GetTreeID(),
+		BranchID:   hb.GetBranchID(),
+		State:      e.ExecutionInfo.State,
+	}, nil
 }
 
 func getHistoryBranch(
@@ -987,4 +395,23 @@ func getHistoryBranch(
 		return nil, err
 	}
 	return &branch, nil
+}
+
+func getChecks(
+	skipHistoryChecks bool,
+	limiter *quotas.DynamicRateLimiter,
+	execStore persistence.ExecutionStore,
+	payloadSerializer persistence.PayloadSerializer,
+	historyStore persistence.HistoryStore,
+) []AdminDBCheck {
+	// the order in which checks are added to the list is important
+	// some checks depend on the output of other checks
+	if skipHistoryChecks {
+		return []AdminDBCheck{NewOrphanExecutionCheck(limiter, execStore, payloadSerializer)}
+	}
+	return []AdminDBCheck{
+		NewHistoryExistsCheck(limiter, historyStore, execStore),
+		NewFirstHistoryEventCheck(payloadSerializer),
+		NewOrphanExecutionCheck(limiter, execStore, payloadSerializer),
+	}
 }
