@@ -27,17 +27,16 @@
 package history
 
 import (
-	"github.com/temporalio/temporal/common/convert"
 	"time"
 
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	eventpb "go.temporal.io/temporal-proto/event"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (

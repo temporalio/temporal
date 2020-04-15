@@ -27,25 +27,24 @@ package history
 import (
 	"context"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.uber.org/zap"
-
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
+	"github.com/uber-go/tally"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
+	"go.uber.org/zap"
 )
 
 type (

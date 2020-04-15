@@ -27,17 +27,16 @@ package archiver
 import (
 	"context"
 	"errors"
-	"github.com/temporalio/temporal/common/convert"
-
-	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/activity"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
 )
 
 const (

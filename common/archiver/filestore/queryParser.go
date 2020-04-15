@@ -29,15 +29,14 @@ package filestore
 import (
 	"errors"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/xwb1989/sqlparser"
 	executionpb "go.temporal.io/temporal-proto/execution"
-
-	"github.com/temporalio/temporal/common"
 )
 
 type (

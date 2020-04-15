@@ -25,7 +25,6 @@
 package persistencetests
 
 import (
-	"github.com/temporalio/temporal/common/convert"
 	"math"
 	"math/rand"
 	"strings"
@@ -35,15 +34,12 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -55,6 +51,9 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 	"github.com/temporalio/temporal/common/service/config"
+	"github.com/uber-go/tally"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 )
 
 type (

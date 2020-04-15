@@ -27,7 +27,6 @@ package gcloud
 import (
 	"context"
 	"errors"
-	"github.com/temporalio/temporal/common/convert"
 	"testing"
 	"time"
 
@@ -35,15 +34,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.uber.org/zap"
-
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/gcloud/connector/mocks"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/uber-go/tally"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.uber.org/zap"
 )
 
 const (

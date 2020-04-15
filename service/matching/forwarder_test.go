@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"github.com/temporalio/temporal/common/convert"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -35,17 +34,17 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-
 	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type ForwarderTestSuite struct {

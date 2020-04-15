@@ -25,7 +25,6 @@
 package persistencetests
 
 import (
-	"github.com/temporalio/temporal/common/convert"
 	"math/rand"
 	"os"
 	"reflect"
@@ -38,14 +37,14 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
+	"github.com/temporalio/temporal/common/convert"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
+	eventpb "go.temporal.io/temporal-proto/event"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (

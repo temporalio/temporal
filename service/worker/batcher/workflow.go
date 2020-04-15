@@ -27,10 +27,14 @@ package batcher
 import (
 	"context"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/temporalio/temporal/client/frontend"
+	"github.com/temporalio/temporal/common/convert"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
 	"go.temporal.io/temporal"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -38,11 +42,6 @@ import (
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"golang.org/x/time/rate"
-
-	"github.com/temporalio/temporal/client/frontend"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
 )
 
 const (

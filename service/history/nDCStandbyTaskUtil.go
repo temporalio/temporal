@@ -25,16 +25,15 @@
 package history
 
 import (
-	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type (

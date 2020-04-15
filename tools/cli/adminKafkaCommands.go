@@ -30,7 +30,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
 	"io"
 	"io/ioutil"
 	"os"
@@ -44,17 +43,13 @@ import (
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
-	"github.com/urfave/cli"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	yaml "gopkg.in/yaml.v2"
-
 	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/persistence"
@@ -62,6 +57,10 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/history"
+	"github.com/urfave/cli"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type filterFn func(*replicationgenpb.ReplicationTask) bool

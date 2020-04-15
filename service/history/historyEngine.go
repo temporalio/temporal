@@ -32,20 +32,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
 	"time"
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
-	sdkclient "go.temporal.io/temporal/client"
-
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -56,6 +46,7 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
@@ -67,6 +58,14 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/xdc"
 	"github.com/temporalio/temporal/service/worker/archiver"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	querypb "go.temporal.io/temporal-proto/query"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/temporal-proto/workflowservice"
+	sdkclient "go.temporal.io/temporal/client"
 )
 
 const (

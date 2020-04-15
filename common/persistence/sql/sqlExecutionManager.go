@@ -29,22 +29,21 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
 	"math"
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type sqlExecutionManager struct {

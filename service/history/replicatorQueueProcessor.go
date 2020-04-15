@@ -27,13 +27,7 @@ package history
 import (
 	"context"
 	"errors"
-	"github.com/temporalio/temporal/common/convert"
 	"time"
-
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
 
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -41,6 +35,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
@@ -48,6 +43,10 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/primitives"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (

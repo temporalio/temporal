@@ -29,10 +29,10 @@ package gcloud
 import (
 	"errors"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
 	"strconv"
 	"time"
 
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/xwb1989/sqlparser"
 )
 

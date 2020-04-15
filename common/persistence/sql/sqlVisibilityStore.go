@@ -28,17 +28,16 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
 	"time"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/service/config"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (

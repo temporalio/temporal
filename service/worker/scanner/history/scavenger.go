@@ -26,21 +26,20 @@ package history
 
 import (
 	"context"
-	"github.com/temporalio/temporal/common/convert"
 	"time"
-
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal/activity"
-	"golang.org/x/time/rate"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal/activity"
+	"golang.org/x/time/rate"
 )
 
 type (

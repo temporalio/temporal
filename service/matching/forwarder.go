@@ -27,21 +27,20 @@ package matching
 import (
 	"context"
 	"errors"
-	"github.com/temporalio/temporal/common/convert"
 	"sync/atomic"
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
-
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 type (

@@ -29,7 +29,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
 	"io/ioutil"
 	"sort"
 	"strconv"
@@ -45,19 +44,19 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.uber.org/zap"
-
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
 	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/uber-go/tally"
+	eventpb "go.temporal.io/temporal-proto/event"
+	"go.temporal.io/temporal-proto/serviceerror"
+	"go.uber.org/zap"
 )
 
 const (

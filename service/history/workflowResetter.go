@@ -29,20 +29,19 @@ package history
 import (
 	"context"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
-
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/collection"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 type (

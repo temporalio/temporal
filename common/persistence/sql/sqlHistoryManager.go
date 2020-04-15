@@ -27,18 +27,17 @@ package sql
 import (
 	"database/sql"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type sqlHistoryV2Manager struct {

@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/temporalio/temporal/common/convert"
 	"testing"
 	"time"
 
@@ -38,18 +37,18 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.uber.org/zap"
-
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
 	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/uber-go/tally"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.uber.org/zap"
 )
 
 type visibilityArchiverSuite struct {
