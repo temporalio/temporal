@@ -118,6 +118,6 @@ type versionMiddleware struct {
 }
 
 func (vm *versionMiddleware) Call(ctx context.Context, request *transport.Request, out transport.UnaryOutbound) (*transport.Response, error) {
-	request.Headers = request.Headers.With(common.LibraryVersionHeaderName, "1.0.0").With(common.FeatureVersionHeaderName, "1.0.0").With(common.ClientImplHeaderName, "cli")
+	request.Headers = request.Headers.With(common.ClientImplHeaderName, "cli")
 	return out.Call(ctx, request)
 }

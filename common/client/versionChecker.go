@@ -40,11 +40,11 @@ const (
 	CLI = "cli"
 
 	// SupportedGoSDKVersion indicates the highest go sdk version server will accept requests from
-	SupportedGoSDKVersion = "1.5.0"
+	SupportedGoSDKVersion = "1.6.0"
 	// SupportedJavaSDKVersion indicates the highest java sdk version server will accept requests from
-	SupportedJavaSDKVersion = "1.5.0"
+	SupportedJavaSDKVersion = "1.6.0"
 	// SupportedCLIVersion indicates the highest cli version server will accept requests from
-	SupportedCLIVersion = "1.5.0"
+	SupportedCLIVersion = "1.6.0"
 
 	// StickyQueryUnknownImplConstraints indicates the minimum client version of an unknown client type which supports StickyQuery
 	StickyQueryUnknownImplConstraints = "1.0.0"
@@ -54,9 +54,17 @@ const (
 	JavaWorkerStickyQueryVersion = "1.0.0"
 	// GoWorkerConsistentQueryVersion indicates the minimum client version of the go worker which supports ConsistentQuery
 	GoWorkerConsistentQueryVersion = "1.5.0"
+	// JavaWorkerSendRawWorkflowHistoryVersion indicates the minimum client version of the java worker which supports RawHistoryQuery
+	JavaWorkerRawHistoryQueryVersion = "1.3.0"
+	// GoWorkerSendRawWorkflowHistoryVersion indicates the minimum client version of the go worker which supports RawHistoryQuery
+	GoWorkerRawHistoryQueryVersion = "1.6.0"
+	// CLIRawHistoryQueryVersion indicates the minimum CLI version of the go worker which supports RawHistoryQuery
+	// Note: cli uses go client feature version
+	CLIRawHistoryQueryVersion = "1.6.0"
 
 	stickyQuery     = "sticky-query"
 	consistentQuery = "consistent-query"
+	rawHistoryQuery = "send-raw-workflow-history"
 )
 
 var (
@@ -71,6 +79,7 @@ type (
 
 		SupportsStickyQuery(clientImpl string, clientFeatureVersion string) error
 		SupportsConsistentQuery(clientImpl string, clientFeatureVersion string) error
+		SupportsRawHistoryQuery(clientImpl string, clientFeatureVersion string) error
 	}
 
 	versionChecker struct {
@@ -86,9 +95,13 @@ func NewVersionChecker() VersionChecker {
 		GoSDK: {
 			stickyQuery:     mustNewConstraint(fmt.Sprintf(">=%v", GoWorkerStickyQueryVersion)),
 			consistentQuery: mustNewConstraint(fmt.Sprintf(">=%v", GoWorkerConsistentQueryVersion)),
+			rawHistoryQuery: mustNewConstraint(fmt.Sprintf(">=%v", GoWorkerRawHistoryQueryVersion)),
 		},
 		JavaSDK: {
 			stickyQuery: mustNewConstraint(fmt.Sprintf(">=%v", JavaWorkerStickyQueryVersion)),
+		},
+		CLI: {
+			rawHistoryQuery: mustNewConstraint(fmt.Sprintf(">=%v", CLIRawHistoryQueryVersion)),
 		},
 	}
 	supportedClients := map[string]version.Constraints{
@@ -143,6 +156,12 @@ func (vc *versionChecker) SupportsConsistentQuery(clientImpl string, clientFeatu
 	return vc.featureSupported(clientImpl, clientFeatureVersion, consistentQuery)
 }
 
+// SupportsSendRawWorkflowHistory returns error if raw history query is not supported otherwise nil.
+// In case client version lookup fails assume the client does not support feature.
+func (vc *versionChecker) SupportsRawHistoryQuery(clientImpl string, clientFeatureVersion string) error {
+	return vc.featureSupported(clientImpl, clientFeatureVersion, rawHistoryQuery)
+}
+
 func (vc *versionChecker) featureSupported(clientImpl string, clientFeatureVersion string, feature string) error {
 	// Some older clients may not provide clientImpl.
 	// If this is the case special handling needs to be done to maintain backwards compatibility.
@@ -150,6 +169,7 @@ func (vc *versionChecker) featureSupported(clientImpl string, clientFeatureVersi
 	if clientImpl == "" {
 		switch feature {
 		case consistentQuery:
+		case rawHistoryQuery:
 			return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion}
 		case stickyQuery:
 			version, err := version.NewVersion(clientFeatureVersion)

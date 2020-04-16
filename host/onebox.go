@@ -850,7 +850,7 @@ type versionMiddleware struct {
 }
 
 func (vm *versionMiddleware) Handle(ctx context.Context, req *transport.Request, resw transport.ResponseWriter, h transport.UnaryHandler) error {
-	req.Headers = req.Headers.With(common.LibraryVersionHeaderName, "1.0.0").With(common.FeatureVersionHeaderName, cc.GoWorkerConsistentQueryVersion).With(common.ClientImplHeaderName, cc.GoSDK)
+	req.Headers = req.Headers.With(common.LibraryVersionHeaderName, "1.0.0").With(common.FeatureVersionHeaderName, cc.GoWorkerRawHistoryQueryVersion).With(common.ClientImplHeaderName, cc.GoSDK)
 	return h.Handle(ctx, req, resw)
 }
 
