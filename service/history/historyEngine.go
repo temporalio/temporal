@@ -36,15 +36,6 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
-	sdkclient "go.temporal.io/temporal/client"
-
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -55,6 +46,7 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
@@ -66,6 +58,14 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/xdc"
 	"github.com/temporalio/temporal/service/worker/archiver"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	querypb "go.temporal.io/temporal-proto/query"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/temporal-proto/workflowservice"
+	sdkclient "go.temporal.io/temporal/client"
 )
 
 const (
@@ -2603,8 +2603,8 @@ func validateStartWorkflowExecutionRequest(
 	if len(request.GetRequestId()) == 0 {
 		return serviceerror.NewInvalidArgument("Missing request ID.")
 	}
-	if request.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
-		return serviceerror.NewInvalidArgument("Missing or invalid ExecutionStartToCloseTimeoutSeconds.")
+	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid ExecutionStartToCloseTimeoutSeconds.")
 	}
 	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
 		return serviceerror.NewInvalidArgument("Invalid TaskStartToCloseTimeoutSeconds.")
@@ -2636,16 +2636,33 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	request *workflowservice.StartWorkflowExecutionRequest,
 	metricsScope int,
 ) {
-
 	namespace := namespaceEntry.GetInfo().Name
-	maxDecisionStartToCloseTimeoutSeconds := common.Int32Ceil(e.config.MaxDecisionTaskStartToCloseTimeout(namespace).Seconds())
+
+	executionStartToCloseTimeoutSeconds := request.GetExecutionStartToCloseTimeoutSeconds()
+	if executionStartToCloseTimeoutSeconds == 0 {
+		executionStartToCloseTimeoutSeconds = convert.Int32Ceil(e.config.DefaultExecutionStartToCloseTimeout(namespace).Seconds())
+	}
+	maxWorkflowExecutionTimeout := convert.Int32Ceil(e.config.MaxExecutionStartToCloseTimeout(namespace).Seconds())
+
+	if executionStartToCloseTimeoutSeconds > maxWorkflowExecutionTimeout {
+		executionStartToCloseTimeoutSeconds = maxWorkflowExecutionTimeout
+	}
+	if executionStartToCloseTimeoutSeconds != request.GetExecutionStartToCloseTimeoutSeconds() {
+		request.ExecutionStartToCloseTimeoutSeconds = executionStartToCloseTimeoutSeconds
+		e.metricsClient.Scope(
+			metricsScope,
+			metrics.NamespaceTag(namespace),
+		).IncCounter(metrics.WorkflowExecutionStartToCloseTimeoutOverrideCount)
+	}
+
+	maxDecisionStartToCloseTimeoutSeconds := convert.Int32Ceil(e.config.MaxDecisionTaskStartToCloseTimeout(namespace).Seconds())
 
 	taskStartToCloseTimeoutSecs := request.GetTaskStartToCloseTimeoutSeconds()
 	if taskStartToCloseTimeoutSecs == 0 {
-		taskStartToCloseTimeoutSecs = common.Int32Ceil(e.config.DefaultDecisionTaskStartToCloseTimeout(namespace).Seconds())
+		taskStartToCloseTimeoutSecs = convert.Int32Ceil(e.config.DefaultDecisionTaskStartToCloseTimeout(namespace).Seconds())
 	}
 	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, maxDecisionStartToCloseTimeoutSeconds)
-	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, request.GetExecutionStartToCloseTimeoutSeconds())
+	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, executionStartToCloseTimeoutSeconds)
 
 	if taskStartToCloseTimeoutSecs != request.GetTaskStartToCloseTimeoutSeconds() {
 		request.TaskStartToCloseTimeoutSeconds = taskStartToCloseTimeoutSecs

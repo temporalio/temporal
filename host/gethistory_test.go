@@ -368,6 +368,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		}
 	}
 	s.Equal(1, len(events))
+	s.Logger.Info("Done TestGetWorkflowExecutionHistory_Close")
 }
 
 func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {

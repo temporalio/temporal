@@ -31,20 +31,20 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/resource"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -824,7 +824,7 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 	}
 
 	request.Encoding = s.getDefaultEncoding(namespaceEntry)
-	request.ShardID = common.IntPtr(s.shardID)
+	request.ShardID = convert.IntPtr(s.shardID)
 	request.TransactionID = transactionID
 
 	size := 0

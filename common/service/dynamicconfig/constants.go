@@ -199,6 +199,8 @@ var keys = map[Key]string{
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
 	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
 	StickyTTL:                                             "history.stickyTTL",
+	DefaultExecutionStartToCloseTimeout:                   "history.defaultWorkflowExecutionTimeout",
+	MaxExecutionStartToCloseTimeout:                       "history.maximumWorkflowExecutionTimeout",
 	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
 	DefaultDecisionTaskStartToCloseTimeout:                "history.defaultDecisionTaskStartToCloseTimeout",
 	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
@@ -298,11 +300,10 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
-	// MaxDecisionTaskStartToCloseTimeout is the minimal allowed decision start to close timeout in seconds
+	// MaxDecisionTaskStartToCloseTimeout  is the maximum allowed decision start to close timeout
 	MaxDecisionTaskStartToCloseTimeout
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
-
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
@@ -558,6 +559,10 @@ const (
 	StickyTTL
 	// DecisionHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
+	// DefaultExecutionStartToCloseTimeout for a workflow execution
+	DefaultExecutionStartToCloseTimeout
+	// Maximum allowed workflow execution timeout
+	MaxExecutionStartToCloseTimeout
 	// DefaultDecisionTaskStartToCloseTimeout for a decision task
 	DefaultDecisionTaskStartToCloseTimeout
 

@@ -29,15 +29,15 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type sqlHistoryV2Manager struct {
@@ -362,7 +362,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 
 	rsp, err := m.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID:  treeID,
-		ShardID: common.IntPtr(request.ShardID),
+		ShardID: convert.IntPtr(request.ShardID),
 	})
 	if err != nil {
 		return err

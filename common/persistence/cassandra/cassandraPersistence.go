@@ -26,23 +26,22 @@ package cassandra
 
 import (
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cassandra"
 	checksum "github.com/temporalio/temporal/common/checksum"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 //	"go.temporal.io/temporal-proto/serviceerror"
@@ -2445,7 +2444,7 @@ func GetTaskTTL(task *persistenceblobs.TaskInfo) int64 {
 		// Ignoring error since err is just validating 0 < yyyy < 1000 and nanos < 1e9
 		// and we'd have checked this upstream
 		expiryGo, _ := types.TimestampFromProto(task.Expiry)
-		expiryTtl := int64(math.Ceil(expiryGo.Sub(time.Now()).Seconds()))
+		expiryTtl := convert.Int64Ceil(expiryGo.Sub(time.Now()).Seconds())
 		ttl = expiryTtl
 	}
 	return ttl

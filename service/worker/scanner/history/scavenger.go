@@ -28,18 +28,18 @@ import (
 	"context"
 	"time"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal/activity"
-	"golang.org/x/time/rate"
-
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal/activity"
+	"golang.org/x/time/rate"
 )
 
 type (
@@ -263,7 +263,7 @@ func (s *Scavenger) startTaskProcessor(
 						// This is a required argument but it is not needed for Cassandra.
 						// Since this scanner is only for Cassandra,
 						// we can fill any number here to let to code go through
-						ShardID: common.IntPtr(1),
+						ShardID: convert.IntPtr(1),
 					})
 					if err != nil {
 						respCh <- err

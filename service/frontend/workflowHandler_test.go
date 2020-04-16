@@ -35,6 +35,22 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/archiver/provider"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/convert"
+	"github.com/temporalio/temporal/common/messaging"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/namespace"
+	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
+	"github.com/temporalio/temporal/common/resource"
+	dc "github.com/temporalio/temporal/common/service/dynamicconfig"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
@@ -44,22 +60,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
-
-	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/provider"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/namespace"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/resource"
-	dc "github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 const (
@@ -985,7 +985,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		MaxEventID:    nextEventID,
 		PageSize:      0,
 		NextPageToken: []byte{},
-		ShardID:       common.IntPtr(shardID),
+		ShardID:       convert.IntPtr(shardID),
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents: []*eventpb.HistoryEvent{

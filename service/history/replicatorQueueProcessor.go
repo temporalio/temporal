@@ -29,17 +29,13 @@ import (
 	"errors"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
@@ -47,6 +43,10 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/primitives"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -673,7 +673,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 					p.historyV2Mgr,
 					p.metricsClient,
 					nil,
-					common.IntPtr(p.shard.GetShardID()),
+					convert.IntPtr(p.shard.GetShardID()),
 				)
 				if err != nil {
 					return nil, err
@@ -759,7 +759,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 		MaxEventID:    nextEventID,
 		PageSize:      1,
 		NextPageToken: pageToken,
-		ShardID:       common.IntPtr(p.shard.GetShardID()),
+		ShardID:       convert.IntPtr(p.shard.GetShardID()),
 	}
 
 	for {

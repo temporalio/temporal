@@ -30,6 +30,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/temporalio/temporal/client/frontend"
+	"github.com/temporalio/temporal/common/convert"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
 	"go.temporal.io/temporal"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -37,12 +42,6 @@ import (
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"golang.org/x/time/rate"
-
-	"github.com/temporalio/temporal/client/frontend"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/metrics"
 )
 
 const (
@@ -225,7 +224,7 @@ func setDefaultParams(params BatchParams) BatchParams {
 		}
 	}
 	if params.TerminateParams.TerminateChildren == nil {
-		params.TerminateParams.TerminateChildren = common.BoolPtr(true)
+		params.TerminateParams.TerminateChildren = convert.BoolPtr(true)
 	}
 	return params
 }
@@ -377,7 +376,7 @@ func startTaskProcessor(
 						return err
 					})
 			case BatchTypeSignal:
-				err = processTask(ctx, limiter, task, batchParams, client, common.BoolPtr(false),
+				err = processTask(ctx, limiter, task, batchParams, client, convert.BoolPtr(false),
 					func(workflowID, runID string) error {
 						_, err := client.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,

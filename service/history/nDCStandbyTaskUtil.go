@@ -28,12 +28,12 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type (
@@ -140,7 +140,7 @@ func newHistoryResendInfoFor2DC(
 	nextEventID int64,
 ) *historyResendInfo {
 	return &historyResendInfo{
-		nextEventID:      common.Int64Ptr(nextEventID),
+		nextEventID:      convert.Int64Ptr(nextEventID),
 		lastEventID:      common.EmptyEventID,
 		lastEventVersion: common.EmptyVersion,
 	}

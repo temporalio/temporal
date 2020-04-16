@@ -33,17 +33,17 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type sqlExecutionManager struct {
@@ -972,7 +972,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 		MinVisibilityTimestamp: &pageToken.Timestamp,
 		TaskID:                 pageToken.TaskID,
 		MaxVisibilityTimestamp: &request.MaxTimestamp,
-		PageSize:               common.IntPtr(request.BatchSize + 1),
+		PageSize:               convert.IntPtr(request.BatchSize + 1),
 	})
 
 	if err != nil && err != sql.ErrNoRows {

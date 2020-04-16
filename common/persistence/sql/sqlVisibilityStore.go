@@ -30,14 +30,14 @@ import (
 	"fmt"
 	"time"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/service/config"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -90,7 +90,7 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRe
 		ExecutionTime:    time.Unix(0, request.ExecutionTimestamp),
 		WorkflowTypeName: request.WorkflowTypeName,
 		CloseTime:        &closeTime,
-		Status:           common.Int32Ptr(int32(request.Status)),
+		Status:           convert.Int32Ptr(int32(request.Status)),
 		HistoryLength:    &request.HistoryLength,
 		Memo:             request.Memo.Data,
 		Encoding:         string(request.Memo.GetEncoding()),
@@ -216,7 +216,7 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByStatus(request *p.Lis
 				MaxStartTime: &readLevel.Time,
 				Closed:       true,
 				RunID:        &readLevel.RunID,
-				Status:       common.Int32Ptr(int32(request.Status)),
+				Status:       convert.Int32Ptr(int32(request.Status)),
 				PageSize:     &request.PageSize,
 			})
 		})
