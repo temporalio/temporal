@@ -1843,8 +1843,13 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
-	if getRequest.GetDomain() == "" {
+	domainName := getRequest.GetDomain()
+	if domainName == "" {
 		return nil, wh.error(errDomainNotSet, scope)
+	}
+	domainID, err := wh.GetDomainCache().GetDomainID(domainName)
+	if err != nil {
+		return nil, wh.error(err, scope)
 	}
 
 	if err := wh.validateExecutionAndEmitMetrics(getRequest.Execution, scope); err != nil {
@@ -1854,18 +1859,13 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	if getRequest.GetMaximumPageSize() <= 0 {
 		getRequest.MaximumPageSize = common.Int32Ptr(int32(wh.config.HistoryMaxPageSize(getRequest.GetDomain())))
 	}
-
-	domainID, err := wh.GetDomainCache().GetDomainID(getRequest.GetDomain())
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
 	// force limit page size if exceed
 	if getRequest.GetMaximumPageSize() > common.GetHistoryMaxPageSize {
 		wh.GetThrottledLogger().Warn("GetHistory page size is larger than threshold",
 			tag.WorkflowID(getRequest.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(getRequest.Execution.GetRunId()),
-			tag.WorkflowDomainID(domainID), tag.WorkflowSize(int64(getRequest.GetMaximumPageSize())))
+			tag.WorkflowDomainID(domainID),
+			tag.WorkflowSize(int64(getRequest.GetMaximumPageSize())))
 		getRequest.MaximumPageSize = common.Int32Ptr(common.GetHistoryMaxPageSize)
 	}
 
@@ -1877,12 +1877,13 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		}
 	}
 
-	// this function return the following 5 things,
-	// 1. the workflow run ID
-	// 2. the last first event ID (the event ID of the last batch of events in the history)
-	// 3. the next event ID
-	// 4. whether the workflow is closed
-	// 5. error if any
+	// this function return the following 6 things,
+	// 1. branch token
+	// 2. the workflow run ID
+	// 3. the last first event ID (the event ID of the last batch of events in the history)
+	// 4. the next event ID
+	// 5. whether the workflow is closed
+	// 6. error if any
 	queryHistory := func(
 		domainUUID string,
 		execution *gen.WorkflowExecution,
@@ -1964,50 +1965,56 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		token.IsWorkflowRunning = isWorkflowRunning
 		token.PersistenceToken = nil
 	}
-	rawHistoryQueryEnabled := wh.config.SendRawWorkflowHistory(getRequest.GetDomain())
+	isRawHistoryEnabled := wh.config.SendRawWorkflowHistory(domainName)
 
 	history := &gen.History{}
 	history.Events = []*gen.HistoryEvent{}
 	var historyBlob []*gen.DataBlob
 
+	// helper function to just getHistory
+	getHistory := func(firstEventID, nextEventID int64, nextPageToken []byte) error {
+		if isRawHistoryEnabled {
+			historyBlob, token.PersistenceToken, err = wh.getRawHistory(
+				scope,
+				domainID,
+				*execution,
+				firstEventID,
+				nextEventID,
+				getRequest.GetMaximumPageSize(),
+				nextPageToken,
+				token.TransientDecision,
+				token.BranchToken,
+			)
+		} else {
+			history, token.PersistenceToken, err = wh.getHistory(
+				scope,
+				domainID,
+				*execution,
+				firstEventID,
+				nextEventID,
+				getRequest.GetMaximumPageSize(),
+				nextPageToken,
+				token.TransientDecision,
+				token.BranchToken,
+			)
+		}
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
-			if rawHistoryQueryEnabled {
-				historyBlob, _, err = wh.getRawHistory(
-					scope,
-					domainID,
-					*execution,
-					lastFirstEventID,
-					nextEventID,
-					getRequest.GetMaximumPageSize(),
-					nil,
-					token.TransientDecision,
-					token.BranchToken,
-				)
-				if err != nil {
-					return nil, wh.error(err, scope)
-				}
-
+			if err := getHistory(lastFirstEventID, nextEventID, nil); err != nil {
+				return nil, wh.error(err, scope)
+			}
+			if isRawHistoryEnabled {
 				// since getHistory func will not return empty history, so the below is safe
-				historyBlob = historyBlob[len(historyBlob)-1 : len(historyBlob)]
+				historyBlob = historyBlob[len(historyBlob)-1:]
 			} else {
-				history, _, err = wh.getHistory(
-					scope,
-					domainID,
-					*execution,
-					lastFirstEventID,
-					nextEventID,
-					getRequest.GetMaximumPageSize(),
-					nil,
-					token.TransientDecision,
-					token.BranchToken,
-				)
-
-				if err != nil {
-					return nil, wh.error(err, scope)
-				}
 				// since getHistory func will not return empty history, so the below is safe
-				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
+				history.Events = history.Events[len(history.Events)-1:]
 			}
 			token = nil
 		} else if isLongPoll {
@@ -2025,35 +2032,9 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 				token = nil
 			}
 		} else {
-			if rawHistoryQueryEnabled {
-				historyBlob, token.PersistenceToken, err = wh.getRawHistory(
-					scope,
-					domainID,
-					*execution,
-					token.FirstEventID,
-					token.NextEventID,
-					getRequest.GetMaximumPageSize(),
-					token.PersistenceToken,
-					token.TransientDecision,
-					token.BranchToken,
-				)
-			} else {
-				history, token.PersistenceToken, err = wh.getHistory(
-					scope,
-					domainID,
-					*execution,
-					token.FirstEventID,
-					token.NextEventID,
-					getRequest.GetMaximumPageSize(),
-					token.PersistenceToken,
-					token.TransientDecision,
-					token.BranchToken,
-				)
-			}
-			if err != nil {
+			if err := getHistory(token.FirstEventID, token.NextEventID, token.PersistenceToken); err != nil {
 				return nil, wh.error(err, scope)
 			}
-
 			// here, for long pull on history events, we need to intercept the paging token from cassandra
 			// and do something clever
 			if len(token.PersistenceToken) == 0 && (!token.IsWorkflowRunning || !isLongPoll) {
