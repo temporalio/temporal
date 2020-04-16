@@ -295,9 +295,9 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ShardSyncMinInterval:                                  dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 2*time.Minute),
 		ShardSyncTimerJitterCoefficient:                       dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
 
-		// history client: client/history/client.go set the client timeout 61s
+		// history client: client/history/client.go set the client timeout 30s
 		// TODO: Return this value to the client: github.com/temporalio/temporal/issues/294
-		LongPollExpirationInterval:          dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, time.Minute),
+		LongPollExpirationInterval:          dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval,  time.Second*20),
 		EventEncodingType:                   dc.GetStringPropertyFnWithNamespaceFilter(dynamicconfig.DefaultEventEncoding, string(common.EncodingTypeProto3)),
 		EnableParentClosePolicy:             dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableParentClosePolicy, true),
 		NumParentClosePolicySystemWorkflows: dc.GetIntProperty(dynamicconfig.NumParentClosePolicySystemWorkflows, 10),

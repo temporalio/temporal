@@ -28,6 +28,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/hashicorp/go-version v1.2.0
+	github.com/hhatto/gocloc v0.3.3 // indirect
 	github.com/iancoleman/strcase v0.0.0-20190422225806-e506e3ef7365
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/jonboulle/clockwork v0.1.0
