@@ -80,10 +80,6 @@ setup_schema() {
         echo 'setup cassandra schema'
         setup_cassandra_schema
     fi
-
-    if [ "$ENABLE_ES" == "true" ]; then
-        setup_es_template
-    fi
 }
 
 wait_for_cassandra() {
@@ -138,10 +134,6 @@ wait_for_db() {
     else
         wait_for_cassandra
     fi
-
-    if [ "$ENABLE_ES" == "true" ]; then
-        wait_for_es
-    fi
 }
 
 register_default_namespace() {
@@ -156,13 +148,24 @@ register_default_namespace() {
     echo "Default namespace registration complete."
 }
 
-wait_for_db
-if [ "$SKIP_SCHEMA_SETUP" != true ]; then
-    setup_schema
+auto_setup() {
+    wait_for_db
+    if [ "$SKIP_SCHEMA_SETUP" != true ]; then
+        setup_schema
+    fi
+
+    if [ "$SKIP_DEFAULT_NAMESPACE_CREATION" != true ]; then
+        register_default_namespace &
+    fi
+}
+
+if [ "$AUTO_SETUP" = "true" ]; then
+	auto_setup
 fi
 
-if [ "$SKIP_DEFAULT_NAMESPACE_CREATION" != true ]; then
-    register_default_namespace &
+if [ "$ENABLE_ES" == "true" ]; then
+    wait_for_es
+    setup_es_template
 fi
 
 bash /start-temporal.sh
