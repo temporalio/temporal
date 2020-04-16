@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
@@ -210,7 +210,7 @@ func (r *nDCWorkflowResetterImpl) getResetBranchToken(
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID, r.workflowID, r.newRunID),
-		ShardID:         common.IntPtr(shardID),
+		ShardID:         convert.IntPtr(shardID),
 	})
 	if err != nil {
 		return nil, err

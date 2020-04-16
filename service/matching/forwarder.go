@@ -27,21 +27,20 @@ package matching
 import (
 	"context"
 	"errors"
-	"math"
 	"sync/atomic"
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
-
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 type (
@@ -154,7 +153,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		return err
 	}
 
-	newScheduleToStartTimeout := int32(math.Ceil(time.Until(expiryGo).Seconds()))
+	newScheduleToStartTimeout := convert.Int32Ceil(time.Until(expiryGo).Seconds())
 
 	// Todo - should we noop expired tasks? This will be moot once history stamp absolute time
 	/*if newScheduleToStartTimeout <= 0 {

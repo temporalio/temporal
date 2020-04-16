@@ -36,16 +36,15 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
+	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/convert"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/service/config"
 	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.uber.org/zap"
-
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/service/config"
 )
 
 const (
@@ -235,7 +234,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: int64(1000),
 				latestCloseTime:   int64(12345),
-				workflowID:        common.StringPtr("random workflowID"),
+				workflowID:        convert.StringPtr("random workflowID"),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp: int64(2000),
@@ -246,8 +245,8 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: int64(1000),
 				latestCloseTime:   int64(12345),
-				workflowID:        common.StringPtr("random workflowID"),
-				runID:             common.StringPtr("random runID"),
+				workflowID:        convert.StringPtr("random workflowID"),
+				runID:             convert.StringPtr("random runID"),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp:   int64(12345),
@@ -261,7 +260,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: int64(1000),
 				latestCloseTime:   int64(12345),
-				workflowTypeName:  common.StringPtr("some random type name"),
+				workflowTypeName:  convert.StringPtr("some random type name"),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp: int64(12345),
@@ -272,7 +271,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: int64(1000),
 				latestCloseTime:   int64(12345),
-				workflowTypeName:  common.StringPtr("some random type name"),
+				workflowTypeName:  convert.StringPtr("some random type name"),
 				status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_ContinuedAsNew),
 			},
 			record: &archiverproto.ArchiveVisibilityRequest{
@@ -408,7 +407,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: int64(1),
 		latestCloseTime:   int64(10001),
-		workflowID:        common.StringPtr(testWorkflowID),
+		workflowID:        convert.StringPtr(testWorkflowID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{

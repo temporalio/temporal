@@ -32,6 +32,11 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
@@ -39,11 +44,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
-
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 const (
@@ -185,7 +185,7 @@ func (s *integrationSuite) isHistoryDeleted(execution *executionpb.WorkflowExecu
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
 		TreeID:  primitives.MustParseUUID(execution.GetRunId()),
-		ShardID: common.IntPtr(shardID),
+		ShardID: convert.IntPtr(shardID),
 	}
 	for i := 0; i < retryLimit; i++ {
 		resp, err := s.testCluster.testBase.HistoryV2Mgr.GetHistoryTree(request)

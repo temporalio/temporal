@@ -30,17 +30,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	versionpb "go.temporal.io/temporal-proto/version"
-	"go.temporal.io/temporal-proto/workflowservice"
-
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -49,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/elasticsearch/validator"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
@@ -60,6 +50,16 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/resource"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
+	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 type (
@@ -3244,7 +3244,7 @@ func (wh *WorkflowHandler) getRawHistory(
 		MaxEventID:    nextEventID,
 		PageSize:      int(pageSize),
 		NextPageToken: nextPageToken,
-		ShardID:       common.IntPtr(shardID),
+		ShardID:       convert.IntPtr(shardID),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -3321,7 +3321,7 @@ func (wh *WorkflowHandler) getHistory(
 		MaxEventID:    nextEventID,
 		PageSize:      int(pageSize),
 		NextPageToken: nextPageToken,
-		ShardID:       common.IntPtr(shardID),
+		ShardID:       convert.IntPtr(shardID),
 	})
 	if err != nil {
 		return nil, nil, err

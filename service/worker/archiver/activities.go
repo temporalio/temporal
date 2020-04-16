@@ -28,15 +28,15 @@ import (
 	"context"
 	"errors"
 
-	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/activity"
-
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
 )
 
 const (
@@ -114,7 +114,7 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	}()
 	err = container.HistoryV2Manager.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: request.BranchToken,
-		ShardID:     common.IntPtr(request.ShardID),
+		ShardID:     convert.IntPtr(request.ShardID),
 	})
 	if err == nil {
 		return nil
