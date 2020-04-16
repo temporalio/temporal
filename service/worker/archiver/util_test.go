@@ -29,7 +29,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/.gen/go/shared"
+
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
 )
 
 type UtilSuite struct {
@@ -64,12 +66,12 @@ func (s *UtilSuite) TestHashDeterminism() {
 		},
 		{
 			instance: ArchiveRequest{
-				DomainID:    "some random domainID",
+				NamespaceID: "some random namespaceID",
 				ShardID:     0,
 				BranchToken: []byte{1, 2, 3},
 				NextEventID: int64(123),
-				CloseStatus: shared.WorkflowExecutionCloseStatusContinuedAsNew,
-				Memo: &shared.Memo{
+				Status:      executionpb.WorkflowExecutionStatus_ContinuedAsNew,
+				Memo: &commonpb.Memo{
 					Fields: map[string][]byte{
 						"memoKey1": []byte{1, 2, 3},
 						"memoKey2": []byte{4, 5, 6},
