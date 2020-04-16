@@ -4,13 +4,6 @@ services:
     image: cassandra:3.11
     ports:
       - "9042:9042"
-  statsd:
-    image: graphiteapp/graphite-statsd
-    ports:
-      - "8080:80"
-      - "2003:2003"
-      - "8125:8125"
-      - "8126:8126"
   zookeeper:
     image: wurstmeister/zookeeper:3.4.6
     ports:
@@ -32,7 +25,7 @@ services:
     environment:
       - discovery.type=single-node
   temporal:
-    image: temporalio/auto-setup:0.21.1
+    image: temporalio/server:${SERVER_TAG:-0.21.1}
     ports:
      - "7233:7233"
      - "7234:7234"
@@ -43,17 +36,24 @@ services:
      - "6935:6935"
      - "6939:6939"
     environment:
+      - "AUTO_SETUP=true"
       - "CASSANDRA_SEEDS=cassandra"
-      - "STATSD_ENDPOINT=statsd:8125"
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development_es.yaml"
       - "ENABLE_ES=true"
       - "ES_SEEDS=elasticsearch"
       - "KAFKA_SEEDS=kafka"
     depends_on:
       - cassandra
-      - statsd
       - kafka
       - elasticsearch
+  temporal-admin-tools:
+    image: temporalio/admin-tools:${ADMIN_TOOLS_TAG:-0.21.1}
+    stdin_open: true
+    tty: true
+    environment:
+      - "TEMPORAL_CLI_ADDRESS=temporal:7233"
+    depends_on:
+      - temporal
   temporal-web:
     image: temporalio/web:0.21.1
     environment:
