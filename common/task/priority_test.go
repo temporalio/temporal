@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,46 +18,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package task
 
 import (
-	"fmt"
+	"testing"
 
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/service/history/task"
+	"github.com/stretchr/testify/assert"
 )
 
-func initializeLoggerForTask(
-	shardID int,
-	task task.Info,
-	logger log.Logger,
-) log.Logger {
-
-	taskLogger := logger.WithTags(
-		tag.ShardID(shardID),
-		tag.TaskID(task.GetTaskID()),
-		tag.TaskVisibilityTimestamp(task.GetVisibilityTimestamp().UnixNano()),
-		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowDomainID(task.GetDomainID()),
-		tag.WorkflowID(task.GetWorkflowID()),
-		tag.WorkflowRunID(task.GetRunID()),
-	)
-
-	switch task := task.(type) {
-	case *persistence.TimerTaskInfo:
-		taskLogger = taskLogger.WithTags(
-			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
-		)
-	case *persistence.TransferTaskInfo:
-		// noop
-	case *persistence.ReplicationTaskInfo:
-		// noop
-	default:
-		taskLogger.Error(fmt.Sprintf("Unknown queue task type: %v", task))
+func TestGetTaskPriority(t *testing.T) {
+	testCases := []struct {
+		class            int
+		subClass         int
+		expectedPriority int
+	}{
+		{
+			class:            HighPriorityClass,
+			subClass:         DefaultPrioritySubclass,
+			expectedPriority: 1,
+		},
+		{
+			class:            DefaultPriorityClass,
+			subClass:         LowPrioritySubclass,
+			expectedPriority: 10,
+		},
+		{
+			class:            LowPriorityClass,
+			subClass:         HighPrioritySubclass,
+			expectedPriority: 16,
+		},
 	}
 
-	return taskLogger
+	for _, tc := range testCases {
+		assert.Equal(t, tc.expectedPriority, GetTaskPriority(tc.class, tc.subClass))
+	}
 }

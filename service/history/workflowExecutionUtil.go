@@ -22,7 +22,6 @@ package history
 
 import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/service/history/execution"
 )
 
@@ -97,56 +96,6 @@ func newWorkflowContext(
 		releaseFn:    releaseFn,
 		mutableState: mutableState,
 	}
-}
-
-func retryWorkflow(
-	mutableState execution.MutableState,
-	eventBatchFirstEventID int64,
-	parentDomainName string,
-	continueAsNewAttributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes,
-) (execution.MutableState, error) {
-
-	if decision, ok := mutableState.GetInFlightDecision(); ok {
-		if err := execution.FailDecision(
-			mutableState,
-			decision,
-			workflow.DecisionTaskFailedCauseForceCloseDecision,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	_, newMutableState, err := mutableState.AddContinueAsNewEvent(
-		eventBatchFirstEventID,
-		common.EmptyEventID,
-		parentDomainName,
-		continueAsNewAttributes,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return newMutableState, nil
-}
-
-func timeoutWorkflow(
-	mutableState execution.MutableState,
-	eventBatchFirstEventID int64,
-) error {
-
-	if decision, ok := mutableState.GetInFlightDecision(); ok {
-		if err := execution.FailDecision(
-			mutableState,
-			decision,
-			workflow.DecisionTaskFailedCauseForceCloseDecision,
-		); err != nil {
-			return err
-		}
-	}
-
-	_, err := mutableState.AddTimeoutWorkflowEvent(
-		eventBatchFirstEventID,
-	)
-	return err
 }
 
 func terminateWorkflow(

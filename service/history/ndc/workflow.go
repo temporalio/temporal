@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,12 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination nDCWorkflow_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination workflow_mock.go -self_package github.com/uber/cadence/service/history/ndc
 
-package history
+package ndc
 
 import (
-	ctx "context"
+	"context"
 	"fmt"
 
 	"github.com/uber/cadence/.gen/go/shared"
@@ -34,39 +34,50 @@ import (
 	"github.com/uber/cadence/service/history/execution"
 )
 
+const (
+	// WorkflowTerminationReason is the reason for terminating workflow due to version conflit
+	WorkflowTerminationReason = "Terminate Workflow Due To Version Conflict."
+	// WorkflowTerminationIdentity is the component which decides to terminate the workflow
+	WorkflowTerminationIdentity = "worker-service"
+
+	identityHistoryService = "history-service"
+)
+
 type (
-	nDCWorkflow interface {
-		getContext() execution.Context
-		getMutableState() execution.MutableState
-		getReleaseFn() execution.ReleaseFunc
-		getVectorClock() (int64, int64, error)
-		happensAfter(that nDCWorkflow) (bool, error)
-		revive() error
-		suppressBy(incomingWorkflow nDCWorkflow) (execution.TransactionPolicy, error)
-		flushBufferedEvents() error
+	// Workflow is the interface for NDC workflow
+	Workflow interface {
+		GetContext() execution.Context
+		GetMutableState() execution.MutableState
+		GetReleaseFn() execution.ReleaseFunc
+		GetVectorClock() (int64, int64, error)
+		HappensAfter(that Workflow) (bool, error)
+		Revive() error
+		SuppressBy(incomingWorkflow Workflow) (execution.TransactionPolicy, error)
+		FlushBufferedEvents() error
 	}
 
-	nDCWorkflowImpl struct {
+	workflowImpl struct {
 		domainCache     cache.DomainCache
 		clusterMetadata cluster.Metadata
 
-		ctx          ctx.Context
+		ctx          context.Context
 		context      execution.Context
 		mutableState execution.MutableState
 		releaseFn    execution.ReleaseFunc
 	}
 )
 
-func newNDCWorkflow(
-	ctx ctx.Context,
+// NewWorkflow creates a new NDC workflow
+func NewWorkflow(
+	ctx context.Context,
 	domainCache cache.DomainCache,
 	clusterMetadata cluster.Metadata,
 	context execution.Context,
 	mutableState execution.MutableState,
 	releaseFn execution.ReleaseFunc,
-) *nDCWorkflowImpl {
+) Workflow {
 
-	return &nDCWorkflowImpl{
+	return &workflowImpl{
 		ctx:             ctx,
 		domainCache:     domainCache,
 		clusterMetadata: clusterMetadata,
@@ -77,19 +88,19 @@ func newNDCWorkflow(
 	}
 }
 
-func (r *nDCWorkflowImpl) getContext() execution.Context {
+func (r *workflowImpl) GetContext() execution.Context {
 	return r.context
 }
 
-func (r *nDCWorkflowImpl) getMutableState() execution.MutableState {
+func (r *workflowImpl) GetMutableState() execution.MutableState {
 	return r.mutableState
 }
 
-func (r *nDCWorkflowImpl) getReleaseFn() execution.ReleaseFunc {
+func (r *workflowImpl) GetReleaseFn() execution.ReleaseFunc {
 	return r.releaseFn
 }
 
-func (r *nDCWorkflowImpl) getVectorClock() (int64, int64, error) {
+func (r *workflowImpl) GetVectorClock() (int64, int64, error) {
 
 	lastWriteVersion, err := r.mutableState.GetLastWriteVersion()
 	if err != nil {
@@ -100,15 +111,15 @@ func (r *nDCWorkflowImpl) getVectorClock() (int64, int64, error) {
 	return lastWriteVersion, lastEventTaskID, nil
 }
 
-func (r *nDCWorkflowImpl) happensAfter(
-	that nDCWorkflow,
+func (r *workflowImpl) HappensAfter(
+	that Workflow,
 ) (bool, error) {
 
-	thisLastWriteVersion, thisLastEventTaskID, err := r.getVectorClock()
+	thisLastWriteVersion, thisLastEventTaskID, err := r.GetVectorClock()
 	if err != nil {
 		return false, err
 	}
-	thatLastWriteVersion, thatLastEventTaskID, err := that.getVectorClock()
+	thatLastWriteVersion, thatLastEventTaskID, err := that.GetVectorClock()
 	if err != nil {
 		return false, err
 	}
@@ -121,7 +132,7 @@ func (r *nDCWorkflowImpl) happensAfter(
 	), nil
 }
 
-func (r *nDCWorkflowImpl) revive() error {
+func (r *workflowImpl) Revive() error {
 
 	state, _ := r.mutableState.GetWorkflowStateCloseStatus()
 	if state != persistence.WorkflowStateZombie {
@@ -142,8 +153,8 @@ func (r *nDCWorkflowImpl) revive() error {
 	)
 }
 
-func (r *nDCWorkflowImpl) suppressBy(
-	incomingWorkflow nDCWorkflow,
+func (r *workflowImpl) SuppressBy(
+	incomingWorkflow Workflow,
 ) (execution.TransactionPolicy, error) {
 
 	// NOTE: READ BEFORE MODIFICATION
@@ -153,11 +164,11 @@ func (r *nDCWorkflowImpl) suppressBy(
 	// if the workflow to be suppressed has last write version being remote active
 	//  then turn this workflow into a zombie
 
-	lastWriteVersion, lastEventTaskID, err := r.getVectorClock()
+	lastWriteVersion, lastEventTaskID, err := r.GetVectorClock()
 	if err != nil {
 		return execution.TransactionPolicyActive, err
 	}
-	incomingLastWriteVersion, incomingLastEventTaskID, err := incomingWorkflow.getVectorClock()
+	incomingLastWriteVersion, incomingLastEventTaskID, err := incomingWorkflow.GetVectorClock()
 	if err != nil {
 		return execution.TransactionPolicyActive, err
 	}
@@ -186,7 +197,7 @@ func (r *nDCWorkflowImpl) suppressBy(
 	return execution.TransactionPolicyPassive, r.zombiefyWorkflow()
 }
 
-func (r *nDCWorkflowImpl) flushBufferedEvents() error {
+func (r *workflowImpl) FlushBufferedEvents() error {
 
 	if !r.mutableState.IsWorkflowExecutionRunning() {
 		return nil
@@ -196,7 +207,7 @@ func (r *nDCWorkflowImpl) flushBufferedEvents() error {
 		return nil
 	}
 
-	lastWriteVersion, _, err := r.getVectorClock()
+	lastWriteVersion, _, err := r.GetVectorClock()
 	if err != nil {
 		return err
 	}
@@ -213,7 +224,7 @@ func (r *nDCWorkflowImpl) flushBufferedEvents() error {
 	return r.failDecision(lastWriteVersion)
 }
 
-func (r *nDCWorkflowImpl) failDecision(
+func (r *workflowImpl) failDecision(
 	lastWriteVersion int64,
 ) error {
 
@@ -245,12 +256,12 @@ func (r *nDCWorkflowImpl) failDecision(
 	return r.mutableState.FlushBufferedEvents()
 }
 
-func (r *nDCWorkflowImpl) terminateWorkflow(
+func (r *workflowImpl) terminateWorkflow(
 	lastWriteVersion int64,
 	incomingLastWriteVersion int64,
 ) error {
 
-	eventBatchFirstEventID := r.getMutableState().GetNextEventID()
+	eventBatchFirstEventID := r.GetMutableState().GetNextEventID()
 	if err := r.failDecision(lastWriteVersion); err != nil {
 		return err
 	}
@@ -262,15 +273,15 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 
 	_, err := r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		eventBatchFirstEventID,
-		workflowTerminationReason,
+		WorkflowTerminationReason,
 		[]byte(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
-		workflowTerminationIdentity,
+		WorkflowTerminationIdentity,
 	)
 
 	return err
 }
 
-func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
+func (r *workflowImpl) zombiefyWorkflow() error {
 
 	return r.mutableState.GetExecutionInfo().UpdateWorkflowStateCloseStatus(
 		persistence.WorkflowStateZombie,

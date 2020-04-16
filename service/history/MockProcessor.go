@@ -22,6 +22,8 @@ package history
 
 import (
 	"github.com/stretchr/testify/mock"
+
+	"github.com/uber/cadence/service/history/task"
 )
 
 // MockProcessor is used as mock implementation for Processor
@@ -56,15 +58,15 @@ func (_m *MockProcessor) complete(task *taskInfo) {
 }
 
 // getTaskFilter is mock implementation for process of Processor
-func (_m *MockProcessor) getTaskFilter() taskFilter {
+func (_m *MockProcessor) getTaskFilter() task.Filter {
 	ret := _m.Called()
 
-	var r0 taskFilter
-	if rf, ok := ret.Get(0).(func() taskFilter); ok {
+	var r0 task.Filter
+	if rf, ok := ret.Get(0).(func() task.Filter); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(taskFilter)
+			r0 = ret.Get(0).(task.Filter)
 		}
 	}
 
@@ -72,15 +74,15 @@ func (_m *MockProcessor) getTaskFilter() taskFilter {
 }
 
 // readTasks is mock implementation for readTasks of Processor
-func (_m *MockProcessor) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
+func (_m *MockProcessor) readTasks(readLevel int64) ([]task.Info, bool, error) {
 	ret := _m.Called(readLevel)
 
-	var r0 []queueTaskInfo
-	if rf, ok := ret.Get(0).(func(int64) []queueTaskInfo); ok {
+	var r0 []task.Info
+	if rf, ok := ret.Get(0).(func(int64) []task.Info); ok {
 		r0 = rf(readLevel)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]queueTaskInfo)
+			r0 = ret.Get(0).([]task.Info)
 		}
 	}
 

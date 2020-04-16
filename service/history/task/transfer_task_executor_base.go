@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package task
 
 import (
 	"context"
@@ -40,13 +40,15 @@ import (
 
 const (
 	transferActiveTaskDefaultTimeout = 30 * time.Second
+	secondsInDay                     = int32(24 * time.Hour / time.Second)
+	defaultDomainName                = "defaultDomainName"
 )
 
 type (
-	transferQueueTaskExecutorBase struct {
+	transferTaskExecutorBase struct {
 		shard          shard.Context
-		historyService *historyEngineImpl
-		cache          *execution.Cache
+		archiverClient archiver.Client
+		executionCache *execution.Cache
 		logger         log.Logger
 		metricsClient  metrics.Client
 		matchingClient matching.Client
@@ -55,17 +57,18 @@ type (
 	}
 )
 
-func newTransferQueueTaskExecutorBase(
+func newTransferTaskExecutorBase(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	archiverClient archiver.Client,
+	executionCache *execution.Cache,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *config.Config,
-) *transferQueueTaskExecutorBase {
-	return &transferQueueTaskExecutorBase{
+) *transferTaskExecutorBase {
+	return &transferTaskExecutorBase{
 		shard:          shard,
-		historyService: historyService,
-		cache:          historyService.executionCache,
+		archiverClient: archiverClient,
+		executionCache: executionCache,
 		logger:         logger,
 		metricsClient:  metricsClient,
 		matchingClient: shard.GetService().GetMatchingClient(),
@@ -74,7 +77,7 @@ func newTransferQueueTaskExecutorBase(
 	}
 }
 
-func (t *transferQueueTaskExecutorBase) getDomainIDAndWorkflowExecution(
+func (t *transferTaskExecutorBase) getDomainIDAndWorkflowExecution(
 	task *persistence.TransferTaskInfo,
 ) (string, workflow.WorkflowExecution) {
 
@@ -84,7 +87,7 @@ func (t *transferQueueTaskExecutorBase) getDomainIDAndWorkflowExecution(
 	}
 }
 
-func (t *transferQueueTaskExecutorBase) pushActivity(
+func (t *transferTaskExecutorBase) pushActivity(
 	task *persistence.TransferTaskInfo,
 	activityScheduleToStartTimeout int32,
 ) error {
@@ -111,7 +114,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	return err
 }
 
-func (t *transferQueueTaskExecutorBase) pushDecision(
+func (t *transferTaskExecutorBase) pushDecision(
 	task *persistence.TransferTaskInfo,
 	tasklist *workflow.TaskList,
 	decisionScheduleToStartTimeout int32,
@@ -137,7 +140,7 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 	return err
 }
 
-func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
+func (t *transferTaskExecutorBase) recordWorkflowStarted(
 	domainID string,
 	workflowID string,
 	runID string,
@@ -186,7 +189,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
 }
 
-func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
+func (t *transferTaskExecutorBase) upsertWorkflowExecution(
 	domainID string,
 	workflowID string,
 	runID string,
@@ -230,7 +233,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	return t.visibilityMgr.UpsertWorkflowExecution(request)
 }
 
-func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
+func (t *transferTaskExecutorBase) recordWorkflowClosed(
 	domainID string,
 	workflowID string,
 	runID string,
@@ -299,7 +302,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	if archiveVisibility {
 		ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
 		defer cancel()
-		_, err := t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
+		_, err := t.archiverClient.Archive(ctx, &archiver.ClientRequest{
 			ArchiveRequest: &archiver.ArchiveRequest{
 				DomainID:           domainID,
 				DomainName:         domain,

@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
+	test "github.com/uber/cadence/service/history/testing"
 )
 
 type (
@@ -123,7 +124,7 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 	attributes.Execution.RunId = common.StringPtr("run-id")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
 	s.EqualError(err, "BadRequestError{Message: Invalid RunId set on decision.}")
-	attributes.Execution.RunId = common.StringPtr(testRunID)
+	attributes.Execution.RunId = common.StringPtr(test.RunID)
 
 	attributes.SignalName = common.StringPtr("my signal name")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)

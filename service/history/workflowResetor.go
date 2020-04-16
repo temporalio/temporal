@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination workflowResetor_mock.go
+// TODO: move this file to reset package
 
 package history
 
@@ -37,34 +37,18 @@ import (
 	ce "github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/reset"
 )
 
 type (
-	// Deprecated: use workflowResetter instead when NDC is applies to all workflows
-	workflowResetor interface {
-		ResetWorkflowExecution(
-			ctx context.Context,
-			resetRequest *workflow.ResetWorkflowExecutionRequest,
-			baseContext execution.Context,
-			baseMutableState execution.MutableState,
-			currContext execution.Context,
-			currMutableState execution.MutableState,
-		) (response *workflow.ResetWorkflowExecutionResponse, retError error)
-
-		ApplyResetEvent(
-			ctx context.Context,
-			request *h.ReplicateEventsRequest,
-			domainID, workflowID, currentRunID string,
-		) (retError error)
-	}
-
+	// Deprecated: use WorkflowResetter instead when NDC is applies to all workflows
 	workflowResetorImpl struct {
 		eng        *historyEngineImpl
 		timeSource clock.TimeSource
 	}
 )
 
-var _ workflowResetor = (*workflowResetorImpl)(nil)
+var _ reset.WorkflowResetor = (*workflowResetorImpl)(nil)
 
 func newWorkflowResetor(historyEngine *historyEngineImpl) *workflowResetorImpl {
 	return &workflowResetorImpl{

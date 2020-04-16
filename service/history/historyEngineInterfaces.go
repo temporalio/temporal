@@ -22,13 +22,11 @@ package history
 
 import (
 	"context"
-	"time"
 
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/task"
-	"github.com/uber/cadence/service/history/shard"
+	"github.com/uber/cadence/service/history/task"
 )
 
 type (
@@ -53,39 +51,11 @@ type (
 
 	queueAckMgr interface {
 		getFinishedChan() <-chan struct{}
-		readQueueTasks() ([]queueTaskInfo, bool, error)
+		readQueueTasks() ([]task.Info, bool, error)
 		completeQueueTask(taskID int64)
 		getQueueAckLevel() int64
 		getQueueReadLevel() int64
 		updateQueueAckLevel() error
-	}
-
-	queueTaskInfo interface {
-		GetVersion() int64
-		GetTaskID() int64
-		GetTaskType() int
-		GetVisibilityTimestamp() time.Time
-		GetWorkflowID() string
-		GetRunID() string
-		GetDomainID() string
-	}
-
-	queueTask interface {
-		task.PriorityTask
-		queueTaskInfo
-		GetQueueType() queueType
-		GetShard() shard.Context
-	}
-
-	queueTaskExecutor interface {
-		execute(taskInfo queueTaskInfo, shouldProcessTask bool) error
-	}
-
-	queueTaskProcessor interface {
-		common.Daemon
-		StopShardProcessor(shard.Context)
-		Submit(queueTask) error
-		TrySubmit(queueTask) (bool, error)
 	}
 
 	// TODO: deprecate this interface in favor of the task interface
@@ -93,12 +63,12 @@ type (
 	taskExecutor interface {
 		process(taskInfo *taskInfo) (int, error)
 		complete(taskInfo *taskInfo)
-		getTaskFilter() taskFilter
+		getTaskFilter() task.Filter
 	}
 
 	processor interface {
 		taskExecutor
-		readTasks(readLevel int64) ([]queueTaskInfo, bool, error)
+		readTasks(readLevel int64) ([]task.Info, bool, error)
 		updateAckLevel(taskID int64) error
 		queueShutdown() error
 	}
@@ -116,12 +86,4 @@ type (
 		getReadLevel() timerKey
 		updateAckLevel() error
 	}
-
-	queueType int
-)
-
-const (
-	transferQueueType queueType = iota + 1
-	timerQueueType
-	replicationQueueType
 )

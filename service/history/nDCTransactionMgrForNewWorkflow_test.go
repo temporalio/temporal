@@ -31,6 +31,7 @@ import (
 
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/ndc"
 )
 
 type (
@@ -71,9 +72,9 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() 
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
-	workflow := NewMocknDCWorkflow(s.controller)
+	workflow := ndc.NewMockWorkflow(s.controller)
 	mutableState := execution.NewMockMutableState(s.controller)
-	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
+	workflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
 
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		DomainID:   domainID,
@@ -97,13 +98,13 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 
 	releaseCalled := false
 
-	workflow := NewMocknDCWorkflow(s.controller)
+	workflow := ndc.NewMockWorkflow(s.controller)
 	context := execution.NewMockContext(s.controller)
 	mutableState := execution.NewMockMutableState(s.controller)
 	var releaseFn execution.ReleaseFunc = func(error) { releaseCalled = true }
-	workflow.EXPECT().getContext().Return(context).AnyTimes()
-	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
-	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
+	workflow.EXPECT().GetContext().Return(context).AnyTimes()
+	workflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
+	workflow.EXPECT().GetReleaseFn().Return(releaseFn).AnyTimes()
 
 	workflowSnapshot := &persistence.WorkflowSnapshot{}
 	workflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
@@ -151,19 +152,19 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetReleaseCalled := false
 	currentReleaseCalled := false
 
-	targetWorkflow := NewMocknDCWorkflow(s.controller)
+	targetWorkflow := ndc.NewMockWorkflow(s.controller)
 	targetContext := execution.NewMockContext(s.controller)
 	targetMutableState := execution.NewMockMutableState(s.controller)
 	var targetReleaseFn execution.ReleaseFunc = func(error) { targetReleaseCalled = true }
-	targetWorkflow.EXPECT().getContext().Return(targetContext).AnyTimes()
-	targetWorkflow.EXPECT().getMutableState().Return(targetMutableState).AnyTimes()
-	targetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
+	targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
 
-	currentWorkflow := NewMocknDCWorkflow(s.controller)
+	currentWorkflow := ndc.NewMockWorkflow(s.controller)
 	currentMutableState := execution.NewMockMutableState(s.controller)
 	var currentReleaseFn execution.ReleaseFunc = func(error) { currentReleaseCalled = true }
-	currentWorkflow.EXPECT().getMutableState().Return(currentMutableState).AnyTimes()
-	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
+	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
+	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
@@ -180,14 +181,14 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
-	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
+	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 		RunID:      currentRunID,
 	}).AnyTimes()
-	currentWorkflow.EXPECT().getVectorClock().Return(currentLastWriteVersion, int64(0), nil)
+	currentWorkflow.EXPECT().GetVectorClock().Return(currentLastWriteVersion, int64(0), nil)
 
 	targetContext.EXPECT().PersistFirstWorkflowEvents(
 		targetWorkflowEventsSeq[0],
@@ -219,17 +220,17 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetReleaseCalled := false
 	currentReleaseCalled := false
 
-	targetWorkflow := NewMocknDCWorkflow(s.controller)
+	targetWorkflow := ndc.NewMockWorkflow(s.controller)
 	targetContext := execution.NewMockContext(s.controller)
 	targetMutableState := execution.NewMockMutableState(s.controller)
 	var targetReleaseFn execution.ReleaseFunc = func(error) { targetReleaseCalled = true }
-	targetWorkflow.EXPECT().getContext().Return(targetContext).AnyTimes()
-	targetWorkflow.EXPECT().getMutableState().Return(targetMutableState).AnyTimes()
-	targetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
+	targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
 
-	currentWorkflow := NewMocknDCWorkflow(s.controller)
+	currentWorkflow := ndc.NewMockWorkflow(s.controller)
 	var currentReleaseFn execution.ReleaseFunc = func(error) { currentReleaseCalled = true }
-	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
+	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -251,8 +252,8 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
-	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
-	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(execution.TransactionPolicyPassive, nil).Times(1)
+	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
+	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(execution.TransactionPolicyPassive, nil).Times(1)
 
 	targetContext.EXPECT().PersistFirstWorkflowEvents(
 		targetWorkflowEventsSeq[0],
@@ -285,17 +286,17 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetReleaseCalled := false
 	currentReleaseCalled := false
 
-	targetWorkflow := NewMocknDCWorkflow(s.controller)
+	targetWorkflow := ndc.NewMockWorkflow(s.controller)
 	targetContext := execution.NewMockContext(s.controller)
 	targetMutableState := execution.NewMockMutableState(s.controller)
 	var targetReleaseFn execution.ReleaseFunc = func(error) { targetReleaseCalled = true }
-	targetWorkflow.EXPECT().getContext().Return(targetContext).AnyTimes()
-	targetWorkflow.EXPECT().getMutableState().Return(targetMutableState).AnyTimes()
-	targetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
+	targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
 
-	currentWorkflow := NewMocknDCWorkflow(s.controller)
+	currentWorkflow := ndc.NewMockWorkflow(s.controller)
 	var currentReleaseFn execution.ReleaseFunc = func(error) { currentReleaseCalled = true }
-	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
+	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -317,8 +318,8 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
-	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
-	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(execution.TransactionPolicyPassive, nil).Times(1)
+	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
+	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(execution.TransactionPolicyPassive, nil).Times(1)
 
 	targetContext.EXPECT().PersistFirstWorkflowEvents(
 		targetWorkflowEventsSeq[0],
@@ -351,21 +352,21 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 	targetReleaseCalled := false
 	currentReleaseCalled := false
 
-	targetWorkflow := NewMocknDCWorkflow(s.controller)
+	targetWorkflow := ndc.NewMockWorkflow(s.controller)
 	targetContext := execution.NewMockContext(s.controller)
 	targetMutableState := execution.NewMockMutableState(s.controller)
 	var targetReleaseFn execution.ReleaseFunc = func(error) { targetReleaseCalled = true }
-	targetWorkflow.EXPECT().getContext().Return(targetContext).AnyTimes()
-	targetWorkflow.EXPECT().getMutableState().Return(targetMutableState).AnyTimes()
-	targetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
+	targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
 
-	currentWorkflow := NewMocknDCWorkflow(s.controller)
+	currentWorkflow := ndc.NewMockWorkflow(s.controller)
 	currentContext := execution.NewMockContext(s.controller)
 	currentMutableState := execution.NewMockMutableState(s.controller)
 	var currentReleaseFn execution.ReleaseFunc = func(error) { currentReleaseCalled = true }
-	currentWorkflow.EXPECT().getContext().Return(currentContext).AnyTimes()
-	currentWorkflow.EXPECT().getMutableState().Return(currentMutableState).AnyTimes()
-	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
+	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
+	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
+	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		DomainID:   domainID,
@@ -376,11 +377,11 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
 
-	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
+	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	currentWorkflowPolicy := execution.TransactionPolicyActive
-	currentWorkflow.EXPECT().suppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil).Times(1)
-	targetWorkflow.EXPECT().revive().Return(nil).Times(1)
+	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil).Times(1)
+	targetWorkflow.EXPECT().Revive().Return(nil).Times(1)
 
 	currentContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		now,

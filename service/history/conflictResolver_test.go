@@ -45,6 +45,7 @@ import (
 	"github.com/uber/cadence/service/history/events"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
+	test "github.com/uber/cadence/service/history/testing"
 )
 
 type (
@@ -123,9 +124,9 @@ func (s *conflictResolverSuite) SetupTest() {
 	}
 	s.mockShard.SetEngine(h)
 
-	s.mockContext = execution.NewContext(testDomainID, shared.WorkflowExecution{
+	s.mockContext = execution.NewContext(test.DomainID, shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	s.conflictResolver = newConflictResolver(s.mockShard, s.mockContext, s.mockHistoryV2Mgr, s.logger)
 

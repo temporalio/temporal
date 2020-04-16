@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package task
 
 import (
 	"time"
@@ -33,13 +33,13 @@ import (
 
 type (
 	standbyActionFn     func(execution.Context, execution.MutableState) (interface{}, error)
-	standbyPostActionFn func(queueTaskInfo, interface{}, log.Logger) error
+	standbyPostActionFn func(Info, interface{}, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time
 )
 
 func standbyTaskPostActionNoOp(
-	taskInfo queueTaskInfo,
+	taskInfo Info,
 	postActionInfo interface{},
 	logger log.Logger,
 ) error {
@@ -53,7 +53,7 @@ func standbyTaskPostActionNoOp(
 }
 
 func standbyTransferTaskPostActionTaskDiscarded(
-	taskInfo queueTaskInfo,
+	taskInfo Info,
 	postActionInfo interface{},
 	logger log.Logger,
 ) error {
@@ -76,7 +76,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 }
 
 func standbyTimerTaskPostActionTaskDiscarded(
-	taskInfo queueTaskInfo,
+	taskInfo Info,
 	postActionInfo interface{},
 	logger log.Logger,
 ) error {
@@ -180,7 +180,7 @@ func getHistoryResendInfo(
 }
 
 func getStandbyPostActionFn(
-	taskInfo queueTaskInfo,
+	taskInfo Info,
 	standbyNow standbyCurrentTimeFn,
 	standbyTaskMissingEventsResendDelay time.Duration,
 	standbyTaskMissingEventsDiscardDelay time.Duration,

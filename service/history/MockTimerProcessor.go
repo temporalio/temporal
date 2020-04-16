@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history/task"
 )
 
 // MockTimerProcessor is used as mock implementation for timerProcessor
@@ -65,15 +66,15 @@ func (_m *MockTimerProcessor) complete(task *taskInfo) {
 }
 
 // getTaskFilter is mock implementation for process of timerProcessor
-func (_m *MockTimerProcessor) getTaskFilter() taskFilter {
+func (_m *MockTimerProcessor) getTaskFilter() task.Filter {
 	ret := _m.Called()
 
-	var r0 taskFilter
-	if rf, ok := ret.Get(0).(func() taskFilter); ok {
+	var r0 task.Filter
+	if rf, ok := ret.Get(0).(func() task.Filter); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(taskFilter)
+			r0 = ret.Get(0).(task.Filter)
 		}
 	}
 

@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/shard"
+	"github.com/uber/cadence/service/history/task"
 )
 
 const (
@@ -45,10 +46,10 @@ type (
 
 		currentClusterName string
 		shard              shard.Context
-		transferTaskFilter taskFilter
+		transferTaskFilter task.Filter
 		logger             log.Logger
 		metricsClient      metrics.Client
-		taskExecutor       queueTaskExecutor
+		taskExecutor       task.Executor
 	}
 )
 
@@ -59,7 +60,7 @@ func newTransferQueueActiveProcessor(
 	matchingClient matching.Client,
 	historyClient history.Client,
 	taskAllocator taskAllocator,
-	queueTaskProcessor queueTaskProcessor,
+	queueTaskProcessor task.Processor,
 	logger log.Logger,
 ) *transferQueueActiveProcessorImpl {
 
@@ -81,7 +82,7 @@ func newTransferQueueActiveProcessor(
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
-	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
+	transferTaskFilter := func(taskInfo task.Info) (bool, error) {
 		task, ok := taskInfo.(*persistence.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
@@ -105,9 +106,12 @@ func newTransferQueueActiveProcessor(
 		logger:             logger,
 		metricsClient:      historyService.metricsClient,
 		transferTaskFilter: transferTaskFilter,
-		taskExecutor: newTransferQueueActiveTaskExecutor(
+		taskExecutor: task.NewTransferActiveTaskExecutor(
 			shard,
-			historyService,
+			historyService.archivalClient,
+			historyService.executionCache,
+			historyService.resetor,
+			historyService.workflowResetter,
 			logger,
 			historyService.metricsClient,
 			config,
@@ -132,8 +136,8 @@ func newTransferQueueActiveProcessor(
 
 	redispatchQueue := collection.NewConcurrentQueue()
 
-	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
-		return newTransferQueueTask(
+	transferQueueTaskInitializer := func(taskInfo task.Info) task.Task {
+		return task.NewTransferTask(
 			shard,
 			taskInfo,
 			historyService.metricsClient.Scope(
@@ -179,7 +183,7 @@ func newTransferQueueFailoverProcessor(
 	minLevel int64,
 	maxLevel int64,
 	taskAllocator taskAllocator,
-	queueTaskProcessor queueTaskProcessor,
+	queueTaskProcessor task.Processor,
 	logger log.Logger,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 
@@ -207,7 +211,7 @@ func newTransferQueueFailoverProcessor(
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
 
-	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
+	transferTaskFilter := func(taskInfo task.Info) (bool, error) {
 		task, ok := taskInfo.(*persistence.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
@@ -240,9 +244,12 @@ func newTransferQueueFailoverProcessor(
 		logger:             logger,
 		metricsClient:      historyService.metricsClient,
 		transferTaskFilter: transferTaskFilter,
-		taskExecutor: newTransferQueueActiveTaskExecutor(
+		taskExecutor: task.NewTransferActiveTaskExecutor(
 			shard,
-			historyService,
+			historyService.archivalClient,
+			historyService.executionCache,
+			historyService.resetor,
+			historyService.workflowResetter,
 			logger,
 			historyService.metricsClient,
 			config,
@@ -267,8 +274,8 @@ func newTransferQueueFailoverProcessor(
 
 	redispatchQueue := collection.NewConcurrentQueue()
 
-	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
-		return newTransferQueueTask(
+	transferQueueTaskInitializer := func(taskInfo task.Info) task.Task {
+		return task.NewTransferTask(
 			shard,
 			taskInfo,
 			historyService.metricsClient.Scope(
@@ -302,7 +309,7 @@ func newTransferQueueFailoverProcessor(
 	return updateTransferAckLevel, processor
 }
 
-func (t *transferQueueActiveProcessorImpl) getTaskFilter() taskFilter {
+func (t *transferQueueActiveProcessorImpl) getTaskFilter() task.Filter {
 	return t.transferTaskFilter
 }
 
@@ -322,5 +329,5 @@ func (t *transferQueueActiveProcessorImpl) process(
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), true)
-	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
+	return metricScope, t.taskExecutor.Execute(taskInfo.task, taskInfo.shouldProcessTask)
 }

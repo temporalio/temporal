@@ -33,6 +33,8 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+
+	ndc "github.com/uber/cadence/service/history/ndc"
 )
 
 // MocknDCTransactionMgrForExistingWorkflow is a mock of nDCTransactionMgrForExistingWorkflow interface
@@ -59,7 +61,7 @@ func (m *MocknDCTransactionMgrForExistingWorkflow) EXPECT() *MocknDCTransactionM
 }
 
 // dispatchForExistingWorkflow mocks base method
-func (m *MocknDCTransactionMgrForExistingWorkflow) dispatchForExistingWorkflow(ctx context.Context, now time.Time, isWorkflowRebuilt bool, targetWorkflow, newWorkflow nDCWorkflow) error {
+func (m *MocknDCTransactionMgrForExistingWorkflow) dispatchForExistingWorkflow(ctx context.Context, now time.Time, isWorkflowRebuilt bool, targetWorkflow, newWorkflow ndc.Workflow) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "dispatchForExistingWorkflow", ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	ret0, _ := ret[0].(error)

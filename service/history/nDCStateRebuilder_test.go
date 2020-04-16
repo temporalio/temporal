@@ -43,6 +43,7 @@ import (
 	"github.com/uber/cadence/service/history/events"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
+	test "github.com/uber/cadence/service/history/testing"
 )
 
 type (
@@ -112,7 +113,7 @@ func (s *nDCStateRebuilderSuite) TearDownTest() {
 }
 
 func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
-	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(testGlobalDomainEntry)
+	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(test.GlobalDomainEntry)
 	s.NotNil(mutableState)
 	s.NotNil(stateBuilder)
 	s.NotNil(mutableState.GetVersionHistories())

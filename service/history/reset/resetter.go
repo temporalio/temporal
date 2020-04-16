@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,46 +18,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination resetter_mock.go
+
+package reset
 
 import (
-	"fmt"
+	"context"
 
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/service/history/task"
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/service/history/ndc"
 )
 
-func initializeLoggerForTask(
-	shardID int,
-	task task.Info,
-	logger log.Logger,
-) log.Logger {
-
-	taskLogger := logger.WithTags(
-		tag.ShardID(shardID),
-		tag.TaskID(task.GetTaskID()),
-		tag.TaskVisibilityTimestamp(task.GetVisibilityTimestamp().UnixNano()),
-		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowDomainID(task.GetDomainID()),
-		tag.WorkflowID(task.GetWorkflowID()),
-		tag.WorkflowRunID(task.GetRunID()),
-	)
-
-	switch task := task.(type) {
-	case *persistence.TimerTaskInfo:
-		taskLogger = taskLogger.WithTags(
-			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
-		)
-	case *persistence.TransferTaskInfo:
-		// noop
-	case *persistence.ReplicationTaskInfo:
-		// noop
-	default:
-		taskLogger.Error(fmt.Sprintf("Unknown queue task type: %v", task))
+type (
+	// WorkflowResetter is the new NDC compatible workflow reset component
+	WorkflowResetter interface {
+		ResetWorkflow(
+			ctx context.Context,
+			domainID string,
+			workflowID string,
+			baseRunID string,
+			baseBranchToken []byte,
+			baseRebuildLastEventID int64,
+			baseRebuildLastEventVersion int64,
+			baseNextEventID int64,
+			resetRunID string,
+			resetRequestID string,
+			currentWorkflow ndc.Workflow,
+			resetReason string,
+			additionalReapplyEvents []*shared.HistoryEvent,
+		) error
 	}
-
-	return taskLogger
-}
+)

@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package ndc
 
 import (
 	"context"
@@ -90,7 +90,7 @@ func (s *nDCWorkflowSuite) TestGetMethods() {
 		LastEventTaskID: lastEventTaskID,
 	}).AnyTimes()
 
-	nDCWorkflow := newNDCWorkflow(
+	nDCWorkflow := NewWorkflow(
 		context.Background(),
 		s.mockDomainCache,
 		s.mockClusterMetadata,
@@ -99,15 +99,15 @@ func (s *nDCWorkflowSuite) TestGetMethods() {
 		execution.NoopReleaseFn,
 	)
 
-	s.Equal(s.mockContext, nDCWorkflow.getContext())
-	s.Equal(s.mockMutableState, nDCWorkflow.getMutableState())
+	s.Equal(s.mockContext, nDCWorkflow.GetContext())
+	s.Equal(s.mockMutableState, nDCWorkflow.GetMutableState())
 	// NOTE golang does not seem to let people compare functions, easily
 	//  link: https://github.com/stretchr/testify/issues/182
 	// this is a hack to compare 2 functions, being the same
 	expectedReleaseFn := runtime.FuncForPC(reflect.ValueOf(execution.NoopReleaseFn).Pointer()).Name()
-	actualReleaseFn := runtime.FuncForPC(reflect.ValueOf(nDCWorkflow.getReleaseFn()).Pointer()).Name()
+	actualReleaseFn := runtime.FuncForPC(reflect.ValueOf(nDCWorkflow.GetReleaseFn()).Pointer()).Name()
 	s.Equal(expectedReleaseFn, actualReleaseFn)
-	version, taskID, err := nDCWorkflow.getVectorClock()
+	version, taskID, err := nDCWorkflow.GetVectorClock()
 	s.NoError(err)
 	s.Equal(lastEventVersion, version)
 	s.Equal(lastEventTaskID, taskID)
@@ -170,7 +170,7 @@ func (s *nDCWorkflowSuite) TestHappensAfter_SameVersion_LatrgerTaskID() {
 }
 
 func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
-	nDCWorkflow := newNDCWorkflow(
+	nDCWorkflow := NewWorkflow(
 		context.Background(),
 		s.mockDomainCache,
 		s.mockClusterMetadata,
@@ -181,7 +181,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 
 	incomingMockContext := execution.NewMockContext(s.controller)
 	incomingMockMutableState := execution.NewMockMutableState(s.controller)
-	incomingNDCWorkflow := newNDCWorkflow(
+	incomingNDCWorkflow := NewWorkflow(
 		context.Background(),
 		s.mockDomainCache,
 		s.mockClusterMetadata,
@@ -212,7 +212,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Error() {
 		LastEventTaskID: incomingLastEventTaskID,
 	}).AnyTimes()
 
-	_, err := nDCWorkflow.suppressBy(incomingNDCWorkflow)
+	_, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.Error(err)
 }
 
@@ -228,7 +228,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 		RunID:           s.runID,
 		LastEventTaskID: lastEventTaskID,
 	}).AnyTimes()
-	nDCWorkflow := newNDCWorkflow(
+	nDCWorkflow := NewWorkflow(
 		context.Background(),
 		s.mockDomainCache,
 		s.mockClusterMetadata,
@@ -242,7 +242,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	incomingLastEventVersion := lastEventVersion + 1
 	incomingMockContext := execution.NewMockContext(s.controller)
 	incomingMockMutableState := execution.NewMockMutableState(s.controller)
-	incomingNDCWorkflow := newNDCWorkflow(
+	incomingNDCWorkflow := NewWorkflow(
 		context.Background(),
 		s.mockDomainCache,
 		s.mockClusterMetadata,
@@ -283,17 +283,17 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
 
 	s.mockMutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		lastEventID+1, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity,
+		lastEventID+1, WorkflowTerminationReason, gomock.Any(), WorkflowTerminationIdentity,
 	).Return(&shared.HistoryEvent{}, nil).Times(1)
 
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(1)
-	policy, err := nDCWorkflow.suppressBy(incomingNDCWorkflow)
+	policy, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(execution.TransactionPolicyPassive, policy)
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(1)
-	policy, err = nDCWorkflow.suppressBy(incomingNDCWorkflow)
+	policy, err = nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(execution.TransactionPolicyActive, policy)
 }
@@ -311,7 +311,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		CloseStatus:     persistence.WorkflowCloseStatusNone,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	nDCWorkflow := newNDCWorkflow(
+	nDCWorkflow := NewWorkflow(
 		context.Background(),
 		s.mockDomainCache,
 		s.mockClusterMetadata,
@@ -325,7 +325,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	incomingLastEventVersion := lastEventVersion + 1
 	incomingMockContext := execution.NewMockContext(s.controller)
 	incomingMockMutableState := execution.NewMockMutableState(s.controller)
-	incomingNDCWorkflow := newNDCWorkflow(
+	incomingNDCWorkflow := NewWorkflow(
 		context.Background(),
 		s.mockDomainCache,
 		s.mockClusterMetadata,
@@ -346,12 +346,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(1)
-	policy, err := nDCWorkflow.suppressBy(incomingNDCWorkflow)
+	policy, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(execution.TransactionPolicyPassive, policy)
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(1)
-	policy, err = nDCWorkflow.suppressBy(incomingNDCWorkflow)
+	policy, err = nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(execution.TransactionPolicyPassive, policy)
 	s.Equal(persistence.WorkflowStateZombie, executionInfo.State)

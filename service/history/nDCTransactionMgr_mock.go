@@ -35,6 +35,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	persistence "github.com/uber/cadence/common/persistence"
+	ndc "github.com/uber/cadence/service/history/ndc"
 )
 
 // MocknDCTransactionMgr is a mock of nDCTransactionMgr interface
@@ -61,7 +62,7 @@ func (m *MocknDCTransactionMgr) EXPECT() *MocknDCTransactionMgrMockRecorder {
 }
 
 // createWorkflow mocks base method
-func (m *MocknDCTransactionMgr) createWorkflow(ctx context.Context, now time.Time, targetWorkflow nDCWorkflow) error {
+func (m *MocknDCTransactionMgr) createWorkflow(ctx context.Context, now time.Time, targetWorkflow ndc.Workflow) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "createWorkflow", ctx, now, targetWorkflow)
 	ret0, _ := ret[0].(error)
@@ -75,7 +76,7 @@ func (mr *MocknDCTransactionMgrMockRecorder) createWorkflow(ctx, now, targetWork
 }
 
 // updateWorkflow mocks base method
-func (m *MocknDCTransactionMgr) updateWorkflow(ctx context.Context, now time.Time, isWorkflowRebuilt bool, targetWorkflow, newWorkflow nDCWorkflow) error {
+func (m *MocknDCTransactionMgr) updateWorkflow(ctx context.Context, now time.Time, isWorkflowRebuilt bool, targetWorkflow, newWorkflow ndc.Workflow) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "updateWorkflow", ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	ret0, _ := ret[0].(error)
@@ -89,7 +90,7 @@ func (mr *MocknDCTransactionMgrMockRecorder) updateWorkflow(ctx, now, isWorkflow
 }
 
 // backfillWorkflow mocks base method
-func (m *MocknDCTransactionMgr) backfillWorkflow(ctx context.Context, now time.Time, targetWorkflow nDCWorkflow, targetWorkflowEvents *persistence.WorkflowEvents) error {
+func (m *MocknDCTransactionMgr) backfillWorkflow(ctx context.Context, now time.Time, targetWorkflow ndc.Workflow, targetWorkflowEvents *persistence.WorkflowEvents) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "backfillWorkflow", ctx, now, targetWorkflow, targetWorkflowEvents)
 	ret0, _ := ret[0].(error)
@@ -133,10 +134,10 @@ func (mr *MocknDCTransactionMgrMockRecorder) getCurrentWorkflowRunID(ctx, domain
 }
 
 // loadNDCWorkflow mocks base method
-func (m *MocknDCTransactionMgr) loadNDCWorkflow(ctx context.Context, domainID, workflowID, runID string) (nDCWorkflow, error) {
+func (m *MocknDCTransactionMgr) loadNDCWorkflow(ctx context.Context, domainID, workflowID, runID string) (ndc.Workflow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "loadNDCWorkflow", ctx, domainID, workflowID, runID)
-	ret0, _ := ret[0].(nDCWorkflow)
+	ret0, _ := ret[0].(ndc.Workflow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -166,10 +166,10 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 		return nil, err
 	}
 	defer func() {
-		baseWorkflow.getReleaseFn()(retError)
+		baseWorkflow.GetReleaseFn()(retError)
 	}()
 
-	baseVersionHistories := baseWorkflow.getMutableState().GetVersionHistories()
+	baseVersionHistories := baseWorkflow.GetMutableState().GetVersionHistories()
 	index, err := baseVersionHistories.FindFirstVersionHistoryIndexByItem(
 		persistence.NewVersionHistoryItem(baseLastEventID, baseLastEventVersion),
 	)

@@ -22,6 +22,8 @@ package history
 
 import (
 	"github.com/stretchr/testify/mock"
+
+	"github.com/uber/cadence/service/history/task"
 )
 
 // MockQueueAckMgr is used as mock implementation for QueueAckMgr
@@ -45,15 +47,15 @@ func (_m *MockQueueAckMgr) getFinishedChan() <-chan struct{} {
 }
 
 // readQueueTasks is mock implementation for readQueueTasks of QueueAckMgr
-func (_m *MockQueueAckMgr) readQueueTasks() ([]queueTaskInfo, bool, error) {
+func (_m *MockQueueAckMgr) readQueueTasks() ([]task.Info, bool, error) {
 	ret := _m.Called()
 
-	var r0 []queueTaskInfo
-	if rf, ok := ret.Get(0).(func() []queueTaskInfo); ok {
+	var r0 []task.Info
+	if rf, ok := ret.Get(0).(func() []task.Info); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]queueTaskInfo)
+			r0 = ret.Get(0).([]task.Info)
 		}
 	}
 

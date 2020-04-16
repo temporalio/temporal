@@ -24,7 +24,6 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -39,10 +38,7 @@ import (
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/shard"
-)
-
-var (
-	errUnknownTimerTask = errors.New("unknown timer task")
+	"github.com/uber/cadence/service/history/task"
 )
 
 type (
@@ -71,7 +67,7 @@ type (
 		isStarted              int32
 		isStopped              int32
 		shutdownChan           chan struct{}
-		queueTaskProcessor     queueTaskProcessor
+		queueTaskProcessor     task.Processor
 		activeTimerProcessor   *timerQueueActiveProcessorImpl
 		standbyTimerProcessors map[string]*timerQueueStandbyProcessorImpl
 	}
@@ -81,7 +77,7 @@ func newTimerQueueProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
 	matchingClient matching.Client,
-	queueTaskProcessor queueTaskProcessor,
+	queueTaskProcessor task.Processor,
 	logger log.Logger,
 ) timerQueueProcessor {
 

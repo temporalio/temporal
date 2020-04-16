@@ -18,9 +18,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package task
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -33,63 +34,85 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"github.com/uber/cadence/common/task"
+	ctask "github.com/uber/cadence/common/task"
 	"github.com/uber/cadence/service/history/shard"
 )
 
+const (
+	loadDomainEntryForTaskRetryDelay = 100 * time.Millisecond
+)
+
+var (
+	// ErrTaskDiscarded is the error indicating that the timer / transfer task is pending for too long and discarded.
+	ErrTaskDiscarded = errors.New("passive task pending for too long")
+	// ErrTaskRetry is the error indicating that the timer / transfer task should be retried.
+	ErrTaskRetry = errors.New("passive task should retry due to condition in mutable state is not met")
+)
+
 type (
-	queueTaskBase struct {
+	// TimerQueueAckMgr is the interface for acking timer task
+	TimerQueueAckMgr interface {
+		CompleteTimerTask(timerTask *persistence.TimerTaskInfo)
+	}
+
+	// QueueAckMgr is the interface for acking transfer task
+	QueueAckMgr interface {
+		CompleteQueueTask(taskID int64)
+	}
+
+	taskBase struct {
 		sync.Mutex
-		queueTaskInfo
+		Info
 
 		shard         shard.Context
-		state         task.State
+		state         ctask.State
 		priority      int
 		attempt       int
 		timeSource    clock.TimeSource
 		submitTime    time.Time
 		logger        log.Logger
 		scope         metrics.Scope
-		taskExecutor  queueTaskExecutor
+		taskExecutor  Executor
 		maxRetryCount dynamicconfig.IntPropertyFn
 
 		// TODO: following two fields should be removed after new task lifecycle is implemented
-		taskFilter        taskFilter
+		taskFilter        Filter
 		shouldProcessTask bool
 	}
 
-	// TODO: we don't need the following two implementations after rewriting queueAckMgr.
-	// (timer)queueAckMgr should store queueTask object instead of just the key. Then by
+	// TODO: we don't need the following two implementations after rewriting QueueAckMgr.
+	// (timer)QueueAckMgr should store queueTask object instead of just the key. Then by
 	// State() on the queueTask, it can know if the task has been acked or not.
-	timerQueueTask struct {
-		*queueTaskBase
+	timerTask struct {
+		*taskBase
 
-		ackMgr          timerQueueAckMgr
+		ackMgr          TimerQueueAckMgr
 		redispatchQueue collection.Queue
 	}
 
-	transferQueueTask struct {
-		*queueTaskBase
+	transferTask struct {
+		*taskBase
 
-		ackMgr          queueAckMgr
+		ackMgr          QueueAckMgr
 		redispatchQueue collection.Queue
 	}
 )
 
-func newTimerQueueTask(
+// NewTimerTask creates a new timer task
+func NewTimerTask(
 	shard shard.Context,
-	taskInfo queueTaskInfo,
+	taskInfo Info,
 	scope metrics.Scope,
 	logger log.Logger,
-	taskFilter taskFilter,
-	taskExecutor queueTaskExecutor,
+	taskFilter Filter,
+	taskExecutor Executor,
 	redispatchQueue collection.Queue,
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
-	ackMgr timerQueueAckMgr,
-) queueTask {
-	return &timerQueueTask{
-		queueTaskBase: newQueueTaskBase(
+	ackMgr TimerQueueAckMgr,
+) Task {
+	return &timerTask{
+		taskBase: newQueueTaskBase(
 			shard,
 			taskInfo,
 			scope,
@@ -104,20 +127,21 @@ func newTimerQueueTask(
 	}
 }
 
-func newTransferQueueTask(
+// NewTransferTask creates a new transfer task
+func NewTransferTask(
 	shard shard.Context,
-	taskInfo queueTaskInfo,
+	taskInfo Info,
 	scope metrics.Scope,
 	logger log.Logger,
-	taskFilter taskFilter,
-	taskExecutor queueTaskExecutor,
+	taskFilter Filter,
+	taskExecutor Executor,
 	redispatchQueue collection.Queue,
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
-	ackMgr queueAckMgr,
-) queueTask {
-	return &transferQueueTask{
-		queueTaskBase: newQueueTaskBase(
+	ackMgr QueueAckMgr,
+) Task {
+	return &transferTask{
+		taskBase: newQueueTaskBase(
 			shard,
 			taskInfo,
 			scope,
@@ -134,18 +158,18 @@ func newTransferQueueTask(
 
 func newQueueTaskBase(
 	shard shard.Context,
-	queueTaskInfo queueTaskInfo,
+	queueTaskInfo Info,
 	scope metrics.Scope,
 	logger log.Logger,
-	taskFilter taskFilter,
-	taskExecutor queueTaskExecutor,
+	taskFilter Filter,
+	taskExecutor Executor,
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
-) *queueTaskBase {
-	return &queueTaskBase{
-		queueTaskInfo: queueTaskInfo,
+) *taskBase {
+	return &taskBase{
+		Info:          queueTaskInfo,
 		shard:         shard,
-		state:         task.TaskStatePending,
+		state:         ctask.TaskStatePending,
 		scope:         scope,
 		logger:        logger,
 		attempt:       0,
@@ -157,55 +181,55 @@ func newQueueTaskBase(
 	}
 }
 
-func (t *timerQueueTask) Ack() {
-	t.queueTaskBase.Ack()
+func (t *timerTask) Ack() {
+	t.taskBase.Ack()
 
-	timerTask, ok := t.queueTaskInfo.(*persistence.TimerTaskInfo)
+	timerTask, ok := t.Info.(*persistence.TimerTaskInfo)
 	if !ok {
 		return
 	}
-	t.ackMgr.completeTimerTask(timerTask)
+	t.ackMgr.CompleteTimerTask(timerTask)
 }
 
-func (t *timerQueueTask) Nack() {
-	t.queueTaskBase.Nack()
+func (t *timerTask) Nack() {
+	t.taskBase.Nack()
 
-	// don't move redispatchQueue to queueTaskBase as we need to
-	// redispatch timeQueueTask, not queueTaskBase
+	// don't move redispatchQueue to taskBase as we need to
+	// redispatch timeQueueTask, not taskBase
 	t.redispatchQueue.Add(t)
 }
 
-func (t *timerQueueTask) GetQueueType() queueType {
-	return timerQueueType
+func (t *timerTask) GetQueueType() QueueType {
+	return QueueTypeTimer
 }
 
-func (t *transferQueueTask) Ack() {
-	t.queueTaskBase.Ack()
+func (t *transferTask) Ack() {
+	t.taskBase.Ack()
 
-	t.ackMgr.completeQueueTask(t.GetTaskID())
+	t.ackMgr.CompleteQueueTask(t.GetTaskID())
 }
 
-func (t *transferQueueTask) Nack() {
-	t.queueTaskBase.Nack()
+func (t *transferTask) Nack() {
+	t.taskBase.Nack()
 
-	// don't move redispatchQueue to queueTaskBase as we need to
-	// redispatch transferQueueTask, not queueTaskBase
+	// don't move redispatchQueue to taskBase as we need to
+	// redispatch transferTask, not taskBase
 	t.redispatchQueue.Add(t)
 }
 
-func (t *transferQueueTask) GetQueueType() queueType {
-	return transferQueueType
+func (t *transferTask) GetQueueType() QueueType {
+	return QueueTypeTransfer
 }
 
-func (t *queueTaskBase) Execute() error {
+func (t *taskBase) Execute() error {
 	// TODO: after mergering active and standby queue,
 	// the task should be smart enough to tell if it should be
 	// processed as active or standby and use the corresponding
 	// task executor.
 	var err error
-	t.shouldProcessTask, err = t.taskFilter(t.queueTaskInfo)
+	t.shouldProcessTask, err = t.taskFilter(t.Info)
 	if err != nil {
-		time.Sleep(loadDomainEntryForTimerTaskRetryDelay)
+		time.Sleep(loadDomainEntryForTaskRetryDelay)
 		return err
 	}
 
@@ -218,10 +242,10 @@ func (t *queueTaskBase) Execute() error {
 		}
 	}()
 
-	return t.taskExecutor.execute(t.queueTaskInfo, t.shouldProcessTask)
+	return t.taskExecutor.Execute(t.Info, t.shouldProcessTask)
 }
 
-func (t *queueTaskBase) HandleErr(
+func (t *taskBase) HandleErr(
 	err error,
 ) (retErr error) {
 	defer func() {
@@ -276,17 +300,17 @@ func (t *queueTaskBase) HandleErr(
 	return err
 }
 
-func (t *queueTaskBase) RetryErr(
+func (t *taskBase) RetryErr(
 	err error,
 ) bool {
 	return true
 }
 
-func (t *queueTaskBase) Ack() {
+func (t *taskBase) Ack() {
 	t.Lock()
 	defer t.Unlock()
 
-	t.state = task.TaskStateAcked
+	t.state = ctask.TaskStateAcked
 	if t.shouldProcessTask {
 		t.scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(t.attempt))
 		t.scope.RecordTimer(metrics.TaskLatency, time.Since(t.submitTime))
@@ -294,28 +318,28 @@ func (t *queueTaskBase) Ack() {
 	}
 }
 
-func (t *queueTaskBase) Nack() {
+func (t *taskBase) Nack() {
 	t.Lock()
 	defer t.Unlock()
 
-	t.state = task.TaskStateNacked
+	t.state = ctask.TaskStateNacked
 }
 
-func (t *queueTaskBase) State() task.State {
+func (t *taskBase) State() ctask.State {
 	t.Lock()
 	defer t.Unlock()
 
 	return t.state
 }
 
-func (t *queueTaskBase) Priority() int {
+func (t *taskBase) Priority() int {
 	t.Lock()
 	defer t.Unlock()
 
 	return t.priority
 }
 
-func (t *queueTaskBase) SetPriority(
+func (t *taskBase) SetPriority(
 	priority int,
 ) {
 	t.Lock()
@@ -324,6 +348,6 @@ func (t *queueTaskBase) SetPriority(
 	t.priority = priority
 }
 
-func (t *queueTaskBase) GetShard() shard.Context {
+func (t *taskBase) GetShard() shard.Context {
 	return t.shard
 }

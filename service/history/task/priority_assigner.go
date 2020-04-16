@@ -18,9 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination taskPriorityAssigner_mock.go -self_package github.com/uber/cadence/service/history
-
-package history
+package task
 
 import (
 	"sync"
@@ -36,11 +34,7 @@ import (
 )
 
 type (
-	taskPriorityAssigner interface {
-		Assign(queueTask) error
-	}
-
-	taskPriorityAssignerImpl struct {
+	priorityAssignerImpl struct {
 		sync.RWMutex
 
 		currentClusterName string
@@ -52,16 +46,17 @@ type (
 	}
 )
 
-var _ taskPriorityAssigner = (*taskPriorityAssignerImpl)(nil)
+var _ PriorityAssigner = (*priorityAssignerImpl)(nil)
 
-func newTaskPriorityAssigner(
+// NewPriorityAssigner creates a new task priority assigner
+func NewPriorityAssigner(
 	currentClusterName string,
 	domainCache cache.DomainCache,
 	logger log.Logger,
 	metricClient metrics.Client,
 	config *config.Config,
-) *taskPriorityAssignerImpl {
-	return &taskPriorityAssignerImpl{
+) PriorityAssigner {
+	return &priorityAssignerImpl{
 		currentClusterName: currentClusterName,
 		domainCache:        domainCache,
 		config:             config,
@@ -71,10 +66,10 @@ func newTaskPriorityAssigner(
 	}
 }
 
-func (a *taskPriorityAssignerImpl) Assign(
-	queueTask queueTask,
+func (a *priorityAssignerImpl) Assign(
+	queueTask Task,
 ) error {
-	if queueTask.GetQueueType() == replicationQueueType {
+	if queueTask.GetQueueType() == QueueTypeReplication {
 		queueTask.SetPriority(task.GetTaskPriority(task.LowPriorityClass, task.DefaultPrioritySubclass))
 		return nil
 	}
@@ -93,7 +88,7 @@ func (a *taskPriorityAssignerImpl) Assign(
 	if !a.getRateLimiter(domainName).Allow() {
 		queueTask.SetPriority(task.GetTaskPriority(task.DefaultPriorityClass, task.DefaultPrioritySubclass))
 		taggedScope := a.scope.Tagged(metrics.DomainTag(domainName))
-		if queueTask.GetQueueType() == transferQueueType {
+		if queueTask.GetQueueType() == QueueTypeTransfer {
 			taggedScope.IncCounter(metrics.TransferTaskThrottledCounter)
 		} else {
 			taggedScope.IncCounter(metrics.TimerTaskThrottledCounter)
@@ -109,7 +104,7 @@ func (a *taskPriorityAssignerImpl) Assign(
 //  1. domain name
 //  2. if domain is active
 //  3. error, if any
-func (a *taskPriorityAssignerImpl) getDomainInfo(
+func (a *priorityAssignerImpl) getDomainInfo(
 	domainID string,
 ) (string, bool, error) {
 	domainEntry, err := a.domainCache.GetDomainByID(domainID)
@@ -120,7 +115,7 @@ func (a *taskPriorityAssignerImpl) getDomainInfo(
 		}
 		// it is possible that the domain is deleted
 		// we should treat that domain as active
-		a.logger.Warn("Cannot find domain, treat as active task.", tag.WorkflowDomainID(domainID))
+		a.logger.Warn("Cannot find domain, treat as active ", tag.WorkflowDomainID(domainID))
 		return "", true, nil
 	}
 
@@ -130,7 +125,7 @@ func (a *taskPriorityAssignerImpl) getDomainInfo(
 	return domainEntry.GetInfo().Name, true, nil
 }
 
-func (a *taskPriorityAssignerImpl) getRateLimiter(
+func (a *priorityAssignerImpl) getRateLimiter(
 	domainName string,
 ) quotas.Limiter {
 	a.RLock()

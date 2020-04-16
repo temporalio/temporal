@@ -36,6 +36,7 @@ import (
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/shard"
+	"github.com/uber/cadence/service/history/task"
 )
 
 type (
@@ -126,7 +127,7 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 
 	moreInput := false
 	taskID1 := int64(59)
-	tasksInput := []queueTaskInfo{
+	tasksInput := []task.Info{
 		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
@@ -148,7 +149,7 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 
 	moreInput = true
 	taskID2 := int64(60)
-	tasksInput = []queueTaskInfo{
+	tasksInput = []task.Info{
 		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
@@ -176,7 +177,7 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 
 	moreInput := false
 	taskID := int64(59)
-	tasksInput := []queueTaskInfo{
+	tasksInput := []task.Info{
 		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
@@ -209,7 +210,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	taskID1 := int64(59)
 	taskID2 := int64(60)
 	taskID3 := int64(61)
-	tasksInput := []queueTaskInfo{
+	tasksInput := []task.Info{
 		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
@@ -314,7 +315,7 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 
 	moreInput := true
 	taskID1 := int64(59)
-	tasksInput := []queueTaskInfo{
+	tasksInput := []task.Info{
 		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
@@ -337,7 +338,7 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 
 	moreInput = false
 	taskID2 := int64(60)
-	tasksInput = []queueTaskInfo{
+	tasksInput = []task.Info{
 		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
@@ -367,7 +368,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 	moreInput := false
 	taskID1 := int64(59)
 	taskID2 := int64(60)
-	tasksInput := []queueTaskInfo{
+	tasksInput := []task.Info{
 		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",

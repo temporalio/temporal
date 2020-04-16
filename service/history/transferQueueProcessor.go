@@ -24,7 +24,6 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -40,10 +39,7 @@ import (
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/shard"
-)
-
-var (
-	errUnknownTransferTask = errors.New("Unknown transfer task")
+	"github.com/uber/cadence/service/history/task"
 )
 
 type (
@@ -54,8 +50,6 @@ type (
 		LockTaskProcessing()
 		UnlockTaskProcessing()
 	}
-
-	taskFilter func(task queueTaskInfo) (bool, error)
 
 	transferQueueProcessorImpl struct {
 		isGlobalDomainEnabled bool
@@ -73,7 +67,7 @@ type (
 		isStarted             int32
 		isStopped             int32
 		shutdownChan          chan struct{}
-		queueTaskProcessor    queueTaskProcessor
+		queueTaskProcessor    task.Processor
 		activeTaskProcessor   *transferQueueActiveProcessorImpl
 		standbyTaskProcessors map[string]*transferQueueStandbyProcessorImpl
 	}
@@ -85,7 +79,7 @@ func newTransferQueueProcessor(
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
 	historyClient history.Client,
-	queueTaskProcessor queueTaskProcessor,
+	queueTaskProcessor task.Processor,
 	logger log.Logger,
 ) *transferQueueProcessorImpl {
 

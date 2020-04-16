@@ -41,6 +41,7 @@ import (
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
+	test "github.com/uber/cadence/service/history/testing"
 )
 
 type (
@@ -117,7 +118,7 @@ func (s *replicatorQueueProcessorSuite) TearDownTest() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	domainName := "some random domain name"
-	domainID := testDomainID
+	domainID := test.DomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -158,7 +159,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	domainName := "some random domain name"
-	domainID := testDomainID
+	domainID := test.DomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -206,7 +207,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	domainName := "some random domain name"
-	domainID := testDomainID
+	domainID := test.DomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -255,7 +256,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	domainName := "some random domain name"
-	domainID := testDomainID
+	domainID := test.DomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -365,7 +366,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	domainName := "some random domain name"
-	domainID := testDomainID
+	domainID := test.DomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)

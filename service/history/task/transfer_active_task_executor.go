@@ -18,10 +18,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package task
 
 import (
 	ctx "context"
+	"errors"
 	"fmt"
 
 	"github.com/pborman/uuid"
@@ -37,8 +38,15 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/ndc"
+	"github.com/uber/cadence/service/history/reset"
 	"github.com/uber/cadence/service/history/shard"
+	"github.com/uber/cadence/service/worker/archiver"
 	"github.com/uber/cadence/service/worker/parentclosepolicy"
+)
+
+const (
+	identityHistoryService = "history-service"
 )
 
 var (
@@ -48,26 +56,38 @@ var (
 	ErrMissingSignalInfo = &workflow.InternalServiceError{Message: "unable to get signal info"}
 )
 
+var (
+	errUnknownTransferTask = errors.New("Unknown transfer task")
+)
+
 type (
-	transferQueueActiveTaskExecutor struct {
-		*transferQueueTaskExecutorBase
+	transferActiveTaskExecutor struct {
+		*transferTaskExecutorBase
 
 		historyClient           history.Client
 		parentClosePolicyClient parentclosepolicy.Client
+		workflowResetor         reset.WorkflowResetor
+		workflowResetter        reset.WorkflowResetter
 	}
 )
 
-func newTransferQueueActiveTaskExecutor(
+// NewTransferActiveTaskExecutor creates a new task executor for active transfer task
+func NewTransferActiveTaskExecutor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	archiverClient archiver.Client,
+	executionCache *execution.Cache,
+	workflowResetor reset.WorkflowResetor,
+	workflowResetter reset.WorkflowResetter,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *config.Config,
-) queueTaskExecutor {
-	return &transferQueueActiveTaskExecutor{
-		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
+) Executor {
+
+	return &transferActiveTaskExecutor{
+		transferTaskExecutorBase: newTransferTaskExecutorBase(
 			shard,
-			historyService,
+			archiverClient,
+			executionCache,
 			logger,
 			metricsClient,
 			config,
@@ -76,20 +96,20 @@ func newTransferQueueActiveTaskExecutor(
 		parentClosePolicyClient: parentclosepolicy.NewClient(
 			shard.GetMetricsClient(),
 			shard.GetLogger(),
-			historyService.publicClient,
+			shard.GetService().GetSDKClient(),
 			config.NumParentClosePolicySystemWorkflows(),
 		),
 	}
 }
 
-func (t *transferQueueActiveTaskExecutor) execute(
-	taskInfo queueTaskInfo,
+func (t *transferActiveTaskExecutor) Execute(
+	taskInfo Info,
 	shouldProcessTask bool,
 ) error {
 
 	task, ok := taskInfo.(*persistence.TransferTaskInfo)
 	if !ok {
-		return errUnexpectedQueueTask
+		return errUnexpectedTask
 	}
 
 	if !shouldProcessTask {
@@ -120,11 +140,11 @@ func (t *transferQueueActiveTaskExecutor) execute(
 	}
 }
 
-func (t *transferQueueActiveTaskExecutor) processActivityTask(
+func (t *transferActiveTaskExecutor) processActivityTask(
 	task *persistence.TransferTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.GetOrCreateWorkflowExecutionForBackground(
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(task),
 	)
 	if err != nil {
@@ -142,7 +162,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	ai, ok := mutableState.GetActivityInfo(task.ScheduleID)
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(task.ScheduleID), tag.TaskType(persistence.TransferTaskTypeActivityTask))
+		t.logger.Debug("Potentially duplicate ", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(task.ScheduleID), tag.TaskType(persistence.TransferTaskTypeActivityTask))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, ai.Version, task.Version, task)
@@ -157,11 +177,11 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	return t.pushActivity(task, timeout)
 }
 
-func (t *transferQueueActiveTaskExecutor) processDecisionTask(
+func (t *transferActiveTaskExecutor) processDecisionTask(
 	task *persistence.TransferTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.GetOrCreateWorkflowExecutionForBackground(
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(task),
 	)
 	if err != nil {
@@ -179,7 +199,7 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 
 	decision, found := mutableState.GetDecisionInfo(task.ScheduleID)
 	if !found {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(task.ScheduleID), tag.TaskType(persistence.TransferTaskTypeDecisionTask))
+		t.logger.Debug("Potentially duplicate ", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(task.ScheduleID), tag.TaskType(persistence.TransferTaskTypeDecisionTask))
 		return nil
 	}
 	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, decision.Version, task.Version, task)
@@ -212,11 +232,11 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 	return t.pushDecision(task, taskList, decisionTimeout)
 }
 
-func (t *transferQueueActiveTaskExecutor) processCloseExecution(
+func (t *transferActiveTaskExecutor) processCloseExecution(
 	task *persistence.TransferTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.GetOrCreateWorkflowExecutionForBackground(
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(task),
 	)
 	if err != nil {
@@ -324,11 +344,11 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	return t.processParentClosePolicy(task.DomainID, domainName, children)
 }
 
-func (t *transferQueueActiveTaskExecutor) processCancelExecution(
+func (t *transferActiveTaskExecutor) processCancelExecution(
 	task *persistence.TransferTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.GetOrCreateWorkflowExecutionForBackground(
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(task),
 	)
 	if err != nil {
@@ -394,7 +414,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	}
 
 	t.logger.Debug(fmt.Sprintf(
-		"RequestCancel successfully recorded to external workflow execution.  WorkflowID: %v, RunID: %v",
+		"RequestCancel successfully recorded to external workflow execution.  task.WorkflowID: %v, RunID: %v",
 		task.TargetWorkflowID,
 		task.TargetRunID,
 	))
@@ -409,11 +429,11 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	)
 }
 
-func (t *transferQueueActiveTaskExecutor) processSignalExecution(
+func (t *transferActiveTaskExecutor) processSignalExecution(
 	task *persistence.TransferTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.GetOrCreateWorkflowExecutionForBackground(
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(task),
 	)
 	if err != nil {
@@ -434,7 +454,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	if !ok {
 		// TODO: here we should also RemoveSignalMutableState from target workflow
 		// Otherwise, target SignalRequestID still can leak if shard restart after signalExternalExecutionCompleted
-		// To do that, probably need to add the SignalRequestID in transfer task.
+		// To do that, probably need to add the SignalRequestID in transfer
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, signalInfo.Version, task.Version, task)
@@ -485,7 +505,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 
 	t.logger.Debug(fmt.Sprintf(
-		"Signal successfully recorded to external workflow execution.  WorkflowID: %v, RunID: %v",
+		"Signal successfully recorded to external workflow execution.  task.WorkflowID: %v, RunID: %v",
 		task.TargetWorkflowID,
 		task.TargetRunID,
 	))
@@ -518,11 +538,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	})
 }
 
-func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
+func (t *transferActiveTaskExecutor) processStartChildExecution(
 	task *persistence.TransferTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.GetOrCreateWorkflowExecutionForBackground(
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(task),
 	)
 	if err != nil {
@@ -606,7 +626,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return err
 	}
 
-	t.logger.Debug(fmt.Sprintf("Child Execution started successfully.  WorkflowID: %v, RunID: %v",
+	t.logger.Debug(fmt.Sprintf("Child Execution started successfully.  task.WorkflowID: %v, RunID: %v",
 		*attributes.WorkflowId, childRunID))
 
 	// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
@@ -622,26 +642,26 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	})
 }
 
-func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStarted(
+func (t *transferActiveTaskExecutor) processRecordWorkflowStarted(
 	task *persistence.TransferTaskInfo,
 ) (retError error) {
 
 	return t.processRecordWorkflowStartedOrUpsertHelper(task, true)
 }
 
-func (t *transferQueueActiveTaskExecutor) processUpsertWorkflowSearchAttributes(
+func (t *transferActiveTaskExecutor) processUpsertWorkflowSearchAttributes(
 	task *persistence.TransferTaskInfo,
 ) (retError error) {
 
 	return t.processRecordWorkflowStartedOrUpsertHelper(task, false)
 }
 
-func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHelper(
+func (t *transferActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHelper(
 	task *persistence.TransferTaskInfo,
 	recordStart bool,
 ) (retError error) {
 
-	context, release, err := t.cache.GetOrCreateWorkflowExecutionForBackground(
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(task),
 	)
 	if err != nil {
@@ -716,11 +736,11 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 	)
 }
 
-func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
+func (t *transferActiveTaskExecutor) processResetWorkflow(
 	task *persistence.TransferTaskInfo,
 ) (retError error) {
 
-	currentContext, currentRelease, err := t.cache.GetOrCreateWorkflowExecutionForBackground(
+	currentContext, currentRelease, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(task),
 	)
 	if err != nil {
@@ -802,7 +822,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			WorkflowId: common.StringPtr(task.WorkflowID),
 			RunId:      common.StringPtr(resetPoint.GetRunId()),
 		}
-		baseContext, baseRelease, err = t.cache.GetOrCreateWorkflowExecutionForBackground(task.DomainID, baseExecution)
+		baseContext, baseRelease, err = t.executionCache.GetOrCreateWorkflowExecutionForBackground(task.DomainID, baseExecution)
 		if err != nil {
 			return err
 		}
@@ -832,7 +852,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	return nil
 }
 
-func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
+func (t *transferActiveTaskExecutor) recordChildExecutionStarted(
 	task *persistence.TransferTaskInfo,
 	context execution.Context,
 	initiatedAttributes *workflow.StartChildWorkflowExecutionInitiatedEventAttributes,
@@ -867,7 +887,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 		})
 }
 
-func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
+func (t *transferActiveTaskExecutor) recordStartChildExecutionFailed(
 	task *persistence.TransferTaskInfo,
 	context execution.Context,
 	initiatedAttributes *workflow.StartChildWorkflowExecutionInitiatedEventAttributes,
@@ -894,7 +914,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 
 // createFirstDecisionTask is used by StartChildExecution transfer task to create the first decision task for
 // child execution.
-func (t *transferQueueActiveTaskExecutor) createFirstDecisionTask(
+func (t *transferActiveTaskExecutor) createFirstDecisionTask(
 	domainID string,
 	execution *workflow.WorkflowExecution,
 ) error {
@@ -918,7 +938,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstDecisionTask(
 	return err
 }
 
-func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionCompleted(
+func (t *transferActiveTaskExecutor) requestCancelExternalExecutionCompleted(
 	task *persistence.TransferTaskInfo,
 	context execution.Context,
 	targetDomain string,
@@ -955,7 +975,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 	return err
 }
 
-func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
+func (t *transferActiveTaskExecutor) signalExternalExecutionCompleted(
 	task *persistence.TransferTaskInfo,
 	context execution.Context,
 	targetDomain string,
@@ -994,7 +1014,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 	return err
 }
 
-func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
+func (t *transferActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	task *persistence.TransferTaskInfo,
 	context execution.Context,
 	targetDomain string,
@@ -1033,7 +1053,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	return err
 }
 
-func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
+func (t *transferActiveTaskExecutor) signalExternalExecutionFailed(
 	task *persistence.TransferTaskInfo,
 	context execution.Context,
 	targetDomain string,
@@ -1074,7 +1094,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 	return err
 }
 
-func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
+func (t *transferActiveTaskExecutor) updateWorkflowExecution(
 	context execution.Context,
 	createDecisionTask bool,
 	action func(builder execution.MutableState) error,
@@ -1100,7 +1120,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 	return context.UpdateWorkflowExecutionAsActive(t.shard.GetTimeSource().Now())
 }
 
-func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetry(
+func (t *transferActiveTaskExecutor) requestCancelExternalExecutionWithRetry(
 	task *persistence.TransferTaskInfo,
 	targetDomain string,
 	requestCancelInfo *persistence.RequestCancelInfo,
@@ -1143,7 +1163,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 	return err
 }
 
-func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
+func (t *transferActiveTaskExecutor) signalExternalExecutionWithRetry(
 	task *persistence.TransferTaskInfo,
 	targetDomain string,
 	signalInfo *persistence.SignalInfo,
@@ -1180,7 +1200,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
-func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
+func (t *transferActiveTaskExecutor) startWorkflowWithRetry(
 	task *persistence.TransferTaskInfo,
 	domain string,
 	targetDomain string,
@@ -1242,7 +1262,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 	return response.GetRunId(), nil
 }
 
-func (t *transferQueueActiveTaskExecutor) resetWorkflow(
+func (t *transferActiveTaskExecutor) resetWorkflow(
 	task *persistence.TransferTaskInfo,
 	domain string,
 	reason string,
@@ -1264,7 +1284,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 
 	// TODO when NDC is rolled out, remove this block
 	if baseMutableState.GetVersionHistories() == nil {
-		_, err = t.historyService.resetor.ResetWorkflowExecution(
+		_, err = t.workflowResetor.ResetWorkflowExecution(
 			ctx,
 			&workflow.ResetWorkflowExecutionRequest{
 				Domain: common.StringPtr(domain),
@@ -1299,7 +1319,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 		baseNextEventID := baseMutableState.GetNextEventID()
 
-		err = t.historyService.workflowResetter.resetWorkflow(
+		err = t.workflowResetter.ResetWorkflow(
 			ctx,
 			domainID,
 			workflowID,
@@ -1310,7 +1330,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 			baseNextEventID,
 			resetRunID,
 			uuid.New(),
-			newNDCWorkflow(
+			ndc.NewWorkflow(
 				ctx,
 				t.shard.GetDomainCache(),
 				t.shard.GetClusterMetadata(),
@@ -1341,7 +1361,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	}
 }
 
-func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
+func (t *transferActiveTaskExecutor) processParentClosePolicy(
 	domainID string,
 	domainName string,
 	childInfos map[int64]*persistence.ChildExecutionInfo,
@@ -1397,7 +1417,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	return nil
 }
 
-func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
+func (t *transferActiveTaskExecutor) applyParentClosePolicy(
 	domainID string,
 	domainName string,
 	childInfo *persistence.ChildExecutionInfo,

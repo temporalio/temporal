@@ -21,12 +21,11 @@
 package history
 
 import (
-	"time"
-
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/shard"
+	"github.com/uber/cadence/service/history/task"
 )
 
 type (
@@ -44,12 +43,6 @@ type (
 		transferQueueShutdown  transferQueueShutdown
 		logger                 log.Logger
 	}
-)
-
-const (
-	secondsInDay = int32(24 * time.Hour / time.Second)
-
-	defaultDomainName = "defaultDomainName"
 )
 
 func newTransferQueueProcessorBase(
@@ -74,7 +67,7 @@ func newTransferQueueProcessorBase(
 
 func (t *transferQueueProcessorBase) readTasks(
 	readLevel int64,
-) ([]queueTaskInfo, bool, error) {
+) ([]task.Info, bool, error) {
 
 	response, err := t.executionManager.GetTransferTasks(&persistence.GetTransferTasksRequest{
 		ReadLevel:    readLevel,
@@ -86,7 +79,7 @@ func (t *transferQueueProcessorBase) readTasks(
 		return nil, false, err
 	}
 
-	tasks := make([]queueTaskInfo, len(response.Tasks))
+	tasks := make([]task.Info, len(response.Tasks))
 	for i := range response.Tasks {
 		tasks[i] = response.Tasks[i]
 	}

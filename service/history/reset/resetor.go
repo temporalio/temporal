@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,46 +18,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination resetor_mock.go
+
+package reset
 
 import (
-	"fmt"
+	"context"
 
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/service/history/task"
+	h "github.com/uber/cadence/.gen/go/history"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/service/history/execution"
 )
 
-func initializeLoggerForTask(
-	shardID int,
-	task task.Info,
-	logger log.Logger,
-) log.Logger {
+type (
+	// WorkflowResetor is deprecated: use WorkflowResetter instead when NDC is applies to all workflows
+	WorkflowResetor interface {
+		ResetWorkflowExecution(
+			ctx context.Context,
+			resetRequest *workflow.ResetWorkflowExecutionRequest,
+			baseContext execution.Context,
+			baseMutableState execution.MutableState,
+			currContext execution.Context,
+			currMutableState execution.MutableState,
+		) (response *workflow.ResetWorkflowExecutionResponse, retError error)
 
-	taskLogger := logger.WithTags(
-		tag.ShardID(shardID),
-		tag.TaskID(task.GetTaskID()),
-		tag.TaskVisibilityTimestamp(task.GetVisibilityTimestamp().UnixNano()),
-		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowDomainID(task.GetDomainID()),
-		tag.WorkflowID(task.GetWorkflowID()),
-		tag.WorkflowRunID(task.GetRunID()),
-	)
-
-	switch task := task.(type) {
-	case *persistence.TimerTaskInfo:
-		taskLogger = taskLogger.WithTags(
-			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
-		)
-	case *persistence.TransferTaskInfo:
-		// noop
-	case *persistence.ReplicationTaskInfo:
-		// noop
-	default:
-		taskLogger.Error(fmt.Sprintf("Unknown queue task type: %v", task))
+		ApplyResetEvent(
+			ctx context.Context,
+			request *h.ReplicateEventsRequest,
+			domainID, workflowID, currentRunID string,
+		) (retError error)
 	}
-
-	return taskLogger
-}
+)

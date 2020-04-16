@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package task
 
 import (
 	"errors"
@@ -33,20 +33,21 @@ import (
 )
 
 type (
-	queueTaskProcessorOptions struct {
-		schedulerType        task.SchedulerType
-		fifoSchedulerOptions *task.FIFOTaskSchedulerOptions
-		wRRSchedulerOptions  *task.WeightedRoundRobinTaskSchedulerOptions
+	// ProcessorOptions configs task processor
+	ProcessorOptions struct {
+		SchedulerType        task.SchedulerType
+		FifoSchedulerOptions *task.FIFOTaskSchedulerOptions
+		WRRSchedulerOptions  *task.WeightedRoundRobinTaskSchedulerOptions
 	}
 
-	queueTaskProcessorImpl struct {
+	processorImpl struct {
 		sync.RWMutex
 
-		priorityAssigner taskPriorityAssigner
+		priorityAssigner PriorityAssigner
 		schedulers       map[shard.Context]task.Scheduler
 
 		status        int32
-		options       *queueTaskProcessorOptions
+		options       *ProcessorOptions
 		logger        log.Logger
 		metricsClient metrics.Client
 
@@ -60,26 +61,27 @@ var (
 	errTaskProcessorNotRunning          = errors.New("queue task processor is not running")
 )
 
-func newQueueTaskProcessor(
-	priorityAssigner taskPriorityAssigner,
-	options *queueTaskProcessorOptions,
+// NewProcessor creates a new task processor
+func NewProcessor(
+	priorityAssigner PriorityAssigner,
+	options *ProcessorOptions,
 	logger log.Logger,
 	metricsClient metrics.Client,
-) (queueTaskProcessor, error) {
-	switch options.schedulerType {
+) (Processor, error) {
+	switch options.SchedulerType {
 	case task.SchedulerTypeFIFO:
-		if options.fifoSchedulerOptions == nil {
+		if options.FifoSchedulerOptions == nil {
 			return nil, errTaskSchedulerOptionsNotSpecified
 		}
 	case task.SchedulerTypeWRR:
-		if options.wRRSchedulerOptions == nil {
+		if options.WRRSchedulerOptions == nil {
 			return nil, errTaskSchedulerOptionsNotSpecified
 		}
 	default:
 		return nil, errUnknownTaskSchedulerType
 	}
 
-	return &queueTaskProcessorImpl{
+	return &processorImpl{
 		priorityAssigner: priorityAssigner,
 		schedulers:       make(map[shard.Context]task.Scheduler),
 		status:           common.DaemonStatusInitialized,
@@ -89,7 +91,7 @@ func newQueueTaskProcessor(
 	}, nil
 }
 
-func (p *queueTaskProcessorImpl) Start() {
+func (p *processorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&p.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
@@ -97,7 +99,7 @@ func (p *queueTaskProcessorImpl) Start() {
 	p.logger.Info("Queue task processor started.")
 }
 
-func (p *queueTaskProcessorImpl) Stop() {
+func (p *processorImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&p.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -113,7 +115,7 @@ func (p *queueTaskProcessorImpl) Stop() {
 	p.logger.Info("Queue task processor stopped.")
 }
 
-func (p *queueTaskProcessorImpl) StopShardProcessor(
+func (p *processorImpl) StopShardProcessor(
 	shard shard.Context,
 ) {
 	p.Lock()
@@ -130,8 +132,8 @@ func (p *queueTaskProcessorImpl) StopShardProcessor(
 	scheduler.Stop()
 }
 
-func (p *queueTaskProcessorImpl) Submit(
-	task queueTask,
+func (p *processorImpl) Submit(
+	task Task,
 ) error {
 	scheduler, err := p.prepareSubmit(task)
 	if err != nil {
@@ -140,8 +142,8 @@ func (p *queueTaskProcessorImpl) Submit(
 	return scheduler.Submit(task)
 }
 
-func (p *queueTaskProcessorImpl) TrySubmit(
-	task queueTask,
+func (p *processorImpl) TrySubmit(
+	task Task,
 ) (bool, error) {
 	scheduler, err := p.prepareSubmit(task)
 	if err != nil {
@@ -150,8 +152,8 @@ func (p *queueTaskProcessorImpl) TrySubmit(
 	return scheduler.TrySubmit(task)
 }
 
-func (p *queueTaskProcessorImpl) prepareSubmit(
-	task queueTask,
+func (p *processorImpl) prepareSubmit(
+	task Task,
 ) (task.Scheduler, error) {
 	if err := p.priorityAssigner.Assign(task); err != nil {
 		return nil, err
@@ -160,7 +162,7 @@ func (p *queueTaskProcessorImpl) prepareSubmit(
 	return p.getOrCreateTaskScheduler(task.GetShard())
 }
 
-func (p *queueTaskProcessorImpl) getOrCreateTaskScheduler(
+func (p *processorImpl) getOrCreateTaskScheduler(
 	shard shard.Context,
 ) (task.Scheduler, error) {
 	p.RLock()
@@ -183,18 +185,18 @@ func (p *queueTaskProcessorImpl) getOrCreateTaskScheduler(
 
 	var scheduler task.Scheduler
 	var err error
-	switch p.options.schedulerType {
+	switch p.options.SchedulerType {
 	case task.SchedulerTypeFIFO:
 		scheduler = task.NewFIFOTaskScheduler(
 			p.logger,
 			p.metricsClient,
-			p.options.fifoSchedulerOptions,
+			p.options.FifoSchedulerOptions,
 		)
 	case task.SchedulerTypeWRR:
 		scheduler, err = task.NewWeightedRoundRobinTaskScheduler(
 			p.logger,
 			p.metricsClient,
-			p.options.wRRSchedulerOptions,
+			p.options.WRRSchedulerOptions,
 		)
 	default:
 		err = errUnknownTaskSchedulerType
@@ -213,6 +215,6 @@ func (p *queueTaskProcessorImpl) getOrCreateTaskScheduler(
 	return scheduler, nil
 }
 
-func (p *queueTaskProcessorImpl) isRunning() bool {
+func (p *processorImpl) isRunning() bool {
 	return atomic.LoadInt32(&p.status) == common.DaemonStatusStarted
 }

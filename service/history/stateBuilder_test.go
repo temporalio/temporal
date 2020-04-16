@@ -40,6 +40,7 @@ import (
 	"github.com/uber/cadence/service/history/events"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
+	test "github.com/uber/cadence/service/history/testing"
 )
 
 type (
@@ -151,7 +152,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 	requestID := uuid.New()
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
@@ -162,7 +163,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 	now := time.Now()
 	evenType := shared.EventTypeWorkflowExecutionStarted
 	startWorkflowAttribute := &shared.WorkflowExecutionStartedEventAttributes{
-		ParentWorkflowDomain: common.StringPtr(testParentDomainName),
+		ParentWorkflowDomain: common.StringPtr(test.ParentDomainName),
 	}
 
 	event := &shared.HistoryEvent{
@@ -173,8 +174,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 		WorkflowExecutionStartedEventAttributes: startWorkflowAttribute,
 	}
 
-	s.mockDomainCache.EXPECT().GetDomain(testParentDomainName).Return(testGlobalParentDomainEntry, nil).Times(1)
-	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(&testParentDomainID, workflowExecution, requestID, event).Return(nil).Times(1)
+	s.mockDomainCache.EXPECT().GetDomain(test.ParentDomainName).Return(test.GlobalParentDomainEntry, nil).Times(1)
+	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(&test.ParentDomainID, workflowExecution, requestID, event).Return(nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	s.mockTaskGenerator.EXPECT().GenerateRecordWorkflowStartedTasks(
@@ -186,9 +187,9 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 		event,
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
-	s.mockMutableState.EXPECT().SetHistoryTree(testRunID).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().SetHistoryTree(test.RunID).Return(nil).Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -198,7 +199,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	requestID := uuid.New()
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
@@ -209,7 +210,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	now := time.Now()
 	evenType := shared.EventTypeWorkflowExecutionStarted
 	startWorkflowAttribute := &shared.WorkflowExecutionStartedEventAttributes{
-		ParentWorkflowDomain: common.StringPtr(testParentDomainName),
+		ParentWorkflowDomain: common.StringPtr(test.ParentDomainName),
 		Initiator:            shared.ContinueAsNewInitiatorCronSchedule.Ptr(),
 		FirstDecisionTaskBackoffSeconds: common.Int32Ptr(
 			int32(backoff.GetBackoffForNextSchedule(cronSchedule, now, now).Seconds()),
@@ -224,8 +225,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 		WorkflowExecutionStartedEventAttributes: startWorkflowAttribute,
 	}
 
-	s.mockDomainCache.EXPECT().GetDomain(testParentDomainName).Return(testGlobalParentDomainEntry, nil).Times(1)
-	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(&testParentDomainID, workflowExecution, requestID, event).Return(nil).Times(1)
+	s.mockDomainCache.EXPECT().GetDomain(test.ParentDomainName).Return(test.GlobalParentDomainEntry, nil).Times(1)
+	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(&test.ParentDomainID, workflowExecution, requestID, event).Return(nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	s.mockTaskGenerator.EXPECT().GenerateRecordWorkflowStartedTasks(
@@ -241,9 +242,9 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 		event,
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
-	s.mockMutableState.EXPECT().SetHistoryTree(testRunID).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().SetHistoryTree(test.RunID).Return(nil).Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -252,7 +253,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut()
 	requestID := uuid.New()
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -273,7 +274,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut()
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -282,7 +283,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	requestID := uuid.New()
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -302,7 +303,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 		s.stateBuilder.unixNanoToTime(event.GetTimestamp()),
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -311,7 +312,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed() {
 	requestID := uuid.New()
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -332,7 +333,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed() {
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -341,7 +342,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted(
 	requestID := uuid.New()
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -362,7 +363,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted(
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -371,7 +372,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCanceled()
 	requestID := uuid.New()
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -392,7 +393,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCanceled()
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -401,7 +402,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	requestID := uuid.New()
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 	parentWorkflowID := "some random parent workflow ID"
 	parentRunID := uuid.New()
@@ -430,7 +431,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		Timestamp: common.Int64Ptr(now.UnixNano()),
 		EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
 		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
-			ParentWorkflowDomain: common.StringPtr(testParentDomainName),
+			ParentWorkflowDomain: common.StringPtr(test.ParentDomainName),
 			ParentWorkflowExecution: &shared.WorkflowExecution{
 				WorkflowId: common.StringPtr(parentWorkflowID),
 				RunId:      common.StringPtr(parentRunID),
@@ -474,10 +475,10 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(continueAsNewEvent.GetVersion()).Return(s.sourceCluster).AnyTimes()
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionContinuedAsNewEvent(
 		continueAsNewEvent.GetEventId(),
-		testDomainID,
+		test.DomainID,
 		continueAsNewEvent,
 	).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().GetDomainEntry().Return(testGlobalDomainEntry).AnyTimes()
+	s.mockMutableState.EXPECT().GetDomainEntry().Return(test.GlobalDomainEntry).AnyTimes()
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
@@ -486,7 +487,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
 	// new workflow domain
-	s.mockDomainCache.EXPECT().GetDomain(testParentDomainName).Return(testGlobalParentDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(test.ParentDomainName).Return(test.GlobalParentDomainEntry, nil).AnyTimes()
 	// task for the new workflow
 	s.mockTaskGeneratorForNew.EXPECT().GenerateRecordWorkflowStartedTasks(
 		s.stateBuilder.unixNanoToTime(newRunStartedEvent.GetTimestamp()),
@@ -508,7 +509,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	).Return(nil).Times(1)
 
 	newRunStateBuilder, err := s.stateBuilder.applyEvents(
-		testDomainID, requestID, workflowExecution, s.toHistory(continueAsNewEvent), newRunEvents, false,
+		test.DomainID, requestID, workflowExecution, s.toHistory(continueAsNewEvent), newRunEvents, false,
 	)
 	s.Nil(err)
 	s.NotNil(newRunStateBuilder)
@@ -519,7 +520,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	requestID := uuid.New()
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -537,10 +538,10 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionContinuedAsNewEvent(
 		continueAsNewEvent.GetEventId(),
-		testDomainID,
+		test.DomainID,
 		continueAsNewEvent,
 	).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().GetDomainEntry().Return(testGlobalDomainEntry).AnyTimes()
+	s.mockMutableState.EXPECT().GetDomainEntry().Return(test.GlobalDomainEntry).AnyTimes()
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
@@ -549,9 +550,9 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
 	// new workflow domain
-	s.mockDomainCache.EXPECT().GetDomain(testParentDomainName).Return(testGlobalParentDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(test.ParentDomainName).Return(test.GlobalParentDomainEntry, nil).AnyTimes()
 	newRunStateBuilder, err := s.stateBuilder.applyEvents(
-		testDomainID, requestID, workflowExecution, s.toHistory(continueAsNewEvent), nil, false,
+		test.DomainID, requestID, workflowExecution, s.toHistory(continueAsNewEvent), nil, false,
 	)
 	s.Nil(err)
 	s.Nil(newRunStateBuilder)
@@ -563,7 +564,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionSignaled()
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -580,7 +581,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionSignaled()
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionSignaled(event).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -590,7 +591,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCancelRequ
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 	now := time.Now()
 	evenType := shared.EventTypeWorkflowExecutionCancelRequested
@@ -607,7 +608,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCancelRequ
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -617,7 +618,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeUpsertWorkflowSearchAttribu
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -637,7 +638,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeUpsertWorkflowSearchAttribu
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -647,7 +648,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeMarkerRecorded() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -663,7 +664,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeMarkerRecorded() {
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -675,7 +676,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -717,7 +718,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskStarted() {
@@ -726,7 +727,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskStarted() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -765,7 +766,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskStarted() {
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -775,7 +776,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskTimedOut() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -812,7 +813,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskTimedOut() {
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -822,7 +823,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskFailed() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -858,7 +859,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskFailed() {
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -868,7 +869,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskCompleted() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -890,7 +891,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskCompleted() {
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -902,7 +903,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -933,7 +934,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {
 	// need to be refreshed each time
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -943,7 +944,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerFired() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -963,7 +964,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerFired() {
 	// need to be refreshed each time
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -973,7 +974,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeCancelTimerFailed() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -990,7 +991,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeCancelTimerFailed() {
 	// assertion on timer generated is in `mockUpdateVersion` function, since activity / user timer
 	// need to be refreshed each time
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1000,7 +1001,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerCanceled() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1020,7 +1021,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerCanceled() {
 	// need to be refreshed each time
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1032,7 +1033,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1081,7 +1082,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 	// need to be refreshed each time
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1091,7 +1092,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskStarted() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1124,7 +1125,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskStarted() {
 	// need to be refreshed each time
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(startedEvent), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(startedEvent), nil, false)
 	s.Nil(err)
 }
 
@@ -1134,7 +1135,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskTimedOut() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1155,7 +1156,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskTimedOut() {
 	//	// need to be refreshed each time
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1165,7 +1166,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskFailed() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1185,7 +1186,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskFailed() {
 	// need to be refreshed each time
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1195,7 +1196,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCompleted() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1215,7 +1216,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCompleted() {
 	// need to be refreshed each time
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1225,7 +1226,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCancelRequested
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1242,7 +1243,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCancelRequested
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1252,7 +1253,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelActivityTaskFa
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1268,7 +1269,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelActivityTaskFa
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1278,7 +1279,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCanceled() {
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1298,7 +1299,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCanceled() {
 	// need to be refreshed each time
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1310,7 +1311,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 	targetWorkflowID := "some random target workflow ID"
 
@@ -1323,7 +1324,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 		Timestamp: common.Int64Ptr(now.UnixNano()),
 		EventType: &evenType,
 		StartChildWorkflowExecutionInitiatedEventAttributes: &shared.StartChildWorkflowExecutionInitiatedEventAttributes{
-			Domain:     common.StringPtr(testTargetDomainName),
+			Domain:     common.StringPtr(test.TargetDomainName),
 			WorkflowId: common.StringPtr(targetWorkflowID),
 		},
 	}
@@ -1334,7 +1335,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 		InitiatedEventBatchID: event.GetEventId(),
 		StartedID:             common.EmptyEventID,
 		CreateRequestID:       createRequestID,
-		DomainName:            testTargetDomainName,
+		DomainName:            test.TargetDomainName,
 	}
 
 	// the create request ID is generated inside, cannot assert equal
@@ -1349,7 +1350,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1359,7 +1360,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1376,7 +1377,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1386,7 +1387,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionStart
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1403,7 +1404,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionStart
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1413,7 +1414,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionTimed
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1430,7 +1431,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionTimed
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1440,7 +1441,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionTermi
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1457,7 +1458,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionTermi
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1467,7 +1468,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionFaile
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1484,7 +1485,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionFaile
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1494,7 +1495,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionCompl
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1511,7 +1512,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionCompl
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1523,7 +1524,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	targetWorkflowID := "some random target workflow ID"
@@ -1540,7 +1541,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 		Timestamp: common.Int64Ptr(now.UnixNano()),
 		EventType: &evenType,
 		RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &shared.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
-			Domain: common.StringPtr(testTargetDomainName),
+			Domain: common.StringPtr(test.TargetDomainName),
 			WorkflowExecution: &shared.WorkflowExecution{
 				WorkflowId: common.StringPtr(targetWorkflowID),
 				RunId:      common.StringPtr(targetRunID),
@@ -1567,7 +1568,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1577,7 +1578,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1594,7 +1595,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1604,7 +1605,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeExternalWorkflowExecutionCa
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1621,7 +1622,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeExternalWorkflowExecutionCa
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1631,7 +1632,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionCance
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1648,7 +1649,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionCance
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1659,7 +1660,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	requestID := uuid.New()
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 	targetWorkflowID := "some random target workflow ID"
 	targetRunID := uuid.New()
@@ -1677,7 +1678,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 		Timestamp: common.Int64Ptr(now.UnixNano()),
 		EventType: &evenType,
 		SignalExternalWorkflowExecutionInitiatedEventAttributes: &shared.SignalExternalWorkflowExecutionInitiatedEventAttributes{
-			Domain: common.StringPtr(testTargetDomainName),
+			Domain: common.StringPtr(test.TargetDomainName),
 			WorkflowExecution: &shared.WorkflowExecution{
 				WorkflowId: common.StringPtr(targetWorkflowID),
 				RunId:      common.StringPtr(targetRunID),
@@ -1708,7 +1709,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1718,7 +1719,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1735,7 +1736,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 
@@ -1745,7 +1746,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeExternalWorkflowExecutionSi
 
 	workflowExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+		RunId:      common.StringPtr(test.RunID),
 	}
 
 	now := time.Now()
@@ -1762,7 +1763,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeExternalWorkflowExecutionSi
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
-	_, err := s.stateBuilder.applyEvents(testDomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
+	_, err := s.stateBuilder.applyEvents(test.DomainID, requestID, workflowExecution, s.toHistory(event), nil, false)
 	s.Nil(err)
 }
 

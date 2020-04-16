@@ -18,9 +18,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package task
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -35,11 +36,17 @@ import (
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
+	"github.com/uber/cadence/service/worker/archiver"
+)
+
+var (
+	errUnexpectedTask   = errors.New("unexpected task")
+	errUnknownTimerTask = errors.New("unknown timer task")
 )
 
 type (
-	timerQueueStandbyTaskExecutor struct {
-		*timerQueueTaskExecutorBase
+	timerStandbyTaskExecutor struct {
+		*timerTaskExecutorBase
 
 		clusterName         string
 		historyRereplicator xdc.HistoryRereplicator
@@ -47,20 +54,23 @@ type (
 	}
 )
 
-func newTimerQueueStandbyTaskExecutor(
+// NewTimerStandbyTaskExecutor creates a new task executor for standby timer task
+func NewTimerStandbyTaskExecutor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	archiverClient archiver.Client,
+	executionCache *execution.Cache,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	clusterName string,
 	config *config.Config,
-) queueTaskExecutor {
-	return &timerQueueStandbyTaskExecutor{
-		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
+) Executor {
+	return &timerStandbyTaskExecutor{
+		timerTaskExecutorBase: newTimerTaskExecutorBase(
 			shard,
-			historyService,
+			archiverClient,
+			executionCache,
 			logger,
 			metricsClient,
 			config,
@@ -71,14 +81,14 @@ func newTimerQueueStandbyTaskExecutor(
 	}
 }
 
-func (t *timerQueueStandbyTaskExecutor) execute(
-	taskInfo queueTaskInfo,
+func (t *timerStandbyTaskExecutor) Execute(
+	taskInfo Info,
 	shouldProcessTask bool,
 ) error {
 
 	timerTask, ok := taskInfo.(*persistence.TimerTaskInfo)
 	if !ok {
-		return errUnexpectedQueueTask
+		return errUnexpectedTask
 	}
 
 	if !shouldProcessTask &&
@@ -110,7 +120,7 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 	}
 }
 
-func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
+func (t *timerStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	timerTask *persistence.TimerTaskInfo,
 ) error {
 
@@ -155,7 +165,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	)
 }
 
-func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
+func (t *timerStandbyTaskExecutor) executeActivityTimeoutTask(
 	timerTask *persistence.TimerTaskInfo,
 ) error {
 
@@ -257,7 +267,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	)
 }
 
-func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
+func (t *timerStandbyTaskExecutor) executeDecisionTimeoutTask(
 	timerTask *persistence.TimerTaskInfo,
 ) error {
 
@@ -297,7 +307,7 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 	)
 }
 
-func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
+func (t *timerStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	timerTask *persistence.TimerTaskInfo,
 ) error {
 
@@ -336,7 +346,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	)
 }
 
-func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
+func (t *timerStandbyTaskExecutor) executeWorkflowTimeoutTask(
 	timerTask *persistence.TimerTaskInfo,
 ) error {
 
@@ -371,13 +381,13 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 	)
 }
 
-func (t *timerQueueStandbyTaskExecutor) getStandbyClusterTime() time.Time {
+func (t *timerStandbyTaskExecutor) getStandbyClusterTime() time.Time {
 	// time of remote cluster in the shard is delayed by "StandbyClusterDelay"
 	// so to get the current accurate remote cluster time, need to add it back
 	return t.shard.GetCurrentTime(t.clusterName).Add(t.shard.GetConfig().StandbyClusterDelay())
 }
 
-func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
+func (t *timerStandbyTaskExecutor) getTimerSequence(
 	mutableState execution.MutableState,
 ) execution.TimerSequence {
 
@@ -387,13 +397,13 @@ func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
 	return execution.NewTimerSequence(timeSource, mutableState)
 }
 
-func (t *timerQueueStandbyTaskExecutor) processTimer(
+func (t *timerStandbyTaskExecutor) processTimer(
 	timerTask *persistence.TimerTaskInfo,
 	actionFn standbyActionFn,
 	postActionFn standbyPostActionFn,
 ) (retError error) {
 
-	context, release, err := t.cache.GetOrCreateWorkflowExecutionForBackground(
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(timerTask),
 	)
 	if err != nil {
@@ -429,8 +439,8 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	return postActionFn(timerTask, historyResendInfo, t.logger)
 }
 
-func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
-	taskInfo queueTaskInfo,
+func (t *timerStandbyTaskExecutor) fetchHistoryFromRemote(
+	taskInfo Info,
 	postActionInfo interface{},
 	log log.Logger,
 ) error {
@@ -485,6 +495,6 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	return ErrTaskRetry
 }
 
-func (t *timerQueueStandbyTaskExecutor) getCurrentTime() time.Time {
+func (t *timerStandbyTaskExecutor) getCurrentTime() time.Time {
 	return t.shard.GetCurrentTime(t.clusterName)
 }

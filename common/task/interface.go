@@ -48,7 +48,7 @@ type (
 	// State represents the current state of a task
 	State int
 
-	// Task is the interface for tasks which should be executed sequentially
+	// Task is the interface for tasks
 	Task interface {
 		// Execute process this task
 		Execute() error

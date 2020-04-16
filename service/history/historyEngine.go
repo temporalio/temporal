@@ -57,8 +57,11 @@ import (
 	"github.com/uber/cadence/service/history/engine"
 	"github.com/uber/cadence/service/history/events"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/query"
+	"github.com/uber/cadence/service/history/reset"
 	"github.com/uber/cadence/service/history/shard"
+	"github.com/uber/cadence/service/history/task"
 	warchiver "github.com/uber/cadence/service/worker/archiver"
 )
 
@@ -94,9 +97,9 @@ type (
 		throttledLogger           log.Logger
 		config                    *config.Config
 		archivalClient            warchiver.Client
-		resetor                   workflowResetor
-		workflowResetter          workflowResetter
-		queueTaskProcessor        queueTaskProcessor
+		resetor                   reset.WorkflowResetor
+		workflowResetter          reset.WorkflowResetter
+		queueTaskProcessor        task.Processor
 		replicationTaskProcessors []ReplicationTaskProcessor
 		publicClient              workflowserviceclient.Interface
 		eventsReapplier           nDCEventsReapplier
@@ -110,10 +113,6 @@ type (
 var _ engine.Engine = (*historyEngineImpl)(nil)
 
 var (
-	// ErrTaskDiscarded is the error indicating that the timer / transfer task is pending for too long and discarded.
-	ErrTaskDiscarded = errors.New("passive task pending for too long")
-	// ErrTaskRetry is the error indicating that the timer / transfer task should be retried.
-	ErrTaskRetry = errors.New("passive task should retry due to condition in mutable state is not met")
 	// ErrDuplicate is exported temporarily for integration test
 	ErrDuplicate = errors.New("duplicate task, completing it")
 
@@ -166,7 +165,7 @@ func NewEngineWithShardContext(
 	config *config.Config,
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matching.Client,
-	queueTaskProcessor queueTaskProcessor,
+	queueTaskProcessor task.Processor,
 ) engine.Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
@@ -2365,7 +2364,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 	baseNextEventID := baseMutableState.GetNextEventID()
 
-	if err := e.workflowResetter.resetWorkflow(
+	if err := e.workflowResetter.ResetWorkflow(
 		ctx,
 		domainID,
 		workflowID,
@@ -2376,7 +2375,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		baseNextEventID,
 		resetRunID,
 		request.GetRequestId(),
-		newNDCWorkflow(
+		ndc.NewWorkflow(
 			ctx,
 			e.shard.GetDomainCache(),
 			e.shard.GetClusterMetadata(),
@@ -2925,7 +2924,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 				baseNextEventID := mutableState.GetNextEventID()
 
-				if err = e.workflowResetter.resetWorkflow(
+				if err = e.workflowResetter.ResetWorkflow(
 					ctx,
 					domainID,
 					workflowID,
@@ -2936,7 +2935,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					baseNextEventID,
 					resetRunID,
 					uuid.New(),
-					newNDCWorkflow(
+					ndc.NewWorkflow(
 						ctx,
 						e.shard.GetDomainCache(),
 						e.shard.GetClusterMetadata(),

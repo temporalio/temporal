@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package task
 
 import (
 	"context"
@@ -36,39 +36,44 @@ import (
 	"github.com/uber/cadence/service/worker/archiver"
 )
 
+var (
+	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
+)
+
 type (
-	timerQueueTaskExecutorBase struct {
+	timerTaskExecutorBase struct {
 		shard          shard.Context
-		historyService *historyEngineImpl
-		cache          *execution.Cache
+		archiverClient archiver.Client
+		executionCache *execution.Cache
 		logger         log.Logger
 		metricsClient  metrics.Client
 		config         *config.Config
 	}
 )
 
-func newTimerQueueTaskExecutorBase(
+func newTimerTaskExecutorBase(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	archiverClient archiver.Client,
+	executionCache *execution.Cache,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *config.Config,
-) *timerQueueTaskExecutorBase {
-	return &timerQueueTaskExecutorBase{
+) *timerTaskExecutorBase {
+	return &timerTaskExecutorBase{
 		shard:          shard,
-		historyService: historyService,
-		cache:          historyService.executionCache,
+		archiverClient: archiverClient,
+		executionCache: executionCache,
 		logger:         logger,
 		metricsClient:  metricsClient,
 		config:         config,
 	}
 }
 
-func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
+func (t *timerTaskExecutorBase) executeDeleteHistoryEventTask(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.GetOrCreateWorkflowExecutionForBackground(t.getDomainIDAndWorkflowExecution(task))
+	context, release, err := t.executionCache.GetOrCreateWorkflowExecutionForBackground(t.getDomainIDAndWorkflowExecution(task))
 	if err != nil {
 		return err
 	}
@@ -109,7 +114,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	return t.deleteWorkflow(task, context, mutableState)
 }
 
-func (t *timerQueueTaskExecutorBase) deleteWorkflow(
+func (t *timerTaskExecutorBase) deleteWorkflow(
 	task *persistence.TimerTaskInfo,
 	context execution.Context,
 	msBuilder execution.MutableState,
@@ -136,7 +141,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 	return nil
 }
 
-func (t *timerQueueTaskExecutorBase) archiveWorkflow(
+func (t *timerTaskExecutorBase) archiveWorkflow(
 	task *persistence.TimerTaskInfo,
 	workflowContext execution.Context,
 	msBuilder execution.MutableState,
@@ -174,7 +179,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 
 	ctx, cancel := context.WithTimeout(context.Background(), t.config.TimerProcessorArchivalTimeLimit())
 	defer cancel()
-	resp, err := t.historyService.archivalClient.Archive(ctx, req)
+	resp, err := t.archiverClient.Archive(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -203,7 +208,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 	return nil
 }
 
-func (t *timerQueueTaskExecutorBase) deleteWorkflowExecution(
+func (t *timerTaskExecutorBase) deleteWorkflowExecution(
 	task *persistence.TimerTaskInfo,
 ) error {
 
@@ -217,7 +222,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowExecution(
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
-func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
+func (t *timerTaskExecutorBase) deleteCurrentWorkflowExecution(
 	task *persistence.TimerTaskInfo,
 ) error {
 
@@ -231,7 +236,7 @@ func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
-func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
+func (t *timerTaskExecutorBase) deleteWorkflowHistory(
 	task *persistence.TimerTaskInfo,
 	msBuilder execution.MutableState,
 ) error {
@@ -250,7 +255,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
-func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
+func (t *timerTaskExecutorBase) deleteWorkflowVisibility(
 	task *persistence.TimerTaskInfo,
 ) error {
 
@@ -267,7 +272,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
-func (t *timerQueueTaskExecutorBase) getDomainIDAndWorkflowExecution(
+func (t *timerTaskExecutorBase) getDomainIDAndWorkflowExecution(
 	task *persistence.TimerTaskInfo,
 ) (string, workflow.WorkflowExecution) {
 

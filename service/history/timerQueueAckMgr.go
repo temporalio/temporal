@@ -299,6 +299,12 @@ func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistence.TimerTaskInfo, 
 	return nil, nil
 }
 
+// CompleteTimerTask implements the task.TimerQueueAckMgr interface
+// TODO: this method should be removed. See the comments in task/task.go L81
+func (t *timerQueueAckMgrImpl) CompleteTimerTask(timerTask *persistence.TimerTaskInfo) {
+	t.completeTimerTask(timerTask)
+}
+
 func (t *timerQueueAckMgrImpl) completeTimerTask(timerTask *persistence.TimerTaskInfo) {
 	timerKey := timerKey{VisibilityTimestamp: timerTask.VisibilityTimestamp, TaskID: timerTask.TaskID}
 	t.Lock()

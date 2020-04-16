@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/xdc"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/shard"
+	"github.com/uber/cadence/service/history/task"
 )
 
 type (
@@ -41,10 +42,10 @@ type (
 		clusterName        string
 		shard              shard.Context
 		config             *config.Config
-		transferTaskFilter taskFilter
+		transferTaskFilter task.Filter
 		logger             log.Logger
 		metricsClient      metrics.Client
-		taskExecutor       queueTaskExecutor
+		taskExecutor       task.Executor
 	}
 )
 
@@ -57,7 +58,7 @@ func newTransferQueueStandbyProcessor(
 	taskAllocator taskAllocator,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
-	queueTaskProcessor queueTaskProcessor,
+	queueTaskProcessor task.Processor,
 	logger log.Logger,
 ) *transferQueueStandbyProcessorImpl {
 
@@ -79,7 +80,7 @@ func newTransferQueueStandbyProcessor(
 	}
 	logger = logger.WithTags(tag.ClusterName(clusterName))
 
-	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
+	transferTaskFilter := func(taskInfo task.Info) (bool, error) {
 		task, ok := taskInfo.(*persistence.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
@@ -103,9 +104,10 @@ func newTransferQueueStandbyProcessor(
 		transferTaskFilter: transferTaskFilter,
 		logger:             logger,
 		metricsClient:      historyService.metricsClient,
-		taskExecutor: newTransferQueueStandbyTaskExecutor(
+		taskExecutor: task.NewTransferStandbyTaskExecutor(
 			shard,
-			historyService,
+			historyService.archivalClient,
+			historyService.executionCache,
 			historyRereplicator,
 			nDCHistoryResender,
 			logger,
@@ -133,8 +135,8 @@ func newTransferQueueStandbyProcessor(
 
 	redispatchQueue := collection.NewConcurrentQueue()
 
-	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
-		return newTransferQueueTask(
+	transferQueueTaskInitializer := func(taskInfo task.Info) task.Task {
+		return task.NewTransferTask(
 			shard,
 			taskInfo,
 			historyService.metricsClient.Scope(
@@ -170,7 +172,7 @@ func newTransferQueueStandbyProcessor(
 	return processor
 }
 
-func (t *transferQueueStandbyProcessorImpl) getTaskFilter() taskFilter {
+func (t *transferQueueStandbyProcessorImpl) getTaskFilter() task.Filter {
 	return t.transferTaskFilter
 }
 
@@ -190,5 +192,5 @@ func (t *transferQueueStandbyProcessorImpl) process(
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), false)
-	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
+	return metricScope, t.taskExecutor.Execute(taskInfo.task, taskInfo.shouldProcessTask)
 }

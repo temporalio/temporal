@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// TODO: move this file to reset package
+
 package history
 
 import (
@@ -39,7 +41,9 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/shard"
+	test "github.com/uber/cadence/service/history/testing"
 )
 
 type (
@@ -102,7 +106,7 @@ func (s *workflowResetterSuite) SetupTest() {
 		return s.mockStateRebuilder
 	}
 
-	s.domainID = testDomainID
+	s.domainID = test.DomainID
 	s.workflowID = "some random workflow ID"
 	s.baseRunID = uuid.New()
 	s.currentRunID = uuid.New()
@@ -117,23 +121,23 @@ func (s *workflowResetterSuite) TearDownTest() {
 func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	currentWorkflowTerminated := true
 
-	currentWorkflow := NewMocknDCWorkflow(s.controller)
+	currentWorkflow := ndc.NewMockWorkflow(s.controller)
 	currentReleaseCalled := false
 	currentContext := execution.NewMockContext(s.controller)
 	currentMutableState := execution.NewMockMutableState(s.controller)
 	var currentReleaseFn execution.ReleaseFunc = func(error) { currentReleaseCalled = true }
-	currentWorkflow.EXPECT().getContext().Return(currentContext).AnyTimes()
-	currentWorkflow.EXPECT().getMutableState().Return(currentMutableState).AnyTimes()
-	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
+	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
+	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
+	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
-	resetWorkflow := NewMocknDCWorkflow(s.controller)
+	resetWorkflow := ndc.NewMockWorkflow(s.controller)
 	resetReleaseCalled := false
 	resetContext := execution.NewMockContext(s.controller)
 	resetMutableState := execution.NewMockMutableState(s.controller)
 	var targetReleaseFn execution.ReleaseFunc = func(error) { resetReleaseCalled = true }
-	resetWorkflow.EXPECT().getContext().Return(resetContext).AnyTimes()
-	resetWorkflow.EXPECT().getMutableState().Return(resetMutableState).AnyTimes()
-	resetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
+	resetWorkflow.EXPECT().GetContext().Return(resetContext).AnyTimes()
+	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()
+	resetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
 
 	currentContext.EXPECT().UpdateWorkflowExecutionWithNewAsActive(
 		gomock.Any(),
@@ -152,28 +156,28 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	currentWorkflowTerminated := false
 	currentLastWriteVersion := int64(1234)
 
-	currentWorkflow := NewMocknDCWorkflow(s.controller)
+	currentWorkflow := ndc.NewMockWorkflow(s.controller)
 	currentReleaseCalled := false
 	currentContext := execution.NewMockContext(s.controller)
 	currentMutableState := execution.NewMockMutableState(s.controller)
 	var currentReleaseFn execution.ReleaseFunc = func(error) { currentReleaseCalled = true }
-	currentWorkflow.EXPECT().getContext().Return(currentContext).AnyTimes()
-	currentWorkflow.EXPECT().getMutableState().Return(currentMutableState).AnyTimes()
-	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
+	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
+	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
+	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		RunID: s.currentRunID,
 	}).AnyTimes()
 	currentMutableState.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 
-	resetWorkflow := NewMocknDCWorkflow(s.controller)
+	resetWorkflow := ndc.NewMockWorkflow(s.controller)
 	resetReleaseCalled := false
 	resetContext := execution.NewMockContext(s.controller)
 	resetMutableState := execution.NewMockMutableState(s.controller)
 	var targetReleaseFn execution.ReleaseFunc = func(error) { resetReleaseCalled = true }
-	resetWorkflow.EXPECT().getContext().Return(resetContext).AnyTimes()
-	resetWorkflow.EXPECT().getMutableState().Return(resetMutableState).AnyTimes()
-	resetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
+	resetWorkflow.EXPECT().GetContext().Return(resetContext).AnyTimes()
+	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()
+	resetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
 
 	resetSnapshot := &persistence.WorkflowSnapshot{}
 	resetEventsSeq := []*persistence.WorkflowEvents{{
@@ -258,8 +262,8 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		resetRequestID,
 	)
 	s.NoError(err)
-	s.Equal(resetHistorySize, resetWorkflow.getContext().GetHistorySize())
-	s.Equal(resetMutableState, resetWorkflow.getMutableState())
+	s.Equal(resetHistorySize, resetWorkflow.GetContext().GetHistorySize())
+	s.Equal(resetMutableState, resetWorkflow.GetMutableState())
 }
 
 func (s *workflowResetterSuite) TestFailInflightActivity() {

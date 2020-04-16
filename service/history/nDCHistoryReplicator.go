@@ -37,13 +37,12 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/shard"
 )
 
 var (
-	workflowTerminationReason   = "Terminate Workflow Due To Version Conflict."
-	workflowTerminationIdentity = "worker-service"
-	workflowResetReason         = "Reset Workflow Due To Events Re-application."
+	workflowResetReason = "Reset Workflow Due To Events Re-application."
 )
 
 const (
@@ -325,7 +324,7 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 	err = r.transactionMgr.createWorkflow(
 		ctx,
 		task.getEventTime(),
-		newNDCWorkflow(
+		ndc.NewWorkflow(
 			ctx,
 			r.domainCache,
 			r.clusterMetadata,
@@ -427,7 +426,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		return err
 	}
 
-	targetWorkflow := newNDCWorkflow(
+	targetWorkflow := ndc.NewWorkflow(
 		ctx,
 		r.domainCache,
 		r.clusterMetadata,
@@ -436,7 +435,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		releaseFn,
 	)
 
-	var newWorkflow nDCWorkflow
+	var newWorkflow ndc.Workflow
 	if newMutableState != nil {
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newContext := execution.NewContext(
@@ -450,7 +449,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 			r.logger,
 		)
 
-		newWorkflow = newNDCWorkflow(
+		newWorkflow = ndc.NewWorkflow(
 			ctx,
 			r.domainCache,
 			r.clusterMetadata,
@@ -530,7 +529,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 	err = r.transactionMgr.backfillWorkflow(
 		ctx,
 		task.getEventTime(),
-		newNDCWorkflow(
+		ndc.NewWorkflow(
 			ctx,
 			r.domainCache,
 			r.clusterMetadata,
@@ -681,7 +680,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 		return err
 	}
 
-	targetWorkflow := newNDCWorkflow(
+	targetWorkflow := ndc.NewWorkflow(
 		ctx,
 		r.domainCache,
 		r.clusterMetadata,

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package task
 
 import (
 	"errors"
@@ -57,7 +57,7 @@ type (
 		mockHistoryV2Manager  *mocks.HistoryV2Manager
 		mockArchivalClient    *archiver.ClientMock
 
-		timerQueueTaskExecutorBase *timerQueueTaskExecutorBase
+		timerQueueTaskExecutorBase *timerTaskExecutorBase
 	}
 )
 
@@ -99,18 +99,10 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 
 	logger := s.mockShard.GetLogger()
 
-	h := &historyEngineImpl{
-		shard:          s.mockShard,
-		logger:         logger,
-		metricsClient:  s.mockShard.GetMetricsClient(),
-		visibilityMgr:  s.mockVisibilityManager,
-		historyV2Mgr:   s.mockHistoryV2Manager,
-		archivalClient: s.mockArchivalClient,
-	}
-
-	s.timerQueueTaskExecutorBase = newTimerQueueTaskExecutorBase(
+	s.timerQueueTaskExecutorBase = newTimerTaskExecutorBase(
 		s.mockShard,
-		h,
+		s.mockArchivalClient,
+		nil,
 		logger,
 		s.mockShard.GetMetricsClient(),
 		config,

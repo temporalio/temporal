@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -165,7 +166,7 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 		return versionHistoryIndex, lcaVersionHistoryItem, nil
 	}
 
-	targetWorkflow := newNDCWorkflow(
+	targetWorkflow := ndc.NewWorkflow(
 		ctx,
 		r.domainCache,
 		r.clusterMetadata,
@@ -173,18 +174,18 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 		r.mutableState,
 		execution.NoopReleaseFn,
 	)
-	if err := targetWorkflow.flushBufferedEvents(); err != nil {
+	if err := targetWorkflow.FlushBufferedEvents(); err != nil {
 		return 0, nil, err
 	}
 	// the workflow must be updated as active, to send out replication tasks
-	if err := targetWorkflow.context.UpdateWorkflowExecutionAsActive(
+	if err := targetWorkflow.GetContext().UpdateWorkflowExecutionAsActive(
 		r.shard.GetTimeSource().Now(),
 	); err != nil {
 		return 0, nil, err
 	}
 
-	r.context = targetWorkflow.getContext()
-	r.mutableState = targetWorkflow.getMutableState()
+	r.context = targetWorkflow.GetContext()
+	r.mutableState = targetWorkflow.GetMutableState()
 
 	localVersionHistories = r.mutableState.GetVersionHistories()
 	return localVersionHistories.FindLCAVersionHistoryIndexAndItem(incomingVersionHistory)

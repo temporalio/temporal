@@ -38,6 +38,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -149,9 +150,9 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	mockBaseWorkflowReleaseFn := func(err error) {
 		mockBaseWorkflowReleaseFnCalled = true
 	}
-	mockBaseWorkflow := NewMocknDCWorkflow(s.controller)
-	mockBaseWorkflow.EXPECT().getMutableState().Return(s.mockBaseMutableState).AnyTimes()
-	mockBaseWorkflow.EXPECT().getReleaseFn().Return(mockBaseWorkflowReleaseFn).Times(1)
+	mockBaseWorkflow := ndc.NewMockWorkflow(s.controller)
+	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
+	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(mockBaseWorkflowReleaseFn).Times(1)
 
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(
 		ctx,
@@ -222,9 +223,9 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 
 	mockBaseWorkflowReleaseFn := func(err error) {
 	}
-	mockBaseWorkflow := NewMocknDCWorkflow(s.controller)
-	mockBaseWorkflow.EXPECT().getMutableState().Return(s.mockBaseMutableState).AnyTimes()
-	mockBaseWorkflow.EXPECT().getReleaseFn().Return(mockBaseWorkflowReleaseFn).Times(1)
+	mockBaseWorkflow := ndc.NewMockWorkflow(s.controller)
+	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
+	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(mockBaseWorkflowReleaseFn).Times(1)
 
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(
 		ctx,

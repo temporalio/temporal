@@ -21,6 +21,7 @@
 package history
 
 import (
+	"errors"
 	"math/rand"
 	"testing"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/service/history/task"
 )
 
 type (
@@ -41,7 +43,7 @@ type (
 		*require.Assertions
 
 		controller             *gomock.Controller
-		mockQueueTaskProcessor *MockqueueTaskProcessor
+		mockQueueTaskProcessor *task.MockProcessor
 
 		redispatchQueue collection.Queue
 		logger          log.Logger
@@ -58,7 +60,7 @@ func (s *queueProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockQueueTaskProcessor = NewMockqueueTaskProcessor(s.controller)
+	s.mockQueueTaskProcessor = task.NewMockProcessor(s.controller)
 
 	s.redispatchQueue = collection.NewConcurrentQueue()
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
@@ -72,7 +74,7 @@ func (s *queueProcessorSuite) TearDownTest() {
 func (s *queueProcessorSuite) TestRedispatchTask_ProcessorShutDown() {
 	numTasks := 5
 	for i := 0; i != numTasks; i++ {
-		mockTask := NewMockqueueTask(s.controller)
+		mockTask := task.NewMockTask(s.controller)
 		s.redispatchQueue.Add(mockTask)
 	}
 
@@ -81,7 +83,7 @@ func (s *queueProcessorSuite) TestRedispatchTask_ProcessorShutDown() {
 	for i := 0; i != successfullyRedispatched; i++ {
 		calls = append(calls, s.mockQueueTaskProcessor.EXPECT().TrySubmit(gomock.Any()).Return(true, nil))
 	}
-	calls = append(calls, s.mockQueueTaskProcessor.EXPECT().TrySubmit(gomock.Any()).Return(false, errTaskProcessorNotRunning))
+	calls = append(calls, s.mockQueueTaskProcessor.EXPECT().TrySubmit(gomock.Any()).Return(false, errors.New("processor shutdown")))
 	gomock.InOrder(calls...)
 
 	shutDownCh := make(chan struct{})
@@ -102,7 +104,7 @@ func (s *queueProcessorSuite) TestRedispatchTask_Random() {
 	var calls []*gomock.Call
 
 	for i := 0; i != numTasks; i++ {
-		mockTask := NewMockqueueTask(s.controller)
+		mockTask := task.NewMockTask(s.controller)
 		s.redispatchQueue.Add(mockTask)
 		submitted := false
 		if rand.Intn(2) == 0 {

@@ -40,6 +40,8 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/ndc"
+	"github.com/uber/cadence/service/history/reset"
 	"github.com/uber/cadence/service/history/shard"
 )
 
@@ -56,7 +58,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		metricsClient     metrics.Client
 		logger            log.Logger
-		resetor           workflowResetor
+		resetor           reset.WorkflowResetor
 
 		getNewConflictResolver conflictResolverProvider
 		getNewStateBuilder     stateBuilderProvider
@@ -980,9 +982,9 @@ func (r *historyReplicator) terminateWorkflow(
 			eventBatchFirstEventID := msBuilder.GetNextEventID()
 			if _, err := msBuilder.AddWorkflowExecutionTerminatedEvent(
 				eventBatchFirstEventID,
-				workflowTerminationReason,
+				ndc.WorkflowTerminationReason,
 				[]byte(fmt.Sprintf("terminated by version: %v", incomingVersion)),
-				workflowTerminationIdentity,
+				ndc.WorkflowTerminationIdentity,
 			); err != nil {
 				return &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
 			}

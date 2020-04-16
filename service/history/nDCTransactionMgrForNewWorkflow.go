@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/ndc"
 )
 
 type (
@@ -37,7 +38,7 @@ type (
 		dispatchForNewWorkflow(
 			ctx ctx.Context,
 			now time.Time,
-			targetWorkflow nDCWorkflow,
+			targetWorkflow ndc.Workflow,
 		) error
 	}
 
@@ -60,12 +61,12 @@ func newNDCTransactionMgrForNewWorkflow(
 func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	ctx ctx.Context,
 	now time.Time,
-	targetWorkflow nDCWorkflow,
+	targetWorkflow ndc.Workflow,
 ) error {
 	// NOTE: this function does NOT mutate current workflow or target workflow,
 	//  workflow mutation is done in methods within executeTransaction function
 
-	targetExecutionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
+	targetExecutionInfo := targetWorkflow.GetMutableState().GetExecutionInfo()
 	domainID := targetExecutionInfo.DomainID
 	workflowID := targetExecutionInfo.WorkflowID
 	targetRunID := targetExecutionInfo.RunID
@@ -103,7 +104,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 		return err
 	}
 
-	targetWorkflowIsNewer, err := targetWorkflow.happensAfter(currentWorkflow)
+	targetWorkflowIsNewer, err := targetWorkflow.HappensAfter(currentWorkflow)
 	if err != nil {
 		return err
 	}
@@ -120,7 +121,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	}
 
 	// target workflow is newer than current workflow
-	if !currentWorkflow.getMutableState().IsWorkflowExecutionRunning() {
+	if !currentWorkflow.GetMutableState().IsWorkflowExecutionRunning() {
 		// current workflow is completed
 		// proceed to create workflow
 		return r.executeTransaction(
@@ -145,11 +146,11 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	ctx ctx.Context,
 	now time.Time,
-	currentWorkflow nDCWorkflow,
-	targetWorkflow nDCWorkflow,
+	currentWorkflow ndc.Workflow,
+	targetWorkflow ndc.Workflow,
 ) error {
 
-	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.getMutableState().CloseTransactionAsSnapshot(
+	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		now,
 		execution.TransactionPolicyPassive,
 	)
@@ -157,7 +158,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		return err
 	}
 
-	targetWorkflowHistorySize, err := targetWorkflow.getContext().PersistFirstWorkflowEvents(
+	targetWorkflowHistorySize, err := targetWorkflow.GetContext().PersistFirstWorkflowEvents(
 		targetWorkflowEventsSeq[0],
 	)
 	if err != nil {
@@ -168,12 +169,12 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	if currentWorkflow != nil {
 		// current workflow exists, need to do compare and swap
 		createMode := persistence.CreateWorkflowModeWorkflowIDReuse
-		prevRunID := currentWorkflow.getMutableState().GetExecutionInfo().RunID
-		prevLastWriteVersion, _, err := currentWorkflow.getVectorClock()
+		prevRunID := currentWorkflow.GetMutableState().GetExecutionInfo().RunID
+		prevLastWriteVersion, _, err := currentWorkflow.GetVectorClock()
 		if err != nil {
 			return err
 		}
-		return targetWorkflow.getContext().CreateWorkflowExecution(
+		return targetWorkflow.GetContext().CreateWorkflowExecution(
 			targetWorkflowSnapshot,
 			targetWorkflowHistorySize,
 			now,
@@ -187,7 +188,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	createMode := persistence.CreateWorkflowModeBrandNew
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	return targetWorkflow.getContext().CreateWorkflowExecution(
+	return targetWorkflow.GetContext().CreateWorkflowExecution(
 		targetWorkflowSnapshot,
 		targetWorkflowHistorySize,
 		now,
@@ -200,11 +201,11 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	ctx ctx.Context,
 	now time.Time,
-	currentWorkflow nDCWorkflow,
-	targetWorkflow nDCWorkflow,
+	currentWorkflow ndc.Workflow,
+	targetWorkflow ndc.Workflow,
 ) error {
 
-	targetWorkflowPolicy, err := targetWorkflow.suppressBy(
+	targetWorkflowPolicy, err := targetWorkflow.SuppressBy(
 		currentWorkflow,
 	)
 	if err != nil {
@@ -216,7 +217,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		}
 	}
 
-	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.getMutableState().CloseTransactionAsSnapshot(
+	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		now,
 		targetWorkflowPolicy,
 	)
@@ -224,14 +225,14 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 
-	targetWorkflowHistorySize, err := targetWorkflow.getContext().PersistFirstWorkflowEvents(
+	targetWorkflowHistorySize, err := targetWorkflow.GetContext().PersistFirstWorkflowEvents(
 		targetWorkflowEventsSeq[0],
 	)
 	if err != nil {
 		return err
 	}
 
-	if err := targetWorkflow.getContext().ReapplyEvents(
+	if err := targetWorkflow.GetContext().ReapplyEvents(
 		targetWorkflowEventsSeq,
 	); err != nil {
 		return err
@@ -240,7 +241,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	createMode := persistence.CreateWorkflowModeZombie
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	err = targetWorkflow.getContext().CreateWorkflowExecution(
+	err = targetWorkflow.GetContext().CreateWorkflowExecution(
 		targetWorkflowSnapshot,
 		targetWorkflowHistorySize,
 		now,
@@ -262,25 +263,25 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 	ctx ctx.Context,
 	now time.Time,
-	currentWorkflow nDCWorkflow,
-	targetWorkflow nDCWorkflow,
+	currentWorkflow ndc.Workflow,
+	targetWorkflow ndc.Workflow,
 ) error {
 
-	currentWorkflowPolicy, err := currentWorkflow.suppressBy(
+	currentWorkflowPolicy, err := currentWorkflow.SuppressBy(
 		targetWorkflow,
 	)
 	if err != nil {
 		return err
 	}
-	if err := targetWorkflow.revive(); err != nil {
+	if err := targetWorkflow.Revive(); err != nil {
 		return err
 	}
 
-	return currentWorkflow.getContext().UpdateWorkflowExecutionWithNew(
+	return currentWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
-		targetWorkflow.getContext(),
-		targetWorkflow.getMutableState(),
+		targetWorkflow.GetContext(),
+		targetWorkflow.GetMutableState(),
 		currentWorkflowPolicy,
 		execution.TransactionPolicyPassive.Ptr(),
 	)
@@ -290,8 +291,8 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
 	ctx ctx.Context,
 	now time.Time,
 	transactionPolicy nDCTransactionPolicy,
-	currentWorkflow nDCWorkflow,
-	targetWorkflow nDCWorkflow,
+	currentWorkflow ndc.Workflow,
+	targetWorkflow ndc.Workflow,
 ) (retError error) {
 
 	defer func() {
@@ -336,15 +337,15 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) cleanupTransaction(
-	currentWorkflow nDCWorkflow,
-	targetWorkflow nDCWorkflow,
+	currentWorkflow ndc.Workflow,
+	targetWorkflow ndc.Workflow,
 	err error,
 ) {
 
 	if currentWorkflow != nil {
-		currentWorkflow.getReleaseFn()(err)
+		currentWorkflow.GetReleaseFn()(err)
 	}
 	if targetWorkflow != nil {
-		targetWorkflow.getReleaseFn()(err)
+		targetWorkflow.GetReleaseFn()(err)
 	}
 }
