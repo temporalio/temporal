@@ -44,12 +44,14 @@ import (
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal/encoded"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/codec"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -1220,8 +1222,8 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	}
 
 	testMemoKey := "memoKey"
-	testMemoVal, _ := json.Marshal("memoVal")
-	testMemo := map[string][]byte{
+	testMemoVal := codec.EncodeString("memoVal")
+	testMemo := map[string]*commonpb.Payload{
 		testMemoKey: testMemoVal,
 	}
 
@@ -1331,12 +1333,12 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NonRetriableErrors, info.NonRetriableErrors)
 	s.Equal(testResetPoints.String(), info.AutoResetPoints.String())
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionStats.HistorySize, state.ExecutionStats.HistorySize)
-	val, ok := info.SearchAttributes[testSearchAttrKey]
+	saVal, ok := info.SearchAttributes[testSearchAttrKey]
 	s.True(ok)
-	s.Equal(testSearchAttrVal, val)
-	val, ok = info.Memo[testMemoKey]
+	s.Equal(testSearchAttrVal, saVal)
+	memoVal, ok := info.Memo[testMemoKey]
 	s.True(ok)
-	s.Equal(testMemoVal, val)
+	s.Equal(testMemoVal, memoVal)
 
 	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.LastWriteEventID, state.ReplicationState.LastWriteEventID)
 	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.LastWriteVersion, state.ReplicationState.LastWriteVersion)
@@ -1428,9 +1430,11 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	searchAttrKey := "env"
 	searchAttrVal := []byte("test")
 	updatedInfo.SearchAttributes = map[string][]byte{searchAttrKey: searchAttrVal}
+
+	dc := encoded.GetDefaultDataConverter()
 	memoKey := "memoKey"
-	memoVal := []byte("memoVal")
-	updatedInfo.Memo = map[string][]byte{memoKey: memoVal}
+	memoVal, _ := dc.ToData("memoVal")
+	updatedInfo.Memo = map[string]*commonpb.Payload{memoKey: memoVal}
 	updatedStats.HistorySize = math.MaxInt64
 
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil)
@@ -2601,6 +2605,9 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	currentTime := time.Now()
+	dc := encoded.GetDefaultDataConverter()
+	details, _ := dc.ToData(uuid.New())
+
 	activityInfos := []*p.ActivityInfo{{
 		Version:                  7789,
 		ScheduleID:               1,
@@ -2609,7 +2616,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 		ScheduledTime:            currentTime,
 		ActivityID:               uuid.New(),
 		RequestID:                uuid.New(),
-		Details:                  []byte(uuid.New()),
+		Details:                  details,
 		StartedID:                2,
 		StartedEvent:             &eventpb.HistoryEvent{EventId: 2},
 		StartedTime:              currentTime,
@@ -2634,7 +2641,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 		NonRetriableErrors:       []string{"accessDenied", "badRequest"},
 		LastFailureReason:        "some random error",
 		LastWorkerIdentity:       uuid.New(),
-		LastFailureDetails:       []byte(uuid.New()),
+		LastFailureDetails:       codec.EncodeString(uuid.New()),
 	}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), nil, activityInfos, nil, nil, nil)
 	s.NoError(err2)
@@ -2887,7 +2894,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 		InitiatedEventBatchId: 1,
 		RequestId:             uuid.New(),
 		Name:                  "my signal",
-		Input:                 []byte("test signal input"),
+		Input:                 codec.EncodeString("test signal input"),
 		Control:               []byte(uuid.New()),
 	}
 	err2 := s.UpsertSignalInfoState(updatedInfo, updatedStats, nil, int64(3), []*persistenceblobs.SignalInfo{signalInfo})
@@ -3722,7 +3729,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 				InitiatedEventBatchId: 38,
 				RequestId:             "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 				Name:                  "signalA",
-				Input:                 []byte("signal_input_A"),
+				Input:                 codec.EncodeString("signal_input_A"),
 				Control:               []byte("signal_control_A"),
 			},
 		},
@@ -3931,7 +3938,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			InitiatedId: 39,
 			RequestId:   "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 			Name:        "signalB",
-			Input:       []byte("signal_input_b"),
+			Input:       codec.EncodeString("signal_input_b"),
 			Control:     []byte("signal_control_b"),
 		},
 		{
@@ -3939,7 +3946,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			InitiatedId: 42,
 			RequestId:   "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 			Name:        "signalC",
-			Input:       []byte("signal_input_c"),
+			Input:       codec.EncodeString("signal_input_c"),
 			Control:     []byte("signal_control_c"),
 		}}
 

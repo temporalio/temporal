@@ -462,19 +462,6 @@ func ValidateLongPollContextTimeoutIsSet(
 	return deadline, nil
 }
 
-// GetSizeOfMapStringToByteArray get size of map[string][]byte
-func GetSizeOfMapStringToByteArray(input map[string][]byte) int {
-	if input == nil {
-		return 0
-	}
-
-	res := 0
-	for k, v := range input {
-		res += len(k) + len(v)
-	}
-	return res + golandMapReserverNumberOfBytes
-}
-
 // IsJustOrderByClause return true is query start with order by
 func IsJustOrderByClause(clause string) bool {
 	whereClause := strings.TrimSpace(clause)

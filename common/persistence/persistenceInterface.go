@@ -259,7 +259,7 @@ type (
 		BranchToken        []byte
 		CronSchedule       string
 		ExpirationSeconds  int32
-		Memo               map[string][]byte
+		Memo               map[string]*commonpb.Payload
 		SearchAttributes   map[string][]byte
 
 		// attributes which are not related to mutable state at all
@@ -295,7 +295,7 @@ type (
 		StartedTime              time.Time
 		ActivityID               string
 		RequestID                string
-		Details                  []byte
+		Details                  *commonpb.Payload
 		ScheduleToStartTimeout   int32
 		ScheduleToCloseTimeout   int32
 		StartToCloseTimeout      int32
@@ -318,7 +318,7 @@ type (
 		NonRetriableErrors []string
 		LastFailureReason  string
 		LastWorkerIdentity string
-		LastFailureDetails []byte
+		LastFailureDetails *commonpb.Payload
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibility int64
 	}
@@ -626,10 +626,10 @@ type (
 
 	// InternalCreateNamespaceRequest is used to create the namespace
 	InternalCreateNamespaceRequest struct {
-		ID					primitives.UUID
-		Name                string
-		Namespace           *serialization.DataBlob
-		IsGlobal            bool
+		ID        primitives.UUID
+		Name      string
+		Namespace *serialization.DataBlob
+		IsGlobal  bool
 	}
 
 	// InternalGetNamespaceResponse is the response for GetNamespace
@@ -641,7 +641,7 @@ type (
 
 	// InternalUpdateNamespaceRequest is used to update namespace
 	InternalUpdateNamespaceRequest struct {
-		Id					primitives.UUID
+		Id                  primitives.UUID
 		Name                string
 		Namespace           *serialization.DataBlob
 		NotificationVersion int64

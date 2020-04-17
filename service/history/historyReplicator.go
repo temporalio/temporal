@@ -42,6 +42,7 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -973,7 +974,7 @@ func (r *historyReplicator) terminateWorkflow(
 			if _, err := msBuilder.AddWorkflowExecutionTerminatedEvent(
 				eventBatchFirstEventID,
 				workflowTerminationReason,
-				[]byte(fmt.Sprintf("terminated by version: %v", incomingVersion)),
+				codec.EncodeString(fmt.Sprintf("terminated by version: %v", incomingVersion)),
 				workflowTerminationIdentity,
 			); err != nil {
 				return serviceerror.NewInternal("Unable to terminate workflow execution.")

@@ -304,7 +304,7 @@ type (
 		ClientFeatureVersion               string
 		ClientImpl                         string
 		AutoResetPoints                    *executionpb.ResetPoints
-		Memo                               map[string][]byte
+		Memo                               map[string]*commonpb.Payload
 		SearchAttributes                   map[string][]byte
 		// for retry
 		Attempt            int32
@@ -574,7 +574,7 @@ type (
 		NamespaceID              string
 		ActivityID               string
 		RequestID                string
-		Details                  []byte
+		Details                  *commonpb.Payload
 		ScheduleToStartTimeout   int32
 		ScheduleToCloseTimeout   int32
 		StartToCloseTimeout      int32
@@ -596,7 +596,7 @@ type (
 		NonRetriableErrors []string
 		LastFailureReason  string
 		LastWorkerIdentity string
-		LastFailureDetails []byte
+		LastFailureDetails *commonpb.Payload
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibility int64
 	}
@@ -1038,15 +1038,15 @@ type (
 
 	// GetNamespaceResponse is the response for GetNamespace
 	GetNamespaceResponse struct {
-		Namespace                   *persistenceblobs.NamespaceDetail
-		IsGlobalNamespace           bool
-		NotificationVersion         int64
+		Namespace           *persistenceblobs.NamespaceDetail
+		IsGlobalNamespace   bool
+		NotificationVersion int64
 	}
 
 	// UpdateNamespaceRequest is used to update namespace
 	UpdateNamespaceRequest struct {
-		Namespace                   *persistenceblobs.NamespaceDetail
-		NotificationVersion         int64
+		Namespace           *persistenceblobs.NamespaceDetail
+		NotificationVersion int64
 	}
 
 	// DeleteNamespaceRequest is used to delete namespace entry from namespaces table

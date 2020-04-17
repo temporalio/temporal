@@ -350,7 +350,7 @@ func getWorkflowExecutionTimestamp(
 }
 
 func getWorkflowMemo(
-	memo map[string][]byte,
+	memo map[string]*commonpb.Payload,
 ) *commonpb.Memo {
 
 	if memo == nil {

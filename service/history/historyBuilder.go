@@ -164,9 +164,9 @@ func (b *historyBuilder) AddActivityTaskTimedOutEvent(
 	scheduleEventID,
 	startedEventID int64,
 	timeoutType eventpb.TimeoutType,
-	lastHeartBeatDetails []byte,
+	lastHeartBeatDetails *commonpb.Payload,
 	lastFailureReason string,
-	lastFailureDetail []byte,
+	lastFailureDetail *commonpb.Payload,
 ) *eventpb.HistoryEvent {
 	event := b.newActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutType, lastHeartBeatDetails,
 		lastFailureReason, lastFailureDetail)
@@ -196,7 +196,7 @@ func (b *historyBuilder) AddTimeoutWorkflowEvent() *eventpb.HistoryEvent {
 
 func (b *historyBuilder) AddWorkflowExecutionTerminatedEvent(
 	reason string,
-	details []byte,
+	details *commonpb.Payload,
 	identity string,
 ) *eventpb.HistoryEvent {
 	event := b.newWorkflowExecutionTerminatedEvent(reason, details, identity)
@@ -267,7 +267,7 @@ func (b *historyBuilder) AddRequestCancelActivityTaskFailedEvent(decisionComplet
 }
 
 func (b *historyBuilder) AddActivityTaskCanceledEvent(scheduleEventID, startedEventID int64,
-	latestCancelRequestedEventID int64, details []byte, identity string) *eventpb.HistoryEvent {
+	latestCancelRequestedEventID int64, details *commonpb.Payload, identity string) *eventpb.HistoryEvent {
 
 	attributes := &eventpb.ActivityTaskCanceledEventAttributes{}
 	attributes.ScheduledEventId = scheduleEventID
@@ -388,7 +388,7 @@ func (b *historyBuilder) AddMarkerRecordedEvent(decisionCompletedEventID int64,
 }
 
 func (b *historyBuilder) AddWorkflowExecutionSignaledEvent(
-	signalName string, input []byte, identity string) *eventpb.HistoryEvent {
+	signalName string, input *commonpb.Payload, identity string) *eventpb.HistoryEvent {
 	event := b.newWorkflowExecutionSignaledEvent(signalName, input, identity)
 
 	return b.addEventToHistory(event)
@@ -629,9 +629,9 @@ func (b *historyBuilder) newActivityTaskCompletedEvent(scheduleEventID, startedE
 func (b *historyBuilder) newActivityTaskTimedOutEvent(
 	scheduleEventID, startedEventID int64,
 	timeoutType eventpb.TimeoutType,
-	lastHeartBeatDetails []byte,
+	lastHeartBeatDetails *commonpb.Payload,
 	lastFailureReason string,
-	lastFailureDetail []byte,
+	lastFailureDetail *commonpb.Payload,
 ) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_ActivityTaskTimedOut)
 	attributes := &eventpb.ActivityTaskTimedOutEventAttributes{}
@@ -694,7 +694,7 @@ func (b *historyBuilder) newTimeoutWorkflowExecutionEvent() *eventpb.HistoryEven
 }
 
 func (b *historyBuilder) newWorkflowExecutionSignaledEvent(
-	signalName string, input []byte, identity string) *eventpb.HistoryEvent {
+	signalName string, input *commonpb.Payload, identity string) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_WorkflowExecutionSignaled)
 	attributes := &eventpb.WorkflowExecutionSignaledEventAttributes{}
 	attributes.SignalName = signalName
@@ -706,7 +706,7 @@ func (b *historyBuilder) newWorkflowExecutionSignaledEvent(
 }
 
 func (b *historyBuilder) newWorkflowExecutionTerminatedEvent(
-	reason string, details []byte, identity string) *eventpb.HistoryEvent {
+	reason string, details *commonpb.Payload, identity string) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_WorkflowExecutionTerminated)
 	attributes := &eventpb.WorkflowExecutionTerminatedEventAttributes{}
 	attributes.Reason = reason

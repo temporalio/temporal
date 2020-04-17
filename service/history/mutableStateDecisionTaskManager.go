@@ -31,6 +31,7 @@ import (
 	"math"
 	"time"
 
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -87,7 +88,7 @@ type (
 			scheduleEventID int64,
 			startedEventID int64,
 			cause eventpb.DecisionTaskFailedCause,
-			details []byte,
+			details *commonpb.Payload,
 			identity string,
 			reason string,
 			binChecksum string,
@@ -493,7 +494,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	cause eventpb.DecisionTaskFailedCause,
-	details []byte,
+	details *commonpb.Payload,
 	identity string,
 	reason string,
 	binChecksum string,

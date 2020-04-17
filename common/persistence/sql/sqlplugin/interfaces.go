@@ -28,6 +28,7 @@ import (
 	"database/sql"
 	"time"
 
+	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/persistence"
@@ -381,7 +382,7 @@ type (
 		ScheduleID               int64
 		Data                     []byte
 		DataEncoding             string
-		LastHeartbeatDetails     []byte
+		LastHeartbeatDetails     *commonpb.Payload
 		LastHeartbeatUpdatedTime time.Time
 	}
 

@@ -36,6 +36,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -214,8 +215,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 		return err
 	}
 
-	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
-		attr.Input,
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		attr.GetInput().Size(),
 		"ScheduleActivityTaskDecisionAttributes.Input exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -269,7 +270,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 				ai.ScheduleID,
 				ai.StartedID,
 				actCancelReqEvent.GetEventId(),
-				[]byte(activityCancellationMsgActivityNotStarted),
+				codec.EncodeString(activityCancellationMsgActivityNotStarted),
 				handler.identity,
 			)
 			if err != nil {
@@ -343,8 +344,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 		return err
 	}
 
-	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
-		attr.Result,
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		attr.GetResult().Size(),
 		"CompleteWorkflowExecutionDecisionAttributes.Result exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -418,8 +419,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 		return err
 	}
 
-	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
-		attr.Details,
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		attr.GetDetails().Size(),
 		"FailWorkflowExecutionDecisionAttributes.Details exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -617,8 +618,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRecordMarker(
 		return err
 	}
 
-	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
-		attr.Details,
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		attr.GetDetails().Size(),
 		"RecordMarkerDecisionAttributes.Details exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -657,9 +658,9 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 		return err
 	}
 
-	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
-		attr.GetInput().GetData(),
-		"ContinueAsNewWorkflowExecutionDecisionAttributes. Input exceeds size limit.",
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		attr.GetInput().Size(),
+		"ContinueAsNewWorkflowExecutionDecisionAttributes.Input exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -739,8 +740,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 		return err
 	}
 
-	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
-		attr.Input,
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		attr.GetInput().Size(),
 		"StartChildWorkflowExecutionDecisionAttributes.Input exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -793,8 +794,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 		return err
 	}
 
-	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
-		attr.Input,
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		attr.GetInput().Size(),
 		"SignalExternalWorkflowExecutionDecisionAttributes.Input exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -841,8 +842,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 	}
 
 	// blob size limit check
-	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
-		convertSearchAttributesToByteArray(attr.GetSearchAttributes().GetIndexedFields()),
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		attr.GetSearchAttributes().Size(),
 		"UpsertWorkflowSearchAttributesDecisionAttributes exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -856,23 +857,13 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 	return err
 }
 
-func convertSearchAttributesToByteArray(fields map[string][]byte) []byte {
-	result := make([]byte, 0)
-
-	for k, v := range fields {
-		result = append(result, []byte(k)...)
-		result = append(result, v...)
-	}
-	return result
-}
-
 func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 	attr *eventpb.WorkflowExecutionStartedEventAttributes,
 	backoffInterval int32,
 	continueAsNewIter commonpb.ContinueAsNewInitiator,
 	failureReason string,
-	failureDetails []byte,
-	lastCompletionResult []byte,
+	failureDetails *commonpb.Payload,
+	lastCompletionResult *commonpb.Payload,
 ) error {
 
 	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{

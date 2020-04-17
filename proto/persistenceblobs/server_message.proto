@@ -26,6 +26,7 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
+import "common/message.proto";
 import "persistenceblobs/server_enum.proto";
 import "replication/server_message.proto";
 import "execution/enum.proto";
@@ -69,10 +70,10 @@ message ActivityInfo {
     repeated string retryNonRetryableErrors = 28;
     string retryLastFailureReason = 29;
     string retryLastWorkerIdentity = 30;
-    bytes retryLastFailureDetails = 31;
+    common.Payload retryLastFailureDetails = 31;
     bytes namespaceId = 32;
     int64 scheduleId = 33;
-    bytes lastHeartbeatDetails = 34;
+    common.Payload lastHeartbeatDetails = 34;
     google.protobuf.Timestamp lastHeartbeatUpdatedTime = 35;
 }
 
@@ -204,7 +205,7 @@ message SignalInfo {
     int64 initiatedEventBatchId = 2;
     string requestId = 3;
     string name = 4;
-    bytes input = 5;
+    common.Payload input = 5;
     bytes control = 6;
     int64 initiatedId = 7;
 }
@@ -279,7 +280,7 @@ message WorkflowExecutionInfo {
     bytes autoResetPoints = 55;
     string autoResetPointsEncoding = 56;
     map<string, bytes> searchAttributes = 57;
-    map<string, bytes> memo = 58;
+    map<string, common.Payload> memo = 58;
     bytes versionHistories = 59;
     string versionHistoriesEncoding = 60;
 }

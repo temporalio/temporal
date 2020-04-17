@@ -370,9 +370,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	sizeLimitError := wh.config.BlobSizeLimitError(namespace)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespace)
 
-	actualSize := len(request.GetInput().GetData())
-	actualSize += common.GetSizeOfMapStringToByteArray(request.GetInput().GetMetadata())
-	actualSize += common.GetSizeOfMapStringToByteArray(request.GetMemo().GetFields())
+	actualSize := request.GetInput().Size()
+	actualSize += request.GetMemo().Size()
 
 	if err := common.CheckEventBlobSizeLimit(
 		actualSize,
@@ -840,7 +839,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.Details),
+		request.GetDetails().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceId,
@@ -850,7 +849,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 		wh.GetThrottledLogger(),
 	); err != nil {
 		// details exceed, we would just truncate the size for decision task failed as the details is not used anywhere by client code
-		request.Details = request.Details[0:sizeLimitError]
+		request.Details = nil
 	}
 
 	_, err = wh.GetHistoryClient().RespondDecisionTaskFailed(ctx, &historyservice.RespondDecisionTaskFailedRequest{
@@ -1018,7 +1017,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.Details),
+		request.GetDetails().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceId,
@@ -1031,7 +1030,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: request.TaskToken,
 			Reason:    common.FailureReasonHeartbeatExceedsLimit,
-			Details:   request.Details[0:sizeLimitError],
+			Details:   nil,
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1120,7 +1119,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.Details),
+		request.GetDetails().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID,
@@ -1133,7 +1132,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: token,
 			Reason:    common.FailureReasonHeartbeatExceedsLimit,
-			Details:   request.Details[0:sizeLimitError],
+			Details:   nil,
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1212,7 +1211,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.Result),
+		request.GetResult().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceId,
@@ -1225,7 +1224,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: request.TaskToken,
 			Reason:    common.FailureReasonCompleteResultExceedsLimit,
-			Details:   request.Result[0:sizeLimitError],
+			Details:   nil,
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1316,7 +1315,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.Result),
+		request.GetResult().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID,
@@ -1329,7 +1328,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: token,
 			Reason:    common.FailureReasonCompleteResultExceedsLimit,
-			Details:   request.Result[0:sizeLimitError],
+			Details:   nil,
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1409,7 +1408,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.Details),
+		request.GetDetails().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID,
@@ -1420,7 +1419,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	); err != nil {
 		// details exceeds blob size limit, we would truncate the details and put a specific error reason
 		request.Reason = common.FailureReasonFailureDetailsExceedsLimit
-		request.Details = request.Details[0:sizeLimitError]
+		request.Details = nil
 	}
 
 	_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1500,7 +1499,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.Details),
+		request.GetDetails().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID,
@@ -1511,7 +1510,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	); err != nil {
 		// details exceeds blob size limit, we would truncate the details and put a specific error reason
 		request.Reason = common.FailureReasonFailureDetailsExceedsLimit
-		request.Details = request.Details[0:sizeLimitError]
+		request.Details = nil
 	}
 
 	req := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1584,7 +1583,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.Details),
+		request.GetDetails().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID,
@@ -1597,7 +1596,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: request.TaskToken,
 			Reason:    common.FailureReasonCancelDetailsExceedsLimit,
-			Details:   request.Details[0:sizeLimitError],
+			Details:   nil,
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1687,7 +1686,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.Details),
+		request.GetDetails().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID,
@@ -1700,7 +1699,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: token,
 			Reason:    common.FailureReasonCancelDetailsExceedsLimit,
-			Details:   request.Details[0:sizeLimitError],
+			Details:   nil,
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1827,7 +1826,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.Input),
+		request.GetInput().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID,
@@ -1942,7 +1941,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	sizeLimitError := wh.config.BlobSizeLimitError(namespace)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespace)
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.SignalInput),
+		request.GetSignalInput().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID,
@@ -1953,7 +1952,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	); err != nil {
 		return nil, wh.error(err, scope)
 	}
-	actualSize := len(request.Input) + common.GetSizeOfMapStringToByteArray(request.Memo.GetFields())
+	actualSize := request.GetInput().Size() + request.GetMemo().Size()
 	if err := common.CheckEventBlobSizeLimit(
 		actualSize,
 		sizeLimitWarn,
@@ -2583,7 +2582,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.GetQueryResult()),
+		request.GetQueryResult().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		queryTaskToken.GetNamespaceId(),
@@ -2706,7 +2705,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(request.GetQuery().GetQueryArgs()),
+		request.GetQuery().GetQueryArgs().Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID,

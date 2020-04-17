@@ -26,7 +26,6 @@ package cli
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -35,8 +34,10 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"
+	"go.temporal.io/temporal/encoded"
 
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/service/worker/batcher"
 )
 
@@ -79,9 +80,9 @@ func DescribeBatchJob(c *cli.Context) {
 	} else {
 		output["msg"] = "batch job is running"
 		if len(wf.PendingActivities) > 0 {
-			hbdBinary := wf.PendingActivities[0].HeartbeatDetails
-			hbd := batcher.HeartBeatDetails{}
-			err := json.Unmarshal(hbdBinary, &hbd)
+			hbdPayload := wf.PendingActivities[0].HeartbeatDetails
+			var hbd batcher.HeartBeatDetails
+			err := codec.Decode(hbdPayload, &hbd)
 			if err != nil {
 				ErrorAndExit("Failed to describe batch job", err)
 			}
@@ -106,12 +107,21 @@ func ListBatchJobs(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Failed to list batch jobs", err)
 	}
+
+	dc := encoded.GetDefaultDataConverter()
+
 	output := make([]interface{}, 0, len(resp.Executions))
 	for _, wf := range resp.Executions {
+		var reason string
+		err = dc.FromData(wf.Memo.Fields["Reason"], &reason)
+		if err != nil {
+			ErrorAndExit("Failed to deserialize reason memo field", err)
+		}
+
 		job := map[string]string{
 			"jobID":     wf.Execution.GetWorkflowId(),
 			"startTime": convertTime(wf.GetStartTime().GetValue(), false),
-			"reason":    string(wf.Memo.Fields["Reason"]),
+			"reason":    reason,
 			"operator":  string(wf.SearchAttributes.IndexedFields["Operator"]),
 		}
 
@@ -185,6 +195,13 @@ func StartBatchJob(c *cli.Context) {
 			"Operator":        operator,
 		},
 	}
+
+	dc := encoded.GetDefaultDataConverter()
+	sigInput, err := dc.ToData(sigVal)
+	if err != nil {
+		ErrorAndExit("Failed to serialize signal value", err)
+	}
+
 	params := batcher.BatchParams{
 		Namespace: namespace,
 		Query:     query,
@@ -192,7 +209,7 @@ func StartBatchJob(c *cli.Context) {
 		BatchType: batchType,
 		SignalParams: batcher.SignalParams{
 			SignalName: sigName,
-			Input:      sigVal,
+			Input:      sigInput,
 		},
 		RPS: rps,
 	}

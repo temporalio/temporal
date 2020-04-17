@@ -205,7 +205,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		TaskList: &tasklistpb.TaskList{
 			Name: taskList,
 		},
-		Input:                               []byte(input),
+		Input:                               codec.EncodeString(input),
 		ExecutionStartToCloseTimeoutSeconds: int32(et),
 		TaskStartToCloseTimeoutSeconds:      int32(dt),
 		Identity:                            getCliIdentity(),
@@ -305,7 +305,7 @@ func processSearchAttr(c *cli.Context) map[string][]byte {
 	return fields
 }
 
-func processMemo(c *cli.Context) map[string][]byte {
+func processMemo(c *cli.Context) map[string]*commonpb.Payload {
 	rawMemoKey := c.String(FlagMemoKey)
 	var memoKeys []string
 	if strings.TrimSpace(rawMemoKey) != "" {
@@ -327,9 +327,9 @@ func processMemo(c *cli.Context) map[string][]byte {
 		ErrorAndExit("Number of memo keys and values are not equal.", nil)
 	}
 
-	fields := map[string][]byte{}
+	fields := map[string]*commonpb.Payload{}
 	for i, key := range memoKeys {
-		fields[key] = []byte(memoValues[i])
+		fields[key] = codec.EncodeString(memoValues[i])
 	}
 	return fields
 }
@@ -337,7 +337,13 @@ func processMemo(c *cli.Context) map[string][]byte {
 func getPrintableMemo(memo *commonpb.Memo) string {
 	buf := new(bytes.Buffer)
 	for k, v := range memo.Fields {
-		fmt.Fprintf(buf, "%s=%s\n", k, string(v))
+		var memo string
+		err := codec.Decode(v, &memo)
+		if err != nil {
+			ErrorAndExit("Memo has incoorect formtat.", err)
+		}
+
+		_, _ = fmt.Fprintf(buf, "%s=%s\n", k, memo)
 	}
 	return buf.String()
 }
@@ -467,7 +473,7 @@ func SignalWorkflow(c *cli.Context) {
 			RunId:      rid,
 		},
 		SignalName: name,
-		Input:      []byte(input),
+		Input:      codec.EncodeString(input),
 		Identity:   getCliIdentity(),
 	})
 
@@ -513,7 +519,7 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 		},
 	}
 	if input != "" {
-		queryRequest.Query.QueryArgs = []byte(input)
+		queryRequest.Query.QueryArgs = codec.EncodeString(input)
 	}
 	if c.IsSet(FlagQueryRejectCondition) {
 		var rejectCondition querypb.QueryRejectCondition
@@ -548,8 +554,12 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 	if queryResponse.QueryRejected != nil {
 		fmt.Printf("Query was rejected, workflow has status: %v\n", queryResponse.QueryRejected.GetStatus())
 	} else {
-		// assume it is json encoded
-		fmt.Printf("Query result as JSON:\n%v\n", string(queryResponse.QueryResult))
+		var queryResult string
+		err = codec.Decode(queryResponse.QueryResult, &queryResult)
+		if err != nil {
+			ErrorAndExit("Unable to decode query result.", err)
+		}
+		fmt.Printf("Query result:\n%v\n", queryResult)
 	}
 }
 
@@ -906,10 +916,16 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
 		}
 		if pa.HeartbeatDetails != nil {
-			tmpAct.HeartbeatDetails = string(pa.HeartbeatDetails)
+			err := codec.Decode(pa.HeartbeatDetails, &tmpAct.HeartbeatDetails)
+			if err != nil {
+				ErrorAndExit("Unable to decode heartbeat details.", err)
+			}
 		}
 		if pa.LastFailureDetails != nil {
-			tmpAct.LastFailureDetails = string(pa.LastFailureDetails)
+			err := codec.Decode(pa.LastFailureDetails, &tmpAct.LastFailureDetails)
+			if err != nil {
+				ErrorAndExit("Unable to decode last failure details.", err)
+			}
 		}
 		pendingActs = append(pendingActs, tmpAct)
 	}
@@ -1093,17 +1109,32 @@ func printRunStatus(event *eventpb.HistoryEvent) {
 	switch event.GetEventType() {
 	case eventpb.EventType_WorkflowExecutionCompleted:
 		fmt.Printf("  Status: %s\n", colorGreen("COMPLETED"))
-		fmt.Printf("  Output: %s\n", string(event.GetWorkflowExecutionCompletedEventAttributes().Result))
+		var result string
+		err := codec.Decode(event.GetWorkflowExecutionCompletedEventAttributes().GetResult(), &result)
+		if err != nil {
+			ErrorAndExit("Unable ot decode WorkflowExecutionCompletedEventAttributes.Result.", err)
+		}
+		fmt.Printf("  Output: %s\n", result)
 	case eventpb.EventType_WorkflowExecutionFailed:
 		fmt.Printf("  Status: %s\n", colorRed("FAILED"))
 		fmt.Printf("  Reason: %s\n", event.GetWorkflowExecutionFailedEventAttributes().GetReason())
-		fmt.Printf("  Detail: %s\n", string(event.GetWorkflowExecutionFailedEventAttributes().Details))
+		var details string
+		err := codec.Decode(event.GetWorkflowExecutionFailedEventAttributes().GetDetails(), &details)
+		if err != nil {
+			ErrorAndExit("Unable ot decode WorkflowExecutionFailedEventAttributes.Details.", err)
+		}
+		fmt.Printf("  Detail: %s\n", details)
 	case eventpb.EventType_WorkflowExecutionTimedOut:
 		fmt.Printf("  Status: %s\n", colorRed("TIMEOUT"))
 		fmt.Printf("  Timeout Type: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetTimeoutType())
 	case eventpb.EventType_WorkflowExecutionCanceled:
 		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
-		fmt.Printf("  Detail: %s\n", string(event.GetWorkflowExecutionCanceledEventAttributes().Details))
+		var details string
+		err := codec.Decode(event.GetWorkflowExecutionCanceledEventAttributes().GetDetails(), &details)
+		if err != nil {
+			ErrorAndExit("Unable ot decode WorkflowExecutionCanceledEventAttributes.Details.", err)
+		}
+		fmt.Printf("  Detail: %s\n", details)
 	}
 }
 
@@ -1712,8 +1743,15 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 
 	if decisionFailed != nil {
 		attr := decisionFailed.GetDecisionTaskFailedEventAttributes()
+
+		var details string
+		err := codec.Decode(attr.GetDetails(), &details)
+		if err != nil {
+			ErrorAndExit("Unable to decode details.", err)
+		}
+
 		if attr.GetCause() == eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure ||
-			strings.Contains(string(attr.GetDetails()), "nondeterministic") {
+			strings.Contains(details, "nondeterministic") {
 			fmt.Printf("found non determnistic workflow wid:%v, rid:%v, orignalStartTime:%v \n", wid, rid, time.Unix(0, firstEvent.GetTimestamp()))
 			return true, nil
 		}
@@ -1921,7 +1959,7 @@ func CompleteActivity(c *cli.Context) {
 		WorkflowId: wid,
 		RunId:      rid,
 		ActivityId: activityID,
-		Result:     []byte(result),
+		Result:     codec.EncodeString(result),
 		Identity:   identity,
 	})
 	if err != nil {
@@ -1953,7 +1991,7 @@ func FailActivity(c *cli.Context) {
 		RunId:      rid,
 		ActivityId: activityID,
 		Reason:     reason,
-		Details:    []byte(detail),
+		Details:    codec.EncodeString(detail),
 		Identity:   identity,
 	})
 	if err != nil {
