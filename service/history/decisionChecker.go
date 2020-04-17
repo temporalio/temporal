@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -238,20 +242,6 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 		return serviceerror.NewInvalidArgument("A valid timeout may not be negative.")
 	}
 
-	// ensure activity timeout never larger than workflow timeout
-	if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
-		attributes.ScheduleToCloseTimeoutSeconds = wfTimeout
-	}
-	if attributes.GetScheduleToStartTimeoutSeconds() > wfTimeout {
-		attributes.ScheduleToStartTimeoutSeconds = wfTimeout
-	}
-	if attributes.GetStartToCloseTimeoutSeconds() > wfTimeout {
-		attributes.StartToCloseTimeoutSeconds = wfTimeout
-	}
-	if attributes.GetHeartbeatTimeoutSeconds() > wfTimeout {
-		attributes.HeartbeatTimeoutSeconds = wfTimeout
-	}
-
 	validScheduleToClose := attributes.GetScheduleToCloseTimeoutSeconds() > 0
 	validScheduleToStart := attributes.GetScheduleToStartTimeoutSeconds() > 0
 	validStartToClose := attributes.GetStartToCloseTimeoutSeconds() > 0
@@ -263,15 +253,37 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 		if !validStartToClose {
 			attributes.StartToCloseTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
 		}
-	} else if validScheduleToStart && validStartToClose {
-		attributes.ScheduleToCloseTimeoutSeconds = attributes.GetScheduleToStartTimeoutSeconds() + attributes.GetStartToCloseTimeoutSeconds()
-		if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
+	} else if validStartToClose {
+		// We are in !validScheduleToClose due to the first if above
+		if validScheduleToStart {
+			attributes.ScheduleToCloseTimeoutSeconds = attributes.GetScheduleToStartTimeoutSeconds() + attributes.GetStartToCloseTimeoutSeconds()
+		} else {
+			attributes.ScheduleToStartTimeoutSeconds = wfTimeout
 			attributes.ScheduleToCloseTimeoutSeconds = wfTimeout
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
-		return serviceerror.NewInvalidArgument("A valid ScheduleToCloseTimeout is not set on decision.")
+		return serviceerror.NewInvalidArgument("A valid StartToClose or ScheduleToCloseTimeout is not set on decision.")
 	}
+	// ensure activity timeout never larger than workflow timeout
+	if wfTimeout > 0 {
+		if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
+			attributes.ScheduleToCloseTimeoutSeconds = wfTimeout
+		}
+		if attributes.GetScheduleToStartTimeoutSeconds() > wfTimeout {
+			attributes.ScheduleToStartTimeoutSeconds = wfTimeout
+		}
+		if attributes.GetStartToCloseTimeoutSeconds() > wfTimeout {
+			attributes.StartToCloseTimeoutSeconds = wfTimeout
+		}
+		if attributes.GetHeartbeatTimeoutSeconds() > wfTimeout {
+			attributes.HeartbeatTimeoutSeconds = wfTimeout
+		}
+	}
+	if attributes.GetHeartbeatTimeoutSeconds() > attributes.GetScheduleToCloseTimeoutSeconds() {
+		attributes.HeartbeatTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
+	}
+
 	// ensure activity's SCHEDULE_TO_START and SCHEDULE_TO_CLOSE is as long as expiration on retry policy
 	p := attributes.RetryPolicy
 	if p != nil {
@@ -656,7 +668,7 @@ func (v *decisionAttrValidator) validateCrossNamespaceCall(
 	// one is local namespace, another one is global namespace or both global namespace
 	// treat global namespace with one replication cluster as local namespace
 	if len(namespaceClusters) == 1 && len(targetNamespaceClusters) == 1 {
-		if *namespaceClusters[0] == *targetNamespaceClusters[0] {
+		if namespaceClusters[0] == targetNamespaceClusters[0] {
 			return nil
 		}
 		return v.createCrossNamespaceCallError(namespaceEntry, targetNamespaceEntry)

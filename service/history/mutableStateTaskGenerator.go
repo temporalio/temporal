@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -34,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -527,7 +532,7 @@ func (r *mutableStateTaskGeneratorImpl) getTargetNamespaceID(
 		if err != nil {
 			return "", err
 		}
-		targetNamespaceID = targetNamespaceEntry.GetInfo().ID
+		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
 	}
 
 	return targetNamespaceID, nil

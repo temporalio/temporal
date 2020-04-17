@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -28,9 +32,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/xwb1989/sqlparser"
-
-	"github.com/temporalio/temporal/common"
 )
 
 type (
@@ -158,7 +161,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		if parsedQuery.workflowTypeName != nil {
 			return fmt.Errorf("can not query %s multiple times", WorkflowTypeName)
 		}
-		parsedQuery.workflowTypeName = common.StringPtr(val)
+		parsedQuery.workflowTypeName = convert.StringPtr(val)
 	case WorkflowID:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -170,7 +173,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		if parsedQuery.workflowID != nil {
 			return fmt.Errorf("can not query %s multiple times", WorkflowID)
 		}
-		parsedQuery.workflowID = common.StringPtr(val)
+		parsedQuery.workflowID = convert.StringPtr(val)
 	case CloseTime:
 		timestamp, err := convertToTimestamp(valStr)
 		if err != nil {
@@ -208,7 +211,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		default:
 			return fmt.Errorf("invalid value for %s: %s", SearchPrecision, val)
 		}
-		parsedQuery.searchPrecision = common.StringPtr(val)
+		parsedQuery.searchPrecision = convert.StringPtr(val)
 
 	default:
 		return fmt.Errorf("unknown filter name: %s", colNameStr)

@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -40,19 +44,19 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.uber.org/zap"
-
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
 	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/uber-go/tally"
+	eventpb "go.temporal.io/temporal-proto/event"
+	"go.temporal.io/temporal-proto/serviceerror"
+	"go.uber.org/zap"
 )
 
 const (
@@ -172,7 +176,7 @@ func setupFsEmulation(s3cli *mocks.S3API) {
 			var nextContinuationToken *string
 			if len(objects) > start+maxKeys {
 				isTruncated = true
-				nextContinuationToken = common.StringPtr(fmt.Sprintf("%d", start+maxKeys))
+				nextContinuationToken = convert.StringPtr(fmt.Sprintf("%d", start+maxKeys))
 				objects = objects[start : start+maxKeys]
 			} else {
 				objects = objects[start:]
@@ -188,7 +192,7 @@ func setupFsEmulation(s3cli *mocks.S3API) {
 
 			if len(commonPrefixes) > start+maxKeys {
 				isTruncated = true
-				nextContinuationToken = common.StringPtr(fmt.Sprintf("%d", start+maxKeys))
+				nextContinuationToken = convert.StringPtr(fmt.Sprintf("%d", start+maxKeys))
 				commonPrefixes = commonPrefixes[start : start+maxKeys]
 			} else if len(commonPrefixes) > 0 {
 				commonPrefixes = commonPrefixes[start:]

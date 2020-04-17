@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -460,8 +464,8 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 
 func (t *MatcherTestSuite) newNamespaceCache() cache.NamespaceCache {
 	entry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{Name: "test-namespace"},
-		&persistence.NamespaceConfig{},
+		&persistenceblobs.NamespaceInfo{Name: "test-namespace"},
+		&persistenceblobs.NamespaceConfig{},
 		"",
 		nil)
 	dc := cache.NewMockNamespaceCache(t.controller)

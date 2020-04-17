@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +35,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
 )
 
@@ -38,71 +43,28 @@ const constNamespacePartition = 0
 const namespaceMetadataRecordName = "temporal-namespace-metadata"
 
 const (
-	templateNamespaceInfoType = `{` +
-		`id: ?, ` +
-		`name: ?, ` +
-		`status: ?, ` +
-		`description: ?, ` +
-		`owner_email: ?, ` +
-		`data: ? ` +
-		`}`
-
-	templateNamespaceConfigType = `{` +
-		`retention: ?, ` +
-		`emit_metric: ?, ` +
-		`archival_bucket: ?, ` +
-		`archival_status: ?,` +
-		`history_archival_status: ?, ` +
-		`history_archival_uri: ?, ` +
-		`visibility_archival_status: ?, ` +
-		`visibility_archival_uri: ?, ` +
-		`bad_binaries: ?,` +
-		`bad_binaries_encoding: ?` +
-		`}`
-
-	templateNamespaceReplicationConfigType = `{` +
-		`active_cluster_name: ?, ` +
-		`clusters: ? ` +
-		`}`
-
 	templateCreateNamespaceQuery = `INSERT INTO namespaces (` +
-		`id, namespace) ` +
-		`VALUES(?, {name: ?}) IF NOT EXISTS`
+		`id, name) ` +
+		`VALUES(?, ?) IF NOT EXISTS`
 
-	templateGetNamespaceQuery = `SELECT namespace.name ` +
+	templateGetNamespaceQuery = `SELECT name ` +
 		`FROM namespaces ` +
 		`WHERE id = ?`
 
 	templateDeleteNamespaceQuery = `DELETE FROM namespaces ` +
 		`WHERE id = ?`
 
-	templateCreateNamespaceByNameQueryWithinBatchV2 = `INSERT INTO namespaces_by_name_v2 (` +
-		`namespaces_partition, name, namespace, config, replication_config, is_global_namespace, config_version, failover_version, failover_notification_version, notification_version) ` +
-		`VALUES(?, ?, ` + templateNamespaceInfoType + `, ` + templateNamespaceConfigType + `, ` + templateNamespaceReplicationConfigType + `, ?, ?, ?, ?, ?) IF NOT EXISTS`
+	templateNamespaceColumns = `id, name, detail, detail_encoding, notification_version, is_global_namespace`
 
-	templateGetNamespaceByNameQueryV2 = `SELECT namespace.id, namespace.name, namespace.status, namespace.description, ` +
-		`namespace.owner_email, namespace.data, config.retention, config.emit_metric, ` +
-		`config.archival_bucket, config.archival_status, ` +
-		`config.history_archival_status, config.history_archival_uri, ` +
-		`config.visibility_archival_status, config.visibility_archival_uri, ` +
-		`config.bad_binaries, config.bad_binaries_encoding, ` +
-		`replication_config.active_cluster_name, replication_config.clusters, ` +
-		`is_global_namespace, ` +
-		`config_version, ` +
-		`failover_version, ` +
-		`failover_notification_version, ` +
-		`notification_version ` +
-		`FROM namespaces_by_name_v2 ` +
-		`WHERE namespaces_partition = ? ` +
-		`and name = ?`
+	templateCreateNamespaceByNameQueryWithinBatchV2 = `INSERT INTO namespaces_by_name_v2 ` +
+		`( namespaces_partition, ` + templateNamespaceColumns + `) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
+
+	templateGetNamespaceByNameQueryV2 = templateListNamespaceQueryV2 + `and name = ?`
 
 	templateUpdateNamespaceByNameQueryWithinBatchV2 = `UPDATE namespaces_by_name_v2 ` +
-		`SET namespace = ` + templateNamespaceInfoType + `, ` +
-		`config = ` + templateNamespaceConfigType + `, ` +
-		`replication_config = ` + templateNamespaceReplicationConfigType + `, ` +
-		`config_version = ? ,` +
-		`failover_version = ? ,` +
-		`failover_notification_version = ? , ` +
+		`SET detail = ? ,` +
+		`detail_encoding = ? ,` +
 		`notification_version = ? ` +
 		`WHERE namespaces_partition = ? ` +
 		`and name = ?`
@@ -122,19 +84,9 @@ const (
 		`WHERE namespaces_partition = ? ` +
 		`and name = ?`
 
-	templateListNamespaceQueryV2 = `SELECT name, namespace.id, namespace.name, namespace.status, namespace.description, ` +
-		`namespace.owner_email, namespace.data, config.retention, config.emit_metric, ` +
-		`config.archival_bucket, config.archival_status, ` +
-		`config.history_archival_status, config.history_archival_uri, ` +
-		`config.visibility_archival_status, config.visibility_archival_uri, ` +
-		`config.bad_binaries, config.bad_binaries_encoding, ` +
-		`replication_config.active_cluster_name, replication_config.clusters, ` +
-		`is_global_namespace, ` +
-		`config_version, ` +
-		`failover_version, ` +
-		`failover_notification_version, ` +
-		`notification_version ` +
-		`FROM namespaces_by_name_v2 ` +
+	templateListNamespaceQueryV2 = `SELECT ` +
+		templateNamespaceColumns +
+		` FROM namespaces_by_name_v2 ` +
 		`WHERE namespaces_partition = ? `
 )
 
@@ -177,13 +129,13 @@ func (m *cassandraMetadataPersistenceV2) Close() {
 // delete the orphaned entry from namespaces table.  There is a chance delete entry could fail and we never delete the
 // orphaned entry from namespaces table.  We might need a background job to delete those orphaned record.
 func (m *cassandraMetadataPersistenceV2) CreateNamespace(request *p.InternalCreateNamespaceRequest) (*p.CreateNamespaceResponse, error) {
-	query := m.session.Query(templateCreateNamespaceQuery, request.Info.ID, request.Info.Name)
+	query := m.session.Query(templateCreateNamespaceQuery, request.ID.Downcast(), request.Name)
 	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
 	}
 	if !applied {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed because of uuid collision."))
+		return nil, serviceerror.NewNamespaceAlreadyExists("CreateNamespace operation failed because of uuid collision.")
 	}
 
 	return m.CreateNamespaceInV2Table(request)
@@ -199,30 +151,12 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
 		constNamespacePartition,
-		request.Info.Name,
-		request.Info.ID,
-		request.Info.Name,
-		request.Info.Status,
-		request.Info.Description,
-		request.Info.OwnerEmail,
-		request.Info.Data,
-		request.Config.Retention,
-		request.Config.EmitMetric,
-		request.Config.ArchivalBucket,
-		request.Config.ArchivalStatus,
-		request.Config.HistoryArchivalStatus,
-		request.Config.HistoryArchivalURI,
-		request.Config.VisibilityArchivalStatus,
-		request.Config.VisibilityArchivalURI,
-		request.Config.BadBinaries.Data,
-		string(request.Config.BadBinaries.GetEncoding()),
-		request.ReplicationConfig.ActiveClusterName,
-		p.SerializeClusterConfigs(request.ReplicationConfig.Clusters),
-		request.IsGlobalNamespace,
-		request.ConfigVersion,
-		request.FailoverVersion,
-		p.InitialFailoverNotificationVersion,
+		request.ID.Downcast(),
+		request.Name,
+		request.Namespace.Data,
+		request.Namespace.Encoding,
 		metadata.NotificationVersion,
+		request.IsGlobal,
 	)
 	m.updateMetadataBatch(batch, metadata.NotificationVersion)
 
@@ -240,48 +174,29 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 
 	if !applied {
 		// Namespace already exist.  Delete orphan namespace record before returning back to user
-		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.Info.ID).Exec(); errDelete != nil {
+		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.ID.Downcast()).Exec(); errDelete != nil {
 			m.logger.Warn("Unable to delete orphan namespace record. Error", tag.Error(errDelete))
 		}
 
-		if namespace, ok := previous["namespace"].(map[string]interface{}); ok {
-			msg := fmt.Sprintf("Namespace already exists.  NamespaceId: %v", namespace["id"])
+		if id, ok := previous["Id"].([]byte); ok {
+			msg := fmt.Sprintf("Namespace already exists.  NamespaceId: %v", primitives.UUIDString(id))
 			return nil, serviceerror.NewNamespaceAlreadyExists(msg)
 		}
 
 		return nil, serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("CreateNamespace operation failed because of conditional failure."))
 	}
 
-	return &p.CreateNamespaceResponse{ID: request.Info.ID}, nil
+	return &p.CreateNamespaceResponse{ID: request.ID}, nil
 }
 
 func (m *cassandraMetadataPersistenceV2) UpdateNamespace(request *p.InternalUpdateNamespaceRequest) error {
 	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateUpdateNamespaceByNameQueryWithinBatchV2,
-		request.Info.ID,
-		request.Info.Name,
-		request.Info.Status,
-		request.Info.Description,
-		request.Info.OwnerEmail,
-		request.Info.Data,
-		request.Config.Retention,
-		request.Config.EmitMetric,
-		request.Config.ArchivalBucket,
-		request.Config.ArchivalStatus,
-		request.Config.HistoryArchivalStatus,
-		request.Config.HistoryArchivalURI,
-		request.Config.VisibilityArchivalStatus,
-		request.Config.VisibilityArchivalURI,
-		request.Config.BadBinaries.Data,
-		string(request.Config.BadBinaries.GetEncoding()),
-		request.ReplicationConfig.ActiveClusterName,
-		p.SerializeClusterConfigs(request.ReplicationConfig.Clusters),
-		request.ConfigVersion,
-		request.FailoverVersion,
-		request.FailoverNotificationVersion,
+		request.Namespace.Data,
+		request.Namespace.Encoding.String(),
 		request.NotificationVersion,
 		constNamespacePartition,
-		request.Info.Name,
+		request.Name,
 	)
 	m.updateMetadataBatch(batch, request.NotificationVersion)
 
@@ -306,28 +221,23 @@ func (m *cassandraMetadataPersistenceV2) UpdateNamespace(request *p.InternalUpda
 func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceRequest) (*p.InternalGetNamespaceResponse, error) {
 	var query *gocql.Query
 	var err error
-	info := &p.NamespaceInfo{}
-	config := &p.InternalNamespaceConfig{}
-	replicationConfig := &p.NamespaceReplicationConfig{}
-	var replicationClusters []map[string]interface{}
-	var failoverNotificationVersion int64
+	var detail []byte
+	var detailEncoding string
 	var notificationVersion int64
-	var failoverVersion int64
-	var configVersion int64
 	var isGlobalNamespace bool
 
 	if len(request.ID) > 0 && len(request.Name) > 0 {
-		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name specified in request.")
+		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name specified in request.Namespace.")
 	} else if len(request.ID) == 0 && len(request.Name) == 0 {
 		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name are empty.")
 	}
 
-	handleError := func(name, ID string, err error) error {
+	handleError := func(name string, ID primitives.UUID, err error) error {
 		identity := name
-		if len(ID) > 0 {
-			identity = ID
-		}
 		if err == gocql.ErrNotFound {
+			if len(ID) > 0 {
+				identity = ID.String()
+			}
 			return serviceerror.NewNotFound(fmt.Sprintf("Namespace %s does not exist.", identity))
 		}
 		return serviceerror.NewInternal(fmt.Sprintf("GetNamespace operation failed. Error %v", err))
@@ -335,64 +245,32 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 
 	namespace := request.Name
 	if len(request.ID) > 0 {
-		query = m.session.Query(templateGetNamespaceQuery, request.ID)
+		query = m.session.Query(templateGetNamespaceQuery, request.ID.Downcast())
+		query = m.session.Query(templateGetNamespaceQuery, request.ID.Downcast())
 		err = query.Scan(&namespace)
 		if err != nil {
 			return nil, handleError(request.Name, request.ID, err)
 		}
 	}
 
-	var badBinariesData []byte
-	var badBinariesDataEncoding string
-
 	query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace)
 	err = query.Scan(
-		&info.ID,
-		&info.Name,
-		&info.Status,
-		&info.Description,
-		&info.OwnerEmail,
-		&info.Data,
-		&config.Retention,
-		&config.EmitMetric,
-		&config.ArchivalBucket,
-		&config.ArchivalStatus,
-		&config.HistoryArchivalStatus,
-		&config.HistoryArchivalURI,
-		&config.VisibilityArchivalStatus,
-		&config.VisibilityArchivalURI,
-		&badBinariesData,
-		&badBinariesDataEncoding,
-		&replicationConfig.ActiveClusterName,
-		&replicationClusters,
-		&isGlobalNamespace,
-		&configVersion,
-		&failoverVersion,
-		&failoverNotificationVersion,
+		nil,
+		nil,
+		&detail,
+		&detailEncoding,
 		&notificationVersion,
+		&isGlobalNamespace,
 	)
 
 	if err != nil {
 		return nil, handleError(request.Name, request.ID, err)
 	}
 
-	if info.Data == nil {
-		info.Data = map[string]string{}
-	}
-	config.BadBinaries = p.NewDataBlob(badBinariesData, common.EncodingType(badBinariesDataEncoding))
-	replicationConfig.ActiveClusterName = p.GetOrUseDefaultActiveCluster(m.currentClusterName, replicationConfig.ActiveClusterName)
-	replicationConfig.Clusters = p.DeserializeClusterConfigs(replicationClusters)
-	replicationConfig.Clusters = p.GetOrUseDefaultClusters(m.currentClusterName, replicationConfig.Clusters)
-
 	return &p.InternalGetNamespaceResponse{
-		Info:                        info,
-		Config:                      config,
-		ReplicationConfig:           replicationConfig,
-		IsGlobalNamespace:           isGlobalNamespace,
-		ConfigVersion:               configVersion,
-		FailoverVersion:             failoverVersion,
-		FailoverNotificationVersion: failoverNotificationVersion,
-		NotificationVersion:         notificationVersion,
+		Namespace:           p.NewDataBlob(detail, common.EncodingType(detailEncoding)),
+		IsGlobal:            isGlobalNamespace,
+		NotificationVersion: notificationVersion,
 	}, nil
 }
 
@@ -406,58 +284,26 @@ func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespace
 	}
 
 	var name string
-	namespace := &p.InternalGetNamespaceResponse{
-		Info:              &p.NamespaceInfo{},
-		Config:            &p.InternalNamespaceConfig{},
-		ReplicationConfig: &p.NamespaceReplicationConfig{},
-	}
-	var replicationClusters []map[string]interface{}
-	var badBinariesData []byte
-	var badBinariesDataEncoding string
+	var detail []byte
+	var detailEncoding string
+	var notificationVersion int64
+	var isGlobal bool
 	response := &p.InternalListNamespacesResponse{}
 	for iter.Scan(
+		nil,
 		&name,
-		&namespace.Info.ID,
-		&namespace.Info.Name,
-		&namespace.Info.Status,
-		&namespace.Info.Description,
-		&namespace.Info.OwnerEmail,
-		&namespace.Info.Data,
-		&namespace.Config.Retention,
-		&namespace.Config.EmitMetric,
-		&namespace.Config.ArchivalBucket,
-		&namespace.Config.ArchivalStatus,
-		&namespace.Config.HistoryArchivalStatus,
-		&namespace.Config.HistoryArchivalURI,
-		&namespace.Config.VisibilityArchivalStatus,
-		&namespace.Config.VisibilityArchivalURI,
-		&badBinariesData,
-		&badBinariesDataEncoding,
-		&namespace.ReplicationConfig.ActiveClusterName,
-		&replicationClusters,
-		&namespace.IsGlobalNamespace,
-		&namespace.ConfigVersion,
-		&namespace.FailoverVersion,
-		&namespace.FailoverNotificationVersion,
-		&namespace.NotificationVersion,
+		&detail,
+		&detailEncoding,
+		&notificationVersion,
+		&isGlobal,
 	) {
+		// do not include the metadata record
 		if name != namespaceMetadataRecordName {
-			// do not include the metadata record
-			if namespace.Info.Data == nil {
-				namespace.Info.Data = map[string]string{}
-			}
-			namespace.Config.BadBinaries = p.NewDataBlob(badBinariesData, common.EncodingType(badBinariesDataEncoding))
-			badBinariesData = []byte("")
-			badBinariesDataEncoding = ""
-			namespace.ReplicationConfig.ActiveClusterName = p.GetOrUseDefaultActiveCluster(m.currentClusterName, namespace.ReplicationConfig.ActiveClusterName)
-			namespace.ReplicationConfig.Clusters = p.DeserializeClusterConfigs(replicationClusters)
-			namespace.ReplicationConfig.Clusters = p.GetOrUseDefaultClusters(m.currentClusterName, namespace.ReplicationConfig.Clusters)
-			response.Namespaces = append(response.Namespaces, namespace)
-		}
-		namespace = &p.InternalGetNamespaceResponse{
-			Info:              &p.NamespaceInfo{},
-			Config:            &p.InternalNamespaceConfig{},
-			ReplicationConfig: &p.NamespaceReplicationConfig{},
+			response.Namespaces = append(response.Namespaces, &p.InternalGetNamespaceResponse{
+				Namespace:           p.NewDataBlob(detail, common.EncodingType(detailEncoding)),
+				IsGlobal:            isGlobal,
+				NotificationVersion: notificationVersion,
+			})
 		}
 	}
 
@@ -473,7 +319,7 @@ func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespace
 
 func (m *cassandraMetadataPersistenceV2) DeleteNamespace(request *p.DeleteNamespaceRequest) error {
 	var name string
-	query := m.session.Query(templateGetNamespaceQuery, request.ID)
+	query := m.session.Query(templateGetNamespaceQuery, request.ID.Downcast())
 	err := query.Scan(&name)
 	if err != nil {
 		if err == gocql.ErrNotFound {
@@ -486,9 +332,9 @@ func (m *cassandraMetadataPersistenceV2) DeleteNamespace(request *p.DeleteNamesp
 }
 
 func (m *cassandraMetadataPersistenceV2) DeleteNamespaceByName(request *p.DeleteNamespaceByNameRequest) error {
-	var ID string
+	var ID []byte
 	query := m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, request.Name)
-	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	err := query.Scan(&ID, nil, nil, nil, nil, nil)
 	if err != nil {
 		if err == gocql.ErrNotFound {
 			return nil
@@ -528,13 +374,13 @@ func (m *cassandraMetadataPersistenceV2) updateMetadataBatch(batch *gocql.Batch,
 	)
 }
 
-func (m *cassandraMetadataPersistenceV2) deleteNamespace(name, ID string) error {
+func (m *cassandraMetadataPersistenceV2) deleteNamespace(name string, ID primitives.UUID) error {
 	query := m.session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteNamespaceByName operation failed. Error %v", err))
 	}
 
-	query = m.session.Query(templateDeleteNamespaceQuery, ID)
+	query = m.session.Query(templateDeleteNamespaceQuery, ID.Downcast())
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteNamespace operation failed. Error %v", err))
 	}

@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,15 +28,15 @@ import (
 	"context"
 	"errors"
 
-	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/activity"
-
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
 )
 
 const (
@@ -110,7 +114,7 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	}()
 	err = container.HistoryV2Manager.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: request.BranchToken,
-		ShardID:     common.IntPtr(request.ShardID),
+		ShardID:     convert.IntPtr(request.ShardID),
 	})
 	if err == nil {
 		return nil

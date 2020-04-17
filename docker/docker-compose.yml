@@ -5,26 +5,17 @@ services:
     image: cassandra:3.11
     ports:
       - "9042:9042"
-  statsd:
-    image: graphiteapp/graphite-statsd
-    ports:
-      - "8080:80"
-      - "2003:2003"
-      - "8125:8125"
-      - "8126:8126"
   temporal:
-    image: temporalio/auto-setup:0.20.0
+    image: temporalio/auto-setup:0.21.1
     ports:
      - "7233:7233"
     environment:
       - "CASSANDRA_SEEDS=cassandra"
-      - "STATSD_ENDPOINT=statsd:8125"
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
     depends_on:
       - cassandra
-      - statsd
   temporal-web:
-    image: temporalio/web:0.20.0
+    image: temporalio/web:0.21.1
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
     ports:

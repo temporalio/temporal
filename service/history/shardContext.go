@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,20 +31,20 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/resource"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -820,7 +824,7 @@ func (s *shardContextImpl) AppendHistoryV2Events(
 	}
 
 	request.Encoding = s.getDefaultEncoding(namespaceEntry)
-	request.ShardID = common.IntPtr(s.shardID)
+	request.ShardID = convert.IntPtr(s.shardID)
 	request.TransactionID = transactionID
 
 	size := 0
@@ -1110,7 +1114,7 @@ func (s *shardContextImpl) allocateTimerIDsLocked(
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
 			s.logger.Warn("New timer generated is less than read level",
-				tag.WorkflowNamespaceID(namespaceEntry.GetInfo().ID),
+				tag.WorkflowNamespaceIDBytes(namespaceEntry.GetInfo().Id),
 				tag.WorkflowID(workflowID),
 				tag.Timestamp(ts),
 				tag.CursorTimestamp(readCursorTS),

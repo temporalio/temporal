@@ -1,4 +1,8 @@
-// Copyright (c) 2016 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -364,6 +368,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		}
 	}
 	s.Equal(1, len(events))
+	s.Logger.Info("Done TestGetWorkflowExecutionHistory_Close")
 }
 
 func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {

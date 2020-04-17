@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,9 +29,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/temporalio/temporal/common/convert"
 	executionpb "go.temporal.io/temporal-proto/execution"
-
-	"github.com/temporalio/temporal/common"
 )
 
 type queryParserSuite struct {
@@ -56,35 +59,35 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 			query:     "WorkflowId = \"random workflowID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: common.StringPtr("random workflowID"),
+				workflowID: convert.StringPtr("random workflowID"),
 			},
 		},
 		{
 			query:     "WorkflowId = \"random workflowID\" and WorkflowId = \"random workflowID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: common.StringPtr("random workflowID"),
+				workflowID: convert.StringPtr("random workflowID"),
 			},
 		},
 		{
 			query:     "RunId = \"random runID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				runID: common.StringPtr("random runID"),
+				runID: convert.StringPtr("random runID"),
 			},
 		},
 		{
 			query:     "WorkflowType = \"random typeName\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowTypeName: common.StringPtr("random typeName"),
+				workflowTypeName: convert.StringPtr("random typeName"),
 			},
 		},
 		{
 			query:     "WorkflowId = 'random workflowID'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: common.StringPtr("random workflowID"),
+				workflowID: convert.StringPtr("random workflowID"),
 			},
 		},
 		{
@@ -98,9 +101,9 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 			query:     "WorkflowType = 'random typeName' and (WorkflowId = \"random workflowID\" and RunId='random runID')",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID:       common.StringPtr("random workflowID"),
-				runID:            common.StringPtr("random runID"),
-				workflowTypeName: common.StringPtr("random typeName"),
+				workflowID:       convert.StringPtr("random workflowID"),
+				runID:            convert.StringPtr("random runID"),
+				workflowTypeName: convert.StringPtr("random typeName"),
 			},
 		},
 		{
@@ -286,7 +289,7 @@ func (s *queryParserSuite) TestParse() {
 			parsedQuery: &parsedQuery{
 				earliestCloseTime: 0,
 				latestCloseTime:   1546341071000000000,
-				workflowID:        common.StringPtr("random workflowID"),
+				workflowID:        convert.StringPtr("random workflowID"),
 			},
 		},
 		{
@@ -295,7 +298,7 @@ func (s *queryParserSuite) TestParse() {
 			parsedQuery: &parsedQuery{
 				earliestCloseTime: 2000,
 				latestCloseTime:   9999,
-				runID:             common.StringPtr("random runID"),
+				runID:             convert.StringPtr("random runID"),
 				status:            toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
 			},
 		},

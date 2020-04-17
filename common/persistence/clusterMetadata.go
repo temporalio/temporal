@@ -1,4 +1,8 @@
-// Copyright (c) 2018 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,13 +33,9 @@ func GetOrUseDefaultActiveCluster(currentClusterName string, activeClusterName s
 }
 
 // GetOrUseDefaultClusters return the current cluster or use the input if valid
-func GetOrUseDefaultClusters(currentClusterName string, clusters []*ClusterReplicationConfig) []*ClusterReplicationConfig {
+func GetOrUseDefaultClusters(currentClusterName string, clusters []string) []string {
 	if len(clusters) == 0 {
-		return []*ClusterReplicationConfig{
-			&ClusterReplicationConfig{
-				ClusterName: currentClusterName,
-			},
-		}
+		return []string{ currentClusterName }
 	}
 	return clusters
 }

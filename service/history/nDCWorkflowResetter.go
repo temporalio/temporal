@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,8 +31,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
@@ -206,7 +210,7 @@ func (r *nDCWorkflowResetterImpl) getResetBranchToken(
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID, r.workflowID, r.newRunID),
-		ShardID:         common.IntPtr(shardID),
+		ShardID:         convert.IntPtr(shardID),
 	})
 	if err != nil {
 		return nil, err

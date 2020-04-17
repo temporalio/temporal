@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -160,7 +164,7 @@ func createTestTaskListManagerWithConfig(controller *gomock.Controller, cfg *Con
 		cfg, tm, nil, logger, mockNamespaceCache,
 	)
 	tl := "tl"
-	dID := "deadbeef-0123-4567-890a-bcdef0123456"
+	dID := "deadbeef-0000-4567-890a-bcdef0123456"
 	tlID := newTestTaskListID(dID, tl, persistence.TaskListTypeActivity)
 	tlKind := tasklistpb.TaskListKind_Normal
 	tlMgr, err := newTaskListManager(me, tlID, tlKind, cfg)

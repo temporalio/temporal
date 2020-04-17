@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -1655,7 +1659,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:                     e.namespaceEntry.GetInfo().ID,
+		NamespaceId:                     primitives.UUIDString(e.namespaceEntry.GetInfo().Id),
 		StartRequest:                    createRequest,
 		ParentExecutionInfo:             parentExecutionInfo,
 		LastCompletionResult:            attributes.LastCompletionResult,
@@ -1781,7 +1785,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	e.executionInfo.CreateRequestID = requestID
-	e.executionInfo.NamespaceID = e.namespaceEntry.GetInfo().ID
+	e.executionInfo.NamespaceID = primitives.UUIDString(e.namespaceEntry.GetInfo().Id)
 	e.executionInfo.WorkflowID = execution.GetWorkflowId()
 	e.executionInfo.RunID = execution.GetRunId()
 	e.executionInfo.TaskList = event.TaskList.GetName()
@@ -2141,7 +2145,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		if err != nil {
 			return nil, err
 		}
-		targetNamespaceID = targetNamespaceEntry.GetInfo().ID
+		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
 	}
 
 	scheduleEventID := event.GetEventId()
@@ -3302,7 +3306,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	firstRunID := currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId()
 
 	namespace := e.namespaceEntry.GetInfo().Name
-	namespaceID := e.namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(e.namespaceEntry.GetInfo().Id)
 	var newStateBuilder *mutableStateBuilder
 	// If a workflow is ndc enabled, the continue as new should be ndc enabled.
 	if e.config.EnableNDC(namespace) || e.GetVersionHistories() != nil {
@@ -4486,7 +4490,7 @@ func (e *mutableStateBuilder) closeTransactionHandleWorkflowReset(
 	}
 	if _, pt := FindAutoResetPoint(
 		e.timeSource,
-		&namespaceEntry.GetConfig().BadBinaries,
+		namespaceEntry.GetConfig().BadBinaries,
 		e.GetExecutionInfo().AutoResetPoints,
 	); pt != nil {
 		if err := e.taskGenerator.generateWorkflowResetTasks(

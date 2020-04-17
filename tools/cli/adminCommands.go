@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -321,8 +325,7 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("readOneRow", err)
 		}
-		namespace := res["namespace"].(map[string]interface{})
-		namespaceName := namespace["name"].(string)
+		namespaceName := res["name"].(string)
 		fmt.Printf("namespace for namespaceId %v is %v \n", namespaceID, namespaceName)
 	} else {
 		tmpl := "select namespace from namespaces_by_name where name = ?"

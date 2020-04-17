@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -31,7 +35,6 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -1016,87 +1019,39 @@ type (
 		NextPageToken []byte
 	}
 
-	// NamespaceInfo describes the namespace entity
-	NamespaceInfo struct {
-		ID          string
-		Name        string
-		Status      int
-		Description string
-		OwnerEmail  string
-		Data        map[string]string
-	}
-
-	// NamespaceConfig describes the namespace configuration
-	NamespaceConfig struct {
-		// NOTE: this retention is in days, not in seconds
-		Retention                int32
-		EmitMetric               bool
-		HistoryArchivalStatus    namespacepb.ArchivalStatus
-		HistoryArchivalURI       string
-		VisibilityArchivalStatus namespacepb.ArchivalStatus
-		VisibilityArchivalURI    string
-		BadBinaries              namespacepb.BadBinaries
-	}
-
-	// NamespaceReplicationConfig describes the cross DC namespace replication configuration
-	NamespaceReplicationConfig struct {
-		ActiveClusterName string
-		Clusters          []*ClusterReplicationConfig
-	}
-
-	// ClusterReplicationConfig describes the cross DC cluster replication configuration
-	ClusterReplicationConfig struct {
-		ClusterName string
-		// Note: if adding new properties of non-primitive types, remember to update GetCopy()
-	}
-
 	// CreateNamespaceRequest is used to create the namespace
 	CreateNamespaceRequest struct {
-		Info              *NamespaceInfo
-		Config            *NamespaceConfig
-		ReplicationConfig *NamespaceReplicationConfig
+		Namespace         *persistenceblobs.NamespaceDetail
 		IsGlobalNamespace bool
-		ConfigVersion     int64
-		FailoverVersion   int64
 	}
 
 	// CreateNamespaceResponse is the response for CreateNamespace
 	CreateNamespaceResponse struct {
-		ID string
+		ID primitives.UUID
 	}
 
 	// GetNamespaceRequest is used to read namespace
 	GetNamespaceRequest struct {
-		ID   string
+		ID   primitives.UUID
 		Name string
 	}
 
 	// GetNamespaceResponse is the response for GetNamespace
 	GetNamespaceResponse struct {
-		Info                        *NamespaceInfo
-		Config                      *NamespaceConfig
-		ReplicationConfig           *NamespaceReplicationConfig
+		Namespace                   *persistenceblobs.NamespaceDetail
 		IsGlobalNamespace           bool
-		ConfigVersion               int64
-		FailoverVersion             int64
-		FailoverNotificationVersion int64
 		NotificationVersion         int64
 	}
 
 	// UpdateNamespaceRequest is used to update namespace
 	UpdateNamespaceRequest struct {
-		Info                        *NamespaceInfo
-		Config                      *NamespaceConfig
-		ReplicationConfig           *NamespaceReplicationConfig
-		ConfigVersion               int64
-		FailoverVersion             int64
-		FailoverNotificationVersion int64
+		Namespace                   *persistenceblobs.NamespaceDetail
 		NotificationVersion         int64
 	}
 
 	// DeleteNamespaceRequest is used to delete namespace entry from namespaces table
 	DeleteNamespaceRequest struct {
-		ID string
+		ID primitives.UUID
 	}
 
 	// DeleteNamespaceByNameRequest is used to delete namespace entry from namespaces_by_name table
@@ -1516,6 +1471,7 @@ type (
 		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
 		ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error)
 		GetMetadata() (*GetMetadataResponse, error)
+		InitializeSystemNamespaces(currentClusterName string) error
 	}
 
 	// ClusterMetadataManager is used to manage cluster-wide metadata and configuration
@@ -2203,44 +2159,6 @@ func (a *SyncActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 
-// SerializeClusterConfigs makes an array of *ClusterReplicationConfig serializable
-// by flattening them into map[string]interface{}
-func SerializeClusterConfigs(replicationConfigs []*ClusterReplicationConfig) []map[string]interface{} {
-	seriaizedReplicationConfigs := []map[string]interface{}{}
-	for index := range replicationConfigs {
-		seriaizedReplicationConfigs = append(seriaizedReplicationConfigs, replicationConfigs[index].serialize())
-	}
-	return seriaizedReplicationConfigs
-}
-
-// DeserializeClusterConfigs creates an array of ClusterReplicationConfigs from an array of map representations
-func DeserializeClusterConfigs(replicationConfigs []map[string]interface{}) []*ClusterReplicationConfig {
-	deseriaizedReplicationConfigs := []*ClusterReplicationConfig{}
-	for index := range replicationConfigs {
-		deseriaizedReplicationConfig := &ClusterReplicationConfig{}
-		deseriaizedReplicationConfig.deserialize(replicationConfigs[index])
-		deseriaizedReplicationConfigs = append(deseriaizedReplicationConfigs, deseriaizedReplicationConfig)
-	}
-
-	return deseriaizedReplicationConfigs
-}
-
-func (config *ClusterReplicationConfig) serialize() map[string]interface{} {
-	output := make(map[string]interface{})
-	output["cluster_name"] = config.ClusterName
-	return output
-}
-
-func (config *ClusterReplicationConfig) deserialize(input map[string]interface{}) {
-	config.ClusterName = input["cluster_name"].(string)
-}
-
-// GetCopy return a copy of ClusterReplicationConfig
-func (config *ClusterReplicationConfig) GetCopy() *ClusterReplicationConfig {
-	res := *config
-	return &res
-}
-
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano
 func DBTimestampToUnixNano(milliseconds int64) int64 {
 	return milliseconds * 1000 * 1000 // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-3) - (-9) = 6, so multiply by 10⁶
@@ -2322,8 +2240,8 @@ func NewGetReplicationTasksFromDLQRequest(
 
 func (r *ReplicationState) GenerateVersionProto() *persistenceblobs.ReplicationVersions {
 	return &persistenceblobs.ReplicationVersions{
-		StartVersion: &types.Int64Value{Value: r.StartVersion},
-		LastWriteVersion: &types.Int64Value{ Value: r.LastWriteVersion},
+		StartVersion:     &types.Int64Value{Value: r.StartVersion},
+		LastWriteVersion: &types.Int64Value{Value: r.LastWriteVersion},
 	}
 }
 

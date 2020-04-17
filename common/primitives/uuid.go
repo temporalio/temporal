@@ -1,4 +1,8 @@
-// Copyright (c) 2018 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +28,8 @@ import (
 	"database/sql/driver"
 	"encoding/hex"
 
-	"github.com/google/uuid"
+	guuid "github.com/google/uuid"
+	"github.com/pborman/uuid"
 )
 
 // UUID represents a 16-byte universally unique identifier
@@ -40,8 +45,13 @@ func MustParseUUID(s string) UUID {
 	if s == "" {
 		return nil
 	}
-	u := uuid.MustParse(s)
+	u := guuid.MustParse(s)
 	return u[:]
+}
+
+// NewUUID generates a new random UUID
+func NewUUID() UUID {
+	return UUID(uuid.NewRandom())
 }
 
 // Downcast returns the UUID as a byte slice. This is necessary when passing to type sensitive interfaces such as cql.
@@ -90,7 +100,7 @@ func (u *UUID) Scan(src interface{}) error {
 	if src == nil {
 		return nil
 	}
-	guuid := &uuid.UUID{}
+	guuid := &guuid.UUID{}
 	if err := guuid.Scan(src); err != nil {
 		return err
 	}

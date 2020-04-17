@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -31,17 +34,17 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-
 	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type ForwarderTestSuite struct {
@@ -106,7 +109,7 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
 
 	schedToStart := request.GetScheduleToStartTimeoutSeconds()
-	rewritten := int32(math.Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds()))
+	rewritten := convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds())
 	t.Equal(schedToStart, rewritten)
 	t.Equal(t.taskList.name, request.GetForwardedFrom())
 }
@@ -132,7 +135,8 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(primitives.UUIDString(taskInfo.Data.GetRunId()), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
-	t.EqualValues(int(math.Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds())), request.GetScheduleToStartTimeoutSeconds())
+	t.EqualValues(convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds()),
+		request.GetScheduleToStartTimeoutSeconds())
 	t.Equal(t.taskList.name, request.GetForwardedFrom())
 }
 

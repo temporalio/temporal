@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,20 +32,19 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
-	"go.uber.org/zap"
-
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
+	"github.com/uber-go/tally"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
+	"go.uber.org/zap"
 )
 
 type (
@@ -348,25 +351,25 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(nil).Once()
 	branchToken2, err := p.NewHistoryBranchTokenByBranchID(treeID2, branchID2)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(nil).Once()
 	branchToken3, err := p.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(nil).Once()
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(nil).Once()
 
 	hbd, err := scvgr.Run(context.Background())
@@ -458,14 +461,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(nil).Once()
 
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
-		ShardID:     common.IntPtr(1),
+		ShardID:     convert.IntPtr(1),
 	}).Return(fmt.Errorf("failed to delete history")).Once()
 
 	hbd, err := scvgr.Run(context.Background())

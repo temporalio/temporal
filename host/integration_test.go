@@ -1,4 +1,8 @@
-// Copyright (c) 2016 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -92,12 +96,24 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
 		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
 	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
+
+	// Validate the default value for TaskStartToCloseTimeoutSeconds
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.namespace,
+		Execution: &executionpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we0.RunId,
+		},
+	})
+	s.NoError(err)
+	history := historyResponse.History
+	startedEvent := history.Events[0].GetWorkflowExecutionStartedEventAttributes()
+	s.Equal(int32(10), startedEvent.GetTaskStartToCloseTimeoutSeconds())
 
 	we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err1)
@@ -334,7 +350,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	expectedActivity := int32(1)
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		s.Equal(id, execution.WorkflowId)
+		s.EqualValues(id, execution.WorkflowId)
 		s.Equal(activityName, activityType.Name)
 		id, _ := strconv.Atoi(activityID)
 		s.Equal(int(expectedActivity), id)
@@ -518,7 +534,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		s.Equal(id, execution.WorkflowId)
+		s.EqualValues(id, execution.WorkflowId)
 		s.Equal(activityName, activityType.Name)
 		s.Logger.Info("Activity ID", tag.WorkflowActivityID(activityID))
 		return []byte("Activity Result"), false, nil

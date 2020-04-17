@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,15 +34,12 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -50,6 +51,9 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 	"github.com/temporalio/temporal/common/service/config"
+	"github.com/uber-go/tally"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
 )
 
 type (
@@ -226,7 +230,7 @@ func (s *TestBase) Setup() {
 		TransferAckLevel:        0,
 		ReplicationAckLevel:     0,
 		TimerAckLevel:           &types.Timestamp{},
-		ClusterTimerAckLevel:    map[string]*types.Timestamp{clusterName: {}},
+		ClusterTimerAckLevel:    map[string]*types.Timestamp{},
 		ClusterTransferAckLevel: map[string]int64{clusterName: 0},
 	}
 
@@ -1326,7 +1330,7 @@ func (s *TestBase) GetTasks(namespaceID primitives.UUID, taskList string, taskTy
 		TaskList:     taskList,
 		TaskType:     taskType,
 		BatchSize:    batchSize,
-		MaxReadLevel: common.Int64Ptr(math.MaxInt64),
+		MaxReadLevel: convert.Int64Ptr(math.MaxInt64),
 	})
 
 	if err != nil {

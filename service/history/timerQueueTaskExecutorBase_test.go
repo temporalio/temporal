@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -165,7 +169,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 		HistoryArchivedInline: false,
 	}, nil)
 
-	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistence.NamespaceInfo{}, &persistence.NamespaceConfig{}, false, nil, 0, nil)
+	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistenceblobs.NamespaceInfo{}, &persistenceblobs.NamespaceConfig{}, false, nil, 0, nil)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
 	s.NoError(err)
 }
@@ -183,7 +187,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 		return req.CallerService == common.HistoryServiceName && !req.AttemptArchiveInline && req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
 	})).Return(nil, errors.New("failed to send signal"))
 
-	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistence.NamespaceInfo{}, &persistence.NamespaceConfig{}, false, nil, 0, nil)
+	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistenceblobs.NamespaceInfo{}, &persistenceblobs.NamespaceConfig{}, false, nil, 0, nil)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
 	s.Error(err)
 }

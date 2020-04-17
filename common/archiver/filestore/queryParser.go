@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,10 +33,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/xwb1989/sqlparser"
 	executionpb "go.temporal.io/temporal-proto/execution"
-
-	"github.com/temporalio/temporal/common"
 )
 
 type (
@@ -145,7 +149,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowID = common.StringPtr(val)
+		parsedQuery.workflowID = convert.StringPtr(val)
 	case RunID:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -158,7 +162,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.runID = common.StringPtr(val)
+		parsedQuery.runID = convert.StringPtr(val)
 	case WorkflowType:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -171,7 +175,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowTypeName = common.StringPtr(val)
+		parsedQuery.workflowTypeName = convert.StringPtr(val)
 	case ExecutionStatus:
 		val, err := extractStringValue(valStr)
 		if err != nil {

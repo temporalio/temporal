@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -182,9 +186,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_AllDefault() {
 	namespace := s.getRandomNamespace()
 	var clusters []*replicationpb.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: cluster,
 		})
 	}
 
@@ -244,9 +248,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestRegisterGetNamespace_
 	isGlobalNamespace := false
 
 	var expectedClusters []*replicationpb.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		expectedClusters = append(expectedClusters, &replicationpb.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: cluster,
 		})
 	}
 
@@ -304,9 +308,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_No
 	emitMetric := true
 	data := map[string]string{"some random key": "some random value"}
 	var clusters []*replicationpb.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: cluster,
 		})
 	}
 
@@ -399,9 +403,9 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TestUpdateGetNamespace_Al
 	data := map[string]string{"some random key": "some random value"}
 
 	var expectedClusters []*replicationpb.ClusterReplicationConfiguration
-	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+	for _, cluster := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
 		expectedClusters = append(expectedClusters, &replicationpb.ClusterReplicationConfiguration{
-			ClusterName: replicationConfig.ClusterName,
+			ClusterName: cluster,
 		})
 	}
 

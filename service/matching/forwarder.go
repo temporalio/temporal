@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,21 +27,20 @@ package matching
 import (
 	"context"
 	"errors"
-	"math"
 	"sync/atomic"
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
-
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 type (
@@ -150,7 +153,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		return err
 	}
 
-	newScheduleToStartTimeout := int32(math.Ceil(time.Until(expiryGo).Seconds()))
+	newScheduleToStartTimeout := convert.Int32Ceil(time.Until(expiryGo).Seconds())
 
 	// Todo - should we noop expired tasks? This will be moot once history stamp absolute time
 	/*if newScheduleToStartTimeout <= 0 {

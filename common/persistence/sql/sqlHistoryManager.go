@@ -1,4 +1,8 @@
-// Copyright (c) 2018 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,15 +29,15 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type sqlHistoryV2Manager struct {
@@ -358,7 +362,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 
 	rsp, err := m.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID:  treeID,
-		ShardID: common.IntPtr(request.ShardID),
+		ShardID: convert.IntPtr(request.ShardID),
 	})
 	if err != nil {
 		return err

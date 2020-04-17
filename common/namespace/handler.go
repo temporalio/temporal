@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -34,6 +38,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
@@ -42,6 +47,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -147,10 +153,10 @@ func (d *HandlerImpl) RegisterNamespace(
 	} else {
 		activeClusterName = d.clusterMetadata.GetCurrentClusterName()
 	}
-	var clusters []*persistence.ClusterReplicationConfig
+	var clusters []string
 	for _, clusterConfig := range registerRequest.Clusters {
 		clusterName := clusterConfig.GetClusterName()
-		clusters = append(clusters, &persistence.ClusterReplicationConfig{ClusterName: clusterName})
+		clusters = append(clusters, clusterName)
 	}
 	clusters = persistence.GetOrUseDefaultClusters(activeClusterName, clusters)
 
@@ -194,24 +200,24 @@ func (d *HandlerImpl) RegisterNamespace(
 		}
 	}
 
-	info := &persistence.NamespaceInfo{
-		ID:          uuid.New(),
+	info := &persistenceblobs.NamespaceInfo{
+		Id:          uuid.NewRandom(),
 		Name:        registerRequest.GetName(),
-		Status:      persistence.NamespaceStatusRegistered,
-		OwnerEmail:  registerRequest.GetOwnerEmail(),
+		Status:      namespacepb.NamespaceStatus_Registered,
+		Owner:       registerRequest.GetOwnerEmail(),
 		Description: registerRequest.GetDescription(),
 		Data:        registerRequest.Data,
 	}
-	config := &persistence.NamespaceConfig{
-		Retention:                registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
+	config := &persistenceblobs.NamespaceConfig{
+		RetentionDays:            registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:               registerRequest.GetEmitMetric(),
 		HistoryArchivalStatus:    nextHistoryArchivalState.Status,
 		HistoryArchivalURI:       nextHistoryArchivalState.URI,
 		VisibilityArchivalStatus: nextVisibilityArchivalState.Status,
 		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
-		BadBinaries:              namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+		BadBinaries:              &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 	}
-	replicationConfig := &persistence.NamespaceReplicationConfig{
+	replicationConfig := &persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
 		Clusters:          clusters,
 	}
@@ -240,12 +246,14 @@ func (d *HandlerImpl) RegisterNamespace(
 	}
 
 	namespaceRequest := &persistence.CreateNamespaceRequest{
-		Info:              info,
-		Config:            config,
-		ReplicationConfig: replicationConfig,
+		Namespace: &persistenceblobs.NamespaceDetail{
+			Info:              info,
+			Config:            config,
+			ReplicationConfig: replicationConfig,
+			ConfigVersion:     0,
+			FailoverVersion:   failoverVersion,
+		},
 		IsGlobalNamespace: isGlobalNamespace,
-		ConfigVersion:     0,
-		FailoverVersion:   failoverVersion,
 	}
 
 	namespaceResponse, err := d.metadataMgr.CreateNamespace(namespaceRequest)
@@ -256,11 +264,11 @@ func (d *HandlerImpl) RegisterNamespace(
 	if namespaceRequest.IsGlobalNamespace {
 		err = d.namespaceReplicator.HandleTransmissionTask(
 			replicationgenpb.NamespaceOperation_Create,
-			namespaceRequest.Info,
-			namespaceRequest.Config,
-			namespaceRequest.ReplicationConfig,
-			namespaceRequest.ConfigVersion,
-			namespaceRequest.FailoverVersion,
+			namespaceRequest.Namespace.Info,
+			namespaceRequest.Namespace.Config,
+			namespaceRequest.Namespace.ReplicationConfig,
+			namespaceRequest.Namespace.ConfigVersion,
+			namespaceRequest.Namespace.FailoverVersion,
 			namespaceRequest.IsGlobalNamespace,
 		)
 		if err != nil {
@@ -270,7 +278,7 @@ func (d *HandlerImpl) RegisterNamespace(
 
 	d.logger.Info("Register namespace succeeded",
 		tag.WorkflowNamespace(registerRequest.GetName()),
-		tag.WorkflowNamespaceID(namespaceResponse.ID),
+		tag.WorkflowNamespaceIDBytes(namespaceResponse.ID),
 	)
 
 	return nil, nil
@@ -300,9 +308,13 @@ func (d *HandlerImpl) ListNamespaces(
 	for _, namespace := range resp.Namespaces {
 		desc := &workflowservice.DescribeNamespaceResponse{
 			IsGlobalNamespace: namespace.IsGlobalNamespace,
-			FailoverVersion:   namespace.FailoverVersion,
+			FailoverVersion:   namespace.Namespace.FailoverVersion,
 		}
-		desc.NamespaceInfo, desc.Configuration, desc.ReplicationConfiguration = d.createResponse(ctx, namespace.Info, namespace.Config, namespace.ReplicationConfig)
+		desc.NamespaceInfo, desc.Configuration, desc.ReplicationConfiguration =
+			d.createResponse(ctx,
+				namespace.Namespace.Info,
+				namespace.Namespace.Config,
+				namespace.Namespace.ReplicationConfig)
 		namespaces = append(namespaces, desc)
 	}
 
@@ -323,7 +335,7 @@ func (d *HandlerImpl) DescribeNamespace(
 	// TODO, we should migrate the non global namespace to new table, see #773
 	req := &persistence.GetNamespaceRequest{
 		Name: describeRequest.GetName(),
-		ID:   describeRequest.GetId(),
+		ID:   primitives.MustParseUUID(describeRequest.GetId()),
 	}
 	resp, err := d.metadataMgr.GetNamespace(req)
 	if err != nil {
@@ -332,9 +344,10 @@ func (d *HandlerImpl) DescribeNamespace(
 
 	response := &workflowservice.DescribeNamespaceResponse{
 		IsGlobalNamespace: resp.IsGlobalNamespace,
-		FailoverVersion:   resp.FailoverVersion,
+		FailoverVersion:   resp.Namespace.FailoverVersion,
 	}
-	response.NamespaceInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(ctx, resp.Info, resp.Config, resp.ReplicationConfig)
+	response.NamespaceInfo, response.Configuration, response.ReplicationConfiguration =
+		d.createResponse(ctx, resp.Namespace.Info, resp.Namespace.Config, resp.Namespace.ReplicationConfig)
 	return response, nil
 }
 
@@ -358,12 +371,12 @@ func (d *HandlerImpl) UpdateNamespace(
 		return nil, err
 	}
 
-	info := getResponse.Info
-	config := getResponse.Config
-	replicationConfig := getResponse.ReplicationConfig
-	configVersion := getResponse.ConfigVersion
-	failoverVersion := getResponse.FailoverVersion
-	failoverNotificationVersion := getResponse.FailoverNotificationVersion
+	info := getResponse.Namespace.Info
+	config := getResponse.Namespace.Config
+	replicationConfig := getResponse.Namespace.ReplicationConfig
+	configVersion := getResponse.Namespace.ConfigVersion
+	failoverVersion := getResponse.Namespace.FailoverVersion
+	failoverNotificationVersion := getResponse.Namespace.FailoverNotificationVersion
 	isGlobalNamespace := getResponse.IsGlobalNamespace
 
 	currentHistoryArchivalState := &ArchivalState{
@@ -417,7 +430,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		}
 		if updatedInfo.GetOwnerEmail() != "" {
 			configurationChanged = true
-			info.OwnerEmail = updatedInfo.GetOwnerEmail()
+			info.Owner = updatedInfo.GetOwnerEmail()
 		}
 		if updatedInfo.Data != nil {
 			configurationChanged = true
@@ -433,7 +446,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		}
 		if updatedConfig.GetWorkflowExecutionRetentionPeriodInDays() != 0 {
 			configurationChanged = true
-			config.Retention = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
+			config.RetentionDays = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
 		}
 		if historyArchivalConfigChanged {
 			configurationChanged = true
@@ -448,7 +461,8 @@ func (d *HandlerImpl) UpdateNamespace(
 		if updatedConfig.BadBinaries != nil {
 			maxLength := d.maxBadBinaryCount(updateRequest.GetName())
 			// only do merging
-			config.BadBinaries = d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano())
+			bb := d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano())
+			config.BadBinaries = &bb
 			if len(config.BadBinaries.Binaries) > maxLength {
 				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Total resetBinaries cannot exceed the max limit: %v", maxLength))
 			}
@@ -469,11 +483,9 @@ func (d *HandlerImpl) UpdateNamespace(
 		updateReplicationConfig := updateRequest.ReplicationConfiguration
 		if len(updateReplicationConfig.Clusters) != 0 {
 			configurationChanged = true
-			var clustersNew []*persistence.ClusterReplicationConfig
+			var clustersNew []string
 			for _, clusterConfig := range updateReplicationConfig.Clusters {
-				clustersNew = append(clustersNew, &persistence.ClusterReplicationConfig{
-					ClusterName: clusterConfig.GetClusterName(),
-				})
+				clustersNew = append(clustersNew, clusterConfig.GetClusterName())
 			}
 
 			if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigClustersDoesNotRemove(
@@ -528,12 +540,14 @@ func (d *HandlerImpl) UpdateNamespace(
 		}
 
 		updateReq := &persistence.UpdateNamespaceRequest{
-			Info:                        info,
-			Config:                      config,
-			ReplicationConfig:           replicationConfig,
-			ConfigVersion:               configVersion,
-			FailoverVersion:             failoverVersion,
-			FailoverNotificationVersion: failoverNotificationVersion,
+			Namespace: &persistenceblobs.NamespaceDetail{
+				Info:                        info,
+				Config:                      config,
+				ReplicationConfig:           replicationConfig,
+				ConfigVersion:               configVersion,
+				FailoverVersion:             failoverVersion,
+				FailoverNotificationVersion: failoverNotificationVersion,
+			},
 			NotificationVersion:         notificationVersion,
 		}
 		err = d.metadataMgr.UpdateNamespace(updateReq)
@@ -562,7 +576,7 @@ func (d *HandlerImpl) UpdateNamespace(
 
 	d.logger.Info("Update namespace succeeded",
 		tag.WorkflowNamespace(info.Name),
-		tag.WorkflowNamespaceID(info.ID),
+		tag.WorkflowNamespaceIDBytes(info.Id),
 	)
 	return response, nil
 }
@@ -593,15 +607,17 @@ func (d *HandlerImpl) DeprecateNamespace(
 		return nil, err
 	}
 
-	getResponse.ConfigVersion = getResponse.ConfigVersion + 1
-	getResponse.Info.Status = persistence.NamespaceStatusDeprecated
+	getResponse.Namespace.ConfigVersion = getResponse.Namespace.ConfigVersion + 1
+	getResponse.Namespace.Info.Status = namespacepb.NamespaceStatus_Deprecated
 	updateReq := &persistence.UpdateNamespaceRequest{
-		Info:                        getResponse.Info,
-		Config:                      getResponse.Config,
-		ReplicationConfig:           getResponse.ReplicationConfig,
-		ConfigVersion:               getResponse.ConfigVersion,
-		FailoverVersion:             getResponse.FailoverVersion,
-		FailoverNotificationVersion: getResponse.FailoverNotificationVersion,
+		Namespace: &persistenceblobs.NamespaceDetail{
+			Info:                        getResponse.Namespace.Info,
+			Config:                      getResponse.Namespace.Config,
+			ReplicationConfig:           getResponse.Namespace.ReplicationConfig,
+			ConfigVersion:               getResponse.Namespace.ConfigVersion,
+			FailoverVersion:             getResponse.Namespace.FailoverVersion,
+			FailoverNotificationVersion: getResponse.Namespace.FailoverNotificationVersion,
+		},
 		NotificationVersion:         notificationVersion,
 	}
 	err = d.metadataMgr.UpdateNamespace(updateReq)
@@ -613,40 +629,39 @@ func (d *HandlerImpl) DeprecateNamespace(
 
 func (d *HandlerImpl) createResponse(
 	ctx context.Context,
-	info *persistence.NamespaceInfo,
-	config *persistence.NamespaceConfig,
-	replicationConfig *persistence.NamespaceReplicationConfig,
+	info *persistenceblobs.NamespaceInfo,
+	config *persistenceblobs.NamespaceConfig,
+	replicationConfig *persistenceblobs.NamespaceReplicationConfig,
 ) (*namespacepb.NamespaceInfo, *namespacepb.NamespaceConfiguration, *replicationpb.NamespaceReplicationConfiguration) {
 
 	infoResult := &namespacepb.NamespaceInfo{
 		Name:        info.Name,
-		Status:      getNamespaceStatus(info),
+		Status:      info.Status,
 		Description: info.Description,
-		OwnerEmail:  info.OwnerEmail,
+		OwnerEmail:  info.Owner,
 		Data:        info.Data,
-		Id:          info.ID,
+		Id:          primitives.UUIDString(info.Id),
 	}
 
 	configResult := &namespacepb.NamespaceConfiguration{
 		EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
-		WorkflowExecutionRetentionPeriodInDays: config.Retention,
+		WorkflowExecutionRetentionPeriodInDays: config.RetentionDays,
 		HistoryArchivalStatus:                  config.HistoryArchivalStatus,
 		HistoryArchivalURI:                     config.HistoryArchivalURI,
 		VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
 		VisibilityArchivalURI:                  config.VisibilityArchivalURI,
-		BadBinaries:                            &config.BadBinaries,
+		BadBinaries:                            config.BadBinaries,
 	}
 
 	var clusters []*replicationpb.ClusterReplicationConfiguration
 	for _, cluster := range replicationConfig.Clusters {
 		clusters = append(clusters, &replicationpb.ClusterReplicationConfiguration{
-			ClusterName: cluster.ClusterName,
+			ClusterName: cluster,
 		})
 	}
-
 	replicationConfigResult := &replicationpb.NamespaceReplicationConfiguration{
 		ActiveClusterName: replicationConfig.ActiveClusterName,
-		Clusters:          clusters,
+		Clusters: clusters,
 	}
 
 	return infoResult, configResult, replicationConfigResult
@@ -748,18 +763,4 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 	}
 
 	return archiver.ValidateURI(URI)
-}
-
-func getNamespaceStatus(info *persistence.NamespaceInfo) namespacepb.NamespaceStatus {
-	switch info.Status {
-	case persistence.NamespaceStatusRegistered:
-		return namespacepb.NamespaceStatus_Registered
-	case persistence.NamespaceStatusDeprecated:
-		return namespacepb.NamespaceStatus_Deprecated
-	case persistence.NamespaceStatusDeleted:
-		return namespacepb.NamespaceStatus_Deleted
-	}
-
-	// TODO: panic, log, ...?
-	return namespacepb.NamespaceStatus_Registered
 }

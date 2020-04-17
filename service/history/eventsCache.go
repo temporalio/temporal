@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,15 +29,14 @@ package history
 import (
 	"time"
 
-	eventpb "go.temporal.io/temporal-proto/event"
-	"go.temporal.io/temporal-proto/serviceerror"
-
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	eventpb "go.temporal.io/temporal-proto/event"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -86,7 +89,7 @@ var _ eventsCache = (*eventsCacheImpl)(nil)
 
 func newEventsCache(shardCtx ShardContext) eventsCache {
 	config := shardCtx.GetConfig()
-	shardID := common.IntPtr(shardCtx.GetShardID())
+	shardID := convert.IntPtr(shardCtx.GetShardID())
 	return newEventsCacheWithOptions(config.EventsCacheInitialSize(), config.EventsCacheMaxSize(), config.EventsCacheTTL(),
 		shardCtx.GetHistoryManager(), false, shardCtx.GetLogger(), shardCtx.GetMetricsClient(), shardID)
 }

@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -64,7 +68,7 @@ var keys = map[Key]string{
 	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
 	TransactionSizeLimit:                   "system.transactionSizeLimit",
 	MinRetentionDays:                       "system.minRetentionDays",
-	MaxDecisionStartToCloseSeconds:         "system.maxDecisionStartToCloseSeconds",
+	MaxDecisionTaskStartToCloseTimeout:     "system.maxDecisionTaskStartToCloseTimeout",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
@@ -195,7 +199,10 @@ var keys = map[Key]string{
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
 	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
 	StickyTTL:                                             "history.stickyTTL",
+	DefaultExecutionStartToCloseTimeout:                   "history.defaultWorkflowExecutionTimeout",
+	MaxExecutionStartToCloseTimeout:                       "history.maximumWorkflowExecutionTimeout",
 	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
+	DefaultDecisionTaskStartToCloseTimeout:                "history.defaultDecisionTaskStartToCloseTimeout",
 	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
 	NumParentClosePolicySystemWorkflows:                   "history.numParentClosePolicySystemWorkflows",
 	ReplicationTaskFetcherParallelism:                     "history.ReplicationTaskFetcherParallelism",
@@ -293,11 +300,10 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
-	// MaxDecisionStartToCloseSeconds is the minimal allowed decision start to close timeout in seconds
-	MaxDecisionStartToCloseSeconds
+	// MaxDecisionTaskStartToCloseTimeout  is the maximum allowed decision start to close timeout
+	MaxDecisionTaskStartToCloseTimeout
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
-
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
@@ -553,6 +559,12 @@ const (
 	StickyTTL
 	// DecisionHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
+	// DefaultExecutionStartToCloseTimeout for a workflow execution
+	DefaultExecutionStartToCloseTimeout
+	// Maximum allowed workflow execution timeout
+	MaxExecutionStartToCloseTimeout
+	// DefaultDecisionTaskStartToCloseTimeout for a decision task
+	DefaultDecisionTaskStartToCloseTimeout
 
 	// key for worker
 

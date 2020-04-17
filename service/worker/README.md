@@ -1,7 +1,7 @@
 Temporal Worker
 ==============
 
-Temporal Worker is a new role for Temporal service used for hosting any
+Temporal Worker is a role for Temporal service used for hosting any
 components responsible for performing background processing on the Temporal
 cluster.
 

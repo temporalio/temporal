@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -105,12 +109,12 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 	return shardInfo, nil
 }
 
-func NamespaceInfoToBlob(info *persistenceblobs.NamespaceInfo) (DataBlob, error) {
+func NamespaceDetailToBlob(info *persistenceblobs.NamespaceDetail) (DataBlob, error) {
 	return proto3Encode(info)
 }
 
-func NamespaceInfoFromBlob(b []byte, proto string) (*persistenceblobs.NamespaceInfo, error) {
-	result := &persistenceblobs.NamespaceInfo{}
+func NamespaceDetailFromBlob(b []byte, proto string) (*persistenceblobs.NamespaceDetail, error) {
+	result := &persistenceblobs.NamespaceDetail{}
 	return result, proto3Decode(b, proto, result)
 }
 

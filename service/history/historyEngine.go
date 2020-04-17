@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -32,15 +36,6 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
-	sdkclient "go.temporal.io/temporal/client"
-
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -51,6 +46,7 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
@@ -62,6 +58,14 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/xdc"
 	"github.com/temporalio/temporal/service/worker/archiver"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	querypb "go.temporal.io/temporal-proto/query"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/temporal-proto/workflowservice"
+	sdkclient "go.temporal.io/temporal/client"
 )
 
 const (
@@ -441,7 +445,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 			for _, nextNamespace := range nextNamespaces {
 				failoverPredicate(shardNotificationVersion, nextNamespace, func() {
-					failoverNamespaceIDs[nextNamespace.GetInfo().ID] = struct{}{}
+					failoverNamespaceIDs[primitives.UUIDString(nextNamespace.GetInfo().Id)] = struct{}{}
 				})
 			}
 
@@ -537,7 +541,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	request := startRequest.StartRequest
 	err = validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit())
@@ -816,20 +820,22 @@ func (e *historyEngineImpl) QueryWorkflow(
 		}
 	}
 
-	// query cannot be processed unless at least one decision task has finished
-	// if first decision task has not finished wait for up to a second for it to complete
-	deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
-	for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
-		<-time.After(queryFirstDecisionTaskCheckInterval)
-		mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
-		if err != nil {
-			return nil, err
+	if request.GetRequest().GetQueryConsistencyLevel() == querypb.QueryConsistencyLevel_Eventual {
+		// query cannot be processed unless at least one decision task has finished
+		// if first decision task has not finished wait for up to a second for it to complete
+		deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
+		for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
+			<-time.After(queryFirstDecisionTaskCheckInterval)
+			mutableStateResp, err = e.getMutableState(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
+			if err != nil {
+				return nil, err
+			}
 		}
-	}
 
-	if mutableStateResp.GetPreviousStartedEventId() <= 0 {
-		scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
-		return nil, ErrQueryWorkflowBeforeFirstDecision
+		if mutableStateResp.GetPreviousStartedEventId() <= 0 {
+			scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
+			return nil, ErrQueryWorkflowBeforeFirstDecision
+		}
 	}
 
 	de, err := e.shard.GetNamespaceCache().GetNamespaceByID(request.GetNamespaceId())
@@ -1330,7 +1336,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 
 	namespaceInfo := namespaceEntry.GetInfo()
 
-	namespaceID := namespaceInfo.ID
+	namespaceID := primitives.UUIDString(namespaceInfo.Id)
 	namespace := namespaceInfo.Name
 
 	execution := executionpb.WorkflowExecution{
@@ -1451,7 +1457,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 	namespace := namespaceEntry.GetInfo().Name
 
 	request := req.CompleteRequest
@@ -1525,7 +1531,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 	namespace := namespaceEntry.GetInfo().Name
 
 	request := req.FailedRequest
@@ -1609,7 +1615,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 	namespace := namespaceEntry.GetInfo().Name
 
 	request := req.CancelRequest
@@ -1692,7 +1698,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	request := req.HeartbeatRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1762,7 +1768,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	request := req.CancelRequest
 	parentExecution := req.ExternalWorkflowExecution
@@ -1819,7 +1825,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	request := signalRequest.SignalRequest
 	parentExecution := signalRequest.ExternalWorkflowExecution
@@ -1894,7 +1900,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	sRequest := signalWithStartRequest.SignalWithStartRequest
 	execution := executionpb.WorkflowExecution{
@@ -2104,7 +2110,7 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	execution := executionpb.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
@@ -2132,7 +2138,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	request := terminateRequest.TerminateRequest
 	execution := executionpb.WorkflowExecution{
@@ -2170,7 +2176,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	execution := executionpb.WorkflowExecution{
 		WorkflowId: completionRequest.WorkflowExecution.WorkflowId,
@@ -2597,11 +2603,11 @@ func validateStartWorkflowExecutionRequest(
 	if len(request.GetRequestId()) == 0 {
 		return serviceerror.NewInvalidArgument("Missing request ID.")
 	}
-	if request.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
-		return serviceerror.NewInvalidArgument("Missing or invalid ExecutionStartToCloseTimeoutSeconds.")
+	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid ExecutionStartToCloseTimeoutSeconds.")
 	}
-	if request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		return serviceerror.NewInvalidArgument("Missing or invalid TaskStartToCloseTimeoutSeconds.")
+	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid TaskStartToCloseTimeoutSeconds.")
 	}
 	if request.TaskList == nil || request.TaskList.GetName() == "" {
 		return serviceerror.NewInvalidArgument("Missing Tasklist.")
@@ -2630,13 +2636,33 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	request *workflowservice.StartWorkflowExecutionRequest,
 	metricsScope int,
 ) {
-
 	namespace := namespaceEntry.GetInfo().Name
-	maxDecisionStartToCloseTimeoutSeconds := int32(e.config.MaxDecisionStartToCloseSeconds(namespace))
+
+	executionStartToCloseTimeoutSeconds := request.GetExecutionStartToCloseTimeoutSeconds()
+	if executionStartToCloseTimeoutSeconds == 0 {
+		executionStartToCloseTimeoutSeconds = convert.Int32Ceil(e.config.DefaultExecutionStartToCloseTimeout(namespace).Seconds())
+	}
+	maxWorkflowExecutionTimeout := convert.Int32Ceil(e.config.MaxExecutionStartToCloseTimeout(namespace).Seconds())
+
+	if executionStartToCloseTimeoutSeconds > maxWorkflowExecutionTimeout {
+		executionStartToCloseTimeoutSeconds = maxWorkflowExecutionTimeout
+	}
+	if executionStartToCloseTimeoutSeconds != request.GetExecutionStartToCloseTimeoutSeconds() {
+		request.ExecutionStartToCloseTimeoutSeconds = executionStartToCloseTimeoutSeconds
+		e.metricsClient.Scope(
+			metricsScope,
+			metrics.NamespaceTag(namespace),
+		).IncCounter(metrics.WorkflowExecutionStartToCloseTimeoutOverrideCount)
+	}
+
+	maxDecisionStartToCloseTimeoutSeconds := convert.Int32Ceil(e.config.MaxDecisionTaskStartToCloseTimeout(namespace).Seconds())
 
 	taskStartToCloseTimeoutSecs := request.GetTaskStartToCloseTimeoutSeconds()
+	if taskStartToCloseTimeoutSecs == 0 {
+		taskStartToCloseTimeoutSecs = convert.Int32Ceil(e.config.DefaultDecisionTaskStartToCloseTimeout(namespace).Seconds())
+	}
 	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, maxDecisionStartToCloseTimeoutSeconds)
-	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, request.GetExecutionStartToCloseTimeoutSeconds())
+	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, executionStartToCloseTimeoutSeconds)
 
 	if taskStartToCloseTimeoutSecs != request.GetTaskStartToCloseTimeoutSeconds() {
 		request.TaskStartToCloseTimeoutSeconds = taskStartToCloseTimeoutSecs
@@ -2880,7 +2906,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 	// remove run id from the execution so that reapply events to the current run
 	currentExecution := executionpb.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -3063,7 +3089,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
 	if err != nil {

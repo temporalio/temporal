@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -774,7 +778,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	}
 	logger = logger.WithTags(tag.WorkflowNamespace(namespaceEntry.GetInfo().Name))
 
-	reason, resetPoint := FindAutoResetPoint(t.shard.GetTimeSource(), &namespaceEntry.GetConfig().BadBinaries, executionInfo.AutoResetPoints)
+	reason, resetPoint := FindAutoResetPoint(t.shard.GetTimeSource(), namespaceEntry.GetConfig().BadBinaries, executionInfo.AutoResetPoints)
 	if resetPoint == nil {
 		logger.Warn("Auto-Reset is skipped, because reset point is not found.")
 		return nil

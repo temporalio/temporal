@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Temporal Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,17 +30,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	versionpb "go.temporal.io/temporal-proto/version"
-	"go.temporal.io/temporal-proto/workflowservice"
-
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -45,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/elasticsearch/validator"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
@@ -56,6 +50,16 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/resource"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
+	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 type (
@@ -338,7 +342,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
 	}
 
-	if request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
+	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
 		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
 	}
 
@@ -655,7 +659,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 	if err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
-	namespaceID := namespaceEntry.GetInfo().ID
+	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
 
 	wh.GetLogger().Debug("Poll for decision.", tag.WorkflowNamespace(namespace), tag.WorkflowNamespaceID(namespaceID))
 	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
@@ -1914,7 +1918,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
 	}
 
-	if request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
+	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
 		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
 	}
 
@@ -2384,7 +2388,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	}
 
 	archiverRequest := &archiver.QueryVisibilityRequest{
-		NamespaceID:   entry.GetInfo().ID,
+		NamespaceID:   primitives.UUIDString(entry.GetInfo().Id),
 		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
@@ -3241,7 +3245,7 @@ func (wh *WorkflowHandler) getRawHistory(
 		MaxEventID:    nextEventID,
 		PageSize:      int(pageSize),
 		NextPageToken: nextPageToken,
-		ShardID:       common.IntPtr(shardID),
+		ShardID:       convert.IntPtr(shardID),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -3318,7 +3322,7 @@ func (wh *WorkflowHandler) getHistory(
 		MaxEventID:    nextEventID,
 		PageSize:      int(pageSize),
 		NextPageToken: nextPageToken,
-		ShardID:       common.IntPtr(shardID),
+		ShardID:       convert.IntPtr(shardID),
 	})
 	if err != nil {
 		return nil, nil, err

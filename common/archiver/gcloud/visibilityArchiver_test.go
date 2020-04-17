@@ -1,3 +1,7 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,16 +34,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
+	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/archiver/gcloud/connector/mocks"
+	"github.com/temporalio/temporal/common/convert"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/metrics"
 	"github.com/uber-go/tally"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.uber.org/zap"
-
-	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/archiver/gcloud/connector/mocks"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/metrics"
 )
 
 const (
@@ -263,9 +266,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       int64(101),
 		searchPrecision: &dayPrecision,
-		workflowType:    common.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      common.StringPtr(testWorkflowID),
-		runID:           common.StringPtr(testRunID),
+		workflowType:    convert.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      convert.StringPtr(testWorkflowID),
+		runID:           convert.StringPtr(testRunID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -306,9 +309,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       int64(101),
 		searchPrecision: &dayPrecision,
-		workflowType:    common.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      common.StringPtr(testWorkflowID),
-		runID:           common.StringPtr(testRunID),
+		workflowType:    convert.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      convert.StringPtr(testWorkflowID),
+		runID:           convert.StringPtr(testRunID),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{

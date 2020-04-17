@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -93,35 +97,39 @@ type (
 
 var testVersion = int64(1234)
 var testNamespaceID = "deadbeef-0123-4567-890a-bcdef0123456"
+var testNamespaceUUID = primitives.MustParseUUID(testNamespaceID)
 var testNamespace = "some random namespace name"
 var testParentNamespaceID = "deadbeef-0123-4567-890a-bcdef0123457"
+var testParentNamespaceUUID = primitives.MustParseUUID(testParentNamespaceID)
 var testParentNamespace = "some random parent namespace name"
 var testTargetNamespaceID = "deadbeef-0123-4567-890a-bcdef0123458"
+var testTargetNamespaceUUID = primitives.MustParseUUID(testTargetNamespaceID)
 var testTargetNamespace = "some random target namespace name"
 var testChildNamespaceID = "deadbeef-0123-4567-890a-bcdef0123459"
+var testChildNamespaceUUID = primitives.MustParseUUID(testChildNamespaceID)
 var testChildNamespace = "some random child namespace name"
 var testWorkflowID = "random-workflow-id"
 var testRunID = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
 var testLocalNamespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(
-	&persistence.NamespaceInfo{ID: testNamespaceID, Name: testNamespace},
-	&persistence.NamespaceConfig{Retention: 1},
+	&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID, Name: testNamespace},
+	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 	cluster.TestCurrentClusterName,
 	nil,
 )
 
 var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistence.NamespaceInfo{ID: testNamespaceID, Name: testNamespace},
-	&persistence.NamespaceConfig{
-		Retention:                1,
+	&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID, Name: testNamespace},
+	&persistenceblobs.NamespaceConfig{
+		RetentionDays:            1,
 		VisibilityArchivalStatus: namespacepb.ArchivalStatus_Enabled,
 		VisibilityArchivalURI:    "test:///visibility/archival",
 	},
-	&persistence.NamespaceReplicationConfig{
+	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
-		Clusters: []*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
+		Clusters: []string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
 		},
 	},
 	testVersion,
@@ -129,13 +137,13 @@ var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalParentNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistence.NamespaceInfo{ID: testParentNamespaceID, Name: testParentNamespace},
-	&persistence.NamespaceConfig{Retention: 1},
-	&persistence.NamespaceReplicationConfig{
+	&persistenceblobs.NamespaceInfo{Id: testParentNamespaceUUID, Name: testParentNamespace},
+	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
-		Clusters: []*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
+		Clusters: []string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
 		},
 	},
 	testVersion,
@@ -143,13 +151,13 @@ var testGlobalParentNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalTargetNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistence.NamespaceInfo{ID: testTargetNamespaceID, Name: testTargetNamespace},
-	&persistence.NamespaceConfig{Retention: 1},
-	&persistence.NamespaceReplicationConfig{
+	&persistenceblobs.NamespaceInfo{Id: testTargetNamespaceUUID, Name: testTargetNamespace},
+	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
-		Clusters: []*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
+		Clusters: []string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
 		},
 	},
 	testVersion,
@@ -157,13 +165,13 @@ var testGlobalTargetNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalChildNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistence.NamespaceInfo{ID: testChildNamespaceID, Name: testChildNamespace},
-	&persistence.NamespaceConfig{Retention: 1},
-	&persistence.NamespaceReplicationConfig{
+	&persistenceblobs.NamespaceInfo{Id: testChildNamespaceUUID, Name: testChildNamespace},
+	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
+	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
-		Clusters: []*persistence.ClusterReplicationConfig{
-			{ClusterName: cluster.TestCurrentClusterName},
-			{ClusterName: cluster.TestAlternativeClusterName},
+		Clusters: []string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
 		},
 	},
 	testVersion,
@@ -1504,6 +1512,9 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		// will use ScheduleToClose for ScheduleToStart and StartToClose
 		{7, 0, 0, 0,
 			7, 7, 7, false},
+		// Only StartToClose timeout
+		{0, 0, 7, 0,
+			workflowTimeout, workflowTimeout, 7, false},
 		// No ScheduleToClose timeout, ScheduleToStart or StartToClose, expect error return
 		{0, 0, 0, 0,
 			0, 0, 0, true},
@@ -1528,7 +1539,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		{0, workflowTimeout + 1, 0, 0,
 			0, 0, 0, true},
 		{0, 0, workflowTimeout + 1, 0,
-			0, 0, 0, true},
+			workflowTimeout, workflowTimeout, workflowTimeout, false},
 		{0, 0, 0, workflowTimeout + 1,
 			0, 0, 0, true},
 		// No ScheduleToClose timeout, will use ScheduleToStart + StartToClose, but exceed limit
@@ -1631,10 +1642,10 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	identity := "testIdentity"
 	executionContext := []byte("context")
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistence.NamespaceInfo{ID: namespaceID, Name: testNamespace},
-		&persistence.NamespaceConfig{
-			Retention: 2,
-			BadBinaries: namespacepb.BadBinaries{
+		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: testNamespace},
+		&persistenceblobs.NamespaceConfig{
+			RetentionDays: 2,
+			BadBinaries: &namespacepb.BadBinaries{
 				Binaries: map[string]*namespacepb.BadBinaryInfo{
 					"test-bad-binary": {},
 				},

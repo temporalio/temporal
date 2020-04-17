@@ -1,4 +1,8 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -39,17 +43,13 @@ import (
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
-	"github.com/urfave/cli"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	yaml "gopkg.in/yaml.v2"
-
 	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/persistence"
@@ -57,6 +57,10 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/history"
+	"github.com/urfave/cli"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type filterFn func(*replicationgenpb.ReplicationTask) bool
@@ -525,7 +529,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 		}
 
 		_, historyBatches, err := history.GetAllHistory(historyV2Mgr, nil, true,
-			minID, maxID, exeInfo.BranchToken, common.IntPtr(shardID))
+			minID, maxID, exeInfo.BranchToken, convert.IntPtr(shardID))
 
 		if err != nil {
 			ErrorAndExit("GetAllHistory error", err)
@@ -556,7 +560,7 @@ func doRereplicate(shardID int, namespaceID, wid, rid string, minID, maxID int64
 			taskTemplate.Version = firstEvent.GetVersion()
 			taskTemplate.FirstEventId = firstEvent.GetEventId()
 			taskTemplate.NextEventId = lastEvent.GetEventId() + 1
-			task, _, err := history.GenerateReplicationTask(targets, taskTemplate, historyV2Mgr, nil, batch, common.IntPtr(shardID))
+			task, _, err := history.GenerateReplicationTask(targets, taskTemplate, historyV2Mgr, nil, batch, convert.IntPtr(shardID))
 			if err != nil {
 				ErrorAndExit("GenerateReplicationTask error", err)
 			}

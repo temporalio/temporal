@@ -1,4 +1,8 @@
-// Copyright (c) 2018 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,15 +32,14 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/types"
-	"go.temporal.io/temporal-proto/serviceerror"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type sqlTaskManager struct {
@@ -68,7 +71,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 		ShardID:     shardID,
 		NamespaceID: &namespaceID,
 		Name:        &request.TaskList,
-		TaskType:    common.Int64Ptr(int64(request.TaskType))})
+		TaskType:    convert.Int64Ptr(int64(request.TaskType))})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			tlInfo := &persistenceblobs.TaskListInfo{
@@ -303,7 +306,7 @@ func (m *sqlTaskManager) DeleteTaskList(request *persistence.DeleteTaskListReque
 		ShardID:     m.shardID(namespaceID, request.TaskList.Name),
 		NamespaceID: &namespaceID,
 		Name:        &request.TaskList.Name,
-		TaskType:    common.Int64Ptr(int64(request.TaskList.TaskType)),
+		TaskType:    convert.Int64Ptr(int64(request.TaskList.TaskType)),
 		RangeID:     &request.RangeID,
 	})
 	if err != nil {
@@ -422,7 +425,7 @@ func (m *sqlTaskManager) shardID(namespaceID primitives.UUID, name string) int {
 
 func lockTaskList(tx sqlplugin.Tx, shardID int, namespaceID primitives.UUID, name string, taskListType int32, oldRangeID int64) error {
 	rangeID, err := tx.LockTaskLists(&sqlplugin.TaskListsFilter{
-		ShardID: shardID, NamespaceID: &namespaceID, Name: &name, TaskType: common.Int64Ptr(int64(taskListType))})
+		ShardID: shardID, NamespaceID: &namespaceID, Name: &name, TaskType: convert.Int64Ptr(int64(taskListType))})
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock task list. Error: %v", err))
 	}

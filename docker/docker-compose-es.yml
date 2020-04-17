@@ -32,7 +32,7 @@ services:
     environment:
       - discovery.type=single-node
   temporal:
-    image: temporalio/auto-setup:0.20.0
+    image: temporalio/auto-setup:0.21.1
     ports:
      - "7233:7233"
      - "7234:7234"
@@ -55,7 +55,7 @@ services:
       - kafka
       - elasticsearch
   temporal-web:
-    image: temporalio/web:0.20.0
+    image: temporalio/web:0.21.1
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
     ports:

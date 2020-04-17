@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,10 +25,10 @@
 package backoff
 
 import (
-	"math"
 	"time"
 
 	"github.com/robfig/cron"
+	"github.com/temporalio/temporal/common/convert"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -61,7 +65,7 @@ func GetBackoffForNextSchedule(cronSchedule string, startTime time.Time, closeTi
 		nextScheduleTime = schedule.Next(nextScheduleTime)
 	}
 	backoffInterval := nextScheduleTime.Sub(closeUTCTime)
-	roundedInterval := time.Second * time.Duration(math.Ceil(backoffInterval.Seconds()))
+	roundedInterval := time.Second * time.Duration(convert.Int64Ceil(backoffInterval.Seconds()))
 	return roundedInterval
 }
 
@@ -72,5 +76,5 @@ func GetBackoffForNextScheduleInSeconds(cronSchedule string, startTime time.Time
 	if backoffDuration == NoBackoff {
 		return 0
 	}
-	return int32(math.Ceil(backoffDuration.Seconds()))
+	return convert.Int32Ceil(backoffDuration.Seconds())
 }

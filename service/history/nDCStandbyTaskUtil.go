@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,12 +28,12 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type (
@@ -136,7 +140,7 @@ func newHistoryResendInfoFor2DC(
 	nextEventID int64,
 ) *historyResendInfo {
 	return &historyResendInfo{
-		nextEventID:      common.Int64Ptr(nextEventID),
+		nextEventID:      convert.Int64Ptr(nextEventID),
 		lastEventID:      common.EmptyEventID,
 		lastEventVersion: common.EmptyVersion,
 	}
