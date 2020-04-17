@@ -115,7 +115,6 @@ var _ engine.Engine = (*historyEngineImpl)(nil)
 var (
 	// ErrDuplicate is exported temporarily for integration test
 	ErrDuplicate = errors.New("duplicate task, completing it")
-
 	// ErrMaxAttemptsExceeded is exported temporarily for integration test
 	ErrMaxAttemptsExceeded = errors.New("maximum attempts exceeded to update history")
 	// ErrStaleState is the error returned during state update indicating that cached mutable state could be stale
@@ -492,16 +491,37 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	domainID := domainEntry.GetInfo().ID
+
+	return e.startWorkflowHelper(
+		ctx,
+		startRequest,
+		domainEntry,
+		metrics.HistoryStartWorkflowExecutionScope,
+		nil)
+}
+
+type signalWithStartArg struct {
+	signalWithStartRequest *workflow.SignalWithStartWorkflowExecutionRequest
+	prevMutableState       execution.MutableState
+}
+
+func (e *historyEngineImpl) startWorkflowHelper(
+	ctx ctx.Context,
+	startRequest *h.StartWorkflowExecutionRequest,
+	domainEntry *cache.DomainCacheEntry,
+	metricsScope int,
+	signalWithStartArg *signalWithStartArg,
+) (resp *workflow.StartWorkflowExecutionResponse, retError error) {
 
 	request := startRequest.StartRequest
-	err = validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit())
+	err := validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
-	e.overrideStartWorkflowExecutionRequest(domainEntry, request, metrics.HistoryStartWorkflowExecutionScope)
+	e.overrideStartWorkflowExecutionRequest(domainEntry, request, metricsScope)
 
 	workflowID := request.GetWorkflowId()
+	domainID := domainEntry.GetInfo().ID
 	// grab the current context as a lock, nothing more
 	_, currentRelease, err := e.executionCache.GetOrCreateCurrentWorkflowExecution(
 		ctx,
@@ -518,12 +538,43 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		RunId:      common.StringPtr(uuid.New()),
 	}
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(clusterMetadata, domainEntry, workflowExecution.GetRunId())
+	curMutableState, err := e.createMutableState(clusterMetadata, domainEntry, workflowExecution.GetRunId())
 	if err != nil {
 		return nil, err
 	}
 
-	startEvent, err := mutableState.AddWorkflowExecutionStartedEvent(
+	// for signalWithStart, WorkflowIDReusePolicy is default to WorkflowIDReusePolicyAllowDuplicate
+	// while for startWorkflow it is default to WorkflowIdReusePolicyAllowDuplicateFailedOnly.
+	isSignalWithStart := signalWithStartArg != nil
+	var prevMutableState execution.MutableState
+	if isSignalWithStart && signalWithStartArg.prevMutableState != nil {
+		prevMutableState = signalWithStartArg.prevMutableState
+	}
+	if prevMutableState != nil {
+		prevLastWriteVersion, err := prevMutableState.GetLastWriteVersion()
+		if err != nil {
+			return nil, err
+		}
+		if prevLastWriteVersion > curMutableState.GetCurrentVersion() {
+			return nil, ce.NewDomainNotActiveError(
+				domainEntry.GetInfo().Name,
+				clusterMetadata.GetCurrentClusterName(),
+				clusterMetadata.ClusterNameForFailoverVersion(prevLastWriteVersion),
+			)
+		}
+		policy := workflow.WorkflowIdReusePolicyAllowDuplicate
+		if request.WorkflowIdReusePolicy != nil {
+			policy = request.GetWorkflowIdReusePolicy()
+		}
+
+		err = e.applyWorkflowIDReusePolicyForSigWithStart(prevMutableState.GetExecutionInfo(), workflowExecution, policy)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Add WF start event
+	startEvent, err := curMutableState.AddWorkflowExecutionStartedEvent(
 		workflowExecution,
 		startRequest,
 	)
@@ -533,9 +584,20 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		}
 	}
 
+	if isSignalWithStart {
+		// Add signal event
+		sRequest := signalWithStartArg.signalWithStartRequest
+		if _, err := curMutableState.AddWorkflowExecutionSignaled(
+			sRequest.GetSignalName(),
+			sRequest.GetSignalInput(),
+			sRequest.GetIdentity()); err != nil {
+			return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution signaled event."}
+		}
+	}
+
 	// Generate first decision task event if not child WF and no first decision task backoff
 	if err := e.generateFirstDecisionTask(
-		mutableState,
+		curMutableState,
 		startRequest.ParentExecutionInfo,
 		startEvent,
 	); err != nil {
@@ -545,7 +607,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	context := execution.NewContext(domainID, workflowExecution, e.shard, e.executionManager, e.logger)
 
 	now := e.timeSource.Now()
-	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
+	newWorkflow, newWorkflowEventsSeq, err := curMutableState.CloseTransactionAsSnapshot(
 		now,
 		execution.TransactionPolicyActive,
 	)
@@ -561,52 +623,71 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	createMode := persistence.CreateWorkflowModeBrandNew
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	err = context.CreateWorkflowExecution(
-		newWorkflow, historySize, now,
-		createMode, prevRunID, prevLastWriteVersion,
-	)
-	if err != nil {
-		if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
-			if t.StartRequestID == *request.RequestId {
-				return &workflow.StartWorkflowExecutionResponse{
-					RunId: common.StringPtr(t.RunID),
-				}, nil
-				// delete history is expected here because duplicate start request will create history with different rid
-			}
 
-			if mutableState.GetCurrentVersion() < t.LastWriteVersion {
-				return nil, ce.NewDomainNotActiveError(
-					*request.Domain,
-					clusterMetadata.GetCurrentClusterName(),
-					clusterMetadata.ClusterNameForFailoverVersion(t.LastWriteVersion),
-				)
-			}
-
-			// create as ID reuse
-			createMode = persistence.CreateWorkflowModeWorkflowIDReuse
-			prevRunID = t.RunID
-			prevLastWriteVersion = t.LastWriteVersion
-			if err = e.applyWorkflowIDReusePolicyHelper(
-				t.StartRequestID,
-				prevRunID,
-				t.State,
-				t.CloseStatus,
-				domainID,
-				workflowExecution,
-				startRequest.StartRequest.GetWorkflowIdReusePolicy(),
-			); err != nil {
-				return nil, err
-			}
-			err = context.CreateWorkflowExecution(
-				newWorkflow, historySize, now,
-				createMode, prevRunID, prevLastWriteVersion,
-			)
+	if prevMutableState != nil {
+		createMode = persistence.CreateWorkflowModeWorkflowIDReuse
+		prevRunID = prevMutableState.GetExecutionInfo().RunID
+		prevLastWriteVersion, err = prevMutableState.GetLastWriteVersion()
+		if err != nil {
+			return nil, err
 		}
 	}
+	err = context.CreateWorkflowExecution(
+		newWorkflow,
+		historySize,
+		now,
+		createMode,
+		prevRunID,
+		prevLastWriteVersion,
+	)
+	// handle already started error
+	if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
 
+		if t.StartRequestID == request.GetRequestId() {
+			return &workflow.StartWorkflowExecutionResponse{
+				RunId: common.StringPtr(t.RunID),
+			}, nil
+		}
+
+		if isSignalWithStart {
+			return nil, err
+		}
+
+		if curMutableState.GetCurrentVersion() < t.LastWriteVersion {
+			return nil, ce.NewDomainNotActiveError(
+				request.GetDomain(),
+				clusterMetadata.GetCurrentClusterName(),
+				clusterMetadata.ClusterNameForFailoverVersion(t.LastWriteVersion),
+			)
+		}
+
+		// create as ID reuse
+		createMode = persistence.CreateWorkflowModeWorkflowIDReuse
+		prevRunID = t.RunID
+		prevLastWriteVersion = t.LastWriteVersion
+		if err = e.applyWorkflowIDReusePolicyHelper(
+			t.StartRequestID,
+			prevRunID,
+			t.State,
+			t.CloseStatus,
+			workflowExecution,
+			startRequest.StartRequest.GetWorkflowIdReusePolicy(),
+		); err != nil {
+			return nil, err
+		}
+		err = context.CreateWorkflowExecution(
+			newWorkflow,
+			historySize,
+			now,
+			createMode,
+			prevRunID,
+			prevLastWriteVersion,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
+
 	return &workflow.StartWorkflowExecutionResponse{
 		RunId: workflowExecution.RunId,
 	}, nil
@@ -1957,133 +2038,16 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 
 	// Start workflow and signal
 	startRequest := getStartRequest(domainID, sRequest)
-	request := startRequest.StartRequest
-	err = validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit())
-	if err != nil {
-		return nil, err
+	sigWithStartArg := &signalWithStartArg{
+		signalWithStartRequest: sRequest,
+		prevMutableState:       prevMutableState,
 	}
-	e.overrideStartWorkflowExecutionRequest(domainEntry, request, metrics.HistorySignalWorkflowExecutionScope)
-
-	workflowID := request.GetWorkflowId()
-	// grab the current context as a lock, nothing more
-	_, currentRelease, err := e.executionCache.GetOrCreateCurrentWorkflowExecution(
+	return e.startWorkflowHelper(
 		ctx,
-		domainID,
-		workflowID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { currentRelease(retError) }()
-
-	workflowExecution = workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(uuid.New()),
-	}
-
-	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(clusterMetadata, domainEntry, workflowExecution.GetRunId())
-	if err != nil {
-		return nil, err
-	}
-
-	if prevMutableState != nil {
-		prevLastWriteVersion, err := prevMutableState.GetLastWriteVersion()
-		if err != nil {
-			return nil, err
-		}
-		if prevLastWriteVersion > mutableState.GetCurrentVersion() {
-			return nil, ce.NewDomainNotActiveError(
-				domainEntry.GetInfo().Name,
-				clusterMetadata.GetCurrentClusterName(),
-				clusterMetadata.ClusterNameForFailoverVersion(prevLastWriteVersion),
-			)
-		}
-		policy := workflow.WorkflowIdReusePolicyAllowDuplicate
-		if request.WorkflowIdReusePolicy != nil {
-			policy = *request.WorkflowIdReusePolicy
-		}
-
-		err = e.applyWorkflowIDReusePolicyForSigWithStart(prevMutableState.GetExecutionInfo(), domainID, workflowExecution, policy)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Add WF start event
-	startEvent, err := mutableState.AddWorkflowExecutionStartedEvent(
-		workflowExecution,
 		startRequest,
-	)
-	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: "Failed to add workflow execution started event.",
-		}
-	}
-
-	// Add signal event
-	if _, err := mutableState.AddWorkflowExecutionSignaled(
-		sRequest.GetSignalName(),
-		sRequest.GetSignalInput(),
-		sRequest.GetIdentity()); err != nil {
-		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution signaled event."}
-	}
-
-	if err = e.generateFirstDecisionTask(
-		mutableState,
-		startRequest.ParentExecutionInfo,
-		startEvent,
-	); err != nil {
-		return nil, err
-	}
-
-	context = execution.NewContext(domainID, workflowExecution, e.shard, e.executionManager, e.logger)
-
-	now := e.timeSource.Now()
-	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
-		now,
-		execution.TransactionPolicyActive,
-	)
-	if err != nil {
-		return nil, err
-	}
-	historySize, err := context.PersistFirstWorkflowEvents(newWorkflowEventsSeq[0])
-	if err != nil {
-		return nil, err
-	}
-
-	createMode := persistence.CreateWorkflowModeBrandNew
-	prevRunID := ""
-	prevLastWriteVersion := int64(0)
-	if prevMutableState != nil {
-		createMode = persistence.CreateWorkflowModeWorkflowIDReuse
-		prevRunID = prevMutableState.GetExecutionInfo().RunID
-		prevLastWriteVersion, err = prevMutableState.GetLastWriteVersion()
-		if err != nil {
-			return nil, err
-		}
-	}
-	err = context.CreateWorkflowExecution(
-		newWorkflow, historySize, now,
-		createMode, prevRunID, prevLastWriteVersion,
-	)
-
-	if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
-		if t.StartRequestID == *request.RequestId {
-			return &workflow.StartWorkflowExecutionResponse{
-				RunId: common.StringPtr(t.RunID),
-			}, nil
-			// delete history is expected here because duplicate start request will create history with different rid
-		}
-		return nil, err
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	return &workflow.StartWorkflowExecutionResponse{
-		RunId: workflowExecution.RunId,
-	}, nil
+		domainEntry,
+		metrics.HistorySignalWithStartWorkflowExecutionScope,
+		sigWithStartArg)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
@@ -2725,7 +2689,6 @@ func getStartRequest(
 // for startWorkflowExecution & signalWithStart to handle workflow reuse policy
 func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 	prevExecutionInfo *persistence.WorkflowExecutionInfo,
-	domainID string,
 	execution workflow.WorkflowExecution,
 	wfIDReusePolicy workflow.WorkflowIdReusePolicy,
 ) error {
@@ -2740,7 +2703,6 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 		prevRunID,
 		prevState,
 		prevCloseState,
-		domainID,
 		execution,
 		wfIDReusePolicy,
 	)
@@ -2752,13 +2714,12 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	prevRunID string,
 	prevState int,
 	prevCloseState int,
-	domainID string,
 	execution workflow.WorkflowExecution,
 	wfIDReusePolicy workflow.WorkflowIdReusePolicy,
 ) error {
 
-	// here we know there is some information about the prev workflow, i.e. either running right now
-	// or has history check if the this workflow is finished
+	// here we know some information about the prev workflow, i.e. either running right now
+	// or has history check if the workflow is finished
 	switch prevState {
 	case persistence.WorkflowStateCreated,
 		persistence.WorkflowStateRunning:
@@ -2778,7 +2739,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 			return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 		}
 	case workflow.WorkflowIdReusePolicyAllowDuplicate:
-		// as long as workflow not running, so this case has no check
+		// no check need here
 	case workflow.WorkflowIdReusePolicyRejectDuplicate:
 		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: reject duplicate workflow ID."
 		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
