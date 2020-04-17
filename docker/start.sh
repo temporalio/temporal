@@ -29,13 +29,16 @@ setup_cassandra_schema() {
 
 setup_mysql_schema() {
     SCHEMA_DIR=$CADENCE_HOME/schema/mysql/v57/cadence/versioned
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD create --db $DBNAME
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $DBNAME setup-schema -v 0.0
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $DBNAME update-schema -d $SCHEMA_DIR
+    if [ "$MYSQL_TX_ISOLATION_COMPAT" == "true" ]; then
+        CONNECT_ATTR='--connect-attributes tx_isolation=READ-COMMITTED'
+    fi
+    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $CONNECT_ATTR create --db $DBNAME
+    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $CONNECT_ATTR --db $DBNAME setup-schema -v 0.0
+    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $CONNECT_ATTR --db $DBNAME update-schema -d $SCHEMA_DIR
     VISIBILITY_SCHEMA_DIR=$CADENCE_HOME/schema/mysql/v57/visibility/versioned
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD create --db $VISIBILITY_DBNAME
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME setup-schema -v 0.0
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
+    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD $CONNECT_ATTR create --db $VISIBILITY_DBNAME
+    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME $CONNECT_ATTR setup-schema -v 0.0
+    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME $CONNECT_ATTR update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 setup_postgres_schema() {
