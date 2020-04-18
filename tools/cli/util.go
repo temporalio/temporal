@@ -44,6 +44,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	filterpb "go.temporal.io/temporal-proto/filter"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
@@ -141,9 +142,17 @@ func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string 
 		for i, key := range v.MapKeys() {
 			str += key.String() + ":"
 			val := v.MapIndex(key)
-			switch val.Interface().(type) {
+			switch typedV := val.Interface().(type) {
 			case []byte:
-				str += string(val.Interface().([]byte))
+				str += string(typedV)
+			case *commonpb.Payload:
+				var data string
+				err := codec.Decode(typedV, &data)
+				if err == nil {
+					str += data
+				} else {
+					str += anyToString(*typedV, printFully, maxFieldLength)
+				}
 			default:
 				str += val.String()
 			}

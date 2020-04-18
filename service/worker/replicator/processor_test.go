@@ -41,6 +41,7 @@ import (
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	messageMocks "github.com/temporalio/temporal/common/messaging/mocks"
@@ -280,7 +281,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Succ
 		StartedId:         1236,
 		StartedTime:       time.Now().UnixNano(),
 		LastHeartbeatTime: time.Now().UnixNano(),
-		Details:           []byte("some random details"),
+		Details:           codec.EncodeString("some random details"),
 		Attempt:           1048576,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
@@ -306,7 +307,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Fail
 		StartedId:         1236,
 		StartedTime:       time.Now().UnixNano(),
 		LastHeartbeatTime: time.Now().UnixNano(),
-		Details:           []byte("some random details"),
+		Details:           codec.EncodeString("some random details"),
 		Attempt:           1048576,
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{

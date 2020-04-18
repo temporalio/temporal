@@ -42,6 +42,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
@@ -279,7 +280,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 			time.Sleep(10 * time.Millisecond)
 			t.rootMatcher.OfferQuery(ctx, task)
 		},
-	).Return(&matchingservice.QueryWorkflowResponse{QueryResult: []byte("answer")}, nil)
+	).Return(&matchingservice.QueryWorkflowResponse{QueryResult: codec.EncodeString("answer")}, nil)
 
 	result, err := t.matcher.OfferQuery(ctx, task)
 	cancel()
@@ -287,7 +288,11 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	t.NoError(err)
 	t.NotNil(result)
 	t.True(querySet.Load())
-	t.Equal("answer", string(result.QueryResult))
+
+	var answer string
+	err = codec.Decode(result.GetQueryResult(), &answer)
+	t.NoError(err)
+	t.Equal("answer", answer)
 	t.Equal(t.taskList.name, req.GetForwardedFrom())
 	t.Equal(t.taskList.Parent(20), req.GetTaskList().GetName())
 }

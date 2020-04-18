@@ -205,8 +205,8 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		Status:             executionpb.WorkflowExecutionStatus_Failed,
 		HistoryLength:      int64(101),
 		Memo: &commonpb.Memo{
-			Fields: map[string][]byte{
-				"testFields": {1, 2, 3},
+			Fields: map[string]*commonpb.Payload{
+				"testFields": codec.EncodeBytes([]byte{1, 2, 3}),
 			},
 		},
 		SearchAttributes: map[string]string{
