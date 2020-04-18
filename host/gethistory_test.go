@@ -383,7 +383,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	taskList := &tasklistpb.TaskList{Name: tasklistName}
 
 	// Start workflow execution
-	request := &workflow.StartWorkflowExecutionRequest{
+	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           s.testRawHistoryNamespaceName,
 		WorkflowId:                          workflowID,
@@ -398,7 +398,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// decider logic
 	activityScheduled := false
@@ -413,7 +413,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return nil, []*decisionpb.Decision{{
-				DecisionType: decisionpb.DecisionType_ScheduleActivityTask),
+				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{
 					ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 						ActivityId:                    "1",
@@ -429,7 +429,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			}}, nil
 		}
 
-		return nil, []*workflow.Decision{{
+		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{
 				CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
@@ -474,7 +474,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	}
 
 	getHistory := func(namespace string, workflowID string, token []byte) ([]*commonpb.DataBlob, []byte) {
-		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &executionpb.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &executionpb.WorkflowExecution{
 				WorkflowId: workflowID,
