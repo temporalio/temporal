@@ -44,6 +44,7 @@ import (
 
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/rpc"
+	"github.com/temporalio/temporal/service/history"
 )
 
 func (s *integrationSuite) TestQueryWorkflow_Sticky() {
@@ -1335,6 +1336,5 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 		},
 	})
 	s.IsType(&workflowservice.QueryWorkflowResponse{}, queryResp)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("workflow must handle at least one decision task before it can be queried", err.Error())
+	s.IsType(history.ErrQueryWorkflowBeforeFirstDecision, err)
 }
