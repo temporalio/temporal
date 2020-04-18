@@ -49,7 +49,6 @@ type (
 
 		membershipUpdateCh chan *membership.ChangedEvent
 		engineFactory      EngineFactory
-		shardClosedCh      chan int
 		status             int32
 		shutdownWG         sync.WaitGroup
 		shutdownCh         chan struct{}
@@ -97,7 +96,6 @@ func newShardController(
 		membershipUpdateCh: make(chan *membership.ChangedEvent, 10),
 		engineFactory:      factory,
 		historyShards:      make(map[int]*historyShardsItem),
-		shardClosedCh:      make(chan int, config.NumberOfShards),
 		shutdownCh:         make(chan struct{}),
 		logger:             resource.GetLogger().WithTags(tag.ComponentShardController, tag.Address(hostIdentity)),
 		throttledLogger:    resource.GetThrottledLogger().WithTags(tag.ComponentShardController, tag.Address(hostIdentity)),
@@ -171,16 +169,26 @@ func (c *shardController) getEngineForShard(shardID int) (Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	return item.getOrCreateEngine(c.shardClosedCh)
+	return item.getOrCreateEngine(c.shardClosedCallback)
 }
 
-func (c *shardController) removeEngineForShard(shardID int) {
+func (c *shardController) removeEngineForShard(shardID int, shardItem *historyShardsItem) {
 	sw := c.metricsScope.StartTimer(metrics.RemoveEngineForShardLatency)
 	defer sw.Stop()
 	item, _ := c.removeHistoryShardItem(shardID)
-	if item != nil {
+	// the shardItem comparison is just a defensive check to make sure we are deleting
+	// what we intend to delete. In the event that multiple callers call removeEngine / getEngine
+	// concurrently, it is possible to reorder a delete/delete/add sequence into a delete/add/delete
+	// sequence. This check is to protect against those scenarios.
+	if item != nil && (item == shardItem || shardItem == nil) {
 		item.stopEngine()
 	}
+}
+
+func (c *shardController) shardClosedCallback(shardID int, shardItem *historyShardsItem) {
+	c.metricsScope.IncCounter(metrics.ShardClosedCounter)
+	c.logger.Info("", tag.LifeCycleStopping, tag.ComponentShard, tag.ShardID(shardID))
+	c.removeEngineForShard(shardID, shardItem)
 }
 
 func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShardsItem, error) {
@@ -280,18 +288,6 @@ func (c *shardController) shardManagementPump() {
 				tag.NumberDeleted(len(changedEvent.HostsRemoved)),
 				tag.Number(int64(len(changedEvent.HostsUpdated))))
 			c.acquireShards()
-		case shardID := <-c.shardClosedCh:
-			c.metricsScope.IncCounter(metrics.ShardClosedCounter)
-			c.logger.Info("", tag.LifeCycleStopping, tag.ComponentShard, tag.ShardID(shardID))
-			c.removeEngineForShard(shardID)
-			// The async close notifications can cause a race
-			// between acquire/release when nodes are flapping
-			// The impact of this race is un-necessary shard load/unloads
-			// even though things will settle eventually
-			// To reduce the chance of the race happening, lets
-			// process all closed events at once before we attempt
-			// to acquire new shards again
-			c.processShardClosedEvents()
 		}
 	}
 }
@@ -321,8 +317,6 @@ func (c *shardController) acquireShards() {
 							c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
 							c.logger.Error("Unable to create history shard engine", tag.Error(err1), tag.OperationFailed, tag.ShardID(shardID))
 						}
-					} else {
-						c.removeEngineForShard(shardID)
 					}
 				}
 			}
@@ -349,19 +343,6 @@ func (c *shardController) doShutdown() {
 	c.historyShards = nil
 }
 
-func (c *shardController) processShardClosedEvents() {
-	for {
-		select {
-		case shardID := <-c.shardClosedCh:
-			c.metricsScope.IncCounter(metrics.ShardClosedCounter)
-			c.logger.Info("", tag.LifeCycleStopping, tag.ComponentShard, tag.ShardID(shardID))
-			c.removeEngineForShard(shardID)
-		default:
-			return
-		}
-	}
-}
-
 func (c *shardController) numShards() int {
 	nShards := 0
 	c.RLock()
@@ -381,7 +362,9 @@ func (c *shardController) shardIDs() []int32 {
 	return ids
 }
 
-func (i *historyShardsItem) getOrCreateEngine(shardClosedCh chan<- int) (Engine, error) {
+func (i *historyShardsItem) getOrCreateEngine(
+	closeCallback func(int, *historyShardsItem),
+) (Engine, error) {
 	i.RLock()
 	if i.status == historyShardsItemStatusStarted {
 		defer i.RUnlock()
@@ -394,7 +377,7 @@ func (i *historyShardsItem) getOrCreateEngine(shardClosedCh chan<- int) (Engine,
 	switch i.status {
 	case historyShardsItemStatusInitialized:
 		i.logger.Info("", tag.LifeCycleStarting, tag.ComponentShardEngine)
-		context, err := acquireShard(i, shardClosedCh)
+		context, err := acquireShard(i, closeCallback)
 		if err != nil {
 			return nil, err
 		}

@@ -333,7 +333,7 @@ func (t *timerQueueAckMgrImpl) getAckLevel() timerKey {
 	return t.ackLevel
 }
 
-func (t *timerQueueAckMgrImpl) updateAckLevel() {
+func (t *timerQueueAckMgrImpl) updateAckLevel() error {
 	t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateCounter)
 
 	t.Lock()
@@ -384,14 +384,16 @@ MoveAckLevelLoop:
 		if err != nil {
 			t.logger.Error("Error shutting down timer queue", tag.Error(err))
 		}
-		return
+		return err
 	}
 
 	t.Unlock()
 	if err := t.updateTimerAckLevel(ackLevel); err != nil {
 		t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateFailedCounter)
 		t.logger.Error("Error updating timer ack level for shard", tag.Error(err))
+		return err
 	}
+	return nil
 }
 
 // this function does not take cluster name as parameter, due to we only have one timer queue on Cassandra

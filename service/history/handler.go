@@ -637,10 +637,10 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 	return &historyservice.RemoveTaskResponse{}, err
 }
 
-// CloseShard returns information about the internal states of a history host
+// CloseShard closes a shard hosted by this instance
 func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseShardRequest) (_ *historyservice.CloseShardResponse, retError error) {
 	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
-	h.controller.removeEngineForShard(int(request.GetShardId()))
+	h.controller.removeEngineForShard(int(request.GetShardId()), nil)
 	return &historyservice.CloseShardResponse{}, nil
 }
 

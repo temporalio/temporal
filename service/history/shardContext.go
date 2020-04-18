@@ -25,6 +25,7 @@
 package history
 
 import (
+	"errors"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -122,8 +123,8 @@ type (
 		rangeID          int64
 		executionManager persistence.ExecutionManager
 		eventsCache      eventsCache
-		closeCh          chan<- int
-		isClosed         bool
+		closeCallback    func(int, *historyShardsItem)
+		closed           int32
 		config           *Config
 		logger           log.Logger
 		throttledLogger  log.Logger
@@ -146,6 +147,9 @@ type (
 )
 
 var _ ShardContext = (*shardContextImpl)(nil)
+
+// ErrShardClosed is returned when shard is closed and a req cannot be processed
+var ErrShardClosed = errors.New("shard closed")
 
 const (
 	logWarnTransferLevelDiff = 3000000 // 3 million
@@ -510,6 +514,7 @@ Create_Loop:
 					} else {
 						// Shard is stolen, trigger shutdown of history engine
 						s.closeShard()
+						break Create_Loop
 					}
 				}
 			default:
@@ -524,6 +529,7 @@ Create_Loop:
 						// At this point we have no choice but to unload the shard, so that it
 						// gets a new RangeID when it's reloaded.
 						s.closeShard()
+						break Create_Loop
 					}
 				}
 			}
@@ -600,6 +606,7 @@ Update_Loop:
 					} else {
 						// Shard is stolen, trigger shutdown of history engine
 						s.closeShard()
+						break Update_Loop
 					}
 				}
 			default:
@@ -614,6 +621,7 @@ Update_Loop:
 						// At this point we have no choice but to unload the shard, so that it
 						// gets a new RangeID when it's reloaded.
 						s.closeShard()
+						break Update_Loop
 					}
 				}
 			}
@@ -685,6 +693,7 @@ Reset_Loop:
 					} else {
 						// Shard is stolen, trigger shutdown of history engine
 						s.closeShard()
+						break Reset_Loop
 					}
 				}
 			default:
@@ -699,6 +708,7 @@ Reset_Loop:
 						// At this point we have no choice but to unload the shard, so that it
 						// gets a new RangeID when it's reloaded.
 						s.closeShard()
+						break Reset_Loop
 					}
 				}
 			}
@@ -783,6 +793,7 @@ Reset_Loop:
 					} else {
 						// Shard is stolen, trigger shutdown of history engine
 						s.closeShard()
+						break Reset_Loop
 					}
 				}
 			default:
@@ -797,6 +808,7 @@ Reset_Loop:
 						// At this point we have no choice but to unload the shard, so that it
 						// gets a new RangeID when it's reloaded.
 						s.closeShard()
+						break Reset_Loop
 					}
 				}
 			}
@@ -874,24 +886,22 @@ func (s *shardContextImpl) getRangeID() int64 {
 	return s.shardInfo.GetRangeId()
 }
 
+func (s *shardContextImpl) isClosed() bool {
+	return atomic.LoadInt32(&s.closed) != 0
+}
+
 func (s *shardContextImpl) closeShard() {
-	if s.isClosed {
+	if !atomic.CompareAndSwapInt32(&s.closed, 0, 1) {
 		return
 	}
 
-	s.isClosed = true
-
-	go s.shardItem.stopEngine()
+	go func() {
+		s.closeCallback(s.shardID, s.shardItem)
+	}()
 
 	// fails any writes that may start after this point.
 	s.shardInfo.RangeId = -1
 	atomic.StoreInt64(&s.rangeID, s.shardInfo.GetRangeId())
-
-	if s.closeCh != nil {
-		// This is the channel passed in by shard controller to monitor if a shard needs to be unloaded
-		// It will trigger the HistoryEngine unload and removal of engine from shard controller
-		s.closeCh <- s.shardID
-	}
 }
 
 func (s *shardContextImpl) generateTransferTaskIDLocked() (int64, error) {
@@ -961,6 +971,10 @@ func (s *shardContextImpl) updateMaxReadLevelLocked(rl int64) {
 }
 
 func (s *shardContextImpl) updateShardInfoLocked() error {
+	if s.isClosed() {
+		return ErrShardClosed
+	}
+
 	var err error
 	now := clock.NewRealTimeSource().Now()
 	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
@@ -1162,8 +1176,10 @@ func (s *shardContextImpl) GetLastUpdatedTime() time.Time {
 	return s.lastUpdated
 }
 
-func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContext,
-	error) {
+func acquireShard(
+	shardItem *historyShardsItem,
+	closeCallback func(int, *historyShardsItem),
+) (ShardContext, error) {
 
 	var shardInfo *persistence.ShardInfoWithFailover
 
@@ -1245,7 +1261,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		shardID:                        shardItem.shardID,
 		executionManager:               executionMgr,
 		shardInfo:                      updatedShardInfo,
-		closeCh:                        closeCh,
+		closeCallback:                  closeCallback,
 		config:                         shardItem.config,
 		remoteClusterCurrentTime:       remoteClusterCurrentTime,
 		timerMaxReadLevelMap:           timerMaxReadLevelMap, // use ack to init read level
