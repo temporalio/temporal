@@ -55,14 +55,15 @@ type (
 	IntegrationBase struct {
 		suite.Suite
 
-		testCluster       *TestCluster
-		testClusterConfig *TestClusterConfig
-		engine            FrontendClient
-		adminClient       AdminClient
-		Logger            log.Logger
-		namespace         string
-		foreignNamespace  string
-		archivalNamespace string
+		testCluster                 *TestCluster
+		testClusterConfig           *TestClusterConfig
+		engine                      FrontendClient
+		adminClient                 AdminClient
+		Logger                      log.Logger
+		namespace                   string
+		testRawHistoryNamespaceName string
+		foreignNamespace            string
+		archivalNamespace           string
 	}
 )
 
@@ -92,9 +93,12 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.adminClient = s.testCluster.GetAdminClient()
 	}
 
+	s.testRawHistoryNamespaceName = "TestRawHistoryNamespace"
 	s.namespace = s.randomizeStr("integration-test-namespace")
 	s.Require().NoError(
 		s.registerNamespace(s.namespace, 1, namespacepb.ArchivalStatus_Disabled, "", namespacepb.ArchivalStatus_Disabled, ""))
+	s.Require().NoError(
+		s.registerNamespace(s.testRawHistoryNamespaceName, 1, namespacepb.ArchivalStatus_Disabled, "", namespacepb.ArchivalStatus_Disabled, ""))
 
 	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
 	s.Require().NoError(
@@ -220,7 +224,7 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 				Status: namespacepb.NamespaceStatus_Registered,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:                0,
+				RetentionDays:            0,
 				HistoryArchivalStatus:    namespacepb.ArchivalStatus_Enabled,
 				HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
 				VisibilityArchivalStatus: namespacepb.ArchivalStatus_Enabled,

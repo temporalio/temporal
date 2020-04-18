@@ -98,6 +98,7 @@ var keys = map[Key]string{
 	FrontendThrottledLogRPS:               "frontend.throttledLogRPS",
 	EnableClientVersionCheck:              "frontend.enableClientVersionCheck",
 	ValidSearchAttributes:                 "frontend.validSearchAttributes",
+	SendRawWorkflowHistory:                "frontend.sendRawWorkflowHistory",
 	SearchAttributesNumberOfKeysLimit:     "frontend.searchAttributesNumberOfKeysLimit",
 	SearchAttributesSizeOfValueLimit:      "frontend.searchAttributesSizeOfValueLimit",
 	SearchAttributesTotalSizeLimit:        "frontend.searchAttributesTotalSizeLimit",
@@ -345,10 +346,13 @@ const (
 	FrontendThrottledLogRPS
 	// EnableClientVersionCheck enables client version check for frontend
 	EnableClientVersionCheck
+
 	// FrontendMaxBadBinaries is the max number of bad binaries in namespace config
 	FrontendMaxBadBinaries
 	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
 	ValidSearchAttributes
+	// SendRawWorkflowHistory is whether to enable raw history retrieving
+	SendRawWorkflowHistory
 	// SearchAttributesNumberOfKeysLimit is the limit of number of keys
 	SearchAttributesNumberOfKeysLimit
 	// SearchAttributesSizeOfValueLimit is the size limit of each value
