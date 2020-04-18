@@ -4033,7 +4033,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(3336), si.Version)
 	s.Equal(int64(39), si.GetInitiatedId())
 	s.Equal("signalB", si.Name)
-	s.Equal([]byte("signal_input_b"), si.Input)
+	var signal string
+	err := codec.Decode(si.GetInput(), &signal)
+	s.NoError(err)
+	s.Equal("signal_input_b", signal)
 	s.Equal([]byte("signal_control_b"), si.Control)
 
 	si, ok = state4.SignalInfos[42]
@@ -4042,7 +4045,9 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(3336), si.Version)
 	s.Equal(int64(42), si.GetInitiatedId())
 	s.Equal("signalC", si.Name)
-	s.Equal([]byte("signal_input_c"), si.Input)
+	err = codec.Decode(si.GetInput(), &signal)
+	s.NoError(err)
+	s.Equal("signal_input_c", signal)
 	s.Equal([]byte("signal_control_c"), si.Control)
 
 	s.Equal(0, len(state4.SignalRequestedIDs))

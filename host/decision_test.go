@@ -130,7 +130,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 			{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: []byte("efg"),
+					Result: codec.EncodeString("efg"),
 				},
 				},
 			}},
@@ -216,7 +216,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "localActivity1",
-					Details:    []byte("abc"),
+					Details:    codec.EncodeString("abc"),
 				},
 				},
 			}},
@@ -236,7 +236,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "localActivity2",
-					Details:    []byte("abc"),
+					Details:    codec.EncodeString("abc"),
 				},
 				},
 			}},
@@ -255,7 +255,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 			{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: []byte("efg"),
+					Result: codec.EncodeString("efg"),
 				},
 				},
 			}},
@@ -326,7 +326,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             []byte(""),
+		Input:             codec.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -410,7 +410,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             []byte(""),
+		Input:             codec.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -485,7 +485,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             []byte(""),
+		Input:             codec.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -584,7 +584,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             []byte(""),
+		Input:             codec.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -698,7 +698,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             []byte(""),
+		Input:             codec.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -798,7 +798,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             []byte(""),
+		Input:             codec.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})

@@ -41,6 +41,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -93,7 +94,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      taskList,
-					Input:                         buf.Bytes(),
+					Input:                         codec.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 25,
 					StartToCloseTimeoutSeconds:    50,
@@ -105,16 +106,16 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: codec.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return codec.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -259,7 +260,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      taskList,
-					Input:                         buf.Bytes(),
+					Input:                         codec.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 25,
 					StartToCloseTimeoutSeconds:    50,
@@ -271,16 +272,16 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: codec.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return codec.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -422,7 +423,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      taskList,
-					Input:                         buf.Bytes(),
+					Input:                         codec.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 25,
 					StartToCloseTimeoutSeconds:    50,
@@ -434,16 +435,16 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: codec.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return codec.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -639,7 +640,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      taskList,
-					Input:                         buf.Bytes(),
+					Input:                         codec.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 25,
 					StartToCloseTimeoutSeconds:    50,
@@ -651,16 +652,16 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: codec.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return codec.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -785,7 +786,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 						ActivityId:                    "1",
 						ActivityType:                  &commonpb.ActivityType{Name: activityName},
 						TaskList:                      taskList,
-						Input:                         buf.Bytes(),
+						Input:                         codec.EncodeBytes(buf.Bytes()),
 						ScheduleToCloseTimeoutSeconds: 100,
 						ScheduleToStartTimeoutSeconds: 25,
 						StartToCloseTimeoutSeconds:    50,
@@ -798,16 +799,16 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{
 				CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: []byte("Done"),
+					Result: codec.EncodeString("Done"),
 				}},
 		}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return codec.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -985,7 +986,7 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 						ActivityId:                    strconv.Itoa(int(1)),
 						ActivityType:                  &commonpb.ActivityType{Name: activityName},
 						TaskList:                      taskList,
-						Input:                         buf.Bytes(),
+						Input:                         codec.EncodeBytes(buf.Bytes()),
 						ScheduleToCloseTimeoutSeconds: 100,
 						ScheduleToStartTimeoutSeconds: 25,
 						StartToCloseTimeoutSeconds:    50,
@@ -999,16 +1000,16 @@ func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{
 				CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: []byte("Done."),
+					Result: codec.EncodeString("Done."),
 				},
 			}}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return codec.EncodeString("Activity Result."), false, nil
 	}
 
 	poller := &TaskPoller{

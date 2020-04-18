@@ -33,6 +33,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -266,7 +267,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         codec.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -295,7 +296,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: codec.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -304,19 +305,22 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		execution *executionpb.WorkflowExecution,
 		activityType *commonpb.ActivityType,
 		activityID string,
-		input []byte,
+		input *commonpb.Payload,
 		taskToken []byte,
-	) ([]byte, bool, error) {
+	) (*commonpb.Payload, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.Name)
 		id, _ := strconv.Atoi(activityID)
 		s.Equal(int(expectedActivityID), id)
-		buf := bytes.NewReader(input)
+		var b []byte
+		err := codec.Decode(input, &b)
+		s.NoError(err)
+		buf := bytes.NewReader(b)
 		var in int32
 		binary.Read(buf, binary.LittleEndian, &in)
 		s.Equal(expectedActivityID, in)
 		expectedActivityID++
-		return []byte("Activity Result"), false, nil
+		return codec.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{

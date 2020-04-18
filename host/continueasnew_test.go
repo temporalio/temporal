@@ -39,6 +39,7 @@ import (
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/tag"
 )
 
@@ -56,7 +57,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		Fields: map[string][]byte{"tracing": []byte("sample payload")},
 	}
 	memo := &commonpb.Memo{
-		Fields: map[string][]byte{"memoKey": []byte("memoVal")},
+		Fields: map[string]*commonpb.Payload{"memoKey": codec.EncodeString("memoVal")},
 	}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string][]byte{"CustomKeywordField": []byte("1")},
@@ -100,7 +101,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
 					TaskList:                            &tasklistpb.TaskList{Name: tl},
-					Input:                               buf.Bytes(),
+					Input:                               codec.EncodeBytes(buf.Bytes()),
 					Header:                              header,
 					Memo:                                memo,
 					SearchAttributes:                    searchAttr,
@@ -115,7 +116,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: codec.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -188,7 +189,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
 					TaskList:                            &tasklistpb.TaskList{Name: tl},
-					Input:                               buf.Bytes(),
+					Input:                               codec.EncodeBytes(buf.Bytes()),
 					ExecutionStartToCloseTimeoutSeconds: 1, // set timeout to 1
 					TaskStartToCloseTimeoutSeconds:      1,
 				}},
@@ -199,7 +200,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: codec.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -301,7 +302,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("succeed"),
+				Result: codec.EncodeString("succeed"),
 			}},
 		}}, nil
 
@@ -391,7 +392,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 				return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
 					DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 					Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-						Input: buf.Bytes(),
+						Input: codec.EncodeBytes(buf.Bytes()),
 					}},
 				}}, nil
 			}
@@ -400,7 +401,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 			return nil, []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: []byte("Child Done"),
+					Result: codec.EncodeString("Child Done"),
 				}},
 			}}, nil
 		}
@@ -419,7 +420,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 						Namespace:    s.namespace,
 						WorkflowId:   childID,
 						WorkflowType: childWorkflowType,
-						Input:        buf.Bytes(),
+						Input:        codec.EncodeBytes(buf.Bytes()),
 					}},
 				}}, nil
 			} else if previousStartedEventID > 0 {
@@ -434,7 +435,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 						return nil, []*decisionpb.Decision{{
 							DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 							Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-								Result: []byte("Done"),
+								Result: codec.EncodeString("Done"),
 							}},
 						}}, nil
 					}
@@ -489,7 +490,10 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NotEqual(startedEvent.GetChildWorkflowExecutionStartedEventAttributes().WorkflowExecution.RunId,
 		completedAttributes.WorkflowExecution.RunId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
-	s.Equal([]byte("Child Done"), completedAttributes.Result)
+	var result string
+	err = codec.Decode(completedAttributes.GetResult(), &result)
+	s.NoError(err)
+	s.Equal("Child Done", result)
 
 	s.Logger.Info("Parent Workflow Execution History: ")
 }
