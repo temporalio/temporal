@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -60,13 +61,36 @@ import (
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	versionpb "go.temporal.io/temporal-proto/version"
 	"go.temporal.io/temporal-proto/workflowservice"
+
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
+const (
+	// HealthStatusOK is used when this node is healthy and rpc requests are allowed
+	HealthStatusOK HealthStatus = iota + 1
+	// HealthStatusShuttingDown is used when the rpc handler is shutting down
+	HealthStatusShuttingDown
+)
+
+var _ ServerHandler = (*WorkflowHandler)(nil)
+
 type (
+	// ServerHandler is the interface for the frontend rpc handler
+	ServerHandler interface {
+		common.Daemon
+		workflowservice.WorkflowServiceServer
+		// Health is the health check method for this rpc handler
+		healthpb.HealthServer
+		// UpdateHealthStatus sets the health status for this rpc handler.
+		// This health status will be used within the rpc health check handler
+		UpdateHealthStatus(status HealthStatus)
+	}
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
 		resource.Resource
 
+		shuttingDown              int32
+		healthStatus              int32
 		tokenSerializer           common.TaskTokenSerializer
 		rateLimiter               quotas.Policy
 		config                    *Config
@@ -75,11 +99,13 @@ type (
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
 	}
+
+	// HealthStatus is an enum that refers to the rpc handler health status
+	HealthStatus int32
 )
 
 var (
-	_                          workflowservice.WorkflowServiceServer = (*WorkflowHandler)(nil)
-	frontendServiceRetryPolicy                                       = common.CreateFrontendServiceRetryPolicy()
+	frontendServiceRetryPolicy = common.CreateFrontendServiceRetryPolicy()
 )
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
@@ -91,6 +117,7 @@ func NewWorkflowHandler(
 	handler := &WorkflowHandler{
 		Resource:        resource,
 		config:          config,
+		healthStatus:    int32(HealthStatusOK),
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		rateLimiter: quotas.NewMultiStageRateLimiter(
 			func() float64 {
@@ -124,6 +151,44 @@ func NewWorkflowHandler(
 	return handler
 }
 
+// Start starts the handler
+func (wh *WorkflowHandler) Start() {
+}
+
+// Stop stops the handler
+func (wh *WorkflowHandler) Stop() {
+	atomic.StoreInt32(&wh.shuttingDown, 1)
+}
+
+// UpdateHealthStatus sets the health status for this rpc handler.
+// This health status will be used within the rpc health check handler
+func (wh *WorkflowHandler) UpdateHealthStatus(status HealthStatus) {
+	atomic.StoreInt32(&wh.healthStatus, int32(status))
+}
+
+func (wh *WorkflowHandler) isShuttingDown() bool {
+	return atomic.LoadInt32(&wh.shuttingDown) != 0
+}
+
+// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+func (wh *WorkflowHandler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
+	wh.GetLogger().Debug("Frontend service health check endpoint (gRPC) reached.")
+	status := HealthStatus(atomic.LoadInt32(&wh.healthStatus))
+	if status == HealthStatusOK {
+		return &healthpb.HealthCheckResponse{
+			Status: healthpb.HealthCheckResponse_SERVING,
+		}, nil
+	}
+
+	return &healthpb.HealthCheckResponse{
+		Status: healthpb.HealthCheckResponse_NOT_SERVING,
+	}, nil
+}
+
+func (wh *WorkflowHandler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
+	return serviceerror.NewUnimplemented("Watch is not implemented.")
+}
+
 // RegisterNamespace creates a new namespace which can be used as a container for all resources.  Namespace is a top level
 // entity within Temporal, used as a container for all resources like workflow executions, tasklists, etc.  Namespace
 // acts as a sandbox and provides isolation for all resources within the namespace.  All resources belongs to exactly one
@@ -133,6 +198,10 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRegisterNamespaceScope)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -169,6 +238,10 @@ func (wh *WorkflowHandler) DescribeNamespace(ctx context.Context, request *workf
 	scope, sw := wh.startRequestProfile(metrics.FrontendDescribeNamespaceScope)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -195,6 +268,10 @@ func (wh *WorkflowHandler) ListNamespaces(ctx context.Context, request *workflow
 	scope, sw := wh.startRequestProfile(metrics.FrontendListNamespacesScope)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -216,6 +293,10 @@ func (wh *WorkflowHandler) UpdateNamespace(ctx context.Context, request *workflo
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendUpdateNamespaceScope)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -252,6 +333,10 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 	scope, sw := wh.startRequestProfile(metrics.FrontendDeprecateNamespaceScope)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -284,6 +369,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendStartWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -402,6 +491,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendGetWorkflowExecutionHistoryScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -790,6 +883,10 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	histResp, err := wh.GetHistoryClient().RespondDecisionTaskCompleted(ctx, &historyservice.RespondDecisionTaskCompletedRequest{
 		NamespaceId:     namespaceId,
 		CompleteRequest: request},
@@ -868,6 +965,10 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 		metrics.FrontendRespondDecisionTaskFailedScope, namespaceEntry.GetInfo().Name,
 	)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, wh.error(errIdentityTooLong, scope)
@@ -1051,6 +1152,10 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
@@ -1102,6 +1207,10 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRecordActivityTaskHeartbeatByIdScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -1245,6 +1354,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
 
@@ -1295,6 +1408,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRespondActivityTaskCompletedByIdScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -1438,6 +1555,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
@@ -1480,6 +1601,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRespondActivityTaskFailedByIdScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -1613,6 +1738,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 	)
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
@@ -1667,6 +1796,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRespondActivityTaskCanceledScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -1776,6 +1909,10 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendRequestCancelWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -1819,6 +1956,10 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendSignalWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -1897,6 +2038,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendSignalWithStartWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -2031,6 +2176,10 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendResetWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2075,6 +2224,10 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendTerminateWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2117,6 +2270,10 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListOpenWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -2209,6 +2366,10 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListClosedWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -2313,6 +2474,10 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2371,6 +2536,10 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListArchivedWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -2456,6 +2625,10 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendScanWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2516,6 +2689,10 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendCountWorkflowExecutionsScope, request.GetNamespace())
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2564,6 +2741,10 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendGetSearchAttributesScope)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -2615,6 +2796,10 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		namespaceEntry.GetInfo().Name,
 	)
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
@@ -2669,6 +2854,10 @@ func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, request *wor
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendResetStickyTaskListScope, request.GetNamespace())
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2706,6 +2895,10 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendQueryWorkflowScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if wh.config.DisallowQuery(request.GetNamespace()) {
 		return nil, wh.error(errQueryDisallowedForNamespace, scope)
@@ -2772,6 +2965,10 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendDescribeWorkflowExecutionScope, request.GetNamespace())
 	defer sw.Stop()
 
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2820,6 +3017,10 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workfl
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendDescribeTaskListScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
@@ -2889,6 +3090,10 @@ func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *
 
 	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendListTaskListPartitionsScope, request.GetNamespace())
 	defer sw.Stop()
+
+	if wh.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	if request == nil {
 		return nil, wh.error(errRequestNotSet, scope)
@@ -3459,4 +3664,15 @@ func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *cache.NamespaceCacheEn
 		}
 	}
 	return nil
+}
+
+func (hs HealthStatus) String() string {
+	switch hs {
+	case HealthStatusOK:
+		return "OK"
+	case HealthStatusShuttingDown:
+		return "ShuttingDown"
+	default:
+		return "unknown"
+	}
 }

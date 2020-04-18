@@ -27,7 +27,6 @@ package frontend
 import (
 	"context"
 
-	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -41,11 +40,11 @@ import (
 type AccessControlledWorkflowHandler struct {
 	resource.Resource
 
-	frontendHandler workflowservice.WorkflowServiceServer
+	frontendHandler ServerHandler
 	authorizer      authorization.Authorizer
 }
 
-var _ workflowservice.WorkflowServiceServer = (*AccessControlledWorkflowHandler)(nil)
+var _ ServerHandler = (*AccessControlledWorkflowHandler)(nil)
 
 // NewAccessControlledHandlerImpl creates frontend handler with authentication support
 func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authorizer authorization.Authorizer) *AccessControlledWorkflowHandler {
@@ -62,16 +61,29 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 
 // TODO(vancexu): refactor frontend handler
 
-// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (a *AccessControlledWorkflowHandler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	a.GetLogger().Debug("Frontend service health check endpoint (gRPC) reached.")
-	hs := &healthpb.HealthCheckResponse{
-		Status: healthpb.HealthCheckResponse_SERVING,
-	}
-	return hs, nil
+// UpdateHealthStatus sets the health status for this rpc handler.
+// This health status will be used within the rpc health check handler
+func (a *AccessControlledWorkflowHandler) UpdateHealthStatus(status HealthStatus) {
+	a.frontendHandler.UpdateHealthStatus(status)
 }
-func (a *AccessControlledWorkflowHandler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
-	return serviceerror.NewUnimplemented("Watch is not implemented.")
+
+// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+func (a *AccessControlledWorkflowHandler) Check(ctx context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
+	return a.frontendHandler.Check(ctx, request)
+}
+
+func (a *AccessControlledWorkflowHandler) Watch(request *healthpb.HealthCheckRequest, server healthpb.Health_WatchServer) error {
+	return a.frontendHandler.Watch(request, server)
+}
+
+// Start starts the handler
+func (a *AccessControlledWorkflowHandler) Start() {
+	a.frontendHandler.Start()
+}
+
+// Stop stops the handler
+func (a *AccessControlledWorkflowHandler) Stop() {
+	a.frontendHandler.Stop()
 }
 
 // CountWorkflowExecutions API call

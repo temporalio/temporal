@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/temporal-proto/workflowservice"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -38,7 +39,7 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 )
 
-var _ workflowservice.WorkflowServiceServer = (*DCRedirectionHandlerImpl)(nil)
+var _ ServerHandler = (*DCRedirectionHandlerImpl)(nil)
 
 type (
 	// DCRedirectionHandlerImpl is simple wrapper over frontend service, doing redirection based on policy
@@ -49,7 +50,7 @@ type (
 		config             *Config
 		redirectionPolicy  DCRedirectionPolicy
 		tokenSerializer    common.TaskTokenSerializer
-		frontendHandler    workflowservice.WorkflowServiceServer
+		frontendHandler    ServerHandler
 	}
 )
 
@@ -73,6 +74,31 @@ func NewDCRedirectionHandler(
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		frontendHandler:    wfHandler,
 	}
+}
+
+// Start starts the handler
+func (handler *DCRedirectionHandlerImpl) Start() {
+	handler.frontendHandler.Start()
+}
+
+// Stop stops the handler
+func (handler *DCRedirectionHandlerImpl) Stop() {
+	handler.frontendHandler.Stop()
+}
+
+// UpdateHealthStatus sets the health status for this rpc handler.
+// This health status will be used within the rpc health check handler
+func (handler *DCRedirectionHandlerImpl) UpdateHealthStatus(status HealthStatus) {
+	handler.frontendHandler.UpdateHealthStatus(status)
+}
+
+// Check is for health check
+func (handler *DCRedirectionHandlerImpl) Check(ctx context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
+	return handler.frontendHandler.Check(ctx, request)
+}
+
+func (handler *DCRedirectionHandlerImpl) Watch(request *healthpb.HealthCheckRequest, server healthpb.Health_WatchServer) error {
+	return handler.frontendHandler.Watch(request, server)
 }
 
 // Namespace APIs, namespace APIs does not require redirection

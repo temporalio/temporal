@@ -59,6 +59,7 @@ type (
 	Handler struct {
 		resource.Resource
 
+		shuttingDown            int32
 		controller              *shardController
 		tokenSerializer         common.TaskTokenSerializer
 		startWG                 sync.WaitGroup
@@ -85,6 +86,7 @@ var (
 	errDeserializeTaskToken    = serviceerror.NewInvalidArgument("Error to deserialize task token. Error: %v.")
 
 	errHistoryHostThrottle = serviceerror.NewResourceExhausted("History host RPS exceeded.")
+	errShuttingDown        = serviceerror.NewInternal("Shutting down")
 )
 
 // NewHandler creates a thrift handler for the history service
@@ -142,9 +144,19 @@ func (h *Handler) Start() {
 
 // Stop stops the handler
 func (h *Handler) Stop() {
+	h.PrepareToStop()
 	h.replicationTaskFetchers.Stop()
 	h.controller.Stop()
 	h.historyEventNotifier.Stop()
+}
+
+// PrepareToStop starts graceful traffic drain in preparation for shutdown
+func (h *Handler) PrepareToStop() {
+	atomic.StoreInt32(&h.shuttingDown, 1)
+}
+
+func (h *Handler) isShuttingDown() bool {
+	return atomic.LoadInt32(&h.shuttingDown) != 0
 }
 
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
@@ -782,6 +794,10 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" || request.CancelRequest.GetNamespace() == "" {
 		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
@@ -823,6 +839,10 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
@@ -861,6 +881,10 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
@@ -895,6 +919,10 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
+
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
@@ -931,6 +959,10 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
@@ -966,6 +998,10 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
@@ -999,6 +1035,10 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
+
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
@@ -1035,6 +1075,10 @@ func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *historyserv
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
+
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
@@ -1074,6 +1118,10 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
+
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
@@ -1120,6 +1168,10 @@ func (h *Handler) ResetStickyTaskList(ctx context.Context, request *historyservi
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
@@ -1153,6 +1205,10 @@ func (h *Handler) ReplicateEvents(ctx context.Context, request *historyservice.R
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, h.error(errNamespaceNotSet, scope, namespaceID, "")
@@ -1181,6 +1237,10 @@ func (h *Handler) ReplicateEvents(ctx context.Context, request *historyservice.R
 func (h *Handler) ReplicateRawEvents(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) (_ *historyservice.ReplicateRawEventsResponse, retError error) {
 	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
+
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	scope := metrics.HistoryReplicateRawEventsScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
@@ -1215,6 +1275,10 @@ func (h *Handler) ReplicateRawEvents(ctx context.Context, request *historyservic
 func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) (_ *historyservice.ReplicateEventsV2Response, retError error) {
 	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
+
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	scope := metrics.HistoryReplicateEventsV2Scope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
@@ -1255,6 +1319,10 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	if ok := h.rateLimiter.Allow(); !ok {
 		return nil, h.error(errHistoryHostThrottle, scope, "", "")
 	}
@@ -1294,6 +1362,10 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
+
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := request.GetNamespaceId()
 	if request.GetNamespaceId() == "" || uuid.Parse(request.GetNamespaceId()) == nil {
@@ -1337,6 +1409,10 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
+
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(request.Tokens))
@@ -1389,6 +1465,10 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
+
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	taskInfoPerExecution := map[definition.WorkflowIdentifier][]*replicationgenpb.ReplicationTaskInfo{}
 	// do batch based on workflow ID and run ID
@@ -1460,6 +1540,10 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := request.GetNamespaceId()
 	workflowID := request.GetRequest().GetWorkflowExecution().GetWorkflowId()
 	engine, err := h.controller.GetEngine(workflowID)
@@ -1498,6 +1582,10 @@ func (h *Handler) ReadDLQMessages(ctx context.Context, request *historyservice.R
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	engine, err := h.controller.getEngineForShard(int(request.GetShardId()))
 	if err != nil {
 		err = h.error(err, scope, "", "")
@@ -1523,6 +1611,10 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
 
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	engine, err := h.controller.getEngineForShard(int(request.GetShardId()))
 	if err != nil {
 		err = h.error(err, scope, "", "")
@@ -1541,6 +1633,10 @@ func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.
 	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 
 	h.startWG.Wait()
+
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
 
 	scope := metrics.HistoryMergeDLQMessagesScope
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
@@ -1571,6 +1667,11 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
 	defer sw.Stop()
+
+	if h.isShuttingDown() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := request.GetNamespaceId()
 	execution := request.GetRequest().GetExecution()
 	workflowID := execution.GetWorkflowId()

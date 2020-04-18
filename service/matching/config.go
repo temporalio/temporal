@@ -35,9 +35,10 @@ import (
 type (
 	// Config represents configuration for matching service
 	Config struct {
-		PersistenceMaxQPS dynamicconfig.IntPropertyFn
-		EnableSyncMatch   dynamicconfig.BoolPropertyFnWithTaskListInfoFilters
-		RPS               dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS     dynamicconfig.IntPropertyFn
+		EnableSyncMatch       dynamicconfig.BoolPropertyFnWithTaskListInfoFilters
+		RPS                   dynamicconfig.IntPropertyFn
+		ShutdownDrainDuration dynamicconfig.DurationPropertyFn
 
 		// taskListManager configuration
 		RangeSize                    int64
@@ -114,6 +115,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		ForwarderMaxOutstandingTasks:    dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 1),
 		ForwarderMaxRatePerSecond:       dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
 		ForwarderMaxChildrenPerNode:     dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
+		ShutdownDrainDuration:           dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0),
 	}
 }
 
