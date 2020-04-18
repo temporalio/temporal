@@ -231,6 +231,7 @@ var keys = map[Key]string{
 	WorkerReplicationTaskMaxRetryCount:              "worker.replicationTaskMaxRetryCount",
 	WorkerReplicationTaskMaxRetryDuration:           "worker.replicationTaskMaxRetryDuration",
 	WorkerReplicationTaskContextDuration:            "worker.replicationTaskContextDuration",
+	WorkerReReplicationContextTimeout:               "worker.workerReReplicationContextTimeout",
 	WorkerIndexerConcurrency:                        "worker.indexerConcurrency",
 	WorkerESProcessorNumOfWorkers:                   "worker.ESProcessorNumOfWorkers",
 	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
@@ -590,6 +591,8 @@ const (
 	WorkerReplicationTaskMaxRetryDuration
 	// WorkerReplicationTaskContextDuration is the context timeout for apply replication tasks
 	WorkerReplicationTaskContextDuration
+	// WorkerReReplicationContextTimeout is the context timeout for end to end  re-replication process
+	WorkerReReplicationContextTimeout
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor
@@ -681,6 +684,7 @@ func (f Filter) String() string {
 var filters = []string{
 	"unknownFilter",
 	"namespace",
+	"namespaceID",
 	"taskListName",
 	"taskType",
 }
@@ -689,6 +693,8 @@ const (
 	unknownFilter Filter = iota
 	// Namespace is the namespace name
 	Namespace
+	// NamespaceID is the namespace id
+	NamespaceID
 	// TaskListName is the tasklist name
 	TaskListName
 	// TaskType is the task type (0:Decision, 1:Activity)
@@ -712,6 +718,13 @@ func TaskListFilter(name string) FilterOption {
 func NamespaceFilter(name string) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
 		filterMap[Namespace] = name
+	}
+}
+
+// NamespaceIDFilter filters by namespace id
+func NamespaceIDFilter(namespaceID string) FilterOption {
+	return func(filterMap map[Filter]interface{}) {
+		filterMap[NamespaceID] = namespaceID
 	}
 }
 

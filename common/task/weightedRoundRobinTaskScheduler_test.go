@@ -169,7 +169,7 @@ func (s *weightedRoundRobinTaskSchedulerSuite) TestDispatcher_SubmitWithNoError(
 	tasksPerRound := []int{6, 5, 2, 1, 1}
 	round := 0
 	mockFn := func(_ Task) error {
-		numSubmittedTask += 1
+		numSubmittedTask++
 		if numSubmittedTask == tasksPerRound[round] {
 			round++
 			numSubmittedTask = 0
@@ -186,7 +186,7 @@ func (s *weightedRoundRobinTaskSchedulerSuite) TestDispatcher_SubmitWithNoError(
 		return nil
 	}
 
-	for priority, _ := range testSchedulerWeights {
+	for priority := range testSchedulerWeights {
 		for i := 0; i != taskPerPriority; i++ {
 			mockTask := NewMockPriorityTask(s.controller)
 			mockTask.EXPECT().Priority().Return(priority).AnyTimes()

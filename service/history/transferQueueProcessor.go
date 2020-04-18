@@ -108,6 +108,7 @@ func newTransferQueueProcessor(
 				},
 				persistence.NewPayloadSerializer(),
 				historyRereplicationTimeout,
+				nil,
 				logger,
 			)
 			nDCHistoryResender := xdc.NewNDCHistoryResender(

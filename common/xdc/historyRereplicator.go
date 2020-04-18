@@ -44,6 +44,7 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/rpc"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 var (
@@ -80,6 +81,7 @@ type (
 		historyReplicationFn historyReplicationFn
 		serializer           persistence.PayloadSerializer
 		replicationTimeout   time.Duration
+		rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
 		logger               log.Logger
 	}
 
@@ -94,6 +96,8 @@ type (
 		endingNextEventID     int64
 		rereplicator          *HistoryRereplicatorImpl
 		logger                log.Logger
+		ctx                   context.Context
+		cancel                context.CancelFunc
 	}
 )
 
@@ -101,10 +105,22 @@ func newHistoryRereplicationContext(namespaceID string, workflowID string,
 	beginningRunID string, beginningFirstEventID int64,
 	endingRunID string, endingNextEventID int64,
 	rereplicator *HistoryRereplicatorImpl) *historyRereplicationContext {
+
 	logger := rereplicator.logger.WithTags(
 		tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(workflowID), tag.WorkflowBeginningRunID(beginningRunID),
 		tag.WorkflowBeginningFirstEventID(beginningFirstEventID), tag.WorkflowEndingRunID(endingRunID),
 		tag.WorkflowEndingNextEventID(endingNextEventID))
+
+	ctx := context.Background()
+	var cancel context.CancelFunc
+	var timeout time.Duration
+	if rereplicator.rereplicationTimeout != nil {
+		timeout = rereplicator.rereplicationTimeout(namespaceID)
+	}
+	if timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+	}
+
 	return &historyRereplicationContext{
 		seenEmptyEvents:       false,
 		rpcCalls:              0,
@@ -116,12 +132,21 @@ func newHistoryRereplicationContext(namespaceID string, workflowID string,
 		endingNextEventID:     endingNextEventID,
 		rereplicator:          rereplicator,
 		logger:                logger,
+		ctx:                   ctx,
+		cancel:                cancel,
 	}
 }
 
 // NewHistoryRereplicator create a new HistoryRereplicatorImpl
-func NewHistoryRereplicator(targetClusterName string, namespaceCache cache.NamespaceCache, adminClient admin.Client, historyReplicationFn historyReplicationFn,
-	serializer persistence.PayloadSerializer, replicationTimeout time.Duration, logger log.Logger) *HistoryRereplicatorImpl {
+func NewHistoryRereplicator(
+	targetClusterName string,
+	namespaceCache cache.NamespaceCache,
+	adminClient admin.Client,
+	historyReplicationFn historyReplicationFn,
+	serializer persistence.PayloadSerializer,
+	replicationTimeout time.Duration,
+	rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter,
+	logger log.Logger) *HistoryRereplicatorImpl {
 
 	return &HistoryRereplicatorImpl{
 		targetClusterName:    targetClusterName,
@@ -130,6 +155,7 @@ func NewHistoryRereplicator(targetClusterName string, namespaceCache cache.Names
 		historyReplicationFn: historyReplicationFn,
 		serializer:           serializer,
 		replicationTimeout:   replicationTimeout,
+		rereplicationTimeout: rereplicationTimeout,
 		logger:               logger,
 	}
 }
@@ -144,6 +170,11 @@ func (h *HistoryRereplicatorImpl) SendMultiWorkflowHistory(namespaceID string, w
 	// endingRunID must not be empty, since this function is trigger missing events of endingRunID
 
 	rereplicationContext := newHistoryRereplicationContext(namespaceID, workflowID, beginningRunID, beginningFirstEventID, endingRunID, endingNextEventID, h)
+	defer func() {
+		if rereplicationContext.cancel != nil {
+			rereplicationContext.cancel()
+		}
+	}()
 
 	runID := beginningRunID
 	for len(runID) != 0 && runID != endingRunID {
@@ -309,7 +340,7 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), c.rereplicator.replicationTimeout)
+	ctx, cancel := context.WithTimeout(c.ctx, c.rereplicator.replicationTimeout)
 	defer func() {
 		cancel()
 		c.rpcCalls++
@@ -319,7 +350,7 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 		return nil
 	}
 
-	logger := c.logger.WithTags(tag.WorkflowEndingRunID(request.WorkflowExecution.GetRunId()))
+	logger := c.logger.WithTags(tag.WorkflowBeginningRunID(c.beginningRunID), tag.WorkflowEndingRunID(request.WorkflowExecution.GetRunId()))
 
 	// sometimes there can be case when the first re-replication call
 	// trigger an history reset and this reset can leave a hole in target
@@ -330,11 +361,11 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 		return err
 	}
 	if c.rpcCalls > 0 {
-		logger.Error("encounter RetryTaskError not in first call")
+		logger.Error("encounter RetryTaskError not in first call", tag.Error(retryErr))
 		return err
 	}
 	if retryErr.RunId != c.beginningRunID {
-		logger.Error("encounter RetryTaskError with non expected run ID")
+		logger.Error("encounter RetryTaskError with non expected run ID", tag.Error(retryErr))
 		return err
 	}
 	if retryErr.NextEventId >= c.beginningFirstEventID {
@@ -350,7 +381,7 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 	}
 
 	// after the amend of the missing history events after history reset, redo the request
-	ctxAgain, cancelAgain := context.WithTimeout(context.Background(), c.rereplicator.replicationTimeout)
+	ctxAgain, cancelAgain := context.WithTimeout(c.ctx, c.rereplicator.replicationTimeout)
 	defer cancelAgain()
 	return c.rereplicator.historyReplicationFn(ctxAgain, request)
 }
@@ -405,8 +436,9 @@ func (c *historyRereplicationContext) getHistory(
 	}
 	namespace := namespaceEntry.GetInfo().Name
 
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(c.rereplicator.replicationTimeout)
+	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndHeaders(c.ctx, c.rereplicator.replicationTimeout)
 	defer cancel()
+
 	response, err := c.rereplicator.adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: namespace,
 		Execution: &executionpb.WorkflowExecution{
