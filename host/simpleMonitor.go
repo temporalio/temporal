@@ -52,6 +52,10 @@ func (s *simpleMonitor) Start() {
 func (s *simpleMonitor) Stop() {
 }
 
+func (s *simpleMonitor) EvictSelf() error {
+	return nil
+}
+
 func (s *simpleMonitor) WhoAmI() (*membership.HostInfo, error) {
 	return s.hostInfo, nil
 }
