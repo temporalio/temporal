@@ -1038,15 +1038,15 @@ type (
 
 	// GetNamespaceResponse is the response for GetNamespace
 	GetNamespaceResponse struct {
-		Namespace                   *persistenceblobs.NamespaceDetail
-		IsGlobalNamespace           bool
-		NotificationVersion         int64
+		Namespace           *persistenceblobs.NamespaceDetail
+		IsGlobalNamespace   bool
+		NotificationVersion int64
 	}
 
 	// UpdateNamespaceRequest is used to update namespace
 	UpdateNamespaceRequest struct {
-		Namespace                   *persistenceblobs.NamespaceDetail
-		NotificationVersion         int64
+		Namespace           *persistenceblobs.NamespaceDetail
+		NotificationVersion int64
 	}
 
 	// DeleteNamespaceRequest is used to delete namespace entry from namespaces table
