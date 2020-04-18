@@ -598,7 +598,7 @@ type (
 		LastWorkerIdentity string
 		LastFailureDetails []byte
 		// Not written to database - This is used only for deduping heartbeat timer creation
-		LastHeartbeatTimeoutVisibility int64
+		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
 
 	// ChildExecutionInfo has details for pending child executions.
