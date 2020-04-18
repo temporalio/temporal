@@ -425,6 +425,7 @@ func processTask(
 	wfs := []shared.WorkflowExecution{task.execution}
 	for len(wfs) > 0 {
 		wf := wfs[0]
+		wfs = wfs[1:]
 
 		err := limiter.Wait(ctx)
 		if err != nil {
@@ -435,12 +436,11 @@ func processTask(
 		err = procFn(wf.GetWorkflowId(), wf.GetRunId())
 		if err != nil {
 			// EntityNotExistsError means wf is not running or deleted
-			_, ok := err.(*shared.EntityNotExistsError)
-			if !ok {
-				return err
+			if _, ok := err.(*shared.EntityNotExistsError); ok {
+				continue
 			}
+			return err
 		}
-		wfs = wfs[1:]
 		resp, err := client.DescribeWorkflowExecution(ctx, &shared.DescribeWorkflowExecutionRequest{
 			Domain: common.StringPtr(batchParams.DomainName),
 			Execution: &shared.WorkflowExecution{
@@ -450,11 +450,10 @@ func processTask(
 		})
 		if err != nil {
 			// EntityNotExistsError means wf is deleted
-			_, ok := err.(*shared.EntityNotExistsError)
-			if !ok {
-				return err
+			if _, ok := err.(*shared.EntityNotExistsError); ok {
+				continue
 			}
-			continue
+			return err
 		}
 
 		// TODO https://github.com/uber/cadence/issues/2159
