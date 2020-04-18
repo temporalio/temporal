@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 
 	"github.com/temporalio/temporal/common/definition"
@@ -86,7 +87,11 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
-			Input:      []byte{},
+			Input: &commonpb.Payload{Items: []*commonpb.PayloadItem{{
+				Metadata: map[string][]byte{
+					"encoding": []byte("raw")},
+				Data: []byte{},
+			}}},
 		}},
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
@@ -120,7 +125,11 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
-			Input:      []byte{},
+			Input: &commonpb.Payload{Items: []*commonpb.PayloadItem{{
+				Metadata: map[string][]byte{
+					"encoding": []byte("raw")},
+				Data: []byte{},
+			}}},
 		}},
 	}
 
@@ -147,7 +156,11 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
-			Input:      []byte{},
+			Input: &commonpb.Payload{Items: []*commonpb.PayloadItem{{
+				Metadata: map[string][]byte{
+					"encoding": []byte("raw")},
+				Data: []byte{},
+			}}},
 		}},
 	}
 	event2 := &eventpb.HistoryEvent{
@@ -156,7 +169,11 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
-			Input:      []byte{},
+			Input: &commonpb.Payload{Items: []*commonpb.PayloadItem{{
+				Metadata: map[string][]byte{
+					"encoding": []byte("raw")},
+				Data: []byte{},
+			}}},
 		}},
 	}
 	attr1 := event1.GetWorkflowExecutionSignaledEventAttributes()
@@ -196,7 +213,11 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
-			Input:      []byte{},
+			Input: &commonpb.Payload{Items: []*commonpb.PayloadItem{{
+				Metadata: map[string][]byte{
+					"encoding": []byte("raw")},
+				Data: []byte{},
+			}}},
 		}},
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()

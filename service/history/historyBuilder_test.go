@@ -42,6 +42,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
@@ -112,7 +113,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	wt := "dynamic-historybuilder-success-type"
 	tl := "dynamic-historybuilder-success-tasklist"
 	identity := "dynamic-historybuilder-success-worker"
-	input := []byte("dynamic-historybuilder-success-input")
+	input := codec.EncodeString("dynamic-historybuilder-success-input")
 	execTimeout := int32(60)
 	taskTimeout := int32(10)
 	we := executionpb.WorkflowExecution{
@@ -157,8 +158,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 
 	activity1ID := "activity1"
 	activity1Type := "dynamic-historybuilder-success-activity1-type"
-	activity1Input := []byte("dynamic-historybuilder-success-activity1-input")
-	activity1Result := []byte("dynamic-historybuilder-success-activity1-result")
+	activity1Input := codec.EncodeString("dynamic-historybuilder-success-activity1-input")
+	activity1Result := codec.EncodeString("dynamic-historybuilder-success-activity1-result")
 	activity1ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity1ID, activity1Type,
 		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.validateActivityTaskScheduledEvent(activity1ScheduledEvent, 5, 4, activity1ID, activity1Type,
@@ -171,9 +172,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 
 	activity2ID := "activity2"
 	activity2Type := "dynamic-historybuilder-success-activity2-type"
-	activity2Input := []byte("dynamic-historybuilder-success-activity2-input")
+	activity2Input := codec.EncodeString("dynamic-historybuilder-success-activity2-input")
 	activity2Reason := "dynamic-historybuilder-success-activity2-failed"
-	activity2Details := []byte("dynamic-historybuilder-success-activity2-callstack")
+	activity2Details := codec.EncodeString("dynamic-historybuilder-success-activity2-callstack")
 	activity2ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity2ID, activity2Type,
 		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.validateActivityTaskScheduledEvent(activity2ScheduledEvent, 6, 4, activity2ID, activity2Type,
@@ -235,7 +236,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.False(activity2Running2)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
-	markerDetails := []byte("dynamic-historybuilder-success-marker-details")
+	markerDetails := codec.EncodeString("dynamic-historybuilder-success-marker-details")
 	markerHeaderField1 := []byte("dynamic-historybuilder-success-marker-header1")
 	markerHeaderField2 := []byte("dynamic-historybuilder-success-marker-header2")
 	markerHeader := map[string][]byte{
@@ -256,7 +257,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 	wt := "historybuilder-workflowstart-failures-type"
 	tl := "historybuilder-workflowstart-failures-tasklist"
 	identity := "historybuilder-workflowstart-failures-worker"
-	input := []byte("historybuilder-workflowstart-failures-input")
+	input := codec.EncodeString("historybuilder-workflowstart-failures-input")
 	execTimeout := int32(60)
 	taskTimeout := int32(10)
 	we := executionpb.WorkflowExecution{
@@ -305,7 +306,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionScheduledFailures() {
 	wt := "historybuilder-decisionscheduled-failures-type"
 	tl := "historybuilder-decisionscheduled-failures-tasklist"
 	identity := "historybuilder-decisionscheduled-failures-worker"
-	input := []byte("historybuilder-decisionscheduled-failures-input")
+	input := codec.EncodeString("historybuilder-decisionscheduled-failures-input")
 	execTimeout := int32(60)
 	taskTimeout := int32(10)
 	we := executionpb.WorkflowExecution{
@@ -340,7 +341,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionStartedFailures() {
 	wt := "historybuilder-decisionstarted-failures-type"
 	tl := "historybuilder-decisionstarted-failures-tasklist"
 	identity := "historybuilder-decisionstarted-failures-worker"
-	input := []byte("historybuilder-decisionstarted-failures-input")
+	input := codec.EncodeString("historybuilder-decisionstarted-failures-input")
 	execTimeout := int32(60)
 	taskTimeout := int32(10)
 	we := executionpb.WorkflowExecution{
@@ -396,7 +397,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	wt := "flush-buffered-events-type"
 	tl := "flush-buffered-events-tasklist"
 	identity := "flush-buffered-events-worker"
-	input := []byte("flush-buffered-events-input")
+	input := codec.EncodeString("flush-buffered-events-input")
 	execTimeout := int32(60)
 	taskTimeout := int32(10)
 	we := executionpb.WorkflowExecution{
@@ -446,8 +447,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	// 5 activity1 scheduled
 	activity1ID := "activity1"
 	activity1Type := "flush-buffered-events-activity1-type"
-	activity1Input := []byte("flush-buffered-events-activity1-input")
-	activity1Result := []byte("flush-buffered-events-activity1-result")
+	activity1Input := codec.EncodeString("flush-buffered-events-activity1-input")
+	activity1Result := codec.EncodeString("flush-buffered-events-activity1-result")
 	activity1ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity1ID, activity1Type,
 		activityTaskList, activity1Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.validateActivityTaskScheduledEvent(activity1ScheduledEvent, 5, 4, activity1ID, activity1Type,
@@ -461,7 +462,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	// 6 activity 2 scheduled
 	activity2ID := "activity2"
 	activity2Type := "flush-buffered-events-activity2-type"
-	activity2Input := []byte("flush-buffered-events-activity2-input")
+	activity2Input := codec.EncodeString("flush-buffered-events-activity2-input")
 	activity2ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity2ID, activity2Type,
 		activityTaskList, activity2Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.validateActivityTaskScheduledEvent(activity2ScheduledEvent, 6, 4, activity2ID, activity2Type,
@@ -524,7 +525,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 
 	// 12 (buffered) activity2 failed
 	activity2Reason := "flush-buffered-events-activity2-failed"
-	activity2Details := []byte("flush-buffered-events-activity2-callstack")
+	activity2Details := codec.EncodeString("flush-buffered-events-activity2-callstack")
 	activity2FailedEvent := s.addActivityTaskFailedEvent(6, common.BufferedEventID, activity2Reason, activity2Details, identity)
 	s.validateActivityTaskFailedEvent(activity2FailedEvent, common.BufferedEventID, 6, common.BufferedEventID, activity2Reason,
 		activity2Details, identity)
@@ -560,7 +561,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() 
 	workflowType := "some random workflow type"
 	tasklist := "some random tasklist"
 	identity := "some random identity"
-	input := []byte("some random workflow input")
+	input := codec.EncodeString("some random workflow input")
 	execTimeout := int32(60)
 	taskTimeout := int32(10)
 	workflowExecution := executionpb.WorkflowExecution{
@@ -632,7 +633,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 	workflowType := "some random workflow type"
 	tasklist := "some random tasklist"
 	identity := "some random identity"
-	input := []byte("some random workflow input")
+	input := codec.EncodeString("some random workflow input")
 	execTimeout := int32(60)
 	taskTimeout := int32(10)
 	workflowExecution := executionpb.WorkflowExecution{
@@ -714,7 +715,7 @@ func (s *historyBuilderSuite) getPreviousDecisionStartedEventID() int64 {
 }
 
 func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we executionpb.WorkflowExecution, workflowType,
-	taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
+	taskList string, input *commonpb.Payload, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
 	identity string) *eventpb.HistoryEvent {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -768,7 +769,7 @@ func (s *historyBuilderSuite) addDecisionTaskCompletedEvent(scheduleID, startedI
 }
 
 func (s *historyBuilderSuite) addActivityTaskScheduledEvent(decisionCompletedID int64, activityID, activityType,
-	taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32) (*eventpb.HistoryEvent,
+	taskList string, input *commonpb.Payload, timeout, queueTimeout, hearbeatTimeout int32) (*eventpb.HistoryEvent,
 	*persistence.ActivityInfo) {
 	event, ai, err := s.msBuilder.AddActivityTaskScheduledEvent(decisionCompletedID,
 		&decisionpb.ScheduleActivityTaskDecisionAttributes{
@@ -793,7 +794,7 @@ func (s *historyBuilderSuite) addActivityTaskStartedEvent(scheduleID int64, task
 	return event
 }
 
-func (s *historyBuilderSuite) addActivityTaskCompletedEvent(scheduleID, startedID int64, result []byte,
+func (s *historyBuilderSuite) addActivityTaskCompletedEvent(scheduleID, startedID int64, result *commonpb.Payload,
 	identity string) *eventpb.HistoryEvent {
 	event, err := s.msBuilder.AddActivityTaskCompletedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskCompletedRequest{
 		Result:   result,
@@ -803,7 +804,7 @@ func (s *historyBuilderSuite) addActivityTaskCompletedEvent(scheduleID, startedI
 	return event
 }
 
-func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID int64, reason string, details []byte,
+func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID int64, reason string, details *commonpb.Payload,
 	identity string) *eventpb.HistoryEvent {
 	event, err := s.msBuilder.AddActivityTaskFailedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskFailedRequest{
 		Reason:   reason,
@@ -814,7 +815,7 @@ func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID i
 	return event
 }
 
-func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID int64, markerName string, details []byte, header *map[string][]byte) *eventpb.HistoryEvent {
+func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID int64, markerName string, details *commonpb.Payload, header *map[string][]byte) *eventpb.HistoryEvent {
 	fields := make(map[string][]byte)
 	if header != nil {
 		for name, value := range *header {
@@ -871,7 +872,7 @@ func (s *historyBuilderSuite) addRequestCancelExternalWorkflowExecutionFailedEve
 }
 
 func (s *historyBuilderSuite) validateWorkflowExecutionStartedEvent(event *eventpb.HistoryEvent, workflowType,
-	taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32, identity string) {
+	taskList string, input *commonpb.Payload, executionStartToCloseTimeout, taskStartToCloseTimeout int32, identity string) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_WorkflowExecutionStarted, event.EventType)
 	s.Equal(common.FirstEventID, event.EventId)
@@ -917,7 +918,7 @@ func (s *historyBuilderSuite) validateDecisionTaskCompletedEvent(event *eventpb.
 }
 
 func (s *historyBuilderSuite) validateActivityTaskScheduledEvent(event *eventpb.HistoryEvent, eventID, decisionID int64,
-	activityID, activityType, taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32) {
+	activityID, activityType, taskList string, input *commonpb.Payload, timeout, queueTimeout, hearbeatTimeout int32) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_ActivityTaskScheduled, event.EventType)
 	s.Equal(eventID, event.EventId)
@@ -945,7 +946,7 @@ func (s *historyBuilderSuite) validateActivityTaskStartedEvent(event *eventpb.Hi
 }
 
 func (s *historyBuilderSuite) validateActivityTaskCompletedEvent(event *eventpb.HistoryEvent, eventID,
-	scheduleID, startedID int64, result []byte, identity string) {
+	scheduleID, startedID int64, result *commonpb.Payload, identity string) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_ActivityTaskCompleted, event.EventType)
 	s.Equal(eventID, event.EventId)
@@ -958,7 +959,7 @@ func (s *historyBuilderSuite) validateActivityTaskCompletedEvent(event *eventpb.
 }
 
 func (s *historyBuilderSuite) validateActivityTaskFailedEvent(event *eventpb.HistoryEvent, eventID,
-	scheduleID, startedID int64, reason string, details []byte, identity string) {
+	scheduleID, startedID int64, reason string, details *commonpb.Payload, identity string) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_ActivityTaskFailed, event.EventType)
 	s.Equal(eventID, event.EventId)
@@ -973,7 +974,7 @@ func (s *historyBuilderSuite) validateActivityTaskFailedEvent(event *eventpb.His
 
 func (s *historyBuilderSuite) validateMarkerRecordedEvent(
 	event *eventpb.HistoryEvent, eventID, decisionTaskCompletedEventID int64,
-	markerName string, details []byte, header *map[string][]byte) {
+	markerName string, details *commonpb.Payload, header *map[string][]byte) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_MarkerRecorded, event.EventType)
 	s.Equal(eventID, event.EventId)

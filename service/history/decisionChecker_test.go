@@ -39,6 +39,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -135,7 +136,7 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 
-	attributes.Input = []byte("test input")
+	attributes.Input = codec.EncodeString("test input")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 }
@@ -193,7 +194,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffec
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{ cluster.TestCurrentClusterName },
+			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
 		nil,
@@ -218,7 +219,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffec
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []string{ cluster.TestAlternativeClusterName },
+			Clusters:          []string{cluster.TestAlternativeClusterName},
 		},
 		1234,
 		nil,
@@ -265,7 +266,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{ cluster.TestCurrentClusterName },
+			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
 		nil,
@@ -290,7 +291,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []string{ cluster.TestAlternativeClusterName },
+			Clusters:          []string{cluster.TestAlternativeClusterName},
 		},
 		1234,
 		nil,
@@ -315,7 +316,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{ cluster.TestCurrentClusterName },
+			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
 		nil,
@@ -325,7 +326,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{ cluster.TestCurrentClusterName },
+			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		5678,
 		nil,
@@ -344,7 +345,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{ cluster.TestCurrentClusterName },
+			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
 		nil,
@@ -354,7 +355,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []string{ cluster.TestAlternativeClusterName },
+			Clusters:          []string{cluster.TestAlternativeClusterName},
 		},
 		5678,
 		nil,

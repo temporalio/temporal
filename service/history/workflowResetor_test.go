@@ -52,6 +52,7 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
@@ -284,7 +285,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 								Name: wfType,
 							},
 							TaskList:                            taskList,
-							Input:                               []byte("testInput"),
+							Input:                               codec.EncodeString("testInput"),
 							ExecutionStartToCloseTimeoutSeconds: 100,
 							TaskStartToCloseTimeoutSeconds:      200,
 						}},
@@ -329,7 +330,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      []byte("details"),
+							Details:                      codec.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -963,7 +964,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 								Name: wfType,
 							},
 							TaskList:                            taskList,
-							Input:                               []byte("testInput"),
+							Input:                               codec.EncodeString("testInput"),
 							ExecutionStartToCloseTimeoutSeconds: 100,
 							TaskStartToCloseTimeoutSeconds:      200,
 						}},
@@ -1008,7 +1009,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      []byte("details"),
+							Details:                      codec.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -1419,7 +1420,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
 			Clusters: []string{
-"active", "standby",
+				"active", "standby",
 			},
 		},
 		afterResetVersion,
@@ -1557,7 +1558,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 								Name: wfType,
 							},
 							TaskList:                            taskList,
-							Input:                               []byte("testInput"),
+							Input:                               codec.EncodeString("testInput"),
 							ExecutionStartToCloseTimeoutSeconds: 100,
 							TaskStartToCloseTimeoutSeconds:      200,
 						}},
@@ -1602,7 +1603,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      []byte("details"),
+							Details:                      codec.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -2258,7 +2259,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 								Name: wfType,
 							},
 							TaskList:                            taskList,
-							Input:                               []byte("testInput"),
+							Input:                               codec.EncodeString("testInput"),
 							ExecutionStartToCloseTimeoutSeconds: 100,
 							TaskStartToCloseTimeoutSeconds:      200,
 						}},
@@ -2303,7 +2304,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      []byte("details"),
+							Details:                      codec.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -2717,7 +2718,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
 			Clusters: []string{
-"active", "standby",
+				"active", "standby",
 			},
 		},
 		afterResetVersion,
@@ -2856,7 +2857,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 								Name: wfType,
 							},
 							TaskList:                            taskList,
-							Input:                               []byte("testInput"),
+							Input:                               codec.EncodeString("testInput"),
 							ExecutionStartToCloseTimeoutSeconds: 100,
 							TaskStartToCloseTimeoutSeconds:      200,
 						}},
@@ -2901,7 +2902,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      []byte("details"),
+							Details:                      codec.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -3531,7 +3532,7 @@ func (s *resetorSuite) TestApplyReset() {
 								Name: wfType,
 							},
 							TaskList:                            taskList,
-							Input:                               []byte("testInput"),
+							Input:                               codec.EncodeString("testInput"),
 							ExecutionStartToCloseTimeoutSeconds: 100,
 							TaskStartToCloseTimeoutSeconds:      200,
 						}},
@@ -3576,7 +3577,7 @@ func (s *resetorSuite) TestApplyReset() {
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      []byte("details"),
+							Details:                      codec.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},

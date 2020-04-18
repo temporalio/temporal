@@ -43,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
@@ -455,7 +456,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		EventType: eventpb.EventType_WorkflowExecutionSignaled,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
-			Input:      []byte("some random signal input"),
+			Input:      codec.EncodeString("some random signal input"),
 			Identity:   "some random identity",
 		}},
 	}
@@ -1674,7 +1675,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	now := time.Now()
 	signalRequestID := uuid.New()
 	signalName := "some random signal name"
-	signalInput := []byte("some random signal input")
+	signalInput := codec.EncodeString("some random signal input")
 	control := []byte("some random control")
 	evenType := eventpb.EventType_SignalExternalWorkflowExecutionInitiated
 	event := &eventpb.HistoryEvent{

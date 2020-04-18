@@ -31,6 +31,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	querypb "go.temporal.io/temporal-proto/query"
+
+	"github.com/temporalio/temporal/common/codec"
 )
 
 type QueryRegistrySuite struct {
@@ -63,7 +65,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 			queryTerminationType: queryTerminationTypeCompleted,
 			queryResult: &querypb.WorkflowQueryResult{
 				ResultType: querypb.QueryResultType_Answered,
-				Answer:     []byte{1, 2, 3},
+				Answer:     codec.EncodeBytes([]byte{1, 2, 3}),
 			},
 		})
 		s.NoError(err)

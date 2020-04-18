@@ -48,6 +48,7 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
@@ -259,7 +260,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentNextEventID := int64(2333)
 
 	signalName := "some random signal name"
-	signalInput := []byte("some random signal input")
+	signalInput := codec.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	req := &historyservice.ReplicateEventsRequest{
@@ -339,7 +340,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	now := time.Now().UnixNano()
 
 	signalName := "some random signal name"
-	signalInput := []byte("some random signal input")
+	signalInput := codec.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	currentRunID := uuid.New()
@@ -972,7 +973,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	currentLastWriteVersion := lastWriteVersion
 
 	signalName := "some random signal name"
-	signalInput := []byte("some random signal input")
+	signalInput := codec.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
@@ -1056,7 +1057,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	currentLastWriteVersion := lastWriteVersion
 
 	signalName := "some random signal name"
-	signalInput := []byte("some random signal input")
+	signalInput := codec.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	decisionStickyTasklist := "some random decision sticky tasklist"
@@ -1173,7 +1174,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	currentLastWriteVersion := int64(123)
 
 	signalName := "some random signal name"
-	signalInput := []byte("some random signal input")
+	signalInput := codec.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
@@ -1222,7 +1223,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	currentLastWriteVersion := int64(123)
 
 	signalName := "some random signal name"
-	signalInput := []byte("some random signal input")
+	signalInput := codec.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	decisionStickyTasklist := "some random decision sticky tasklist"
@@ -1706,7 +1707,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().GetInFlightDecision().Return(pendingDecisionInfo, true).Times(1)
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderIn.EXPECT().AddDecisionTaskFailedEvent(pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
-		eventpb.DecisionTaskFailedCause_FailoverCloseDecision, ([]byte)(nil), identityHistoryService, "", "", "", "", int64(0),
+		eventpb.DecisionTaskFailedCause_FailoverCloseDecision, nil, identityHistoryService, "", "", "", "", int64(0),
 	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 	msBuilderIn.EXPECT().HasPendingDecision().Return(false).Times(1)
 	currentState := persistence.WorkflowStateRunning
@@ -2791,7 +2792,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	parentRunID := uuid.New()
 
 	signalName := "some random signal name"
-	signalInput := []byte("some random signal input")
+	signalInput := codec.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	weContext := newWorkflowExecutionContext(namespaceID, executionpb.WorkflowExecution{
@@ -2967,7 +2968,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	parentRunID := uuid.New()
 
 	signalName := "some random signal name"
-	signalInput := []byte("some random signal input")
+	signalInput := codec.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	weContext := newWorkflowExecutionContext(namespaceID, executionpb.WorkflowExecution{

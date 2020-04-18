@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonpb "go.temporal.io/temporal-proto/common"
 	querypb "go.temporal.io/temporal-proto/query"
 
 	"github.com/temporalio/temporal/common/headers"
@@ -118,7 +119,11 @@ func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize in
 	for _, id := range ids {
 		results[id] = &querypb.WorkflowQueryResult{
 			ResultType: querypb.QueryResultType_Answered,
-			Answer:     make([]byte, resultSize, resultSize),
+			Answer: &commonpb.Payload{Items: []*commonpb.PayloadItem{{
+				Metadata: map[string][]byte{
+					"encoding": []byte("raw"),
+				},
+				Data: make([]byte, resultSize, resultSize)}}},
 		}
 	}
 	return results
