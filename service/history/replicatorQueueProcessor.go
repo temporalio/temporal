@@ -100,6 +100,7 @@ func newReplicatorQueueProcessor(
 		MaxRetryCount:                       config.ReplicatorTaskMaxRetryCount,
 		RedispatchInterval:                  config.ReplicatorProcessorRedispatchInterval,
 		RedispatchIntervalJitterCoefficient: config.ReplicatorProcessorRedispatchIntervalJitterCoefficient,
+		MaxRedispatchQueueSize:              config.ReplicatorProcessorMaxRedispatchQueueSize,
 		EnablePriorityTaskProcessor:         config.ReplicatorProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.ReplicatorQueueProcessorScope,
 	}
@@ -141,6 +142,7 @@ func newReplicatorQueueProcessor(
 		historyCache,
 		nil, // there's no queueTask implementation for replication task
 		logger,
+		shard.GetMetricsClient().Scope(metrics.ReplicatorQueueProcessorScope),
 	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase

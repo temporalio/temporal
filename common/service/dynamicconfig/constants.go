@@ -173,6 +173,7 @@ var keys = map[Key]string{
 	TimerProcessorMaxPollIntervalJitterCoefficient:         "history.timerProcessorMaxPollIntervalJitterCoefficient",
 	TimerProcessorRedispatchInterval:                       "history.timerProcessorRedispatchInterval",
 	TimerProcessorRedispatchIntervalJitterCoefficient:      "history.timerProcessorRedispatchIntervalJitterCoefficient",
+	TimerProcessorMaxRedispatchQueueSize:                   "history.timerProcessorMaxRedispatchQueueSize",
 	TimerProcessorEnablePriorityTaskProcessor:              "history.timerProcessorEnablePriorityTaskProcessor",
 	TimerProcessorMaxTimeShift:                             "history.timerProcessorMaxTimeShift",
 	TimerProcessorHistoryArchivalSizeLimit:                 "history.timerProcessorHistoryArchivalSizeLimit",
@@ -191,6 +192,7 @@ var keys = map[Key]string{
 	TransferProcessorCompleteTransferInterval:              "history.transferProcessorCompleteTransferInterval",
 	TransferProcessorRedispatchInterval:                    "history.transferProcessorRedispatchInterval",
 	TransferProcessorRedispatchIntervalJitterCoefficient:   "history.transferProcessorRedispatchIntervalJitterCoefficient",
+	TransferProcessorMaxRedispatchQueueSize:                "history.transferProcessorMaxRedispatchQueueSize",
 	TransferProcessorEnablePriorityTaskProcessor:           "history.transferProcessorEnablePriorityTaskProcessor",
 	TransferProcessorVisibilityArchivalTimeLimit:           "history.transferProcessorVisibilityArchivalTimeLimit",
 	ReplicatorTaskBatchSize:                                "history.replicatorTaskBatchSize",
@@ -204,6 +206,7 @@ var keys = map[Key]string{
 	ReplicatorProcessorUpdateAckIntervalJitterCoefficient:  "history.replicatorProcessorUpdateAckIntervalJitterCoefficient",
 	ReplicatorProcessorRedispatchInterval:                  "history.replicatorProcessorRedispatchInterval",
 	ReplicatorProcessorRedispatchIntervalJitterCoefficient: "history.replicatorProcessorRedispatchIntervalJitterCoefficient",
+	ReplicatorProcessorMaxRedispatchQueueSize:              "history.replicatorProcessorMaxRedispatchQueueSize",
 	ReplicatorProcessorEnablePriorityTaskProcessor:         "history.replicatorProcessorEnablePriorityTaskProcessor",
 	ExecutionMgrNumConns:                                   "history.executionMgrNumConns",
 	HistoryMgrNumConns:                                     "history.historyMgrNumConns",
@@ -524,6 +527,8 @@ const (
 	TimerProcessorRedispatchInterval
 	// TimerProcessorRedispatchIntervalJitterCoefficient is the redispatch interval jitter coefficient
 	TimerProcessorRedispatchIntervalJitterCoefficient
+	// TimerProcessorMaxRedispatchQueueSize is the threshold of the number of tasks in the redispatch queue for timer processor
+	TimerProcessorMaxRedispatchQueueSize
 	// TimerProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for timer processor
 	TimerProcessorEnablePriorityTaskProcessor
 	// TimerProcessorMaxTimeShift is the max shift timer processor can have
@@ -560,6 +565,8 @@ const (
 	TransferProcessorRedispatchInterval
 	// TransferProcessorRedispatchIntervalJitterCoefficient is the redispatch interval jitter coefficient
 	TransferProcessorRedispatchIntervalJitterCoefficient
+	// TransferProcessorMaxRedispatchQueueSize is the threshold of the number of tasks in the redispatch queue for transferQueueProcessor
+	TransferProcessorMaxRedispatchQueueSize
 	// TransferProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for transferQueueProcessor
 	TransferProcessorEnablePriorityTaskProcessor
 	// TransferProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
@@ -586,6 +593,8 @@ const (
 	ReplicatorProcessorRedispatchInterval
 	// ReplicatorProcessorRedispatchIntervalJitterCoefficient is the redispatch interval jitter coefficient
 	ReplicatorProcessorRedispatchIntervalJitterCoefficient
+	// ReplicatorProcessorMaxRedispatchQueueSize is the threshold of the number of tasks in the redispatch queue for ReplicatorProcessor
+	ReplicatorProcessorMaxRedispatchQueueSize
 	// ReplicatorProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for ReplicatorProcessor
 	ReplicatorProcessorEnablePriorityTaskProcessor
 	// ExecutionMgrNumConns is persistence connections number for ExecutionManager

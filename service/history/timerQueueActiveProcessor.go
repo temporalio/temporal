@@ -137,6 +137,7 @@ func newTimerQueueActiveProcessor(
 		timerGate,
 		shard.GetConfig().TimerProcessorMaxPollRPS,
 		logger,
+		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
 	)
 
 	return processor
@@ -251,6 +252,7 @@ func newTimerQueueFailoverProcessor(
 		timerGate,
 		shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
 		logger,
+		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
 	)
 
 	return updateShardAckLevel, processor

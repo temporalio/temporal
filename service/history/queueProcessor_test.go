@@ -31,10 +31,12 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
 
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 type (
@@ -47,6 +49,7 @@ type (
 
 		redispatchQueue collection.Queue
 		logger          log.Logger
+		metricsScope    metrics.Scope
 	}
 )
 
@@ -63,6 +66,7 @@ func (s *queueProcessorSuite) SetupTest() {
 
 	s.redispatchQueue = collection.NewConcurrentQueue()
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.metricsScope = metrics.NewClient(tally.NoopScope, metrics.History).Scope(metrics.TransferQueueProcessorScope)
 }
 
 func (s *queueProcessorSuite) TearDownTest() {
@@ -89,6 +93,7 @@ func (s *queueProcessorSuite) TestRedispatchTask_ProcessorShutDown() {
 		s.redispatchQueue,
 		s.mockQueueTaskProcessor,
 		s.logger,
+		s.metricsScope,
 		shutDownCh,
 	)
 
@@ -116,6 +121,7 @@ func (s *queueProcessorSuite) TestRedispatchTask_Random() {
 		s.redispatchQueue,
 		s.mockQueueTaskProcessor,
 		s.logger,
+		s.metricsScope,
 		shutDownCh,
 	)
 
