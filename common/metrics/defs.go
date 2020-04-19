@@ -1542,6 +1542,8 @@ const (
 	ServiceErrClientVersionNotSupportedCounter
 	ServiceErrIncompleteHistoryCounter
 	ServiceErrNonDeterministicCounter
+	ServiceErrUnauthorizedCounter
+	ServiceErrAuthorizeFailedCounter
 	PersistenceRequests
 	PersistenceFailures
 	PersistenceLatency
@@ -1564,6 +1566,8 @@ const (
 	ClientRedirectionRequests
 	ClientRedirectionFailures
 	ClientRedirectionLatency
+
+	ServiceAuthorizationLatency
 
 	NamespaceCachePrepareCallbacksLatency
 	NamespaceCacheCallbacksLatency
@@ -1911,6 +1915,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceErrClientVersionNotSupportedCounter:          {metricName: "service_errors_client_version_not_supported", metricType: Counter},
 		ServiceErrIncompleteHistoryCounter:                  {metricName: "service_errors_incomplete_history", metricType: Counter},
 		ServiceErrNonDeterministicCounter:                   {metricName: "service_errors_nondeterministic", metricType: Counter},
+		ServiceErrUnauthorizedCounter:                       {metricName: "service_errors_unauthorized", metricType: Counter},
+		ServiceErrAuthorizeFailedCounter:                    {metricName: "service_errors_authorize_failed", metricType: Counter},
 		PersistenceRequests:                                 {metricName: "persistence_requests", metricType: Counter},
 		PersistenceFailures:                                 {metricName: "persistence_errors", metricType: Counter},
 		PersistenceLatency:                                  {metricName: "persistence_latency", metricType: Timer},
@@ -1931,6 +1937,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ClientRedirectionRequests:                           {metricName: "client_redirection_requests", metricType: Counter},
 		ClientRedirectionFailures:                           {metricName: "client_redirection_errors", metricType: Counter},
 		ClientRedirectionLatency:                            {metricName: "client_redirection_latency", metricType: Timer},
+		ServiceAuthorizationLatency:                         {metricName: "service_authorization_latency", metricType: Timer},
 		NamespaceCachePrepareCallbacksLatency:               {metricName: "namespace_cache_prepare_callbacks_latency", metricType: Timer},
 		NamespaceCacheCallbacksLatency:                      {metricName: "namespace_cache_callbacks_latency", metricType: Timer},
 		HistorySize:                                         {metricName: "history_size", metricType: Timer},
