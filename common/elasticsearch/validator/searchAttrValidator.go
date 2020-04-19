@@ -30,6 +30,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -79,12 +80,19 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 	}
 
 	totalSize := 0
+	validAttr := sv.validSearchAttributes()
 	for key, val := range fields {
 		// verify: key is whitelisted
-		if !sv.isValidSearchAttributes(key) {
+		if !sv.isValidSearchAttributesKey(validAttr, key) {
 			sv.logger.WithTags(tag.ESKey(key), tag.WorkflowNamespace(namespace)).
-				Error("invalid search attribute")
+				Error("invalid search attribute key")
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not valid search attribute", key))
+		}
+		// verify: value has the correct type
+		if !sv.isValidSearchAttributesValue(validAttr, key, val) {
+			sv.logger.WithTags(tag.ESKey(key), tag.ESValue(val), tag.WorkflowNamespace(namespace)).
+				Error("invalid search attribute value")
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not a valid search attribute value for key %s", val, key))
 		}
 		// verify: key is not system reserved
 		if definition.IsSystemIndexedKey(key) {
@@ -111,9 +119,22 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 	return nil
 }
 
-// isValidSearchAttributes return true if key is registered
-func (sv *SearchAttributesValidator) isValidSearchAttributes(key string) bool {
-	validAttr := sv.validSearchAttributes()
+// isValidSearchAttributesKey return true if key is registered
+func (sv *SearchAttributesValidator) isValidSearchAttributesKey(
+	validAttr map[string]interface{},
+	key string,
+) bool {
 	_, isValidKey := validAttr[key]
 	return isValidKey
+}
+
+// isValidSearchAttributesValue return true if value has the correct representation for the attribute key
+func (sv *SearchAttributesValidator) isValidSearchAttributesValue(
+	validAttr map[string]interface{},
+	key string,
+	value []byte,
+) bool {
+	valueType := common.ConvertIndexedValueTypeToProtoType(validAttr[key], sv.logger)
+	_, err := common.DeserializeSearchAttributeValue(value, valueType)
+	return err == nil
 }
