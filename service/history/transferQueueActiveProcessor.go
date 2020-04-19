@@ -30,6 +30,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -61,6 +62,7 @@ func newTransferQueueActiveProcessor(
 	matchingClient matching.Client,
 	historyClient history.Client,
 	taskAllocator taskAllocator,
+	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) *transferQueueActiveProcessorImpl {
 
@@ -129,14 +131,36 @@ func newTransferQueueActiveProcessor(
 		shard.GetTransferClusterAckLevel(currentClusterName),
 		logger,
 	)
+
+	redispatchQueue := collection.NewConcurrentQueue()
+
+	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
+		return newTransferQueueTask(
+			shard,
+			taskInfo,
+			historyService.metricsClient.Scope(
+				getTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
+			),
+			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+			transferTaskFilter,
+			processor.taskExecutor,
+			redispatchQueue,
+			shard.GetTimeSource(),
+			options.MaxRetryCount,
+			queueAckMgr,
+		)
+	}
+
 	queueProcessorBase := newQueueProcessorBase(
 		currentClusterName,
 		shard,
 		options,
 		processor,
-		nil, // TODO: @yycptt wire up implementations for priority task processor
+		queueTaskProcessor,
 		queueAckMgr,
+		redispatchQueue,
 		historyService.historyCache,
+		transferQueueTaskInitializer,
 		logger,
 	)
 	processor.queueAckMgr = queueAckMgr
@@ -156,6 +180,7 @@ func newTransferQueueFailoverProcessor(
 	minLevel int64,
 	maxLevel int64,
 	taskAllocator taskAllocator,
+	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 
@@ -239,14 +264,36 @@ func newTransferQueueFailoverProcessor(
 		minLevel,
 		logger,
 	)
+
+	redispatchQueue := collection.NewConcurrentQueue()
+
+	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
+		return newTransferQueueTask(
+			shard,
+			taskInfo,
+			historyService.metricsClient.Scope(
+				getTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
+			),
+			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+			transferTaskFilter,
+			processor.taskExecutor,
+			redispatchQueue,
+			shard.GetTimeSource(),
+			options.MaxRetryCount,
+			queueAckMgr,
+		)
+	}
+
 	queueProcessorBase := newQueueProcessorBase(
 		currentClusterName,
 		shard,
 		options,
 		processor,
-		nil, // TODO: @yycptt wire up implementations for priority task processor
+		queueTaskProcessor,
 		queueAckMgr,
+		redispatchQueue,
 		historyService.historyCache,
+		transferQueueTaskInitializer,
 		logger,
 	)
 	processor.queueAckMgr = queueAckMgr
@@ -273,6 +320,6 @@ func (t *transferQueueActiveProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := t.getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), true)
+	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), true)
 	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
 }

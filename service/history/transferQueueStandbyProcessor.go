@@ -27,6 +27,7 @@ package history
 import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -60,6 +61,7 @@ func newTransferQueueStandbyProcessor(
 	taskAllocator taskAllocator,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
+	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) *transferQueueStandbyProcessorImpl {
 
@@ -131,16 +133,39 @@ func newTransferQueueStandbyProcessor(
 		shard.GetTransferClusterAckLevel(clusterName),
 		logger,
 	)
+
+	redispatchQueue := collection.NewConcurrentQueue()
+
+	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
+		return newTransferQueueTask(
+			shard,
+			taskInfo,
+			historyService.metricsClient.Scope(
+				getTransferTaskMetricsScope(taskInfo.GetTaskType(), false),
+			),
+			logger,
+			transferTaskFilter,
+			processor.taskExecutor,
+			redispatchQueue,
+			shard.GetTimeSource(),
+			options.MaxRetryCount,
+			queueAckMgr,
+		)
+	}
+
 	queueProcessorBase := newQueueProcessorBase(
 		clusterName,
 		shard,
 		options,
 		processor,
-		nil, // TODO: @yycptt wire up implementations for priority task processor
+		queueTaskProcessor,
 		queueAckMgr,
+		redispatchQueue,
 		historyService.historyCache,
+		transferQueueTaskInitializer,
 		logger,
 	)
+
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 
@@ -166,6 +191,6 @@ func (t *transferQueueStandbyProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := t.getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), false)
+	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), false)
 	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
 }
