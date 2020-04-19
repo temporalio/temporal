@@ -116,7 +116,7 @@ func newTimerQueueActiveProcessor(
 			historyService.metricsClient.Scope(
 				getTimerTaskMetricScope(taskInfo.GetTaskType(), true),
 			),
-			logger,
+			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			timerTaskFilter,
 			processor.taskExecutor,
 			redispatchQueue,
@@ -230,7 +230,7 @@ func newTimerQueueFailoverProcessor(
 			historyService.metricsClient.Scope(
 				getTimerTaskMetricScope(taskInfo.GetTaskType(), true),
 			),
-			logger,
+			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
 			timerTaskFilter,
 			processor.taskExecutor,
 			redispatchQueue,

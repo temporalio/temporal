@@ -234,9 +234,10 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.R
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 	_, err := adh.GetHistoryClient().RemoveTask(ctx, &historyservice.RemoveTaskRequest{
-		ShardId: request.GetShardId(),
-		Type:    request.GetType(),
-		TaskId:  request.GetTaskId(),
+		ShardId:             request.GetShardId(),
+		Type:                request.GetType(),
+		TaskId:              request.GetTaskId(),
+		VisibilityTimestamp: request.GetVisibilityTimestamp(),
 	})
 	return &adminservice.RemoveTaskResponse{}, err
 }

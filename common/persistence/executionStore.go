@@ -768,12 +768,6 @@ func (m *executionManagerImpl) DeserializeVersionHistories(
 	return NewVersionHistoriesFromProto(versionHistories), nil
 }
 
-func (m *executionManagerImpl) DeleteTask(
-	request *DeleteTaskRequest,
-) error {
-	return m.persistence.DeleteTask(request)
-}
-
 func (m *executionManagerImpl) DeleteWorkflowExecution(
 	request *DeleteWorkflowExecutionRequest,
 ) error {

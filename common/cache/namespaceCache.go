@@ -219,7 +219,7 @@ func NewLocalNamespaceCacheEntryForTest(
 		isGlobalNamespace: false,
 		replicationConfig: &persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: targetCluster,
-			Clusters:          []string{ targetCluster },
+			Clusters:          []string{targetCluster},
 		},
 		failoverVersion: common.EmptyVersion,
 		clusterMetadata: clusterMetadata,
@@ -686,7 +686,7 @@ func (entry *NamespaceCacheEntry) duplicate() *NamespaceCacheEntry {
 	}
 
 	result.config = proto.Clone(entry.config).(*persistenceblobs.NamespaceConfig)
-	if result.config.BadBinaries == nil || result.config.BadBinaries.Binaries == nil{
+	if result.config.BadBinaries == nil || result.config.BadBinaries.Binaries == nil {
 		result.config.BadBinaries.Binaries = make(map[string]*namespacepb.BadBinaryInfo, 0)
 	}
 

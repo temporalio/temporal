@@ -534,6 +534,11 @@ func TaskVersion(taskVersion int64) Tag {
 	return newInt64("queue-task-version", taskVersion)
 }
 
+// TaskVisibilityTimestamp returns tag for task visibilityTimestamp
+func TaskVisibilityTimestamp(timestamp int64) Tag {
+	return newInt64("queue-task-visibility-timestamp", timestamp)
+}
+
 // NumberProcessed returns tag for NumberProcessed
 func NumberProcessed(n int) Tag {
 	return newInt("number-processed", n)

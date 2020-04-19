@@ -1788,49 +1788,6 @@ func (d *cassandraPersistence) assertNotCurrentExecution(
 	return nil
 }
 
-func (d *cassandraPersistence) DeleteTask(request *p.DeleteTaskRequest) error {
-	var namespaceID, workflowID, runID string
-	switch request.Type {
-	case rowTypeTransferTask:
-		namespaceID = rowTypeTransferNamespaceID
-		workflowID = rowTypeTransferWorkflowID
-		runID = rowTypeTransferRunID
-
-	case rowTypeTimerTask:
-		namespaceID = rowTypeTimerNamespaceID
-		workflowID = rowTypeTimerWorkflowID
-		runID = rowTypeTimerRunID
-
-	case rowTypeReplicationTask:
-		namespaceID = rowTypeReplicationNamespaceID
-		workflowID = rowTypeReplicationWorkflowID
-		runID = rowTypeReplicationRunID
-
-	default:
-		return fmt.Errorf("DeleteTask type id is not one of 2 (transfer task), 3 (timer task), 4 (replication task) ")
-
-	}
-
-	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
-		request.ShardID,
-		request.Type,
-		namespaceID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		request.TaskID)
-
-	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("DeleteTask operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteTask operation failed. Error: %v", err))
-	}
-
-	return nil
-}
-
 func (d *cassandraPersistence) DeleteWorkflowExecution(request *p.DeleteWorkflowExecutionRequest) error {
 	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
 		d.shardID,

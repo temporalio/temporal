@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pborman/uuid"
 	eventpb "go.temporal.io/temporal-proto/event"
@@ -85,6 +86,7 @@ var (
 	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
 	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
 	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
+	errInvalidTaskType         = serviceerror.NewInvalidArgument("Invalid task type")
 	errDeserializeTaskToken    = serviceerror.NewInvalidArgument("Error to deserialize task token. Error: %v.")
 
 	errHistoryHostThrottle = serviceerror.NewResourceExhausted("History host RPS exceeded.")
@@ -690,12 +692,25 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 	if err != nil {
 		return nil, err
 	}
-	deleteTaskRequest := &persistence.DeleteTaskRequest{
-		TaskID:  request.GetTaskId(),
-		Type:    int(request.GetType()),
-		ShardID: int(request.GetShardId()),
+
+	switch taskType := common.TaskType(request.GetType()); taskType {
+	case common.TaskTypeTransfer:
+		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
+			TaskID: request.GetTaskId(),
+		})
+	case common.TaskTypeTimer:
+		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
+			VisibilityTimestamp: time.Unix(0, request.GetVisibilityTimestamp()),
+			TaskID:              request.GetTaskId(),
+		})
+	case common.TaskTypeReplication:
+		err = executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
+			TaskID: request.GetTaskId(),
+		})
+	default:
+		err = errInvalidTaskType
 	}
-	err = executionMgr.DeleteTask(deleteTaskRequest)
+
 	return &historyservice.RemoveTaskResponse{}, err
 }
 
