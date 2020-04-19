@@ -165,6 +165,13 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			},
 		},
 		{
+			query:     "ExecutionStatus = 'TIMED_OUT'",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_TimedOut),
+			},
+		},
+		{
 			query:     "ExecutionStatus = 'Failed' and ExecutionStatus = \"Failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
@@ -192,6 +199,17 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 		},
 		{
 			query:     "ExecutionStatus > \"Failed\"",
+			expectErr: true,
+		},
+		{
+			query:     "ExecutionStatus = 1",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
+			},
+		},
+		{
+			query:     "CloseStatus = 10",
 			expectErr: true,
 		},
 	}
