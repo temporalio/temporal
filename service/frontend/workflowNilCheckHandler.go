@@ -35,7 +35,7 @@ var _ workflowservice.WorkflowServiceServer = (*WorkflowNilCheckHandler)(nil)
 type (
 	// WorkflowNilCheckHandler - gRPC handler interface for workflow workflowservice
 	WorkflowNilCheckHandler struct {
-		parentHandler workflowservice.WorkflowServiceServer
+		parentHandler Handler
 	}
 )
 
@@ -45,7 +45,7 @@ type (
 
 // NewWorkflowNilCheckHandler creates handler that never returns nil response when error is nil
 func NewWorkflowNilCheckHandler(
-	parentHandler workflowservice.WorkflowServiceServer,
+	parentHandler Handler,
 ) *WorkflowNilCheckHandler {
 	handler := &WorkflowNilCheckHandler{
 		parentHandler: parentHandler,

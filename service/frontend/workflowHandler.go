@@ -72,19 +72,9 @@ const (
 	HealthStatusShuttingDown
 )
 
-var _ ServerHandler = (*WorkflowHandler)(nil)
+var _ Handler = (*WorkflowHandler)(nil)
 
 type (
-	// ServerHandler is the interface for the frontend rpc handler
-	ServerHandler interface {
-		common.Daemon
-		workflowservice.WorkflowServiceServer
-		// Health is the health check method for this rpc handler
-		healthpb.HealthServer
-		// UpdateHealthStatus sets the health status for this rpc handler.
-		// This health status will be used within the rpc health check handler
-		UpdateHealthStatus(status HealthStatus)
-	}
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
 		resource.Resource
@@ -113,7 +103,7 @@ func NewWorkflowHandler(
 	resource resource.Resource,
 	config *Config,
 	replicationMessageSink messaging.Producer,
-) *WorkflowHandler {
+) Handler {
 	handler := &WorkflowHandler{
 		Resource:        resource,
 		config:          config,
@@ -168,6 +158,16 @@ func (wh *WorkflowHandler) UpdateHealthStatus(status HealthStatus) {
 
 func (wh *WorkflowHandler) isShuttingDown() bool {
 	return atomic.LoadInt32(&wh.shuttingDown) != 0
+}
+
+// GetResource return resource
+func (wh *WorkflowHandler) GetResource() resource.Resource {
+	return wh.Resource
+}
+
+// GetConfig return config
+func (wh *WorkflowHandler) GetConfig() *Config {
+	return wh.config
 }
 
 // https://github.com/grpc/grpc/blob/master/doc/health-checking.md

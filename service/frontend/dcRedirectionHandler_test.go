@@ -873,3 +873,11 @@ func (serverHandler *testServerHandler) Watch(*healthpb.HealthCheckRequest, heal
 
 func (serverHandler *testServerHandler) UpdateHealthStatus(status HealthStatus) {
 }
+
+func (serverHandler *testServerHandler) GetResource() resource.Resource {
+	return nil
+}
+
+func (serverHandler *testServerHandler) GetConfig() *Config {
+	return nil
+}

@@ -148,7 +148,7 @@ type Service struct {
 	config *Config
 	params *resource.BootstrapParams
 
-	handler      *AccessControlledWorkflowHandler
+	handler      Handler
 	adminHandler *AdminHandler
 	server       *grpc.Server
 }
@@ -244,13 +244,14 @@ func (s *Service) Start() {
 	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
-	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
-	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
-	workflowNilCheckHandler := NewWorkflowNilCheckHandler(accessControlledWorkflowHandler)
+	s.handler = NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
+	if s.params.Authorizer != nil {
+		s.handler = NewAccessControlledHandlerImpl(s.handler, s.params.Authorizer)
+	}
+	workflowNilCheckHandler := NewWorkflowNilCheckHandler(s.handler)
 
 	workflowservice.RegisterWorkflowServiceServer(s.server, workflowNilCheckHandler)
-	healthpb.RegisterHealthServer(s.server, accessControlledWorkflowHandler)
-	s.handler = accessControlledWorkflowHandler
+	healthpb.RegisterHealthServer(s.server, s.handler)
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
 	adminNilCheckHandler := NewAdminNilCheckHandler(s.adminHandler)

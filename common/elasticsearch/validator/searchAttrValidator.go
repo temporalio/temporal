@@ -86,7 +86,7 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 		if !sv.isValidSearchAttributesKey(validAttr, key) {
 			sv.logger.WithTags(tag.ESKey(key), tag.WorkflowNamespace(namespace)).
 				Error("invalid search attribute key")
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not valid search attribute", key))
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not valid search attribute key", key))
 		}
 		// verify: value has the correct type
 		if !sv.isValidSearchAttributesValue(validAttr, key, val) {
