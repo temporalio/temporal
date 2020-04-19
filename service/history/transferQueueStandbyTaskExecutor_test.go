@@ -1082,6 +1082,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 		StartTimestamp:   event.GetTimestamp(),
 		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
 		TaskID:           taskID,
+		TaskList:         taskListName,
 	}).Return(nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())
@@ -1144,6 +1145,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 		StartTimestamp:   event.GetTimestamp(),
 		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
 		TaskID:           taskID,
+		TaskList:         taskListName,
 	}).Return(nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC())

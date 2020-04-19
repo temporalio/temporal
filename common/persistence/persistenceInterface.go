@@ -569,6 +569,7 @@ type (
 		Status           *executionpb.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *serialization.DataBlob
+		TaskList         string
 		SearchAttributes map[string]interface{}
 	}
 
@@ -596,6 +597,7 @@ type (
 		WorkflowTimeout    int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
+		TaskList           string
 		SearchAttributes   map[string][]byte
 	}
 
@@ -609,6 +611,7 @@ type (
 		ExecutionTimestamp int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
+		TaskList           string
 		SearchAttributes   map[string][]byte
 		CloseTimestamp     int64
 		Status             executionpb.WorkflowExecutionStatus
@@ -627,6 +630,7 @@ type (
 		WorkflowTimeout    int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
+		TaskList           string
 		SearchAttributes   map[string][]byte
 	}
 

@@ -78,6 +78,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWo
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		WorkflowTimeout:    request.WorkflowTimeout,
 		TaskID:             request.TaskID,
+		TaskList:           request.TaskList,
 		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
 		SearchAttributes:   request.SearchAttributes,
 	}
@@ -94,6 +95,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWor
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		TaskID:             request.TaskID,
 		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		TaskList:           request.TaskList,
 		SearchAttributes:   request.SearchAttributes,
 		CloseTimestamp:     request.CloseTimestamp,
 		Status:             request.Status,
@@ -113,6 +115,7 @@ func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowE
 		ExecutionTimestamp: request.ExecutionTimestamp,
 		TaskID:             request.TaskID,
 		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		TaskList:           request.TaskList,
 		SearchAttributes:   request.SearchAttributes,
 	}
 	return v.persistence.UpsertWorkflowExecution(req)
@@ -286,6 +289,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 		ExecutionTime:    execution.ExecutionTime.UnixNano(),
 		Memo:             memo,
 		SearchAttributes: searchAttributes,
+		TaskList:         execution.TaskList,
 	}
 
 	// for close records

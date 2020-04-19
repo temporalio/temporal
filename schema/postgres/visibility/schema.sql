@@ -10,6 +10,7 @@ CREATE TABLE executions_visibility (
   history_length       BIGINT,
   memo                 BYTEA,
   encoding             VARCHAR(64) NOT NULL,
+  task_list            VARCHAR(255) DEFAULT '' NOT NULL,
 
   PRIMARY KEY  (namespace_id, run_id)
 );
