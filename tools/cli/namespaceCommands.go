@@ -307,6 +307,10 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 		ErrorAndExit(fmt.Sprintf("Namespace %s does not exist.", namespace), err)
 	}
 
+	printNamespace(resp)
+}
+
+func printNamespace(resp *workflowservice.DescribeNamespaceResponse) {
 	var formatStr = "Name: %v\nId: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nStatus: %v\nRetentionInDays: %v\n" +
 		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nHistoryArchivalStatus: %v\n"
 	descValues := []interface{}{
@@ -351,6 +355,46 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 		}
 		table.Render()
 	}
+}
+
+// ListNamespaces list all namespaces
+func (d *namespaceCLIImpl) ListNamespaces(c *cli.Context) {
+	for _, ns := range d.getAllNamespaces(c) {
+		printNamespace(ns)
+	}
+}
+
+func (d *namespaceCLIImpl) getAllNamespaces(c *cli.Context) []*workflowservice.DescribeNamespaceResponse {
+	var res []*workflowservice.DescribeNamespaceResponse
+	pagesize := int32(200)
+	var token []byte
+	ctx, cancel := newContext(c)
+	defer cancel()
+	for more := true; more; more = len(token) > 0 {
+		listRequest := &workflowservice.ListNamespacesRequest{
+			PageSize:      pagesize,
+			NextPageToken: token,
+		}
+		listResp, err := d.listNamespaces(ctx, listRequest)
+		if err != nil {
+			ErrorAndExit("Error when list namespaces info", err)
+		}
+		token = listResp.GetNextPageToken()
+		res = append(res, listResp.GetNamespaces()...)
+	}
+	return res
+}
+
+func (d *namespaceCLIImpl) listNamespaces(
+	ctx context.Context,
+	request *workflowservice.ListNamespacesRequest,
+) (*workflowservice.ListNamespacesResponse, error) {
+
+	if d.frontendClient != nil {
+		return d.frontendClient.ListNamespaces(ctx, request)
+	}
+
+	return d.namespaceHandler.ListNamespaces(ctx, request)
 }
 
 func (d *namespaceCLIImpl) registerNamespace(
