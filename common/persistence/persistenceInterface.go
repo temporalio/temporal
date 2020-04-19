@@ -626,10 +626,10 @@ type (
 
 	// InternalCreateNamespaceRequest is used to create the namespace
 	InternalCreateNamespaceRequest struct {
-		ID					primitives.UUID
-		Name                string
-		Namespace           *serialization.DataBlob
-		IsGlobal            bool
+		ID        primitives.UUID
+		Name      string
+		Namespace *serialization.DataBlob
+		IsGlobal  bool
 	}
 
 	// InternalGetNamespaceResponse is the response for GetNamespace
@@ -641,7 +641,7 @@ type (
 
 	// InternalUpdateNamespaceRequest is used to update namespace
 	InternalUpdateNamespaceRequest struct {
-		Id					primitives.UUID
+		Id                  primitives.UUID
 		Name                string
 		Namespace           *serialization.DataBlob
 		NotificationVersion int64
