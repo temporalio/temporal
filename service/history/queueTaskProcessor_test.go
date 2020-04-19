@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -74,10 +75,11 @@ func (s *queueTaskProcessorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&persistence.ShardInfo{
-			ShardID: 10,
-			RangeID: 1,
-		},
+		&persistence.ShardInfoWithFailover{
+			ShardInfo: &persistenceblobs.ShardInfo{
+				ShardId: 10,
+				RangeId: 1,
+			}},
 		NewDynamicConfigForTest(),
 	)
 	s.mockPriorityAssigner = NewMocktaskPriorityAssigner(s.controller)
@@ -169,10 +171,11 @@ func (s *queueTaskProcessorSuite) TestStop() {
 	for i := 0; i != 10; i++ {
 		mockShard := newTestShardContext(
 			s.controller,
-			&persistence.ShardInfo{
-				ShardID: 10,
-				RangeID: 1,
-			},
+			&persistence.ShardInfoWithFailover{
+				ShardInfo: &persistenceblobs.ShardInfo{
+					ShardId: 10,
+					RangeId: 1,
+				}},
 			NewDynamicConfigForTest(),
 		)
 		mockScheduler := task.NewMockScheduler(s.controller)

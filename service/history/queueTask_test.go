@@ -35,6 +35,7 @@ import (
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
@@ -73,10 +74,11 @@ func (s *queueTaskSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&persistence.ShardInfo{
-			ShardID: 10,
-			RangeID: 1,
-		},
+		&persistence.ShardInfoWithFailover{
+			ShardInfo: &persistenceblobs.ShardInfo{
+				ShardId: 10,
+				RangeId: 1,
+			}},
 		NewDynamicConfigForTest(),
 	)
 	s.mockQueueTaskExecutor = NewMockqueueTaskExecutor(s.controller)
