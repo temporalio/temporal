@@ -202,7 +202,7 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			expectErr: true,
 		},
 		{
-			query:     "ExecutionStatus = 1",
+			query:     "ExecutionStatus = 3",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
 				status: toWorkflowExecutionStatusPtr(executionpb.WorkflowExecutionStatus_Failed),
