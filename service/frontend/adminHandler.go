@@ -674,7 +674,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 		return nil, adh.error(errors.New("namespace replication queue not enabled for cluster"), scope)
 	}
 
-	lastMessageID := defaultLastMessageID
+	lastMessageID := request.GetLastRetrievedMessageId()
 	if request.GetLastRetrievedMessageId() == defaultLastMessageID {
 		clusterAckLevels, err := adh.GetNamespaceReplicationQueue().GetAckLevels()
 		if err == nil {
@@ -691,7 +691,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 	}
 
 	if request.GetLastProcessedMessageId() != defaultLastMessageID {
-		err := adh.GetNamespaceReplicationQueue().UpdateAckLevel(int(request.GetLastProcessedMessageId()), request.GetClusterName())
+		err := adh.GetNamespaceReplicationQueue().UpdateAckLevel(request.GetLastProcessedMessageId(), request.GetClusterName())
 		if err != nil {
 			adh.GetLogger().Warn("Failed to update namespace replication queue ack level",
 				tag.TaskID(request.GetLastProcessedMessageId()),
@@ -817,7 +817,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 			default:
 				var err error
 				tasks, token, err = adh.namespaceDLQHandler.Read(
-					int(request.GetInclusiveEndMessageId()),
+					request.GetInclusiveEndMessageId(),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken())
 				return err
@@ -876,7 +876,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
-				return adh.namespaceDLQHandler.Purge(int(request.GetInclusiveEndMessageId()))
+				return adh.namespaceDLQHandler.Purge(request.GetInclusiveEndMessageId())
 			}
 		}
 	default:
@@ -936,7 +936,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 			default:
 				var err error
 				token, err = adh.namespaceDLQHandler.Merge(
-					int(request.GetInclusiveEndMessageId()),
+					request.GetInclusiveEndMessageId(),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken(),
 				)
