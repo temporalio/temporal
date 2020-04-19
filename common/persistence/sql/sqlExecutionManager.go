@@ -719,6 +719,12 @@ func (m *sqlExecutionManager) GetCurrentExecution(
 	}, nil
 }
 
+func (m *sqlExecutionManager) ListConcreteExecutions(
+	_ *p.ListConcreteExecutionsRequest,
+) (*p.InternalListConcreteExecutionsResponse, error) {
+	return nil, serviceerror.NewUnimplemented("ListConcreteExecutions is not implemented")
+}
+
 func (m *sqlExecutionManager) GetTransferTasks(
 	request *p.GetTransferTasksRequest,
 ) (*p.GetTransferTasksResponse, error) {
