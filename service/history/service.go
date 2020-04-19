@@ -231,6 +231,9 @@ type Config struct {
 	MutableStateChecksumGenProbability    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateChecksumVerifyProbability dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateChecksumInvalidateBefore  dynamicconfig.FloatPropertyFn
+
+	//Crocess DC Replication configuration
+	ReplicationEventsFromCurrentCluster dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 const (
@@ -377,6 +380,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		MutableStateChecksumGenProbability:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateChecksumGenProbability, 0),
 		MutableStateChecksumVerifyProbability: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateChecksumVerifyProbability, 0),
 		MutableStateChecksumInvalidateBefore:  dc.GetFloat64Property(dynamicconfig.MutableStateChecksumInvalidateBefore, 0),
+
+		ReplicationEventsFromCurrentCluster: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.ReplicationEventsFromCurrentCluster, false),
 	}
 
 	return cfg
