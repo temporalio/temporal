@@ -682,7 +682,7 @@ func (e *historyEngineImpl) PollMutableState(
 		CurrentBranchToken:  request.CurrentBranchToken})
 
 	if err != nil {
-		return nil, err
+		return nil, e.updateEntityNotExistsErrorOnPassiveCluster(err, request.GetNamespaceId())
 	}
 	return &historyservice.PollMutableStateResponse{
 		Execution:                            response.Execution,
@@ -702,6 +702,26 @@ func (e *historyEngineImpl) PollMutableState(
 		WorkflowState:                        response.WorkflowState,
 		WorkflowStatus:                       response.WorkflowStatus,
 	}, nil
+}
+
+func (e *historyEngineImpl) updateEntityNotExistsErrorOnPassiveCluster(err error, namespaceID string) error {
+	switch err.(type) {
+	case *serviceerror.NotFound:
+		namespaceCache, namespaceCacheErr := e.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+		if namespaceCacheErr != nil {
+			return err // if could not access namespace cache simply return original error
+		}
+		namespaceNotActiveErr := namespaceCache.GetNamespaceNotActiveErr().(*serviceerror.NamespaceNotActive)
+		if namespaceNotActiveErr != nil {
+			return &serviceerror.NotFound{
+				Message: "Workflow execution not found in non-active cluster",
+				// TODO: Need proto changes before we can enable this
+				//				ActiveCluster:  namespaceNotActiveErr.GetActiveCluster(),
+				//				CurrentCluster: namespaceNotActiveErr.GetCurrentCluster(),
+			}
+		}
+	}
+	return err
 }
 
 func (e *historyEngineImpl) getMutableStateOrPolling(

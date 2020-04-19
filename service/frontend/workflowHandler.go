@@ -534,11 +534,14 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		request.MaximumPageSize = common.GetHistoryMaxPageSize
 	}
 
+	// TODO: Need proto changes before we can enable this
+	//if !request.GetSkipArchival() {
 	enableArchivalRead := wh.GetArchivalMetadata().GetHistoryConfig().ReadEnabled()
 	historyArchived := wh.historyArchived(ctx, request, namespaceID)
 	if enableArchivalRead && historyArchived {
 		return wh.getArchivedHistory(ctx, request, namespaceID, scope)
 	}
+	//}
 
 	// this function return the following 5 things,
 	// 1. the workflow run ID
