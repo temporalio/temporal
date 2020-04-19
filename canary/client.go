@@ -53,6 +53,7 @@ type cadenceClient struct {
 // if the namespace already exist, this method silently returns success
 func (client *cadenceClient) createNamespace(name string, desc string, owner string, archivalStatus namespacepb.ArchivalStatus) error {
 	emitMetric := true
+	isGlobalDomain := false
 	retention := int32(workflowRetentionDays)
 	if archivalStatus == namespacepb.ArchivalStatus_Enabled {
 		retention = int32(0)
@@ -64,6 +65,8 @@ func (client *cadenceClient) createNamespace(name string, desc string, owner str
 		WorkflowExecutionRetentionPeriodInDays: retention,
 		EmitMetric:                             emitMetric,
 		HistoryArchivalStatus:                  archivalStatus,
+		VisibilityArchivalStatus:               archivalStatus,
+		IsGlobalDomain:                         &isGlobalDomain,
 	}
 	err := client.Register(context.Background(), req)
 	if err != nil {
