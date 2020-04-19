@@ -471,6 +471,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		"",
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("StartWorkflowExecution"),
 	); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -989,6 +990,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("RespondDecisionTaskFailed"),
 	); err != nil {
 		// details exceed, we would just truncate the size for decision task failed as the details is not used anywhere by client code
 		request.Details = request.Details[0:sizeLimitError]
@@ -1171,6 +1173,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeat"),
 	); err != nil {
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1277,6 +1280,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeatById"),
 	); err != nil {
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1373,6 +1377,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("RespondActivityTaskCompleted"),
 	); err != nil {
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1481,6 +1486,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		runID,
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("RespondActivityTaskCompletedById"),
 	); err != nil {
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1578,6 +1584,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
 	); err != nil {
 		// details exceeds blob size limit, we would truncate the details and put a specific error reason
 		request.Reason = common.FailureReasonFailureDetailsExceedsLimit
@@ -1673,6 +1680,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		runID,
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
 	); err != nil {
 		// details exceeds blob size limit, we would truncate the details and put a specific error reason
 		request.Reason = common.FailureReasonFailureDetailsExceedsLimit
@@ -1761,6 +1769,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("RespondActivityTaskCanceled"),
 	); err != nil {
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1868,6 +1877,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		runID,
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("RespondActivityTaskCanceledById"),
 	); err != nil {
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -2016,6 +2026,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		request.GetWorkflowExecution().GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("SignalWorkflowExecution"),
 	); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2135,6 +2146,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		"",
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("SignalWithStartWorkflowExecution"),
 	); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2148,6 +2160,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		"",
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("SignalWithStartWorkflowExecution"),
 	); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2816,6 +2829,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		"",
 		scope,
 		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("RespondQueryTaskCompleted"),
 	); err != nil {
 		request = &workflowservice.RespondQueryTaskCompletedRequest{
 			TaskToken:     request.TaskToken,
@@ -2946,7 +2960,8 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		request.GetExecution().GetWorkflowId(),
 		request.GetExecution().GetRunId(),
 		scope,
-		wh.GetThrottledLogger()); err != nil {
+		wh.GetThrottledLogger(),
+		tag.BlobSizeViolationOperation("QueryWorkflow")); err != nil {
 		return nil, wh.error(err, scope)
 	}
 

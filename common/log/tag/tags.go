@@ -169,6 +169,11 @@ func QueryID(queryID string) Tag {
 	return newStringTag("query-id", queryID)
 }
 
+// BlobSizeViolationOperation returns tag for BlobSizeViolationOperation
+func BlobSizeViolationOperation(operation string) Tag {
+	return newStringTag("blob-size-violation-operation", operation)
+}
+
 // namespace related
 
 // WorkflowNamespaceID returns tag for WorkflowNamespaceID
