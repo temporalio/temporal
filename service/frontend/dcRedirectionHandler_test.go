@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	querypb "go.temporal.io/temporal-proto/query"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal-proto/workflowservicemock"
@@ -74,7 +75,7 @@ type (
 	}
 )
 
-func newTestServerHandler(mockHandler *workflowservicemock.MockWorkflowServiceServer) ServerHandler {
+func newTestServerHandler(mockHandler *workflowservicemock.MockWorkflowServiceServer) Handler {
 	return &testServerHandler{mockHandler}
 }
 
@@ -383,7 +384,8 @@ func (s *dcRedirectionHandlerSuite) TestQueryWorkflow() {
 		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
 
 	req := &workflowservice.QueryWorkflowRequest{
-		Namespace: s.namespace,
+		Namespace:             s.namespace,
+		QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
 	}
 	resp, err := s.handler.QueryWorkflow(context.Background(), req)
 	s.Nil(err)

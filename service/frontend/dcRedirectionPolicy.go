@@ -46,6 +46,7 @@ const (
 	// 3. SignalWorkflowExecution
 	// 4. RequestCancelWorkflowExecution
 	// 5. TerminateWorkflowExecution
+	// 6. QueryWorkflow
 	// please also reference selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs
 	DCRedirectionPolicySelectedAPIsForwarding = "selected-apis-forwarding"
 )
@@ -78,6 +79,7 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 	"SignalWorkflowExecution":          {},
 	"RequestCancelWorkflowExecution":   {},
 	"TerminateWorkflowExecution":       {},
+	"QueryWorkflow":                    {},
 }
 
 // RedirectionPolicyGenerator generate corresponding redirection policy

@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/workflowservice"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -562,8 +563,15 @@ func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 		case targetDC == handler.currentClusterName:
 			resp, err = handler.frontendHandler.QueryWorkflow(ctx, request)
 		default:
-			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.QueryWorkflow(ctx, request)
+			// Only autofoward consistent queries, this is done for two reasons:
+			// 1. Query is meant to be fast, autoforwarding all queries will increase latency.
+			// 2. If eventual consistency was requested then the results from running out of local dc will be fine.
+			if request.GetQueryConsistencyLevel() == querypb.QueryConsistencyLevel_Strong {
+				remoteClient := handler.GetRemoteFrontendClient(targetDC)
+				resp, err = remoteClient.QueryWorkflow(ctx, request)
+			} else {
+				resp, err = handler.frontendHandler.QueryWorkflow(ctx, request)
+			}
 		}
 		return err
 	})
