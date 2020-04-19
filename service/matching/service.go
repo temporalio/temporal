@@ -64,6 +64,7 @@ func NewService(
 		params,
 		common.MatchingServiceName,
 		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.ThrottledLogRPS,
 		func(
 			persistenceBean persistenceClient.Bean,

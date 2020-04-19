@@ -69,6 +69,7 @@ type (
 		ScannerCfg                    *scanner.Config
 		BatcherCfg                    *batcher.Config
 		ThrottledLogRPS               dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
 		EnableBatcher                 dynamicconfig.BoolPropertyFn
 		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
 	}
@@ -85,6 +86,7 @@ func NewService(
 		params,
 		common.WorkerServiceName,
 		serviceConfig.ReplicationCfg.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.ThrottledLogRPS,
 		func(
 			persistenceBean persistenceClient.Bean,
@@ -142,6 +144,7 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 		EnableBatcher:                 dc.GetBoolProperty(dynamicconfig.EnableBatcher, false),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
 		ThrottledLogRPS:               dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
+		PersistenceGlobalMaxQPS:       dc.GetIntProperty(dynamicconfig.WorkerPersistenceGlobalMaxQPS, 0),
 	}
 	advancedVisWritingMode := dc.GetStringProperty(
 		dynamicconfig.AdvancedVisibilityWritingMode,
