@@ -64,7 +64,8 @@ type Config struct {
 	ESIndexMaxResultWindow          dynamicconfig.IntPropertyFn
 	HistoryMaxPageSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RPS                             dynamicconfig.IntPropertyFn
-	NamespaceRPS                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceRPSPerInstance      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceRPS              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                dynamicconfig.IntPropertyFn
 	EnableClientVersionCheck        dynamicconfig.BoolPropertyFn
 	MinRetentionDays                dynamicconfig.IntPropertyFn
@@ -116,7 +117,8 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		ESIndexMaxResultWindow:                 dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
 		HistoryMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
-		NamespaceRPS:                           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendNamespaceRPS, 1200),
+		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 1200),
+		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		HistoryMgrNumConns:                     dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
 		MaxBadBinaries:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),

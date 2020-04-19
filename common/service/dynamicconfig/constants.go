@@ -93,7 +93,8 @@ var keys = map[Key]string{
 	FrontendESIndexMaxResultWindow:        "frontend.esIndexMaxResultWindow",
 	FrontendHistoryMaxPageSize:            "frontend.historyMaxPageSize",
 	FrontendRPS:                           "frontend.rps",
-	FrontendNamespaceRPS:                  "frontend.namespacerps",
+	FrontendMaxNamespaceRPSPerInstance:    "frontend.namespacerps",
+	FrontendGlobalNamespaceRPS:            "frontend.globalNamespacerps",
 	FrontendHistoryMgrNumConns:            "frontend.historyMgrNumConns",
 	FrontendShutdownDrainDuration:         "frontend.shutdownDrainDuration",
 	DisableListVisibilityByFilter:         "frontend.disableListVisibilityByFilter",
@@ -359,8 +360,10 @@ const (
 	FrontendHistoryMaxPageSize
 	// FrontendRPS is workflow rate limit per second
 	FrontendRPS
-	// FrontendNamespaceRPS is workflow namespace rate limit per second
-	FrontendNamespaceRPS
+	// FrontendMaxNamespaceRPSPerInstance is workflow namespace rate limit per second
+	FrontendMaxNamespaceRPSPerInstance
+	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster
+	FrontendGlobalNamespaceRPS
 	// FrontendHistoryMgrNumConns is for persistence cluster.NumConns
 	FrontendHistoryMgrNumConns
 	// FrontendThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger

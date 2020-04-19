@@ -114,7 +114,14 @@ func NewWorkflowHandler(
 				return float64(config.RPS())
 			},
 			func(namespace string) float64 {
-				return float64(config.NamespaceRPS(namespace))
+				if monitor := resource.GetMembershipMonitor(); monitor != nil && config.GlobalNamespaceRPS(namespace) > 0 {
+					ringSize, err := monitor.GetMemberCount(common.FrontendServiceName)
+					if err == nil && ringSize > 0 {
+						avgQuota := common.MaxInt(config.GlobalNamespaceRPS(namespace)/ringSize, 1)
+						return float64(common.MinInt(avgQuota, config.MaxNamespaceRPSPerInstance(namespace)))
+					}
+				}
+				return float64(config.MaxNamespaceRPSPerInstance(namespace))
 			},
 		),
 		versionChecker: headers.NewVersionChecker(),
