@@ -338,7 +338,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if request.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
+	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
 		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
 	}
 
@@ -1913,7 +1913,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errRequestIDTooLong, scope)
 	}
 
-	if request.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
+	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
 		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
 	}
 
