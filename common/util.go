@@ -21,6 +21,7 @@
 package common
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -31,7 +32,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"go.uber.org/yarpc/yarpcerrors"
-	"golang.org/x/net/context"
 
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"

@@ -21,8 +21,9 @@
 package common
 
 import (
+	"context"
+
 	"go.uber.org/yarpc"
-	"golang.org/x/net/context"
 )
 
 const (
