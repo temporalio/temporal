@@ -373,7 +373,7 @@ func (wh *WorkflowHandler) UpdateDomain(
 	if updateRequest.GetName() == "" {
 		return nil, errDomainNotSet
 	}
-
+	// TODO: call remote clusters to verify domain data
 	resp, err := wh.domainHandler.UpdateDomain(ctx, updateRequest)
 	if err != nil {
 		return resp, wh.error(err, scope)

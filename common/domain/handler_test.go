@@ -416,6 +416,221 @@ func (s *domainHandlerCommonSuite) TestUpdateDomain_InvalidRetentionPeriod() {
 	s.Equal(errInvalidRetentionPeriod, err)
 }
 
+func (s *domainHandlerCommonSuite) TestUpdateDomain_GracefulFailover_Success() {
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Twice()
+	domain := uuid.New()
+	registerRequest := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domain),
+		Description:                            common.StringPtr(domain),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(10)),
+		IsGlobalDomain:                         common.BoolPtr(true),
+		ActiveClusterName:                      common.StringPtr("standby"),
+		Clusters: []*workflow.ClusterReplicationConfiguration{
+			{
+				common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+			},
+			{
+				common.StringPtr("standby"),
+			},
+		},
+	}
+	err := s.handler.RegisterDomain(context.Background(), registerRequest)
+	s.NoError(err)
+
+	updateRequest := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domain),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+		},
+		FailoverTimeoutInSeconds: common.Int32Ptr(100),
+	}
+	resp, err := s.handler.UpdateDomain(context.Background(), updateRequest)
+	s.NoError(err)
+	resp2, err := s.metadataMgr.GetDomain(&persistence.GetDomainRequest{
+		ID: resp.GetDomainInfo().GetUUID(),
+	})
+	s.NoError(err)
+	s.NotNil(resp2.FailoverEndTime)
+}
+
+func (s *domainHandlerCommonSuite) TestUpdateDomain_GracefulFailover_NotCurrentActiveCluster() {
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
+	domain := uuid.New()
+	registerRequest := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domain),
+		Description:                            common.StringPtr(domain),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(10)),
+		IsGlobalDomain:                         common.BoolPtr(true),
+		ActiveClusterName:                      common.StringPtr("active"),
+		Clusters: []*workflow.ClusterReplicationConfiguration{
+			{
+				common.StringPtr("active"),
+			},
+			{
+				common.StringPtr("standby"),
+			},
+		},
+	}
+	err := s.handler.RegisterDomain(context.Background(), registerRequest)
+	s.NoError(err)
+
+	updateRequest := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domain),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr("standby"),
+		},
+		FailoverTimeoutInSeconds: common.Int32Ptr(100),
+	}
+	_, err = s.handler.UpdateDomain(context.Background(), updateRequest)
+	s.Error(err)
+}
+
+func (s *domainHandlerCommonSuite) TestUpdateDomain_GracefulFailover_OngoingFailover() {
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Twice()
+	domain := uuid.New()
+	registerRequest := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domain),
+		Description:                            common.StringPtr(domain),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(10)),
+		IsGlobalDomain:                         common.BoolPtr(true),
+		ActiveClusterName:                      common.StringPtr("standby"),
+		Clusters: []*workflow.ClusterReplicationConfiguration{
+			{
+				common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+			},
+			{
+				common.StringPtr("standby"),
+			},
+		},
+	}
+	err := s.handler.RegisterDomain(context.Background(), registerRequest)
+	s.NoError(err)
+
+	updateRequest := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domain),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+		},
+		FailoverTimeoutInSeconds: common.Int32Ptr(100),
+	}
+	_, err = s.handler.UpdateDomain(context.Background(), updateRequest)
+	s.NoError(err)
+	_, err = s.handler.UpdateDomain(context.Background(), updateRequest)
+	s.Error(err)
+}
+
+func (s *domainHandlerCommonSuite) TestUpdateDomain_GracefulFailover_NoUpdateActiveCluster() {
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
+	domain := uuid.New()
+	registerRequest := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domain),
+		Description:                            common.StringPtr(domain),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(10)),
+		IsGlobalDomain:                         common.BoolPtr(true),
+		ActiveClusterName:                      common.StringPtr("standby"),
+		Clusters: []*workflow.ClusterReplicationConfiguration{
+			{
+				common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+			},
+			{
+				common.StringPtr("standby"),
+			},
+		},
+	}
+	err := s.handler.RegisterDomain(context.Background(), registerRequest)
+	s.NoError(err)
+
+	updateRequest := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domain),
+		UpdatedInfo: &workflow.UpdateDomainInfo{
+			OwnerEmail: common.StringPtr("test"),
+		},
+		FailoverTimeoutInSeconds: common.Int32Ptr(100),
+	}
+	_, err = s.handler.UpdateDomain(context.Background(), updateRequest)
+	s.Error(err)
+}
+
+func (s *domainHandlerCommonSuite) TestUpdateDomain_GracefulFailover_After_ForceFailover() {
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Times(3)
+	domain := uuid.New()
+	registerRequest := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domain),
+		Description:                            common.StringPtr(domain),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(10)),
+		IsGlobalDomain:                         common.BoolPtr(true),
+		ActiveClusterName:                      common.StringPtr("standby"),
+		Clusters: []*workflow.ClusterReplicationConfiguration{
+			{
+				common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+			},
+			{
+				common.StringPtr("standby"),
+			},
+		},
+	}
+	err := s.handler.RegisterDomain(context.Background(), registerRequest)
+	s.NoError(err)
+
+	// Start graceful failover
+	updateRequest := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domain),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+		},
+		FailoverTimeoutInSeconds: common.Int32Ptr(100),
+	}
+	resp, err := s.handler.UpdateDomain(context.Background(), updateRequest)
+	s.NoError(err)
+
+	// Force failover
+	updateRequest = &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domain),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+		},
+	}
+	_, err = s.handler.UpdateDomain(context.Background(), updateRequest)
+	s.NoError(err)
+	resp2, err := s.metadataMgr.GetDomain(&persistence.GetDomainRequest{
+		ID: resp.GetDomainInfo().GetUUID(),
+	})
+	s.NoError(err)
+	s.Nil(resp2.FailoverEndTime)
+}
+
+func (s *domainHandlerCommonSuite) TestUpdateDomain_ForceFailover_SameActiveCluster() {
+	s.mockProducer.On("Publish", mock.Anything).Return(nil).Twice()
+	domain := uuid.New()
+	registerRequest := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domain),
+		Description:                            common.StringPtr(domain),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(10)),
+		IsGlobalDomain:                         common.BoolPtr(true),
+		ActiveClusterName:                      common.StringPtr("standby"),
+		Clusters: []*workflow.ClusterReplicationConfiguration{
+			{
+				common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+			},
+			{
+				common.StringPtr("standby"),
+			},
+		},
+	}
+	err := s.handler.RegisterDomain(context.Background(), registerRequest)
+	s.NoError(err)
+
+	// Start graceful failover
+	updateRequest := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domain),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr("standby"),
+		},
+	}
+	_, err = s.handler.UpdateDomain(context.Background(), updateRequest)
+	s.NoError(err)
+}
+
 func (s *domainHandlerCommonSuite) getRandomDomainName() string {
 	return "domain" + uuid.New()
 }

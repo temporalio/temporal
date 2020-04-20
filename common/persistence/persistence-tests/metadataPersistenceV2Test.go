@@ -159,6 +159,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 	m.Equal(failoverVersion, resp1.FailoverVersion)
 	m.True(resp1.ReplicationConfig.Clusters[0].ClusterName == cluster.TestCurrentClusterName)
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.FailoverNotificationVersion)
+	m.Nil(resp1.FailoverEndTime)
 
 	resp2, err2 := m.CreateDomain(
 		&p.DomainInfo{
@@ -285,6 +286,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	m.Equal(configVersion, resp2.ConfigVersion)
 	m.Equal(failoverVersion, resp2.FailoverVersion)
 	m.Equal(p.InitialFailoverNotificationVersion, resp2.FailoverNotificationVersion)
+	m.Nil(resp2.FailoverEndTime)
 
 	resp3, err3 := m.GetDomain("", name)
 	m.NoError(err3)
@@ -645,6 +647,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 
 	resp2, err2 := m.GetDomain(id, "")
 	m.NoError(err2)
+	m.Nil(resp2.FailoverEndTime)
 	metadata, err := m.MetadataManager.GetMetadata()
 	m.NoError(err)
 	notificationVersion := metadata.NotificationVersion

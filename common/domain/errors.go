@@ -26,10 +26,13 @@ import (
 
 var (
 	// err indicating that this cluster is not the master, so cannot do domain registration or update
-	errNotMasterCluster                = &workflow.BadRequestError{Message: "Cluster is not master cluster, cannot do domain registration or domain update."}
-	errCannotRemoveClustersFromDomain  = &workflow.BadRequestError{Message: "Cannot remove existing replicated clusters from a domain."}
-	errActiveClusterNotInClusters      = &workflow.BadRequestError{Message: "Active cluster is not contained in all clusters."}
-	errCannotDoDomainFailoverAndUpdate = &workflow.BadRequestError{Message: "Cannot set active cluster to current cluster when other parameters are set."}
+	errNotMasterCluster                    = &workflow.BadRequestError{Message: "Cluster is not master cluster, cannot do domain registration or domain update."}
+	errCannotRemoveClustersFromDomain      = &workflow.BadRequestError{Message: "Cannot remove existing replicated clusters from a domain."}
+	errActiveClusterNotInClusters          = &workflow.BadRequestError{Message: "Active cluster is not contained in all clusters."}
+	errCannotDoDomainFailoverAndUpdate     = &workflow.BadRequestError{Message: "Cannot set active cluster to current cluster when other parameters are set."}
+	errCannotDoGracefulFailoverFromCluster = &workflow.BadRequestError{Message: "Cannot start the graceful failover from a to-be-passive cluster."}
+	errOngoingGracefulFailover             = &workflow.BadRequestError{Message: "Cannot start concurrent graceful failover."}
+	errInvalidGracefulFailover             = &workflow.BadRequestError{Message: "Cannot start graceful failover without updating active cluster or in local domain."}
 
 	errInvalidRetentionPeriod = &workflow.BadRequestError{Message: "A valid retention period is not set on request."}
 	errInvalidArchivalConfig  = &workflow.BadRequestError{Message: "Invalid to enable archival without specifying a uri."}
