@@ -248,7 +248,6 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 		TaskList: &tasklistpb.TaskList{
 			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: 1,
 		TaskStartToCloseTimeoutSeconds:      1,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
@@ -375,8 +374,6 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 		TaskList: &tasklistpb.TaskList{
 			Name: "",
 		},
-		ExecutionStartToCloseTimeoutSeconds: 1,
-		TaskStartToCloseTimeoutSeconds:      1,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
 			BackoffCoefficient:          2,
@@ -405,7 +402,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 		TaskList: &tasklistpb.TaskList{
 			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: 0,
+		ExecutionStartToCloseTimeoutSeconds: -1,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
 			BackoffCoefficient:          2,
