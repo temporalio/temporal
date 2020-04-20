@@ -108,7 +108,7 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 	return t.transferQueueShutdown()
 }
 
-func (t *transferQueueProcessorBase) getTransferTaskMetricsScope(
+func getTransferTaskMetricsScope(
 	taskType int32,
 	isActive bool,
 ) int {

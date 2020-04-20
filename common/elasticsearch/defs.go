@@ -41,6 +41,7 @@ const (
 	HistoryLength   = "HistoryLength"
 	Memo            = "Memo"
 	Encoding        = "Encoding"
+	TaskList        = "TaskList"
 
 	KafkaKey = "KafkaKey"
 )

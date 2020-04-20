@@ -33,6 +33,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -47,7 +48,7 @@ type (
 		sync.Mutex
 		queueTaskInfo
 
-		shardID       int
+		shard         ShardContext
 		state         task.State
 		priority      int
 		attempt       int
@@ -69,30 +70,33 @@ type (
 	timerQueueTask struct {
 		*queueTaskBase
 
-		ackMgr timerQueueAckMgr
+		ackMgr          timerQueueAckMgr
+		redispatchQueue collection.Queue
 	}
 
 	transferQueueTask struct {
 		*queueTaskBase
 
-		ackMgr queueAckMgr
+		ackMgr          queueAckMgr
+		redispatchQueue collection.Queue
 	}
 )
 
 func newTimerQueueTask(
-	shardID int,
+	shard ShardContext,
 	taskInfo queueTaskInfo,
 	scope metrics.Scope,
 	logger log.Logger,
 	taskFilter taskFilter,
 	taskExecutor queueTaskExecutor,
+	redispatchQueue collection.Queue,
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
 	ackMgr timerQueueAckMgr,
 ) queueTask {
 	return &timerQueueTask{
 		queueTaskBase: newQueueTaskBase(
-			shardID,
+			shard,
 			taskInfo,
 			scope,
 			logger,
@@ -101,24 +105,26 @@ func newTimerQueueTask(
 			timeSource,
 			maxRetryCount,
 		),
-		ackMgr: ackMgr,
+		ackMgr:          ackMgr,
+		redispatchQueue: redispatchQueue,
 	}
 }
 
 func newTransferQueueTask(
-	shardID int,
+	shard ShardContext,
 	taskInfo queueTaskInfo,
 	scope metrics.Scope,
 	logger log.Logger,
 	taskFilter taskFilter,
 	taskExecutor queueTaskExecutor,
+	redispatchQueue collection.Queue,
 	timeSource clock.TimeSource,
 	maxRetryCount dynamicconfig.IntPropertyFn,
 	ackMgr queueAckMgr,
 ) queueTask {
 	return &transferQueueTask{
 		queueTaskBase: newQueueTaskBase(
-			shardID,
+			shard,
 			taskInfo,
 			scope,
 			logger,
@@ -127,12 +133,13 @@ func newTransferQueueTask(
 			timeSource,
 			maxRetryCount,
 		),
-		ackMgr: ackMgr,
+		ackMgr:          ackMgr,
+		redispatchQueue: redispatchQueue,
 	}
 }
 
 func newQueueTaskBase(
-	shardID int,
+	shard ShardContext,
 	queueTaskInfo queueTaskInfo,
 	scope metrics.Scope,
 	logger log.Logger,
@@ -143,7 +150,7 @@ func newQueueTaskBase(
 ) *queueTaskBase {
 	return &queueTaskBase{
 		queueTaskInfo: queueTaskInfo,
-		shardID:       shardID,
+		shard:         shard,
 		state:         task.TaskStatePending,
 		scope:         scope,
 		logger:        logger,
@@ -166,6 +173,14 @@ func (t *timerQueueTask) Ack() {
 	t.ackMgr.completeTimerTask(timerTask)
 }
 
+func (t *timerQueueTask) Nack() {
+	t.queueTaskBase.Nack()
+
+	// don't move redispatchQueue to queueTaskBase as we need to
+	// redispatch timeQueueTask, not queueTaskBase
+	t.redispatchQueue.Add(t)
+}
+
 func (t *timerQueueTask) GetQueueType() queueType {
 	return timerQueueType
 }
@@ -174,6 +189,14 @@ func (t *transferQueueTask) Ack() {
 	t.queueTaskBase.Ack()
 
 	t.ackMgr.completeQueueTask(t.GetTaskId())
+}
+
+func (t *transferQueueTask) Nack() {
+	t.queueTaskBase.Nack()
+
+	// don't move redispatchQueue to queueTaskBase as we need to
+	// redispatch transferQueueTask, not queueTaskBase
+	t.redispatchQueue.Add(t)
 }
 
 func (t *transferQueueTask) GetQueueType() queueType {
@@ -282,9 +305,6 @@ func (t *queueTaskBase) Nack() {
 	defer t.Unlock()
 
 	t.state = task.TaskStateNacked
-
-	// TODO: Nack should also notify the queue processor to redispatch the task
-	// implement this after redispatch functionality is added to the processor
 }
 
 func (t *queueTaskBase) State() task.State {
@@ -310,6 +330,6 @@ func (t *queueTaskBase) SetPriority(
 	t.priority = priority
 }
 
-func (t *queueTaskBase) GetShardID() int {
-	return t.shardID
+func (t *queueTaskBase) GetShard() ShardContext {
+	return t.shard
 }

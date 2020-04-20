@@ -222,6 +222,11 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ?`
 
+	templateListWorkflowExecutionQuery = `SELECT run_id, execution, execution_encoding, next_event_id ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ?`
+
 	templateCheckWorkflowExecutionQuery = `UPDATE executions ` +
 		`SET next_event_id = ? ` +
 		`WHERE shard_id = ? ` +
@@ -1788,49 +1793,6 @@ func (d *cassandraPersistence) assertNotCurrentExecution(
 	return nil
 }
 
-func (d *cassandraPersistence) DeleteTask(request *p.DeleteTaskRequest) error {
-	var namespaceID, workflowID, runID string
-	switch request.Type {
-	case rowTypeTransferTask:
-		namespaceID = rowTypeTransferNamespaceID
-		workflowID = rowTypeTransferWorkflowID
-		runID = rowTypeTransferRunID
-
-	case rowTypeTimerTask:
-		namespaceID = rowTypeTimerNamespaceID
-		workflowID = rowTypeTimerWorkflowID
-		runID = rowTypeTimerRunID
-
-	case rowTypeReplicationTask:
-		namespaceID = rowTypeReplicationNamespaceID
-		workflowID = rowTypeReplicationWorkflowID
-		runID = rowTypeReplicationRunID
-
-	default:
-		return fmt.Errorf("DeleteTask type id is not one of 2 (transfer task), 3 (timer task), 4 (replication task) ")
-
-	}
-
-	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
-		request.ShardID,
-		request.Type,
-		namespaceID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		request.TaskID)
-
-	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("DeleteTask operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteTask operation failed. Error: %v", err))
-	}
-
-	return nil
-}
-
 func (d *cassandraPersistence) DeleteWorkflowExecution(request *p.DeleteWorkflowExecutionRequest) error {
 	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
 		d.shardID,
@@ -1912,6 +1874,40 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 		Status:           executionInfo.Status,
 		LastWriteVersion: replicationVersions.LastWriteVersion.GetValue(),
 	}, nil
+}
+
+func (d *cassandraPersistence) ListConcreteExecutions(
+	request *p.ListConcreteExecutionsRequest,
+) (*p.InternalListConcreteExecutionsResponse, error) {
+	query := d.session.Query(
+		templateListWorkflowExecutionQuery,
+		d.shardID,
+		rowTypeExecution,
+	).PageSize(request.PageSize).PageState(request.PageToken)
+
+	iter := query.Iter()
+	if iter == nil {
+		return nil, serviceerror.NewInternal("ListConcreteExecutions operation failed.  Not able to create query iterator.")
+	}
+
+	response := &p.InternalListConcreteExecutionsResponse{}
+	result := make(map[string]interface{})
+	for iter.MapScan(result) {
+		runID := result["run_id"].(gocql.UUID).String()
+		if runID == permanentRunID {
+			result = make(map[string]interface{})
+			continue
+		}
+		if _, ok := result["execution"]; ok {
+			wfInfo, _, _ := workflowExecutionFromRow(result)
+			response.ExecutionInfos = append(response.ExecutionInfos, wfInfo)
+		}
+		result = make(map[string]interface{})
+	}
+	nextPageToken := iter.PageState()
+	response.NextPageToken = make([]byte, len(nextPageToken))
+	copy(response.NextPageToken, nextPageToken)
+	return response, nil
 }
 
 func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksRequest) (*p.GetTransferTasksResponse, error) {

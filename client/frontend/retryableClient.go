@@ -125,37 +125,6 @@ func (c *retryableClient) GetWorkflowExecutionHistory(
 	return resp, err
 }
 
-func (c *retryableClient) GetWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
-	var resp *workflowservice.GetWorkflowExecutionRawHistoryResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) PollForWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.PollForWorkflowExecutionRawHistoryRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.PollForWorkflowExecutionRawHistoryResponse, error) {
-
-	var resp *workflowservice.PollForWorkflowExecutionRawHistoryResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.PollForWorkflowExecutionRawHistory(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,

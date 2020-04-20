@@ -42,6 +42,7 @@ const (
 	Encoding        = "Encoding"
 	KafkaKey        = "KafkaKey"
 	BinaryChecksums = "BinaryChecksums"
+	TaskList        = "TaskList"
 
 	CustomStringField     = "CustomStringField"
 	CustomKeywordField    = "CustomKeywordField"
@@ -96,6 +97,7 @@ var systemIndexedKeys = map[string]interface{}{
 	CloseTime:       commonpb.IndexedValueType_Int,
 	ExecutionStatus: commonpb.IndexedValueType_Int,
 	HistoryLength:   commonpb.IndexedValueType_Int,
+	TaskList:        commonpb.IndexedValueType_Keyword,
 }
 
 // IsSystemIndexedKey return true is key is system added

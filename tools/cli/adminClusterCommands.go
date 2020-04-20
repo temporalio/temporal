@@ -25,10 +25,7 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/fatih/color"
 	"github.com/urfave/cli"
@@ -46,14 +43,9 @@ func AdminAddSearchAttribute(c *cli.Context) {
 	}
 
 	// ask user for confirmation
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("Are you trying to add key [%s] with Type [%s]? Y/N\n",
+	promptMsg := fmt.Sprintf("Are you trying to add key [%s] with Type [%s]? Y/N",
 		color.YellowString(key), color.YellowString(intValTypeToString(valType)))
-	text, _ := reader.ReadString('\n')
-	textLower := strings.ToLower(strings.TrimRight(text, "\n"))
-	if textLower != "y" && textLower != "yes" {
-		return
-	}
+	prompt(promptMsg)
 
 	adminClient := cFactory.AdminClient(c)
 	ctx, cancel := newContext(c)

@@ -32,7 +32,9 @@ import (
 	"github.com/olivere/elastic"
 	"github.com/uber-go/tally"
 
+	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/collection"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"
@@ -69,6 +71,7 @@ type (
 		config        *Config
 		logger        log.Logger
 		metricsClient metrics.Client
+		msgEncoder    *codec.JSONPBEncoder
 	}
 
 	kafkaMessageWithMetrics struct { // value of esProcessorImpl.mapToKafkaMsg
@@ -88,11 +91,12 @@ const (
 
 // NewESProcessorAndStart create new ESProcessor and start
 func NewESProcessorAndStart(config *Config, client es.Client, processorName string,
-	logger log.Logger, metricsClient metrics.Client) (ESProcessor, error) {
+	logger log.Logger, metricsClient metrics.Client, msgEncoder *codec.JSONPBEncoder) (ESProcessor, error) {
 	p := &esProcessorImpl{
 		config:        config,
 		logger:        logger.WithTags(tag.ComponentIndexerESProcessor),
 		metricsClient: metricsClient,
+		msgEncoder:    msgEncoder,
 	}
 
 	params := &es.BulkProcessorParameters{
@@ -165,8 +169,10 @@ func (p *esProcessorImpl) bulkAfterAction(id int64, requests []elastic.BulkableR
 			case isResponseSuccess(resp.Status):
 				p.ackKafkaMsg(key)
 			case !isResponseRetriable(resp.Status):
+				wid, rid, namespaceID := p.getMsgWithInfo(key)
 				p.logger.Error("ES request failed.",
-					tag.ESResponseStatus(resp.Status), tag.ESResponseError(getErrorMsgFromESResp(resp)))
+					tag.ESResponseStatus(resp.Status), tag.ESResponseError(getErrorMsgFromESResp(resp)), tag.WorkflowID(wid), tag.WorkflowRunID(rid),
+					tag.WorkflowNamespaceID(namespaceID))
 				p.nackKafkaMsg(key)
 			default: // bulk processor will retry
 				p.logger.Info("ES request retried.", tag.ESResponseStatus(resp.Status))
@@ -185,13 +191,9 @@ func (p *esProcessorImpl) nackKafkaMsg(key string) {
 }
 
 func (p *esProcessorImpl) ackKafkaMsgHelper(key string, nack bool) {
-	msg, ok := p.mapToKafkaMsg.Get(key)
+	kafkaMsg, ok := p.getKafkaMsg(key)
 	if !ok {
-		return // duplicate kafka message
-	}
-	kafkaMsg, ok := msg.(*kafkaMessageWithMetrics)
-	if !ok { // must be bug in code and bad deployment
-		p.logger.Fatal("Message is not kafka message.", tag.ESKey(key))
+		return
 	}
 
 	if nack {
@@ -201,6 +203,32 @@ func (p *esProcessorImpl) ackKafkaMsgHelper(key string, nack bool) {
 	}
 
 	p.mapToKafkaMsg.Remove(key)
+}
+
+func (p *esProcessorImpl) getKafkaMsg(key string) (kafkaMsg *kafkaMessageWithMetrics, ok bool) {
+	msg, ok := p.mapToKafkaMsg.Get(key)
+	if !ok {
+		return // duplicate kafka message
+	}
+	kafkaMsg, ok = msg.(*kafkaMessageWithMetrics)
+	if !ok { // must be bug in code and bad deployment
+		p.logger.Fatal("Message is not kafka message.", tag.ESKey(key))
+	}
+	return kafkaMsg, ok
+}
+
+func (p *esProcessorImpl) getMsgWithInfo(key string) (wid string, rid string, namespaceID string) {
+	kafkaMsg, ok := p.getKafkaMsg(key)
+	if !ok {
+		return
+	}
+
+	var msg indexergenpb.Message
+	if err := p.msgEncoder.Decode(kafkaMsg.message.Value(), &msg); err != nil {
+		p.logger.Error("failed to deserialize kafka message.", tag.Error(err))
+		return
+	}
+	return msg.GetWorkflowId(), msg.GetRunId(), msg.GetNamespaceId()
 }
 
 func (p *esProcessorImpl) hashFn(key interface{}) uint32 {

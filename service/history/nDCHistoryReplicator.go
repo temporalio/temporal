@@ -238,7 +238,20 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 	default:
 		// apply events, other than simple start workflow execution
 		// the continue as new + start workflow execution combination will also be processed here
-		mutableState, err := context.loadWorkflowExecution()
+		var mutableState mutableState
+		var err error
+		namespaceEntry, err := r.namespaceCache.GetNamespaceByID(context.getNamespaceID())
+		if err != nil {
+			return err
+		}
+
+		if r.shard.GetConfig().ReplicationEventsFromCurrentCluster(namespaceEntry.GetInfo().Name) {
+			// this branch is used when replicating events (generated from current cluster)from remote cluster to current cluster.
+			// this could happen when the events are lost in current cluster and plan to recover them from remote cluster.
+			mutableState, err = context.loadWorkflowExecutionForReplication(task.getVersion())
+		} else {
+			mutableState, err = context.loadWorkflowExecution()
+		}
 		switch err.(type) {
 		case nil:
 			// Sanity check to make only 3DC mutable state here

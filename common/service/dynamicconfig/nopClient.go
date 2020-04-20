@@ -53,6 +53,9 @@ func (mc *nopClient) GetFloatValue(name Key, filters map[Filter]interface{}, def
 }
 
 func (mc *nopClient) GetBoolValue(name Key, filters map[Filter]interface{}, defaultValue bool) (bool, error) {
+	if filters[Namespace] == "TestRawHistoryNamespace" {
+		return true, errors.New("unable to find key")
+	}
 	return defaultValue, errors.New("unable to find key")
 }
 

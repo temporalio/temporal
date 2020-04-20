@@ -315,6 +315,7 @@ message NamespaceDetail {
     int64 configVersion = 9;
     int64 failoverNotificationVersion = 11;
     int64 failoverVersion = 12;
+    int64 failoverEndTime = 13;
 }
 
 message NamespaceInfo {

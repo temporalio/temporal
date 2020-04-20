@@ -179,7 +179,8 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 	case ExecutionStatus:
 		val, err := extractStringValue(valStr)
 		if err != nil {
-			return err
+			// if failed to extract string value, it means user input close status as a number
+			val = valStr
 		}
 		if op != "=" {
 			return fmt.Errorf("only operation = is support for %s", ExecutionStatus)
@@ -246,17 +247,17 @@ func convertToTimestamp(timeStr string) (int64, error) {
 }
 
 func convertStatusStr(statusStr string) (executionpb.WorkflowExecutionStatus, error) {
-	statusStr = strings.ToLower(statusStr)
+	statusStr = strings.ToLower(strings.TrimSpace(statusStr))
 	switch statusStr {
-	case "completed":
+	case "completed", strconv.Itoa(int(executionpb.WorkflowExecutionStatus_Completed)):
 		return executionpb.WorkflowExecutionStatus_Completed, nil
-	case "failed":
+	case "failed", strconv.Itoa(int(executionpb.WorkflowExecutionStatus_Failed)):
 		return executionpb.WorkflowExecutionStatus_Failed, nil
-	case "canceled":
+	case "canceled", strconv.Itoa(int(executionpb.WorkflowExecutionStatus_Canceled)):
 		return executionpb.WorkflowExecutionStatus_Canceled, nil
-	case "continuedasnew":
+	case "continuedasnew", "continued_as_new", strconv.Itoa(int(executionpb.WorkflowExecutionStatus_ContinuedAsNew)):
 		return executionpb.WorkflowExecutionStatus_ContinuedAsNew, nil
-	case "timedout":
+	case "timedout", "timed_out", strconv.Itoa(int(executionpb.WorkflowExecutionStatus_TimedOut)):
 		return executionpb.WorkflowExecutionStatus_TimedOut, nil
 	default:
 		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)

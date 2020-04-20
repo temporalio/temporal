@@ -37,14 +37,14 @@ import (
 )
 
 const (
-	templateGetClosedWorkflowExecutionsV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
+	templateGetClosedWorkflowExecutionsV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition IN (?) ` +
 		`AND close_time >= ? ` +
 		`AND close_time <= ? `
 
-	templateGetClosedWorkflowExecutionsByTypeV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
+	templateGetClosedWorkflowExecutionsByTypeV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
@@ -52,7 +52,7 @@ const (
 		`AND close_time <= ? ` +
 		`AND workflow_type_name = ? `
 
-	templateGetClosedWorkflowExecutionsByIDV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
+	templateGetClosedWorkflowExecutionsByIDV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +
@@ -60,7 +60,7 @@ const (
 		`AND close_time <= ? ` +
 		`AND workflow_id = ? `
 
-	templateGetClosedWorkflowExecutionsByStatusV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding ` +
+	templateGetClosedWorkflowExecutionsByStatusV2 = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_list ` +
 		`FROM closed_executions_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`AND namespace_partition = ? ` +

@@ -1479,16 +1479,16 @@ func isMessageIDConflictError(err error) bool {
 
 // GetReplicationMessages is a utility method to get messages from the queue
 func (s *TestBase) GetReplicationMessages(
-	lastMessageID int,
+	lastMessageID int64,
 	maxCount int,
-) ([]*replicationgenpb.ReplicationTask, int, error) {
+) ([]*replicationgenpb.ReplicationTask, int64, error) {
 
 	return s.NamespaceReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
 }
 
 // UpdateAckLevel updates replication queue ack level
 func (s *TestBase) UpdateAckLevel(
-	lastProcessedMessageID int,
+	lastProcessedMessageID int64,
 	clusterName string,
 ) error {
 
@@ -1496,7 +1496,7 @@ func (s *TestBase) UpdateAckLevel(
 }
 
 // GetAckLevels returns replication queue ack levels
-func (s *TestBase) GetAckLevels() (map[string]int, error) {
+func (s *TestBase) GetAckLevels() (map[string]int64, error) {
 	return s.NamespaceReplicationQueue.GetAckLevels()
 }
 
@@ -1521,8 +1521,8 @@ func (s *TestBase) PublishToNamespaceDLQ(
 
 // GetMessagesFromNamespaceDLQ is a utility method to get messages from the namespace DLQ
 func (s *TestBase) GetMessagesFromNamespaceDLQ(
-	firstMessageID int,
-	lastMessageID int,
+	firstMessageID int64,
+	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
 ) ([]*replicationgenpb.ReplicationTask, []byte, error) {
@@ -1537,20 +1537,20 @@ func (s *TestBase) GetMessagesFromNamespaceDLQ(
 
 // UpdateNamespaceDLQAckLevel updates namespace dlq ack level
 func (s *TestBase) UpdateNamespaceDLQAckLevel(
-	lastProcessedMessageID int,
+	lastProcessedMessageID int64,
 ) error {
 
 	return s.NamespaceReplicationQueue.UpdateDLQAckLevel(lastProcessedMessageID)
 }
 
 // GetNamespaceDLQAckLevel returns namespace dlq ack level
-func (s *TestBase) GetNamespaceDLQAckLevel() (int, error) {
+func (s *TestBase) GetNamespaceDLQAckLevel() (int64, error) {
 	return s.NamespaceReplicationQueue.GetDLQAckLevel()
 }
 
 // DeleteMessageFromNamespaceDLQ deletes one message from namespace DLQ
 func (s *TestBase) DeleteMessageFromNamespaceDLQ(
-	messageID int,
+	messageID int64,
 ) error {
 
 	return s.NamespaceReplicationQueue.DeleteMessageFromDLQ(messageID)
@@ -1558,8 +1558,8 @@ func (s *TestBase) DeleteMessageFromNamespaceDLQ(
 
 // RangeDeleteMessagesFromNamespaceDLQ deletes messages from namespace DLQ
 func (s *TestBase) RangeDeleteMessagesFromNamespaceDLQ(
-	firstMessageID int,
-	lastMessageID int,
+	firstMessageID int64,
+	lastMessageID int64,
 ) error {
 
 	return s.NamespaceReplicationQueue.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)

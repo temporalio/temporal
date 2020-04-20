@@ -410,7 +410,7 @@ Update_History_Loop:
 				completedEvent.GetEventId(),
 				msBuilder,
 				executionStats,
-				handler.metricsClient,
+				handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.NamespaceTag(namespace)),
 				handler.throttledLogger,
 			)
 
@@ -645,7 +645,10 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 	workflowID := msBuilder.GetExecutionInfo().WorkflowID
 	runID := msBuilder.GetExecutionInfo().RunID
 
-	scope := handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope)
+	scope := handler.metricsClient.Scope(
+		metrics.HistoryRespondDecisionTaskCompletedScope,
+		metrics.NamespaceTag(namespaceEntry.GetInfo().Name),
+		metrics.DecisionTypeTag("ConsistentQuery"))
 
 	// if its a heartbeat decision it means local activities may still be running on the worker
 	// which were started by an external event which happened before the query
@@ -667,6 +670,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 			runID,
 			scope,
 			handler.throttledLogger,
+			tag.BlobSizeViolationOperation("ConsistentQuery"),
 		); err != nil {
 			handler.logger.Info("failing query because query result size is too large",
 				tag.WorkflowNamespace(namespace),

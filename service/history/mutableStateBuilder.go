@@ -2200,7 +2200,8 @@ func (e *mutableStateBuilder) addTransientActivityStartedEvent(
 	}
 
 	// activity task was started (as transient event), we need to add it now.
-	event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, ai.RequestID, ai.StartedIdentity)
+	event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, ai.RequestID, ai.StartedIdentity,
+		ai.LastFailureReason, ai.LastFailureDetails)
 	if !ai.StartedTime.IsZero() {
 		// overwrite started event time to the one recorded in ActivityInfo
 		event.Timestamp = ai.StartedTime.UnixNano()
@@ -2221,7 +2222,8 @@ func (e *mutableStateBuilder) AddActivityTaskStartedEvent(
 	}
 
 	if !ai.HasRetryPolicy {
-		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, requestID, identity)
+		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, requestID, identity,
+			ai.LastFailureReason, ai.LastFailureDetails)
 		if err := e.ReplicateActivityTaskStartedEvent(event); err != nil {
 			return nil, err
 		}
@@ -3862,12 +3864,25 @@ func (e *mutableStateBuilder) StartTransaction(
 		return false, err
 	}
 
-	flushBeforeReady, err := e.startTransactionHandleDecisionFailover()
+	flushBeforeReady, err := e.startTransactionHandleDecisionFailover(false)
 	if err != nil {
 		return false, err
 	}
 
 	return flushBeforeReady, nil
+}
+
+func (e *mutableStateBuilder) StartTransactionSkipDecisionFail(
+	namespaceEntry *cache.NamespaceCacheEntry,
+) error {
+
+	e.namespaceEntry = namespaceEntry
+	if err := e.UpdateCurrentVersion(namespaceEntry.GetFailoverVersion(), false); err != nil {
+		return err
+	}
+
+	_, err := e.startTransactionHandleDecisionFailover(true)
+	return err
 }
 
 func (e *mutableStateBuilder) CloseTransactionAsMutation(
@@ -4329,7 +4344,9 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	}
 }
 
-func (e *mutableStateBuilder) startTransactionHandleDecisionFailover() (bool, error) {
+func (e *mutableStateBuilder) startTransactionHandleDecisionFailover(
+	skipDecisionTaskFailed bool,
+) (bool, error) {
 
 	if !e.IsWorkflowExecutionRunning() ||
 		!e.canReplicateEvents() {
@@ -4398,7 +4415,11 @@ func (e *mutableStateBuilder) startTransactionHandleDecisionFailover() (bool, er
 		return false, err
 	}
 
-	// we have a decision on the fly with a lower version, fail it
+	if skipDecisionTaskFailed {
+		return false, nil
+	}
+
+	// we have a decision with buffered events on the fly with a lower version, fail it
 	if err := failDecision(
 		e,
 		decision,

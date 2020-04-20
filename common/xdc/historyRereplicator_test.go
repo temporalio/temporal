@@ -128,6 +128,7 @@ func (s *historyRereplicatorSuite) SetupTest() {
 		},
 		persistence.NewPayloadSerializer(),
 		30*time.Second,
+		nil,
 		s.logger,
 	)
 }
@@ -1277,5 +1278,6 @@ func (s *historyRereplicatorSuite) getDummyRereplicationContext() *historyRerepl
 	return &historyRereplicationContext{
 		rereplicator: s.rereplicator,
 		logger:       s.rereplicator.logger,
+		ctx:          context.Background(),
 	}
 }
