@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,9 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskFetcher_mock.go -self_package github.com/uber/cadence/service/history
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_fetcher_mock.go  -self_package github.com/uber/cadence/service/history/replication
 
-package history
+package replication
 
 import (
 	"context"
@@ -45,8 +45,23 @@ const (
 )
 
 type (
-	// ReplicationTaskFetcherImpl is the implementation of fetching replication messages.
-	ReplicationTaskFetcherImpl struct {
+	// TaskFetcher is responsible for fetching replication messages from remote DC.
+	TaskFetcher interface {
+		common.Daemon
+
+		GetSourceCluster() string
+		GetRequestChan() chan<- *request
+	}
+
+	// TaskFetchers is a group of fetchers, one per source DC.
+	TaskFetchers interface {
+		common.Daemon
+
+		GetFetchers() []TaskFetcher
+	}
+
+	// taskFetcherImpl is the implementation of fetching replication messages.
+	taskFetcherImpl struct {
 		status         int32
 		currentCluster string
 		sourceCluster  string
@@ -56,39 +71,28 @@ type (
 		requestChan    chan *request
 		done           chan struct{}
 	}
-	// ReplicationTaskFetcher is responsible for fetching replication messages from remote DC.
-	ReplicationTaskFetcher interface {
-		common.Daemon
 
-		GetSourceCluster() string
-		GetRequestChan() chan<- *request
-	}
-
-	// ReplicationTaskFetchers is a group of fetchers, one per source DC.
-	ReplicationTaskFetchers interface {
-		common.Daemon
-
-		GetFetchers() []ReplicationTaskFetcher
-	}
-
-	// ReplicationTaskFetchersImpl is a group of fetchers, one per source DC.
-	ReplicationTaskFetchersImpl struct {
+	// taskFetchersImpl is a group of fetchers, one per source DC.
+	taskFetchersImpl struct {
 		status   int32
 		logger   log.Logger
-		fetchers []ReplicationTaskFetcher
+		fetchers []TaskFetcher
 	}
 )
 
-// NewReplicationTaskFetchers creates an instance of ReplicationTaskFetchers with given configs.
-func NewReplicationTaskFetchers(
+var _ TaskFetcher = (*taskFetcherImpl)(nil)
+var _ TaskFetchers = (*taskFetchersImpl)(nil)
+
+// NewTaskFetchers creates an instance of ReplicationTaskFetchers with given configs.
+func NewTaskFetchers(
 	logger log.Logger,
 	config *config.Config,
 	consumerConfig *serviceConfig.ReplicationConsumerConfig,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
-) *ReplicationTaskFetchersImpl {
+) TaskFetchers {
 
-	var fetchers []ReplicationTaskFetcher
+	var fetchers []TaskFetcher
 	if consumerConfig.Type == serviceConfig.ReplicationConsumerTypeRPC {
 		for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
 			if !info.Enabled {
@@ -110,7 +114,7 @@ func NewReplicationTaskFetchers(
 		}
 	}
 
-	return &ReplicationTaskFetchersImpl{
+	return &taskFetchersImpl{
 		fetchers: fetchers,
 		status:   common.DaemonStatusInitialized,
 		logger:   logger,
@@ -118,7 +122,7 @@ func NewReplicationTaskFetchers(
 }
 
 // Start starts the fetchers
-func (f *ReplicationTaskFetchersImpl) Start() {
+func (f *taskFetchersImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&f.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
@@ -130,7 +134,7 @@ func (f *ReplicationTaskFetchersImpl) Start() {
 }
 
 // Stop stops the fetchers
-func (f *ReplicationTaskFetchersImpl) Stop() {
+func (f *taskFetchersImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&f.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -142,7 +146,7 @@ func (f *ReplicationTaskFetchersImpl) Stop() {
 }
 
 // GetFetchers returns all the fetchers
-func (f *ReplicationTaskFetchersImpl) GetFetchers() []ReplicationTaskFetcher {
+func (f *taskFetchersImpl) GetFetchers() []TaskFetcher {
 	return f.fetchers
 }
 
@@ -153,9 +157,9 @@ func newReplicationTaskFetcher(
 	currentCluster string,
 	config *config.Config,
 	sourceFrontend admin.Client,
-) *ReplicationTaskFetcherImpl {
+) TaskFetcher {
 
-	return &ReplicationTaskFetcherImpl{
+	return &taskFetcherImpl{
 		status:         common.DaemonStatusInitialized,
 		config:         config,
 		logger:         logger.WithTags(tag.ClusterName(sourceCluster)),
@@ -168,7 +172,7 @@ func newReplicationTaskFetcher(
 }
 
 // Start starts the fetcher
-func (f *ReplicationTaskFetcherImpl) Start() {
+func (f *taskFetcherImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&f.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
@@ -180,7 +184,7 @@ func (f *ReplicationTaskFetcherImpl) Start() {
 }
 
 // Stop stops the fetcher
-func (f *ReplicationTaskFetcherImpl) Stop() {
+func (f *taskFetcherImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&f.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -190,7 +194,7 @@ func (f *ReplicationTaskFetcherImpl) Stop() {
 }
 
 // fetchTasks collects getReplicationTasks request from shards and send out aggregated request to source frontend.
-func (f *ReplicationTaskFetcherImpl) fetchTasks() {
+func (f *taskFetcherImpl) fetchTasks() {
 	timer := time.NewTimer(backoff.JitDuration(
 		f.config.ReplicationTaskFetcherAggregationInterval(),
 		f.config.ReplicationTaskFetcherTimerJitterCoefficient(),
@@ -233,7 +237,7 @@ func (f *ReplicationTaskFetcherImpl) fetchTasks() {
 	}
 }
 
-func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[int32]*request) error {
+func (f *taskFetcherImpl) fetchAndDistributeTasks(requestByShard map[int32]*request) error {
 	if len(requestByShard) == 0 {
 		// We don't receive tasks from previous fetch so processors are all sleeping.
 		f.logger.Debug("Skip fetching as no processor is asking for tasks.")
@@ -258,7 +262,7 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 	return nil
 }
 
-func (f *ReplicationTaskFetcherImpl) getMessages(
+func (f *taskFetcherImpl) getMessages(
 	requestByShard map[int32]*request,
 ) (map[int32]*r.ReplicationMessages, error) {
 	var tokens []*r.ReplicationToken
@@ -282,11 +286,11 @@ func (f *ReplicationTaskFetcherImpl) getMessages(
 }
 
 // GetSourceCluster returns the source cluster for the fetcher
-func (f *ReplicationTaskFetcherImpl) GetSourceCluster() string {
+func (f *taskFetcherImpl) GetSourceCluster() string {
 	return f.sourceCluster
 }
 
 // GetRequestChan returns the request chan for the fetcher
-func (f *ReplicationTaskFetcherImpl) GetRequestChan() chan<- *request {
+func (f *taskFetcherImpl) GetRequestChan() chan<- *request {
 	return f.requestChan
 }

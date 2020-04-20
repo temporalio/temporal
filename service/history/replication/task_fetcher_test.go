@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package replication
 
 import (
 	"testing"
@@ -37,32 +37,32 @@ import (
 )
 
 type (
-	replicationTaskFetcherSuite struct {
+	taskFetcherSuite struct {
 		suite.Suite
 		*require.Assertions
 		controller *gomock.Controller
 
-		mockResource           *resource.Test
-		config                 *config.Config
-		frontendClient         *adminservicetest.MockClient
-		replicationTaskFetcher *ReplicationTaskFetcherImpl
+		mockResource   *resource.Test
+		config         *config.Config
+		frontendClient *adminservicetest.MockClient
+		taskFetcher    *taskFetcherImpl
 	}
 )
 
 func TestReplicationTaskFetcherSuite(t *testing.T) {
-	s := new(replicationTaskFetcherSuite)
+	s := new(taskFetcherSuite)
 	suite.Run(t, s)
 }
 
-func (s *replicationTaskFetcherSuite) SetupSuite() {
+func (s *taskFetcherSuite) SetupSuite() {
 
 }
 
-func (s *replicationTaskFetcherSuite) TearDownSuite() {
+func (s *taskFetcherSuite) TearDownSuite() {
 
 }
 
-func (s *replicationTaskFetcherSuite) SetupTest() {
+func (s *taskFetcherSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
@@ -71,21 +71,21 @@ func (s *replicationTaskFetcherSuite) SetupTest() {
 	logger := log.NewNoop()
 	s.config = config.NewForTest()
 
-	s.replicationTaskFetcher = newReplicationTaskFetcher(
+	s.taskFetcher = newReplicationTaskFetcher(
 		logger,
 		"standby",
 		"active",
 		s.config,
 		s.frontendClient,
-	)
+	).(*taskFetcherImpl)
 }
 
-func (s *replicationTaskFetcherSuite) TearDownTest() {
+func (s *taskFetcherSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockResource.Finish(s.T())
 }
 
-func (s *replicationTaskFetcherSuite) TestGetMessages() {
+func (s *taskFetcherSuite) TestGetMessages() {
 	requestByShard := make(map[int32]*request)
 	token := &replicator.ReplicationToken{
 		ShardID:                common.Int32Ptr(0),
@@ -107,12 +107,12 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 		MessagesByShard: messageByShared,
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)
-	response, err := s.replicationTaskFetcher.getMessages(requestByShard)
+	response, err := s.taskFetcher.getMessages(requestByShard)
 	s.NoError(err)
 	s.Equal(messageByShared, response)
 }
 
-func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
+func (s *taskFetcherSuite) TestFetchAndDistributeTasks() {
 	requestByShard := make(map[int32]*request)
 	token := &replicator.ReplicationToken{
 		ShardID:                common.Int32Ptr(0),
@@ -136,7 +136,7 @@ func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
 		MessagesByShard: messageByShared,
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)
-	err := s.replicationTaskFetcher.fetchAndDistributeTasks(requestByShard)
+	err := s.taskFetcher.fetchAndDistributeTasks(requestByShard)
 	s.NoError(err)
 	respToken := <-respChan
 	s.Equal(messageByShared[0], respToken)

@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//TODO move this file to replication subfolder
+
 package history
 
 import (
@@ -446,7 +448,7 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 	lastReadTaskID int64,
 ) (*replicator.ReplicationMessages, error) {
 
-	if lastReadTaskID == emptyMessageID {
+	if lastReadTaskID == common.EmptyMessageID {
 		lastReadTaskID = p.shard.GetClusterReplicationLevel(pollingCluster)
 	}
 

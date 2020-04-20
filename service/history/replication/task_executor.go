@@ -18,9 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskExecutor_mock.go -self_package github.com/uber/cadence/service/history
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_executor_mock.go
 
-package history
+package replication
 
 import (
 	"context"
@@ -38,11 +38,12 @@ import (
 )
 
 type (
-	replicationTaskExecutor interface {
+	// TaskExecutor is the executor for replication task
+	TaskExecutor interface {
 		execute(sourceCluster string, replicationTask *r.ReplicationTask, forceApply bool) (int, error)
 	}
 
-	replicationTaskExecutorImpl struct {
+	taskExecutorImpl struct {
 		currentCluster      string
 		domainCache         cache.DomainCache
 		nDCHistoryResender  xdc.NDCHistoryResender
@@ -54,9 +55,11 @@ type (
 	}
 )
 
-// newReplicationTaskExecutor creates an replication task executor
+var _ TaskExecutor = (*taskExecutorImpl)(nil)
+
+// NewTaskExecutor creates an replication task executor
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
-func newReplicationTaskExecutor(
+func NewTaskExecutor(
 	currentCluster string,
 	domainCache cache.DomainCache,
 	nDCHistoryResender xdc.NDCHistoryResender,
@@ -64,8 +67,8 @@ func newReplicationTaskExecutor(
 	historyEngine engine.Engine,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) replicationTaskExecutor {
-	return &replicationTaskExecutorImpl{
+) TaskExecutor {
+	return &taskExecutorImpl{
 		currentCluster:      currentCluster,
 		domainCache:         domainCache,
 		nDCHistoryResender:  nDCHistoryResender,
@@ -76,7 +79,7 @@ func newReplicationTaskExecutor(
 	}
 }
 
-func (e *replicationTaskExecutorImpl) execute(
+func (e *taskExecutorImpl) execute(
 	sourceCluster string,
 	replicationTask *r.ReplicationTask,
 	forceApply bool,
@@ -109,7 +112,7 @@ func (e *replicationTaskExecutorImpl) execute(
 	return scope, err
 }
 
-func (e *replicationTaskExecutorImpl) handleActivityTask(
+func (e *taskExecutorImpl) handleActivityTask(
 	task *r.ReplicationTask,
 	forceApply bool,
 ) error {
@@ -191,7 +194,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 }
 
 //TODO: remove this part after 2DC deprecation
-func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
+func (e *taskExecutorImpl) handleHistoryReplicationTask(
 	sourceCluster string,
 	task *r.ReplicationTask,
 	forceApply bool,
@@ -250,7 +253,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	return e.historyEngine.ReplicateEvents(ctx, request)
 }
 
-func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
+func (e *taskExecutorImpl) handleHistoryReplicationTaskV2(
 	task *r.ReplicationTask,
 	forceApply bool,
 ) error {
@@ -301,7 +304,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 	return e.historyEngine.ReplicateEventsV2(ctx, request)
 }
 
-func (e *replicationTaskExecutorImpl) filterTask(
+func (e *taskExecutorImpl) filterTask(
 	domainID string,
 	forceApply bool,
 ) (bool, error) {
@@ -327,7 +330,7 @@ FilterLoop:
 }
 
 //TODO: remove this code after 2DC deprecation
-func (e *replicationTaskExecutorImpl) convertRetryTaskError(
+func (e *taskExecutorImpl) convertRetryTaskError(
 	err error,
 ) (*shared.RetryTaskError, bool) {
 
@@ -335,7 +338,7 @@ func (e *replicationTaskExecutorImpl) convertRetryTaskError(
 	return retError, ok
 }
 
-func (e *replicationTaskExecutorImpl) convertRetryTaskV2Error(
+func (e *taskExecutorImpl) convertRetryTaskV2Error(
 	err error,
 ) (*shared.RetryTaskV2Error, bool) {
 

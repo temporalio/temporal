@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package replication
 
 import (
 	"testing"
@@ -48,42 +48,42 @@ import (
 )
 
 type (
-	replicationTaskProcessorSuite struct {
+	taskProcessorSuite struct {
 		suite.Suite
 		*require.Assertions
 		controller *gomock.Controller
 
-		mockShard               *shard.TestContext
-		mockEngine              *engine.MockEngine
-		config                  *config.Config
-		historyClient           *historyservicetest.MockClient
-		replicationTaskFetcher  *MockReplicationTaskFetcher
-		mockDomainCache         *cache.MockDomainCache
-		mockClientBean          *client.MockBean
-		adminClient             *adminservicetest.MockClient
-		clusterMetadata         *cluster.MockMetadata
-		executionManager        *mocks.ExecutionManager
-		requestChan             chan *request
-		replicationTaskExecutor *MockreplicationTaskExecutor
+		mockShard        *shard.TestContext
+		mockEngine       *engine.MockEngine
+		config           *config.Config
+		historyClient    *historyservicetest.MockClient
+		taskFetcher      *MockTaskFetcher
+		mockDomainCache  *cache.MockDomainCache
+		mockClientBean   *client.MockBean
+		adminClient      *adminservicetest.MockClient
+		clusterMetadata  *cluster.MockMetadata
+		executionManager *mocks.ExecutionManager
+		requestChan      chan *request
+		taskExecutor     *MockTaskExecutor
 
-		replicationTaskProcessor *ReplicationTaskProcessorImpl
+		taskProcessor *taskProcessorImpl
 	}
 )
 
-func TestReplicationTaskProcessorSuite(t *testing.T) {
-	s := new(replicationTaskProcessorSuite)
+func TestTaskProcessorSuite(t *testing.T) {
+	s := new(taskProcessorSuite)
 	suite.Run(t, s)
 }
 
-func (s *replicationTaskProcessorSuite) SetupSuite() {
+func (s *taskProcessorSuite) SetupSuite() {
 
 }
 
-func (s *replicationTaskProcessorSuite) TearDownSuite() {
+func (s *taskProcessorSuite) TearDownSuite() {
 
 }
 
-func (s *replicationTaskProcessorSuite) SetupTest() {
+func (s *taskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
@@ -102,7 +102,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.adminClient = s.mockShard.Resource.RemoteAdminClient
 	s.clusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.executionManager = s.mockShard.Resource.ExecutionMgr
-	s.replicationTaskExecutor = NewMockreplicationTaskExecutor(s.controller)
+	s.taskExecutor = NewMockTaskExecutor(s.controller)
 
 	s.mockEngine = engine.NewMockEngine(s.controller)
 	s.config = config.NewForTest()
@@ -110,29 +110,29 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.requestChan = make(chan *request, 10)
 
-	s.replicationTaskFetcher = NewMockReplicationTaskFetcher(s.controller)
+	s.taskFetcher = NewMockTaskFetcher(s.controller)
 
-	s.replicationTaskFetcher.EXPECT().GetSourceCluster().Return("standby").AnyTimes()
-	s.replicationTaskFetcher.EXPECT().GetRequestChan().Return(s.requestChan).AnyTimes()
+	s.taskFetcher.EXPECT().GetSourceCluster().Return("standby").AnyTimes()
+	s.taskFetcher.EXPECT().GetRequestChan().Return(s.requestChan).AnyTimes()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
 
-	s.replicationTaskProcessor = NewReplicationTaskProcessor(
+	s.taskProcessor = NewTaskProcessor(
 		s.mockShard,
 		s.mockEngine,
 		s.config,
 		metricsClient,
-		s.replicationTaskFetcher,
-		s.replicationTaskExecutor,
-	)
+		s.taskFetcher,
+		s.taskExecutor,
+	).(*taskProcessorImpl)
 }
 
-func (s *replicationTaskProcessorSuite) TearDownTest() {
+func (s *taskProcessorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
 }
 
-func (s *replicationTaskProcessorSuite) TestSendFetchMessageRequest() {
-	s.replicationTaskProcessor.sendFetchMessageRequest()
+func (s *taskProcessorSuite) TestSendFetchMessageRequest() {
+	s.taskProcessor.sendFetchMessageRequest()
 	requestMessage := <-s.requestChan
 
 	s.Equal(int32(0), requestMessage.token.GetShardID())
@@ -140,7 +140,7 @@ func (s *replicationTaskProcessorSuite) TestSendFetchMessageRequest() {
 	s.Equal(int64(-1), requestMessage.token.GetLastRetrievedMessageId())
 }
 
-func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
+func (s *taskProcessorSuite) TestHandleSyncShardStatus() {
 	now := time.Now()
 	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), &history.SyncShardStatusRequest{
 		SourceCluster: common.StringPtr("standby"),
@@ -148,13 +148,13 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
 		Timestamp:     common.Int64Ptr(now.UnixNano()),
 	}).Return(nil).Times(1)
 
-	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicator.SyncShardStatus{
+	err := s.taskProcessor.handleSyncShardStatus(&replicator.SyncShardStatus{
 		Timestamp: common.Int64Ptr(now.UnixNano()),
 	})
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivityReplicationTask() {
+func (s *taskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivityReplicationTask() {
 	domainID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
@@ -176,11 +176,11 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
-	err := s.replicationTaskProcessor.putReplicationTaskToDLQ(task)
+	err := s.taskProcessor.putReplicationTaskToDLQ(task)
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryReplicationTask() {
+func (s *taskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryReplicationTask() {
 	domainID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
@@ -203,11 +203,11 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
-	err := s.replicationTaskProcessor.putReplicationTaskToDLQ(task)
+	err := s.taskProcessor.putReplicationTaskToDLQ(task)
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2ReplicationTask() {
+func (s *taskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2ReplicationTask() {
 	domainID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
@@ -245,6 +245,6 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
-	err = s.replicationTaskProcessor.putReplicationTaskToDLQ(task)
+	err = s.taskProcessor.putReplicationTaskToDLQ(task)
 	s.NoError(err)
 }

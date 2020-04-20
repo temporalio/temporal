@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package replication
 
 import (
 	"context"
@@ -42,38 +42,38 @@ import (
 )
 
 type (
-	replicationDLQHandlerSuite struct {
+	dlqHandlerSuite struct {
 		suite.Suite
 		*require.Assertions
 		controller *gomock.Controller
 
-		mockShard              *shard.TestContext
-		config                 *config.Config
-		mockClientBean         *client.MockBean
-		adminClient            *adminservicetest.MockClient
-		clusterMetadata        *cluster.MockMetadata
-		executionManager       *mocks.ExecutionManager
-		shardManager           *mocks.ShardManager
-		replicatorTaskExecutor *MockreplicationTaskExecutor
+		mockShard        *shard.TestContext
+		config           *config.Config
+		mockClientBean   *client.MockBean
+		adminClient      *adminservicetest.MockClient
+		clusterMetadata  *cluster.MockMetadata
+		executionManager *mocks.ExecutionManager
+		shardManager     *mocks.ShardManager
+		taskExecutor     *MockTaskExecutor
 
-		replicationMessageHandler *replicationDLQHandlerImpl
+		messageHandler *dlqHandlerImpl
 	}
 )
 
-func TestReplicationMessageHandlerSuite(t *testing.T) {
-	s := new(replicationDLQHandlerSuite)
+func TestDLQMessageHandlerSuite(t *testing.T) {
+	s := new(dlqHandlerSuite)
 	suite.Run(t, s)
 }
 
-func (s *replicationDLQHandlerSuite) SetupSuite() {
+func (s *dlqHandlerSuite) SetupSuite() {
 
 }
 
-func (s *replicationDLQHandlerSuite) TearDownSuite() {
+func (s *dlqHandlerSuite) TearDownSuite() {
 
 }
 
-func (s *replicationDLQHandlerSuite) SetupTest() {
+func (s *dlqHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.config = config.NewForTest()
@@ -96,20 +96,20 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 	s.shardManager = s.mockShard.Resource.ShardMgr
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
-	s.replicatorTaskExecutor = NewMockreplicationTaskExecutor(s.controller)
+	s.taskExecutor = NewMockTaskExecutor(s.controller)
 
-	s.replicationMessageHandler = newReplicationDLQHandler(
+	s.messageHandler = NewDLQHandler(
 		s.mockShard,
-		s.replicatorTaskExecutor,
-	).(*replicationDLQHandlerImpl)
+		s.taskExecutor,
+	).(*dlqHandlerImpl)
 }
 
-func (s *replicationDLQHandlerSuite) TearDownTest() {
+func (s *dlqHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
 }
 
-func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
+func (s *dlqHandlerSuite) TestReadMessages_OK() {
 	ctx := context.Background()
 	sourceCluster := "test"
 	lastMessageID := int64(1)
@@ -141,13 +141,13 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	s.adminClient.EXPECT().
 		GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&replicator.GetDLQReplicationMessagesResponse{}, nil)
-	tasks, token, err := s.replicationMessageHandler.readMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken)
+	tasks, token, err := s.messageHandler.ReadMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
 	s.Nil(token)
 	s.Nil(tasks)
 }
 
-func (s *replicationDLQHandlerSuite) TestPurgeMessages_OK() {
+func (s *dlqHandlerSuite) TestPurgeMessages_OK() {
 	sourceCluster := "test"
 	lastMessageID := int64(1)
 
@@ -159,11 +159,11 @@ func (s *replicationDLQHandlerSuite) TestPurgeMessages_OK() {
 		}).Return(nil).Times(1)
 
 	s.shardManager.On("UpdateShard", mock.Anything).Return(nil)
-	err := s.replicationMessageHandler.purgeMessages(sourceCluster, lastMessageID)
+	err := s.messageHandler.PurgeMessages(sourceCluster, lastMessageID)
 	s.NoError(err)
 }
 
-func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
+func (s *dlqHandlerSuite) TestMergeMessages_OK() {
 	ctx := context.Background()
 	sourceCluster := "test"
 	lastMessageID := int64(1)
@@ -204,7 +204,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 				replicationTask,
 			},
 		}, nil)
-	s.replicatorTaskExecutor.EXPECT().execute(sourceCluster, replicationTask, true).Return(0, nil).Times(1)
+	s.taskExecutor.EXPECT().execute(sourceCluster, replicationTask, true).Return(0, nil).Times(1)
 	s.executionManager.On("RangeDeleteReplicationTaskFromDLQ",
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 			SourceClusterName:    sourceCluster,
@@ -214,7 +214,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 
 	s.shardManager.On("UpdateShard", mock.Anything).Return(nil)
 
-	token, err := s.replicationMessageHandler.mergeMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken)
+	token, err := s.messageHandler.MergeMessages(ctx, sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
 	s.Nil(token)
 }

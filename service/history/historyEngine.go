@@ -58,6 +58,7 @@ import (
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/query"
+	"github.com/uber/cadence/service/history/replication"
 	"github.com/uber/cadence/service/history/reset"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
@@ -70,6 +71,7 @@ const (
 	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
 	defaultQueryFirstDecisionTaskWaitTime     = time.Second
 	queryFirstDecisionTaskCheckInterval       = 200 * time.Millisecond
+	replicationTimeout                        = 30 * time.Second
 )
 
 type (
@@ -99,13 +101,13 @@ type (
 		resetor                   reset.WorkflowResetor
 		workflowResetter          reset.WorkflowResetter
 		queueTaskProcessor        task.Processor
-		replicationTaskProcessors []ReplicationTaskProcessor
+		replicationTaskProcessors []replication.TaskProcessor
 		publicClient              workflowserviceclient.Interface
 		eventsReapplier           nDCEventsReapplier
 		matchingClient            matching.Client
 		rawMatchingClient         matching.Client
 		clientChecker             client.VersionChecker
-		replicationDLQHandler     replicationDLQHandler
+		replicationDLQHandler     replication.DLQHandler
 	}
 )
 
@@ -161,7 +163,7 @@ func NewEngineWithShardContext(
 	historyEventNotifier events.Notifier,
 	publisher messaging.Producer,
 	config *config.Config,
-	replicationTaskFetchers ReplicationTaskFetchers,
+	replicationTaskFetchers replication.TaskFetchers,
 	rawMatchingClient matching.Client,
 	queueTaskProcessor task.Processor,
 ) engine.Engine {
@@ -265,7 +267,7 @@ func NewEngineWithShardContext(
 		nil,
 		shard.GetLogger(),
 	)
-	replicationTaskExecutor := newReplicationTaskExecutor(
+	replicationTaskExecutor := replication.NewTaskExecutor(
 		currentClusterName,
 		shard.GetDomainCache(),
 		nDCHistoryResender,
@@ -274,9 +276,9 @@ func NewEngineWithShardContext(
 		shard.GetMetricsClient(),
 		shard.GetLogger(),
 	)
-	var replicationTaskProcessors []ReplicationTaskProcessor
+	var replicationTaskProcessors []replication.TaskProcessor
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
-		replicationTaskProcessor := NewReplicationTaskProcessor(
+		replicationTaskProcessor := replication.NewTaskProcessor(
 			shard,
 			historyEngImpl,
 			config,
@@ -287,7 +289,7 @@ func NewEngineWithShardContext(
 		replicationTaskProcessors = append(replicationTaskProcessors, replicationTaskProcessor)
 	}
 	historyEngImpl.replicationTaskProcessors = replicationTaskProcessors
-	replicationMessageHandler := newReplicationDLQHandler(shard, replicationTaskExecutor)
+	replicationMessageHandler := replication.NewDLQHandler(shard, replicationTaskExecutor)
 	historyEngImpl.replicationDLQHandler = replicationMessageHandler
 
 	shard.SetEngine(historyEngImpl)
@@ -2944,7 +2946,7 @@ func (e *historyEngineImpl) ReadDLQMessages(
 	request *r.ReadDLQMessagesRequest,
 ) (*r.ReadDLQMessagesResponse, error) {
 
-	tasks, token, err := e.replicationDLQHandler.readMessages(
+	tasks, token, err := e.replicationDLQHandler.ReadMessages(
 		ctx,
 		request.GetSourceCluster(),
 		request.GetInclusiveEndMessageID(),
@@ -2966,7 +2968,7 @@ func (e *historyEngineImpl) PurgeDLQMessages(
 	request *r.PurgeDLQMessagesRequest,
 ) error {
 
-	return e.replicationDLQHandler.purgeMessages(
+	return e.replicationDLQHandler.PurgeMessages(
 		request.GetSourceCluster(),
 		request.GetInclusiveEndMessageID(),
 	)
@@ -2977,7 +2979,7 @@ func (e *historyEngineImpl) MergeDLQMessages(
 	request *r.MergeDLQMessagesRequest,
 ) (*r.MergeDLQMessagesResponse, error) {
 
-	token, err := e.replicationDLQHandler.mergeMessages(
+	token, err := e.replicationDLQHandler.MergeMessages(
 		ctx,
 		request.GetSourceCluster(),
 		request.GetInclusiveEndMessageID(),

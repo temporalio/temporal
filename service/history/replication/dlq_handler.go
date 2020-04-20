@@ -18,9 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationDLQHandler_mock.go -self_package github.com/uber/cadence/service/history
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination dlq_handler_mock.go
 
-package history
+package replication
 
 import (
 	"context"
@@ -34,20 +34,20 @@ import (
 )
 
 type (
-	// replicationDLQHandler is the interface handles replication DLQ messages
-	replicationDLQHandler interface {
-		readMessages(
+	// DLQHandler is the interface handles replication DLQ messages
+	DLQHandler interface {
+		ReadMessages(
 			ctx context.Context,
 			sourceCluster string,
 			lastMessageID int64,
 			pageSize int,
 			pageToken []byte,
 		) ([]*replicator.ReplicationTask, []byte, error)
-		purgeMessages(
+		PurgeMessages(
 			sourceCluster string,
 			lastMessageID int64,
 		) error
-		mergeMessages(
+		MergeMessages(
 			ctx context.Context,
 			sourceCluster string,
 			lastMessageID int64,
@@ -56,26 +56,29 @@ type (
 		) ([]byte, error)
 	}
 
-	replicationDLQHandlerImpl struct {
-		replicationTaskExecutor replicationTaskExecutor
-		shard                   shard.Context
-		logger                  log.Logger
+	dlqHandlerImpl struct {
+		taskExecutor TaskExecutor
+		shard        shard.Context
+		logger       log.Logger
 	}
 )
 
-func newReplicationDLQHandler(
-	shard shard.Context,
-	replicationTaskExecutor replicationTaskExecutor,
-) replicationDLQHandler {
+var _ DLQHandler = (*dlqHandlerImpl)(nil)
 
-	return &replicationDLQHandlerImpl{
-		shard:                   shard,
-		replicationTaskExecutor: replicationTaskExecutor,
-		logger:                  shard.GetLogger(),
+// NewDLQHandler initialize the replication message DLQ handler
+func NewDLQHandler(
+	shard shard.Context,
+	taskExecutor TaskExecutor,
+) DLQHandler {
+
+	return &dlqHandlerImpl{
+		shard:        shard,
+		taskExecutor: taskExecutor,
+		logger:       shard.GetLogger(),
 	}
 }
 
-func (r *replicationDLQHandlerImpl) readMessages(
+func (r *dlqHandlerImpl) ReadMessages(
 	ctx context.Context,
 	sourceCluster string,
 	lastMessageID int64,
@@ -93,7 +96,7 @@ func (r *replicationDLQHandlerImpl) readMessages(
 	return tasks, token, err
 }
 
-func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
+func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	ctx context.Context,
 	sourceCluster string,
 	lastMessageID int64,
@@ -142,7 +145,7 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	return dlqResponse.ReplicationTasks, ackLevel, resp.NextPageToken, nil
 }
 
-func (r *replicationDLQHandlerImpl) purgeMessages(
+func (r *dlqHandlerImpl) PurgeMessages(
 	sourceCluster string,
 	lastMessageID int64,
 ) error {
@@ -169,7 +172,7 @@ func (r *replicationDLQHandlerImpl) purgeMessages(
 	return nil
 }
 
-func (r *replicationDLQHandlerImpl) mergeMessages(
+func (r *dlqHandlerImpl) MergeMessages(
 	ctx context.Context,
 	sourceCluster string,
 	lastMessageID int64,
@@ -186,7 +189,7 @@ func (r *replicationDLQHandlerImpl) mergeMessages(
 	)
 
 	for _, task := range tasks {
-		if _, err := r.replicationTaskExecutor.execute(
+		if _, err := r.taskExecutor.execute(
 			sourceCluster,
 			task,
 			true,

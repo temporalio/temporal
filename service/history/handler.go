@@ -49,6 +49,7 @@ import (
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/engine"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/replication"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/history/task"
 )
@@ -66,7 +67,7 @@ type (
 		historyEventNotifier    events.Notifier
 		publisher               messaging.Producer
 		rateLimiter             quotas.Limiter
-		replicationTaskFetchers ReplicationTaskFetchers
+		replicationTaskFetchers replication.TaskFetchers
 		queueTaskProcessor      task.Processor
 	}
 )
@@ -125,7 +126,7 @@ func (h *Handler) Start() {
 		}
 	}
 
-	h.replicationTaskFetchers = NewReplicationTaskFetchers(
+	h.replicationTaskFetchers = replication.NewTaskFetchers(
 		h.GetLogger(),
 		h.config,
 		h.GetClusterMetadata().GetReplicationConsumerConfig(),
