@@ -93,21 +93,21 @@ type (
 
 	// Single task list in memory state
 	taskListManagerImpl struct {
-		taskListID          *taskListID
-		taskListKind        int // sticky taskList has different process in persistence
-		config              *taskListConfig
-		db                  *taskListDB
-		engine              *matchingEngineImpl
-		taskWriter          *taskWriter
-		taskReader          *taskReader // reads tasks from db and async matches it with poller
-		taskGC              *taskGC
-		taskAckManager      ackManager   // tracks ackLevel for delivered messages
-		matcher             *TaskMatcher // for matching a task producer with a poller
-		namespaceCache      cache.NamespaceCache
-		logger              log.Logger
-		metricsClient       metrics.Client
-		namespaceValue      atomic.Value
-		namespaceScopeValue atomic.Value // namespace tagged metric scope
+		taskListID       *taskListID
+		taskListKind     tasklistpb.TaskListKind // sticky taskList has different process in persistence
+		config           *taskListConfig
+		db               *taskListDB
+		engine           *matchingEngineImpl
+		taskWriter       *taskWriter
+		taskReader       *taskReader // reads tasks from db and async matches it with poller
+		taskGC           *taskGC
+		taskAckManager   ackManager   // tracks ackLevel for delivered messages
+		matcher          *TaskMatcher // for matching a task producer with a poller
+		namespaceCache   cache.NamespaceCache
+		logger           log.Logger
+		metricsClient    metrics.Client
+		namespaceValue   atomic.Value
+		metricScopeValue atomic.Value // namespace/tasklist tagged metric scope
 		// pollerHistory stores poller which poll from this tasklist in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
@@ -146,12 +146,14 @@ func newTaskListManager(
 	}
 
 	db := newTaskListDB(e.taskManager, primitives.MustParseUUID(taskList.namespaceID), taskList.name, taskList.taskType, int32(taskListKind), e.logger)
+
 	tlMgr := &taskListManagerImpl{
 		namespaceCache: e.namespaceCache,
 		metricsClient:  e.metricsClient,
 		engine:         e,
 		shutdownCh:     make(chan struct{}),
 		taskListID:     taskList,
+		taskListKind:   taskListKind,
 		logger: e.logger.WithTags(tag.WorkflowTaskListName(taskList.name),
 			tag.WorkflowTaskListType(taskList.taskType)),
 		db:                  db,
@@ -160,18 +162,27 @@ func newTaskListManager(
 		config:              taskListConfig,
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
-		taskListKind:        int(taskListKind),
 	}
+
 	tlMgr.namespaceValue.Store("")
-	tlMgr.namespaceScopeValue.Store(e.metricsClient.Scope(metrics.MatchingTaskListMgrScope, metrics.NamespaceUnknownTag()))
-	tlMgr.tryInitNamespaceAndScope()
+	if tlMgr.metricScope() == nil { // namespace name lookup failed
+		// metric scope to use when namespace lookup fails
+		tlMgr.metricScopeValue.Store(newPerTaskListScope(
+			"",
+			tlMgr.taskListID.name,
+			tlMgr.taskListKind,
+			e.metricsClient,
+			metrics.MatchingTaskListMgrScope,
+		))
+	}
+
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
 	var fwdr *Forwarder
 	if tlMgr.isFowardingAllowed(taskList, taskListKind) {
-		fwdr = newForwarder(&taskListConfig.forwarderConfig, taskList, taskListKind, e.matchingClient, tlMgr.namespaceScope)
+		fwdr = newForwarder(&taskListConfig.forwarderConfig, taskList, taskListKind, e.matchingClient)
 	}
-	tlMgr.matcher = newTaskMatcher(taskListConfig, fwdr, tlMgr.namespaceScope)
+	tlMgr.matcher = newTaskMatcher(taskListConfig, fwdr, tlMgr.metricScope)
 	tlMgr.startWG.Add(1)
 	return tlMgr, nil
 }
@@ -428,10 +439,10 @@ func (c *taskListManagerImpl) renewLeaseWithRetry() (taskListState, error) {
 		newState, err = c.db.RenewLease()
 		return
 	}
-	c.namespaceScope().IncCounter(metrics.LeaseRequestCounter)
+	c.metricScope().IncCounter(metrics.LeaseRequestPerTaskListCounter)
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
-		c.namespaceScope().IncCounter(metrics.LeaseFailureCounter)
+		c.metricScope().IncCounter(metrics.LeaseFailurePerTaskListCounter)
 		c.engine.unloadTaskList(c.taskListID)
 		return newState, err
 	}
@@ -477,7 +488,7 @@ func (c *taskListManagerImpl) executeWithRetry(
 	})
 
 	if _, ok := err.(*persistence.ConditionFailedError); ok {
-		c.namespaceScope().IncCounter(metrics.ConditionFailedErrorCounter)
+		c.metricScope().IncCounter(metrics.ConditionFailedErrorPerTaskListCounter)
 		c.logger.Debug("Stopping task list due to persistence condition failure", tag.Error(err))
 		c.Stop()
 	}
@@ -530,13 +541,9 @@ func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind task
 	return !taskList.IsRoot() && kind != tasklistpb.TaskListKind_Sticky
 }
 
-func (c *taskListManagerImpl) namespaceScope() metrics.Scope {
-	scope := c.namespaceScopeValue.Load().(metrics.Scope)
-	if scope != nil {
-		return scope
-	}
+func (c *taskListManagerImpl) metricScope() metrics.Scope {
 	c.tryInitNamespaceAndScope()
-	return c.namespaceScopeValue.Load().(metrics.Scope)
+	return c.metricScopeValue.Load().(metrics.Scope)
 }
 
 func (c *taskListManagerImpl) namespace() string {
@@ -551,20 +558,25 @@ func (c *taskListManagerImpl) namespace() string {
 // reload from namespaceCache in case it got empty result during construction
 func (c *taskListManagerImpl) tryInitNamespaceAndScope() {
 	namespace := c.namespaceValue.Load().(string)
-	if len(namespace) == 0 {
-		namespace, scope := namespaceAndMetricScope(c.namespaceCache, primitives.MustParseUUID(c.taskListID.namespaceID), c.metricsClient, metrics.MatchingTaskListMgrScope)
-		if len(namespace) > 0 && scope != nil {
-			c.namespaceValue.Store(namespace)
-			c.namespaceScopeValue.Store(scope)
-		}
+	if namespace != "" {
+		return
 	}
-}
 
-// if namespaceCache return error, it will return "" as namespace and a scope without namespace tagged
-func namespaceAndMetricScope(cache cache.NamespaceCache, namespaceID primitives.UUID, client metrics.Client, scope int) (string, metrics.Scope) {
-	entry, err := cache.GetNamespaceByID(namespaceID.String())
+	entry, err := c.namespaceCache.GetNamespaceByID(c.taskListID.namespaceID)
 	if err != nil {
-		return "", nil
+		return
 	}
-	return entry.GetInfo().Name, client.Scope(scope, metrics.NamespaceTag(entry.GetInfo().Name))
+
+	namespace = entry.GetInfo().Name
+
+	scope := newPerTaskListScope(
+		namespace,
+		c.taskListID.name,
+		c.taskListKind,
+		c.metricsClient,
+		metrics.MatchingTaskListMgrScope,
+	)
+
+	c.metricScopeValue.Store(scope)
+	c.namespaceValue.Store(namespace)
 }

@@ -56,6 +56,8 @@ type (
 
 	namespaceUnknownTag struct{}
 
+	taskListUnknownTag struct{}
+
 	instanceTag struct {
 		value string
 	}
@@ -106,6 +108,21 @@ func NamespaceUnknownTag() Tag {
 	return namespaceUnknownTag{}
 }
 
+// Key returns the key of the tasklist unknown tag
+func (d taskListUnknownTag) Key() string {
+	return namespace
+}
+
+// Value returns the value of the tasklist unknown tag
+func (d taskListUnknownTag) Value() string {
+	return unknownValue
+}
+
+// TaskListUnknownTag returns a new tasklist:unknown tag-value
+func TaskListUnknownTag() Tag {
+	return taskListUnknownTag{}
+}
+
 // Key returns the key of the namespace unknown tag
 func (d namespaceUnknownTag) Key() string {
 	return namespace
@@ -154,7 +171,7 @@ func TaskListTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return taskListTag{value}
+	return taskListTag{sanitizer.Value(value)}
 }
 
 // Key returns the key of the task list tag
