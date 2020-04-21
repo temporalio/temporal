@@ -98,7 +98,8 @@ func NewVersionChecker() VersionChecker {
 			rawHistoryQuery: mustNewConstraint(fmt.Sprintf(">=%v", GoWorkerRawHistoryQueryVersion)),
 		},
 		JavaSDK: {
-			stickyQuery: mustNewConstraint(fmt.Sprintf(">=%v", JavaWorkerStickyQueryVersion)),
+			stickyQuery:     mustNewConstraint(fmt.Sprintf(">=%v", JavaWorkerStickyQueryVersion)),
+			rawHistoryQuery: mustNewConstraint(fmt.Sprintf(">=%v", JavaWorkerRawHistoryQueryVersion)),
 		},
 		CLI: {
 			rawHistoryQuery: mustNewConstraint(fmt.Sprintf(">=%v", CLIRawHistoryQueryVersion)),
