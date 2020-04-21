@@ -367,8 +367,8 @@ func (t *timerQueueProcessorBase) getTimerTaskType(
 		return "ActivityTimeout"
 	case persistence.TaskTypeDecisionTimeout:
 		return "DecisionTimeout"
-	case persistence.TaskTypeWorkflowTimeout:
-		return "WorkflowTimeout"
+	case persistence.TaskTypeWorkflowRunTimeout:
+		return "WorkflowRunTimeout"
 	case persistence.TaskTypeDeleteHistoryEvent:
 		return "DeleteHistoryEvent"
 	case persistence.TaskTypeActivityRetryTimer:
@@ -399,7 +399,7 @@ func (t *timerQueueProcessorBase) getTimerTaskMetricScope(
 			return metrics.TimerActiveTaskUserTimerScope
 		}
 		return metrics.TimerStandbyTaskUserTimerScope
-	case persistence.TaskTypeWorkflowTimeout:
+	case persistence.TaskTypeWorkflowRunTimeout:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowTimeoutScope
 		}

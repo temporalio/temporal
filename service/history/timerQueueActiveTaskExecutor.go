@@ -95,7 +95,7 @@ func (t *timerQueueActiveTaskExecutor) execute(
 		return t.executeActivityTimeoutTask(timerTask)
 	case persistence.TaskTypeDecisionTimeout:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case persistence.TaskTypeWorkflowTimeout:
+	case persistence.TaskTypeWorkflowRunTimeout:
 		return t.executeWorkflowTimeoutTask(timerTask)
 	case persistence.TaskTypeActivityRetryTimer:
 		return t.executeActivityRetryTimerTask(timerTask)

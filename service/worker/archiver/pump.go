@@ -54,7 +54,7 @@ type (
 		timeout       time.Duration
 		requestLimit  int
 		requestCh     workflow.Channel
-		signalCh      workflow.Channel
+		signalCh      workflow.ReceiveChannel
 	}
 )
 
@@ -67,7 +67,7 @@ func NewPump(
 	timeout time.Duration,
 	requestLimit int,
 	requestCh workflow.Channel,
-	signalCh workflow.Channel,
+	signalCh workflow.ReceiveChannel,
 ) Pump {
 	return &pump{
 		ctx:           ctx,
@@ -120,7 +120,7 @@ func (p *pump) Run() PumpResult {
 		}
 		finished = true
 	})
-	selector.AddReceive(p.signalCh, func(ch workflow.Channel, more bool) {
+	selector.AddReceive(p.signalCh, func(ch workflow.ReceiveChannel, more bool) {
 		if !more {
 			p.logger.Error("signal channel channel closed unexpectedly")
 			p.metricsClient.IncCounter(metrics.ArchiverPumpScope, metrics.ArchiverPumpSignalChannelClosedCount)

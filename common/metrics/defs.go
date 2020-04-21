@@ -1787,7 +1787,8 @@ const (
 	QueryRegistryInvalidStateCount
 	WorkerNotSupportsConsistentQueryCount
 	DecisionStartToCloseTimeoutOverrideCount
-	WorkflowExecutionStartToCloseTimeoutOverrideCount
+	WorkflowRunTimeoutOverrideCount
+	WorkflowExecutionTimeoutOverrideCount
 	ReplicationTaskCleanupCount
 	ReplicationTaskCleanupFailure
 	MutableStateChecksumMismatch
@@ -2136,7 +2137,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		QueryRegistryInvalidStateCount:                    {metricName: "query_registry_invalid_state", metricType: Counter},
 		WorkerNotSupportsConsistentQueryCount:             {metricName: "worker_not_supports_consistent_query", metricType: Counter},
 		DecisionStartToCloseTimeoutOverrideCount:          {metricName: "decision_start_to_close_timeout_overrides", metricType: Counter},
-		WorkflowExecutionStartToCloseTimeoutOverrideCount: {metricName: "workflow_execution_start_to_close_timeout_overrides", metricType: Counter},
+		WorkflowRunTimeoutOverrideCount:                   {metricName: "workflow_run_timeout_overrides", metricType: Counter},
+		WorkflowExecutionTimeoutOverrideCount:             {metricName: "workflow_execution_timeout_overrides", metricType: Counter},
 		ReplicationTaskCleanupCount:                       {metricName: "replication_task_cleanup_count", metricType: Counter},
 		ReplicationTaskCleanupFailure:                     {metricName: "replication_task_cleanup_failed", metricType: Counter},
 		MutableStateChecksumMismatch:                      {metricName: "mutable_state_checksum_mismatch", metricType: Counter},

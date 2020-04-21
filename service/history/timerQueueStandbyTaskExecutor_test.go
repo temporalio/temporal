@@ -935,7 +935,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
-		TaskType:            persistence.TaskTypeWorkflowTimeout,
+		TaskType:            persistence.TaskTypeWorkflowRunTimeout,
 		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 	}
@@ -999,7 +999,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
-		TaskType:            persistence.TaskTypeWorkflowTimeout,
+		TaskType:            persistence.TaskTypeWorkflowRunTimeout,
 		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 	}

@@ -133,34 +133,6 @@ func (c *clientImpl) GetWorkflowExecutionHistory(
 	return client.GetWorkflowExecutionHistory(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
-}
-
-func (c *clientImpl) PollForWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.PollForWorkflowExecutionRawHistoryRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.PollForWorkflowExecutionRawHistoryResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.PollForWorkflowExecutionRawHistory(ctx, request, opts...)
-}
-
 func (c *clientImpl) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,

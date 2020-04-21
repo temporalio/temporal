@@ -1889,7 +1889,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddDecisionTaskRequest(
 	}
 	taskList := &tasklistpb.TaskList{Name: task.TaskList}
 	executionInfo := mutableState.GetExecutionInfo()
-	timeout := executionInfo.WorkflowTimeout
+	timeout := executionInfo.WorkflowRunTimeout
 	if mutableState.GetExecutionInfo().TaskList != task.TaskList {
 		taskList.Kind = tasklistpb.TaskListKind_Sticky
 		timeout = executionInfo.StickyScheduleToStartTimeout
@@ -1925,7 +1925,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 		WorkflowTypeName:   executionInfo.WorkflowTypeName,
 		StartTimestamp:     startEvent.GetTimestamp(),
 		ExecutionTimestamp: executionTimestamp.UnixNano(),
-		WorkflowTimeout:    int64(executionInfo.WorkflowTimeout),
+		WorkflowTimeout:    int64(executionInfo.WorkflowRunTimeout),
 		TaskID:             task.GetTaskId(),
 	}
 }
@@ -2050,7 +2050,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttribu
 		Execution:        *execution,
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   startEvent.GetTimestamp(),
-		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
+		WorkflowTimeout:  int64(executionInfo.WorkflowRunTimeout),
 		TaskID:           task.GetTaskId(),
 	}
 }

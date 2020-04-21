@@ -1217,8 +1217,8 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfiguration: &executionpb.WorkflowExecutionConfiguration{
 			TaskList:                            &tasklistpb.TaskList{Name: executionInfo.TaskList},
-			ExecutionStartToCloseTimeoutSeconds: executionInfo.WorkflowTimeout,
-			TaskStartToCloseTimeoutSeconds:      executionInfo.DecisionStartToCloseTimeout,
+			ExecutionStartToCloseTimeoutSeconds: executionInfo.WorkflowRunTimeout,
+			TaskStartToCloseTimeoutSeconds:      executionInfo.WorkflowTaskTimeout,
 		},
 		WorkflowExecutionInfo: &executionpb.WorkflowExecutionInfo{
 			Execution: &executionpb.WorkflowExecution{
@@ -2603,11 +2603,14 @@ func validateStartWorkflowExecutionRequest(
 	if len(request.GetRequestId()) == 0 {
 		return serviceerror.NewInvalidArgument("Missing request ID.")
 	}
-	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("Invalid ExecutionStartToCloseTimeoutSeconds.")
+	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowExecutionTimeoutSeconds.")
 	}
-	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("Invalid TaskStartToCloseTimeoutSeconds.")
+	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeoutSeconds.")
+	}
+	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeoutSeconds.")
 	}
 	if request.TaskList == nil || request.TaskList.GetName() == "" {
 		return serviceerror.NewInvalidArgument("Missing Tasklist.")
@@ -2638,21 +2641,21 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 ) {
 	namespace := namespaceEntry.GetInfo().Name
 
-	executionStartToCloseTimeoutSeconds := request.GetExecutionStartToCloseTimeoutSeconds()
-	if executionStartToCloseTimeoutSeconds == 0 {
-		executionStartToCloseTimeoutSeconds = convert.Int32Ceil(e.config.DefaultExecutionStartToCloseTimeout(namespace).Seconds())
+	runTimeoutSeconds := request.GetWorkflowRunTimeoutSeconds()
+	if runTimeoutSeconds == 0 {
+		runTimeoutSeconds = convert.Int32Ceil(e.config.DefaultWorkflowRunTimeout(namespace).Seconds())
 	}
-	maxWorkflowExecutionTimeout := convert.Int32Ceil(e.config.MaxExecutionStartToCloseTimeout(namespace).Seconds())
+	maxWorkflowRunTimeout := convert.Int32Ceil(e.config.MaxWorkflowRunTimeout(namespace).Seconds())
 
-	if executionStartToCloseTimeoutSeconds > maxWorkflowExecutionTimeout {
-		executionStartToCloseTimeoutSeconds = maxWorkflowExecutionTimeout
+	if runTimeoutSeconds > maxWorkflowRunTimeout {
+		runTimeoutSeconds = maxWorkflowRunTimeout
 	}
-	if executionStartToCloseTimeoutSeconds != request.GetExecutionStartToCloseTimeoutSeconds() {
-		request.ExecutionStartToCloseTimeoutSeconds = executionStartToCloseTimeoutSeconds
+	if runTimeoutSeconds != request.GetWorkflowRunTimeoutSeconds() {
+		request.WorkflowRunTimeoutSeconds = runTimeoutSeconds
 		e.metricsClient.Scope(
 			metricsScope,
 			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.WorkflowExecutionStartToCloseTimeoutOverrideCount)
+		).IncCounter(metrics.WorkflowRunTimeoutOverrideCount)
 	}
 
 	maxDecisionStartToCloseTimeoutSeconds := convert.Int32Ceil(e.config.MaxDecisionTaskStartToCloseTimeout(namespace).Seconds())
@@ -2662,7 +2665,7 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 		taskStartToCloseTimeoutSecs = convert.Int32Ceil(e.config.DefaultDecisionTaskStartToCloseTimeout(namespace).Seconds())
 	}
 	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, maxDecisionStartToCloseTimeoutSeconds)
-	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, executionStartToCloseTimeoutSeconds)
+	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, runTimeoutSeconds)
 
 	if taskStartToCloseTimeoutSecs != request.GetTaskStartToCloseTimeoutSeconds() {
 		request.TaskStartToCloseTimeoutSeconds = taskStartToCloseTimeoutSecs

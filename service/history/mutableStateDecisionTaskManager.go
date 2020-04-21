@@ -181,7 +181,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateTransientDecisionTaskSche
 		ScheduleID:         m.msb.GetNextEventID(),
 		StartedID:          common.EmptyEventID,
 		RequestID:          emptyUUID,
-		DecisionTimeout:    m.msb.GetExecutionInfo().DecisionStartToCloseTimeout,
+		DecisionTimeout:    m.msb.GetExecutionInfo().WorkflowTaskTimeout,
 		TaskList:           m.msb.GetExecutionInfo().TaskList,
 		Attempt:            m.msb.GetExecutionInfo().DecisionAttempt,
 		ScheduledTimestamp: m.msb.timeSource.Now().UnixNano(),
@@ -311,7 +311,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 		//  if we can use a new field(LastDecisionUpdateTimestamp), then we could get rid of it.
 		m.msb.ClearStickyness()
 	}
-	startToCloseTimeoutSeconds := m.msb.executionInfo.DecisionStartToCloseTimeout
+	startToCloseTimeoutSeconds := m.msb.executionInfo.WorkflowTaskTimeout
 
 	// Flush any buffered events before creating the decision, otherwise it will result in invalid IDs for transient
 	// decision and will cause in timeout processing to not work for transient decisions

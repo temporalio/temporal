@@ -1080,7 +1080,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   event.GetTimestamp(),
-		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
+		WorkflowTimeout:  int64(executionInfo.WorkflowRunTimeout),
 		TaskID:           taskID,
 	}).Return(nil).Once()
 
@@ -1142,7 +1142,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   event.GetTimestamp(),
-		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
+		WorkflowTimeout:  int64(executionInfo.WorkflowRunTimeout),
 		TaskID:           taskID,
 	}).Return(nil).Once()
 

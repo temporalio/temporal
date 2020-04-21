@@ -792,7 +792,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
 	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
@@ -2073,7 +2073,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
 	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
@@ -3360,7 +3360,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
 	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
@@ -4047,7 +4047,7 @@ func (s *resetorSuite) TestApplyReset() {
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
 	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 

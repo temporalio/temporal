@@ -1237,7 +1237,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Fire() {
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
-		TaskType:            persistence.TaskTypeWorkflowTimeout,
+		TaskType:            persistence.TaskTypeWorkflowRunTimeout,
 		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 	}
@@ -1299,7 +1299,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
-		TaskType:            persistence.TaskTypeWorkflowTimeout,
+		TaskType:            persistence.TaskTypeWorkflowRunTimeout,
 		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 	}
@@ -1358,7 +1358,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cr
 		WorkflowId:          execution.GetWorkflowId(),
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
-		TaskType:            persistence.TaskTypeWorkflowTimeout,
+		TaskType:            persistence.TaskTypeWorkflowRunTimeout,
 		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 	}

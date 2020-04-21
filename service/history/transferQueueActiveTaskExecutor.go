@@ -192,7 +192,7 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	workflowTimeout := executionInfo.WorkflowTimeout
+	workflowTimeout := executionInfo.WorkflowRunTimeout
 	decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
 
 	// NOTE: previously this section check whether mutable state has enabled
@@ -672,7 +672,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	workflowTimeout := executionInfo.WorkflowTimeout
+	workflowTimeout := executionInfo.WorkflowRunTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {

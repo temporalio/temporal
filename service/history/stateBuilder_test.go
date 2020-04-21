@@ -162,8 +162,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 	}
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		WorkflowTimeout: 100,
-		CronSchedule:    cronSchedule,
+		WorkflowRunTimeout: 100,
+		CronSchedule:       cronSchedule,
 	}
 
 	now := time.Now()
@@ -209,8 +209,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	}
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		WorkflowTimeout: 100,
-		CronSchedule:    cronSchedule,
+		WorkflowRunTimeout: 100,
+		CronSchedule:       cronSchedule,
 	}
 
 	now := time.Now()

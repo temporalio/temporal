@@ -199,8 +199,10 @@ var keys = map[Key]string{
 	EmitShardDiffLog:                                      "history.emitShardDiffLog",
 	HistoryThrottledLogRPS:                                "history.throttledLogRPS",
 	StickyTTL:                                             "history.stickyTTL",
-	DefaultExecutionStartToCloseTimeout:                   "history.defaultWorkflowExecutionTimeout",
-	MaxExecutionStartToCloseTimeout:                       "history.maximumWorkflowExecutionTimeout",
+	DefaultWorkflowExecutionTimeout:                       "history.defaultWorkflowExecutionTimeout",
+	DefaultWorkflowRunTimeout:                             "history.defaultWorkflowRunTimeout",
+	MaxWorkflowExecutionTimeout:                           "history.maximumWorkflowExecutionTimeout",
+	MaxWorkflowRunTimeout:                                 "history.maximumWorkflowRunTimeout",
 	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
 	DefaultDecisionTaskStartToCloseTimeout:                "history.defaultDecisionTaskStartToCloseTimeout",
 	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
@@ -559,10 +561,14 @@ const (
 	StickyTTL
 	// DecisionHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
-	// DefaultExecutionStartToCloseTimeout for a workflow execution
-	DefaultExecutionStartToCloseTimeout
-	// Maximum allowed workflow execution timeout
-	MaxExecutionStartToCloseTimeout
+	// DefaultWorkflowExecutionTimeout for a workflow execution
+	DefaultWorkflowExecutionTimeout
+	// DefaultWorkflowRunTimeout for a workflow run
+	DefaultWorkflowRunTimeout
+	// MaxWorkflowExecutionTimeout maximum allowed workflow execution timeout
+	MaxWorkflowExecutionTimeout
+	// MaxWorkflowRunTimeout maximum allowed workflow run timeout
+	MaxWorkflowRunTimeout
 	// DefaultDecisionTaskStartToCloseTimeout for a decision task
 	DefaultDecisionTaskStartToCloseTimeout
 

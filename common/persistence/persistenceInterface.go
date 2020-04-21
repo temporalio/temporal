@@ -217,8 +217,9 @@ type (
 		CompletionEvent                    *serialization.DataBlob
 		TaskList                           string
 		WorkflowTypeName                   string
-		WorkflowTimeout                    int32
-		DecisionStartToCloseTimeout        int32
+		WorkflowRunTimeout                 int32
+		WorkflowExecutionTimeout           int32
+		WorkflowTaskTimeout                int32
 		ExecutionContext                   []byte
 		State                              int
 		Status                             executionpb.WorkflowExecutionStatus
@@ -626,10 +627,10 @@ type (
 
 	// InternalCreateNamespaceRequest is used to create the namespace
 	InternalCreateNamespaceRequest struct {
-		ID					primitives.UUID
-		Name                string
-		Namespace           *serialization.DataBlob
-		IsGlobal            bool
+		ID        primitives.UUID
+		Name      string
+		Namespace *serialization.DataBlob
+		IsGlobal  bool
 	}
 
 	// InternalGetNamespaceResponse is the response for GetNamespace
@@ -641,7 +642,7 @@ type (
 
 	// InternalUpdateNamespaceRequest is used to update namespace
 	InternalUpdateNamespaceRequest struct {
-		Id					primitives.UUID
+		Id                  primitives.UUID
 		Name                string
 		Namespace           *serialization.DataBlob
 		NotificationVersion int64
@@ -734,8 +735,9 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		WorkflowId:                              executionInfo.WorkflowID,
 		TaskList:                                executionInfo.TaskList,
 		WorkflowTypeName:                        executionInfo.WorkflowTypeName,
-		WorkflowTimeoutSeconds:                  executionInfo.WorkflowTimeout,
-		DecisionTaskTimeoutSeconds:              executionInfo.DecisionStartToCloseTimeout,
+		WorkflowRunTimeoutSeconds:               executionInfo.WorkflowRunTimeout,
+		WorkflowExecutionTimeoutSeconds:         executionInfo.WorkflowExecutionTimeout,
+		WorkflowTaskTimeoutSeconds:              executionInfo.WorkflowTaskTimeout,
 		ExecutionContext:                        executionInfo.ExecutionContext,
 		LastFirstEventId:                        executionInfo.LastFirstEventID,
 		LastEventTaskId:                         executionInfo.LastEventTaskID,
@@ -823,8 +825,8 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		NextEventID:                        nextEventID,
 		TaskList:                           info.GetTaskList(),
 		WorkflowTypeName:                   info.GetWorkflowTypeName(),
-		WorkflowTimeout:                    info.GetWorkflowTimeoutSeconds(),
-		DecisionStartToCloseTimeout:        info.GetDecisionTaskTimeoutSeconds(),
+		WorkflowRunTimeout:                 info.GetWorkflowRunTimeoutSeconds(),
+		WorkflowTaskTimeout:                info.GetWorkflowTaskTimeoutSeconds(),
 		State:                              int(state.GetState()),
 		Status:                             state.GetStatus(),
 		LastFirstEventID:                   info.GetLastFirstEventId(),
