@@ -61,11 +61,13 @@ type (
 )
 
 var (
-	testSchedulerWeights = map[int]dynamicconfig.IntPropertyFn{
-		0: dynamicconfig.GetIntPropertyFn(3),
-		1: dynamicconfig.GetIntPropertyFn(2),
-		2: dynamicconfig.GetIntPropertyFn(1),
-	}
+	testSchedulerWeights = dynamicconfig.GetMapPropertyFn(
+		map[string]interface{}{
+			"0": 3,
+			"1": 2,
+			"2": 1,
+		},
+	)
 )
 
 func TestWeightedRoundRobinTaskSchedulerSuite(t *testing.T) {
@@ -157,7 +159,10 @@ func (s *weightedRoundRobinTaskSchedulerSuite) TestTrySubmit() {
 }
 
 func (s *weightedRoundRobinTaskSchedulerSuite) TestDispatcher_SubmitWithNoError() {
-	numPriorities := len(testSchedulerWeights)
+	weights, err := convertWeightsFromDynamicConfig(testSchedulerWeights())
+	s.NoError(err)
+
+	numPriorities := len(weights)
 	tasks := [][]*MockPriorityTask{}
 	var taskWG sync.WaitGroup
 	for i := 0; i != numPriorities; i++ {
@@ -169,12 +174,13 @@ func (s *weightedRoundRobinTaskSchedulerSuite) TestDispatcher_SubmitWithNoError(
 	tasksPerRound := []int{6, 5, 2, 1, 1}
 	round := 0
 	mockFn := func(_ Task) error {
-		numSubmittedTask += 1
+		numSubmittedTask++
 		if numSubmittedTask == tasksPerRound[round] {
 			round++
 			numSubmittedTask = 0
-			for priority, weightFn := range testSchedulerWeights {
-				expectedRemainingTasksNum := taskPerPriority - round*weightFn()
+
+			for priority, weight := range weights {
+				expectedRemainingTasksNum := taskPerPriority - round*weight
 				if expectedRemainingTasksNum < 0 {
 					expectedRemainingTasksNum = 0
 				}
@@ -186,7 +192,7 @@ func (s *weightedRoundRobinTaskSchedulerSuite) TestDispatcher_SubmitWithNoError(
 		return nil
 	}
 
-	for priority, _ := range testSchedulerWeights {
+	for priority := range weights {
 		for i := 0; i != taskPerPriority; i++ {
 			mockTask := NewMockPriorityTask(s.controller)
 			mockTask.EXPECT().Priority().Return(priority).AnyTimes()
@@ -246,7 +252,7 @@ func (s *weightedRoundRobinTaskSchedulerSuite) newTestWeightedRoundRobinTaskSche
 ) *weightedRoundRobinTaskSchedulerImpl {
 	scheduler, err := NewWeightedRoundRobinTaskScheduler(
 		loggerimpl.NewDevelopmentForTest(s.Suite),
-		metrics.NewClient(tally.NoopScope, metrics.Common).Scope(metrics.TaskSchedulerScope),
+		metrics.NewClient(tally.NoopScope, metrics.Common),
 		options,
 	)
 	s.NoError(err)

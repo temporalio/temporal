@@ -296,11 +296,13 @@ func connectToCassandra(c *cli.Context) *gocql.Session {
 	}
 
 	clusterCfg, err := cassandra.NewCassandraCluster(cassandraConfig, 10)
-	clusterCfg.SerialConsistency = gocql.LocalSerial
-	clusterCfg.NumConns = 20
 	if err != nil {
 		ErrorAndExit("connect to Cassandra failed", err)
 	}
+	clusterCfg.SerialConsistency = gocql.LocalSerial
+	clusterCfg.NumConns = 20
+	clusterCfg.PoolConfig.HostSelectionPolicy = nil
+
 	session, err := clusterCfg.CreateSession()
 	if err != nil {
 		ErrorAndExit("connect to Cassandra failed", err)
@@ -369,18 +371,23 @@ func AdminGetShardID(c *cli.Context) {
 func AdminRemoveTask(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
 
-	sid := getRequiredIntOption(c, FlagShardID)
-	taskID := getRequiredInt64Option(c, FlagRemoveTaskID)
-	typeID := getRequiredIntOption(c, FlagRemoveTypeID)
+	shardID := getRequiredIntOption(c, FlagShardID)
+	taskID := getRequiredInt64Option(c, FlagTaskID)
+	typeID := getRequiredIntOption(c, FlagTaskType)
+	var visibilityTimestamp int64
+	if common.TaskType(typeID) == common.TaskTypeTimer {
+		visibilityTimestamp = getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
+	}
 
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	req := &adminservice.RemoveTaskRequest{}
-
-	req.ShardId = int32(sid)
-	req.TaskId = taskID
-	req.Type = int32(typeID)
+	req := &adminservice.RemoveTaskRequest{
+		ShardId:             int32(shardID),
+		Type:                int32(typeID),
+		TaskId:              taskID,
+		VisibilityTimestamp: visibilityTimestamp,
+	}
 
 	_, err := adminClient.RemoveTask(ctx, req)
 	if err != nil {

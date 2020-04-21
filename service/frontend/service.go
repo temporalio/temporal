@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -54,6 +55,7 @@ import (
 type Config struct {
 	NumHistoryShards                int
 	PersistenceMaxQPS               dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS         dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableVisibilitySampling        dynamicconfig.BoolPropertyFn
 	EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn
@@ -63,11 +65,13 @@ type Config struct {
 	ESIndexMaxResultWindow          dynamicconfig.IntPropertyFn
 	HistoryMaxPageSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RPS                             dynamicconfig.IntPropertyFn
-	NamespaceRPS                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceRPSPerInstance      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceRPS              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                dynamicconfig.IntPropertyFn
 	EnableClientVersionCheck        dynamicconfig.BoolPropertyFn
 	MinRetentionDays                dynamicconfig.IntPropertyFn
 	DisallowQuery                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration           dynamicconfig.DurationPropertyFn
 
 	// Persistence settings
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
@@ -96,6 +100,8 @@ type Config struct {
 
 	// VisibilityArchival system protection
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
+
+	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -103,6 +109,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 	return &Config{
 		NumHistoryShards:                       numHistoryShards,
 		PersistenceMaxQPS:                      dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
+		PersistenceGlobalMaxQPS:                dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
 		VisibilityMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
 		EnableVisibilitySampling:               dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
 		EnableReadFromClosedExecutionV2:        dc.GetBoolProperty(dynamicconfig.EnableReadFromClosedExecutionV2, false),
@@ -112,7 +119,8 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		ESIndexMaxResultWindow:                 dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
 		HistoryMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
-		NamespaceRPS:                           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendNamespaceRPS, 1200),
+		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 1200),
+		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		HistoryMgrNumConns:                     dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
 		MaxBadBinaries:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
@@ -122,6 +130,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		BlobSizeLimitError:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
 		BlobSizeLimitWarn:                      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 256*1024),
 		ThrottledLogRPS:                        dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
+		ShutdownDrainDuration:                  dc.GetDurationProperty(dynamicconfig.FrontendShutdownDrainDuration, 0),
 		EnableNamespaceNotActiveAutoForwarding: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableNamespaceNotActiveAutoForwarding, true),
 		EnableClientVersionCheck:               dc.GetBoolProperty(dynamicconfig.EnableClientVersionCheck, false),
 		ValidSearchAttributes:                  dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
@@ -131,6 +140,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		MinRetentionDays:                       dc.GetIntProperty(dynamicconfig.MinRetentionDays, namespace.MinRetentionDays),
 		VisibilityArchivalQueryMaxPageSize:     dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
 		DisallowQuery:                          dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisallowQuery, false),
+		SendRawWorkflowHistory:                 dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
 	}
 }
 
@@ -142,6 +152,7 @@ type Service struct {
 	config *Config
 	params *resource.BootstrapParams
 
+	handler      Handler
 	adminHandler *AdminHandler
 	server       *grpc.Server
 }
@@ -191,6 +202,7 @@ func NewService(
 		params,
 		common.FrontendServiceName,
 		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.ThrottledLogRPS,
 		visibilityManagerInitializer,
 	)
@@ -237,12 +249,14 @@ func (s *Service) Start() {
 	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
-	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
-	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
-	workflowNilCheckHandler := NewWorkflowNilCheckHandler(accessControlledWorkflowHandler)
+	s.handler = NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
+	if s.params.Authorizer != nil {
+		s.handler = NewAccessControlledHandlerImpl(s.handler, s.params.Authorizer)
+	}
+	workflowNilCheckHandler := NewWorkflowNilCheckHandler(s.handler)
 
 	workflowservice.RegisterWorkflowServiceServer(s.server, workflowNilCheckHandler)
-	healthpb.RegisterHealthServer(s.server, accessControlledWorkflowHandler)
+	healthpb.RegisterHealthServer(s.server, s.handler)
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
 	adminNilCheckHandler := NewAdminNilCheckHandler(s.adminHandler)
@@ -266,11 +280,29 @@ func (s *Service) Stop() {
 		return
 	}
 
-	s.server.GracefulStop()
+	// initiate graceful shutdown:
+	// 1. Fail rpc health check, this will cause client side load balancer to stop forwarding requests to this node
+	// 2. wait for failure detection time
+	// 3. stop taking new requests by returning InternalServiceError
+	// 4. Wait for a second
+	// 5. Stop everything forcefully and return
+
+	requestDrainTime := common.MinDuration(time.Second, s.config.ShutdownDrainDuration())
+	failureDetectionTime := common.MaxDuration(0, s.config.ShutdownDrainDuration()-requestDrainTime)
+
+	s.GetLogger().Info("ShutdownHandler: Updating rpc health status to ShuttingDown")
+	s.handler.UpdateHealthStatus(HealthStatusShuttingDown)
+
+	s.GetLogger().Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
+	time.Sleep(failureDetectionTime)
 
 	s.adminHandler.Stop()
-	s.Resource.Stop()
 
+	s.GetLogger().Info("ShutdownHandler: Draining traffic")
+	time.Sleep(requestDrainTime)
+
+	s.server.GracefulStop()
+	s.Resource.Stop()
 	s.params.Logger.Info("frontend stopped")
 }
 

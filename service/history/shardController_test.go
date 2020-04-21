@@ -456,7 +456,7 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Return().Times(1)
 		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(differentHostInfo, nil).AnyTimes()
-		s.shardController.shardClosedCh <- shardID
+		s.shardController.shardClosedCallback(shardID, nil)
 	}
 
 	for w := 0; w < 10; w++ {
@@ -500,80 +500,6 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 	for shardID := 2; shardID < numShards; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Return().Times(1)
-		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).AnyTimes()
-	}
-	s.shardController.Stop()
-}
-
-func (s *shardControllerSuite) TestRingUpdated() {
-	numShards := 4
-	s.config.NumberOfShards = numShards
-	s.shardController = newShardController(s.mockResource, s.mockEngineFactory, s.config)
-	historyEngines := make(map[int]*MockEngine)
-	for shardID := 0; shardID < numShards; shardID++ {
-		mockEngine := NewMockEngine(s.controller)
-		historyEngines[shardID] = mockEngine
-		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
-	}
-
-	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
-	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
-	s.shardController.Start()
-
-	differentHostInfo := membership.NewHostInfo("another-host", nil)
-	for shardID := 0; shardID < 2; shardID++ {
-		mockEngine := historyEngines[shardID]
-		mockEngine.EXPECT().Stop().Times(1)
-		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(differentHostInfo, nil).AnyTimes()
-	}
-	s.mockServiceResolver.EXPECT().Lookup(string(2)).Return(s.hostInfo, nil).AnyTimes()
-	s.mockServiceResolver.EXPECT().Lookup(string(3)).Return(s.hostInfo, nil).AnyTimes()
-	s.shardController.membershipUpdateCh <- &membership.ChangedEvent{}
-
-	var workerWG sync.WaitGroup
-	for w := 0; w < 10; w++ {
-		workerWG.Add(1)
-		go func() {
-			for attempt := 0; attempt < 10; attempt++ {
-				for shardID := 2; shardID < numShards; shardID++ {
-					engine, err := s.shardController.getEngineForShard(shardID)
-					s.Nil(err)
-					s.NotNil(engine)
-					time.Sleep(20 * time.Millisecond)
-				}
-			}
-			workerWG.Done()
-		}()
-	}
-
-	for w := 0; w < 10; w++ {
-		workerWG.Add(1)
-		go func() {
-			shardLost := false
-			for attempt := 0; !shardLost && attempt < 10; attempt++ {
-				for shardID := 0; shardID < 2; shardID++ {
-					_, err := s.shardController.getEngineForShard(shardID)
-					if err != nil {
-						s.logger.Error("ShardLost", tag.Error(err))
-						shardLost = true
-					}
-					time.Sleep(20 * time.Millisecond)
-				}
-			}
-
-			s.True(shardLost)
-			workerWG.Done()
-		}()
-	}
-
-	workerWG.Wait()
-
-	s.mockServiceResolver.EXPECT().RemoveListener(shardControllerMembershipUpdateListenerName).Return(nil).AnyTimes()
-	for shardID := 2; shardID < numShards; shardID++ {
-		mockEngine := historyEngines[shardID]
-		mockEngine.EXPECT().Stop().Times(1)
 		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).AnyTimes()
 	}
 	s.shardController.Stop()

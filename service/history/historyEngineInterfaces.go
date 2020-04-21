@@ -68,7 +68,7 @@ type (
 		completeQueueTask(taskID int64)
 		getQueueAckLevel() int64
 		getQueueReadLevel() int64
-		updateQueueAckLevel()
+		updateQueueAckLevel() error
 	}
 
 	queueTaskInfo interface {
@@ -85,7 +85,7 @@ type (
 		task.PriorityTask
 		queueTaskInfo
 		GetQueueType() queueType
-		GetShardID() int
+		GetShard() ShardContext
 	}
 
 	queueTaskExecutor interface {
@@ -94,7 +94,7 @@ type (
 
 	queueTaskProcessor interface {
 		common.Daemon
-		StopShardProcessor(int)
+		StopShardProcessor(ShardContext)
 		Submit(queueTask) error
 		TrySubmit(queueTask) (bool, error)
 	}
@@ -125,7 +125,7 @@ type (
 		completeTimerTask(timerTask *persistenceblobs.TimerTaskInfo)
 		getAckLevel() timerKey
 		getReadLevel() timerKey
-		updateAckLevel()
+		updateAckLevel() error
 	}
 
 	historyEventNotifier interface {

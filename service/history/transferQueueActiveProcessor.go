@@ -30,6 +30,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -61,20 +62,25 @@ func newTransferQueueActiveProcessor(
 	matchingClient matching.Client,
 	historyClient history.Client,
 	taskAllocator taskAllocator,
+	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) *transferQueueActiveProcessorImpl {
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		BatchSize:                          config.TransferTaskBatchSize,
-		WorkerCount:                        config.TransferTaskWorkerCount,
-		MaxPollRPS:                         config.TransferProcessorMaxPollRPS,
-		MaxPollInterval:                    config.TransferProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:   config.TransferProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                  config.TransferProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		MaxRetryCount:                      config.TransferTaskMaxRetryCount,
-		MetricScope:                        metrics.TransferActiveQueueProcessorScope,
+		BatchSize:                           config.TransferTaskBatchSize,
+		WorkerCount:                         config.TransferTaskWorkerCount,
+		MaxPollRPS:                          config.TransferProcessorMaxPollRPS,
+		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
+		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
+		MaxRetryCount:                       config.TransferTaskMaxRetryCount,
+		RedispatchInterval:                  config.TransferProcessorRedispatchInterval,
+		RedispatchIntervalJitterCoefficient: config.TransferProcessorRedispatchIntervalJitterCoefficient,
+		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
+		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
+		MetricScope:                         metrics.TransferActiveQueueProcessorScope,
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
@@ -119,8 +125,46 @@ func newTransferQueueActiveProcessor(
 		),
 	}
 
-	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(currentClusterName), logger)
-	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, historyService.historyCache, logger)
+	queueAckMgr := newQueueAckMgr(
+		shard,
+		options,
+		processor,
+		shard.GetTransferClusterAckLevel(currentClusterName),
+		logger,
+	)
+
+	redispatchQueue := collection.NewConcurrentQueue()
+
+	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
+		return newTransferQueueTask(
+			shard,
+			taskInfo,
+			historyService.metricsClient.Scope(
+				getTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
+			),
+			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+			transferTaskFilter,
+			processor.taskExecutor,
+			redispatchQueue,
+			shard.GetTimeSource(),
+			options.MaxRetryCount,
+			queueAckMgr,
+		)
+	}
+
+	queueProcessorBase := newQueueProcessorBase(
+		currentClusterName,
+		shard,
+		options,
+		processor,
+		queueTaskProcessor,
+		queueAckMgr,
+		redispatchQueue,
+		historyService.historyCache,
+		transferQueueTaskInitializer,
+		logger,
+		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
+	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 
@@ -138,20 +182,25 @@ func newTransferQueueFailoverProcessor(
 	minLevel int64,
 	maxLevel int64,
 	taskAllocator taskAllocator,
+	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		BatchSize:                          config.TransferTaskBatchSize,
-		WorkerCount:                        config.TransferTaskWorkerCount,
-		MaxPollRPS:                         config.TransferProcessorFailoverMaxPollRPS,
-		MaxPollInterval:                    config.TransferProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:   config.TransferProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                  config.TransferProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		MaxRetryCount:                      config.TransferTaskMaxRetryCount,
-		MetricScope:                        metrics.TransferActiveQueueProcessorScope,
+		BatchSize:                           config.TransferTaskBatchSize,
+		WorkerCount:                         config.TransferTaskWorkerCount,
+		MaxPollRPS:                          config.TransferProcessorFailoverMaxPollRPS,
+		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
+		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
+		MaxRetryCount:                       config.TransferTaskMaxRetryCount,
+		RedispatchInterval:                  config.TransferProcessorRedispatchInterval,
+		RedispatchIntervalJitterCoefficient: config.TransferProcessorRedispatchIntervalJitterCoefficient,
+		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
+		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
+		MetricScope:                         metrics.TransferActiveQueueProcessorScope,
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	failoverUUID := uuid.New()
@@ -211,8 +260,46 @@ func newTransferQueueFailoverProcessor(
 		),
 	}
 
-	queueAckMgr := newQueueFailoverAckMgr(shard, options, processor, minLevel, logger)
-	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, historyService.historyCache, logger)
+	queueAckMgr := newQueueFailoverAckMgr(
+		shard,
+		options,
+		processor,
+		minLevel,
+		logger,
+	)
+
+	redispatchQueue := collection.NewConcurrentQueue()
+
+	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
+		return newTransferQueueTask(
+			shard,
+			taskInfo,
+			historyService.metricsClient.Scope(
+				getTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
+			),
+			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
+			transferTaskFilter,
+			processor.taskExecutor,
+			redispatchQueue,
+			shard.GetTimeSource(),
+			options.MaxRetryCount,
+			queueAckMgr,
+		)
+	}
+
+	queueProcessorBase := newQueueProcessorBase(
+		currentClusterName,
+		shard,
+		options,
+		processor,
+		queueTaskProcessor,
+		queueAckMgr,
+		redispatchQueue,
+		historyService.historyCache,
+		transferQueueTaskInitializer,
+		logger,
+		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
+	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 	return updateTransferAckLevel, processor
@@ -237,6 +324,6 @@ func (t *transferQueueActiveProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := t.getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), true)
+	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), true)
 	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
 }

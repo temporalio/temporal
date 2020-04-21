@@ -271,38 +271,38 @@ func (m *executionManagerImpl) DeserializeActivityInfos(
 			ScheduledEvent: scheduledEvent,
 			StartedEvent:   startedEvent,
 
-			Version:                        v.Version,
-			ScheduleID:                     v.ScheduleID,
-			ScheduledEventBatchID:          v.ScheduledEventBatchID,
-			ScheduledTime:                  v.ScheduledTime,
-			StartedID:                      v.StartedID,
-			StartedTime:                    v.StartedTime,
-			ActivityID:                     v.ActivityID,
-			RequestID:                      v.RequestID,
-			Details:                        v.Details,
-			ScheduleToStartTimeout:         v.ScheduleToStartTimeout,
-			ScheduleToCloseTimeout:         v.ScheduleToCloseTimeout,
-			StartToCloseTimeout:            v.StartToCloseTimeout,
-			HeartbeatTimeout:               v.HeartbeatTimeout,
-			CancelRequested:                v.CancelRequested,
-			CancelRequestID:                v.CancelRequestID,
-			LastHeartBeatUpdatedTime:       v.LastHeartBeatUpdatedTime,
-			TimerTaskStatus:                v.TimerTaskStatus,
-			Attempt:                        v.Attempt,
-			NamespaceID:                    v.NamespaceID.String(),
-			StartedIdentity:                v.StartedIdentity,
-			TaskList:                       v.TaskList,
-			HasRetryPolicy:                 v.HasRetryPolicy,
-			InitialInterval:                v.InitialInterval,
-			BackoffCoefficient:             v.BackoffCoefficient,
-			MaximumInterval:                v.MaximumInterval,
-			ExpirationTime:                 v.ExpirationTime,
-			MaximumAttempts:                v.MaximumAttempts,
-			NonRetriableErrors:             v.NonRetriableErrors,
-			LastFailureReason:              v.LastFailureReason,
-			LastWorkerIdentity:             v.LastWorkerIdentity,
-			LastFailureDetails:             v.LastFailureDetails,
-			LastHeartbeatTimeoutVisibility: v.LastHeartbeatTimeoutVisibility,
+			Version:                                 v.Version,
+			ScheduleID:                              v.ScheduleID,
+			ScheduledEventBatchID:                   v.ScheduledEventBatchID,
+			ScheduledTime:                           v.ScheduledTime,
+			StartedID:                               v.StartedID,
+			StartedTime:                             v.StartedTime,
+			ActivityID:                              v.ActivityID,
+			RequestID:                               v.RequestID,
+			Details:                                 v.Details,
+			ScheduleToStartTimeout:                  v.ScheduleToStartTimeout,
+			ScheduleToCloseTimeout:                  v.ScheduleToCloseTimeout,
+			StartToCloseTimeout:                     v.StartToCloseTimeout,
+			HeartbeatTimeout:                        v.HeartbeatTimeout,
+			CancelRequested:                         v.CancelRequested,
+			CancelRequestID:                         v.CancelRequestID,
+			LastHeartBeatUpdatedTime:                v.LastHeartBeatUpdatedTime,
+			TimerTaskStatus:                         v.TimerTaskStatus,
+			Attempt:                                 v.Attempt,
+			NamespaceID:                             v.NamespaceID.String(),
+			StartedIdentity:                         v.StartedIdentity,
+			TaskList:                                v.TaskList,
+			HasRetryPolicy:                          v.HasRetryPolicy,
+			InitialInterval:                         v.InitialInterval,
+			BackoffCoefficient:                      v.BackoffCoefficient,
+			MaximumInterval:                         v.MaximumInterval,
+			ExpirationTime:                          v.ExpirationTime,
+			MaximumAttempts:                         v.MaximumAttempts,
+			NonRetriableErrors:                      v.NonRetriableErrors,
+			LastFailureReason:                       v.LastFailureReason,
+			LastWorkerIdentity:                      v.LastWorkerIdentity,
+			LastFailureDetails:                      v.LastFailureDetails,
+			LastHeartbeatTimeoutVisibilityInSeconds: v.LastHeartbeatTimeoutVisibilityInSeconds,
 		}
 		newInfos[k] = a
 	}
@@ -390,40 +390,40 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(
 			return nil, err
 		}
 		i := &InternalActivityInfo{
-			Version:                        v.Version,
-			ScheduleID:                     v.ScheduleID,
-			ScheduledEventBatchID:          v.ScheduledEventBatchID,
-			ScheduledEvent:                 scheduledEvent,
-			ScheduledTime:                  v.ScheduledTime,
-			StartedID:                      v.StartedID,
-			StartedEvent:                   startedEvent,
-			StartedTime:                    v.StartedTime,
-			ActivityID:                     v.ActivityID,
-			RequestID:                      v.RequestID,
-			Details:                        v.Details,
-			ScheduleToStartTimeout:         v.ScheduleToStartTimeout,
-			ScheduleToCloseTimeout:         v.ScheduleToCloseTimeout,
-			StartToCloseTimeout:            v.StartToCloseTimeout,
-			HeartbeatTimeout:               v.HeartbeatTimeout,
-			CancelRequested:                v.CancelRequested,
-			CancelRequestID:                v.CancelRequestID,
-			LastHeartBeatUpdatedTime:       v.LastHeartBeatUpdatedTime,
-			TimerTaskStatus:                v.TimerTaskStatus,
-			Attempt:                        v.Attempt,
-			NamespaceID:                    primitives.MustParseUUID(v.NamespaceID),
-			StartedIdentity:                v.StartedIdentity,
-			TaskList:                       v.TaskList,
-			HasRetryPolicy:                 v.HasRetryPolicy,
-			InitialInterval:                v.InitialInterval,
-			BackoffCoefficient:             v.BackoffCoefficient,
-			MaximumInterval:                v.MaximumInterval,
-			ExpirationTime:                 v.ExpirationTime,
-			MaximumAttempts:                v.MaximumAttempts,
-			NonRetriableErrors:             v.NonRetriableErrors,
-			LastFailureReason:              v.LastFailureReason,
-			LastWorkerIdentity:             v.LastWorkerIdentity,
-			LastFailureDetails:             v.LastFailureDetails,
-			LastHeartbeatTimeoutVisibility: v.LastHeartbeatTimeoutVisibility,
+			Version:                                 v.Version,
+			ScheduleID:                              v.ScheduleID,
+			ScheduledEventBatchID:                   v.ScheduledEventBatchID,
+			ScheduledEvent:                          scheduledEvent,
+			ScheduledTime:                           v.ScheduledTime,
+			StartedID:                               v.StartedID,
+			StartedEvent:                            startedEvent,
+			StartedTime:                             v.StartedTime,
+			ActivityID:                              v.ActivityID,
+			RequestID:                               v.RequestID,
+			Details:                                 v.Details,
+			ScheduleToStartTimeout:                  v.ScheduleToStartTimeout,
+			ScheduleToCloseTimeout:                  v.ScheduleToCloseTimeout,
+			StartToCloseTimeout:                     v.StartToCloseTimeout,
+			HeartbeatTimeout:                        v.HeartbeatTimeout,
+			CancelRequested:                         v.CancelRequested,
+			CancelRequestID:                         v.CancelRequestID,
+			LastHeartBeatUpdatedTime:                v.LastHeartBeatUpdatedTime,
+			TimerTaskStatus:                         v.TimerTaskStatus,
+			Attempt:                                 v.Attempt,
+			NamespaceID:                             primitives.MustParseUUID(v.NamespaceID),
+			StartedIdentity:                         v.StartedIdentity,
+			TaskList:                                v.TaskList,
+			HasRetryPolicy:                          v.HasRetryPolicy,
+			InitialInterval:                         v.InitialInterval,
+			BackoffCoefficient:                      v.BackoffCoefficient,
+			MaximumInterval:                         v.MaximumInterval,
+			ExpirationTime:                          v.ExpirationTime,
+			MaximumAttempts:                         v.MaximumAttempts,
+			NonRetriableErrors:                      v.NonRetriableErrors,
+			LastFailureReason:                       v.LastFailureReason,
+			LastWorkerIdentity:                      v.LastWorkerIdentity,
+			LastFailureDetails:                      v.LastFailureDetails,
+			LastHeartbeatTimeoutVisibilityInSeconds: v.LastHeartbeatTimeoutVisibilityInSeconds,
 		}
 		newInfos = append(newInfos, i)
 	}
@@ -768,12 +768,6 @@ func (m *executionManagerImpl) DeserializeVersionHistories(
 	return NewVersionHistoriesFromProto(versionHistories), nil
 }
 
-func (m *executionManagerImpl) DeleteTask(
-	request *DeleteTaskRequest,
-) error {
-	return m.persistence.DeleteTask(request)
-}
-
 func (m *executionManagerImpl) DeleteWorkflowExecution(
 	request *DeleteWorkflowExecutionRequest,
 ) error {
@@ -790,6 +784,26 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	request *GetCurrentExecutionRequest,
 ) (*GetCurrentExecutionResponse, error) {
 	return m.persistence.GetCurrentExecution(request)
+}
+
+func (m *executionManagerImpl) ListConcreteExecutions(
+	request *ListConcreteExecutionsRequest,
+) (*ListConcreteExecutionsResponse, error) {
+	response, err := m.persistence.ListConcreteExecutions(request)
+	if err != nil {
+		return nil, err
+	}
+	newResponse := &ListConcreteExecutionsResponse{
+		ExecutionInfos: make([]*WorkflowExecutionInfo, len(response.ExecutionInfos), len(response.ExecutionInfos)),
+		PageToken:      response.NextPageToken,
+	}
+	for i, info := range response.ExecutionInfos {
+		newResponse.ExecutionInfos[i], _, err = m.DeserializeExecutionInfo(info)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return newResponse, nil
 }
 
 // Transfer task related methods

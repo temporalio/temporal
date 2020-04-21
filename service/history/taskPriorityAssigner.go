@@ -27,6 +27,7 @@
 package history
 
 import (
+	"strconv"
 	"sync"
 
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -73,6 +74,12 @@ const (
 	taskDefaultPrioritySubclass
 	taskLowPrioritySubclass
 )
+
+var defaultTaskPriorityWeight = map[int]int{
+	getTaskPriority(taskHighPriorityClass, taskDefaultPrioritySubclass):    200,
+	getTaskPriority(taskDefaultPriorityClass, taskDefaultPrioritySubclass): 100,
+	getTaskPriority(taskLowPriorityClass, taskDefaultPrioritySubclass):     50,
+}
 
 func newTaskPriorityAssigner(
 	currentClusterName string,
@@ -180,4 +187,14 @@ func getTaskPriority(
 	class, subClass int,
 ) int {
 	return class | subClass
+}
+
+func convertWeightsToDynamicConfigValue(
+	weights map[int]int,
+) map[string]interface{} {
+	weightsForDC := make(map[string]interface{})
+	for priority, weight := range weights {
+		weightsForDC[strconv.Itoa(priority)] = weight
+	}
+	return weightsForDC
 }

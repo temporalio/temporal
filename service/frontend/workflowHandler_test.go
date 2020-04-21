@@ -131,6 +131,10 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockHistoryArchiver = &archiver.HistoryArchiverMock{}
 	s.mockVisibilityArchiver = &archiver.VisibilityArchiverMock{}
+
+	mockMonitor := s.mockResource.MembershipMonitor
+	mockMonitor.EXPECT().GetMemberCount(common.FrontendServiceName).Return(5, nil).AnyTimes()
+
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {
@@ -142,7 +146,7 @@ func (s *workflowHandlerSuite) TearDownTest() {
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
-	return NewWorkflowHandler(s.mockResource, config, s.mockProducer)
+	return NewWorkflowHandler(s.mockResource, config, s.mockProducer).(*WorkflowHandler)
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {

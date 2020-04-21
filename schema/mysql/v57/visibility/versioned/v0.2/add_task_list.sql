@@ -1,0 +1,1 @@
+ALTER TABLE executions_visibility ADD task_list varchar(255) DEFAULT '';

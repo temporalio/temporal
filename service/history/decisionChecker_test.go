@@ -155,7 +155,7 @@ func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes(
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "IndexedFields is empty on decision.")
 
-	attributes.SearchAttributes.IndexedFields = map[string][]byte{"CustomKeywordField": []byte(`bytes`)}
+	attributes.SearchAttributes.IndexedFields = map[string][]byte{"CustomKeywordField": []byte(`"bytes"`)}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.Nil(err)
 }
@@ -193,7 +193,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffec
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{ cluster.TestCurrentClusterName },
+			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
 		nil,
@@ -218,7 +218,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffec
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []string{ cluster.TestAlternativeClusterName },
+			Clusters:          []string{cluster.TestAlternativeClusterName},
 		},
 		1234,
 		nil,
@@ -265,7 +265,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{ cluster.TestCurrentClusterName },
+			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
 		nil,
@@ -290,7 +290,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []string{ cluster.TestAlternativeClusterName },
+			Clusters:          []string{cluster.TestAlternativeClusterName},
 		},
 		1234,
 		nil,
@@ -315,7 +315,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{ cluster.TestCurrentClusterName },
+			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
 		nil,
@@ -325,7 +325,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{ cluster.TestCurrentClusterName },
+			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		5678,
 		nil,
@@ -344,7 +344,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{ cluster.TestCurrentClusterName },
+			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
 		nil,
@@ -354,7 +354,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoc
 		nil,
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []string{ cluster.TestAlternativeClusterName },
+			Clusters:          []string{cluster.TestAlternativeClusterName},
 		},
 		5678,
 		nil,

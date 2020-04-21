@@ -38,9 +38,9 @@ import (
 type (
 	// DLQMessageHandler is the interface handles namespace DLQ messages
 	DLQMessageHandler interface {
-		Read(lastMessageID int, pageSize int, pageToken []byte) ([]*replicationgenpb.ReplicationTask, []byte, error)
-		Purge(lastMessageID int) error
-		Merge(lastMessageID int, pageSize int, pageToken []byte) ([]byte, error)
+		Read(lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationgenpb.ReplicationTask, []byte, error)
+		Purge(lastMessageID int64) error
+		Merge(lastMessageID int64, pageSize int, pageToken []byte) ([]byte, error)
 	}
 
 	dlqMessageHandlerImpl struct {
@@ -65,7 +65,7 @@ func NewDLQMessageHandler(
 
 // ReadMessages reads namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Read(
-	lastMessageID int,
+	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
 ) ([]*replicationgenpb.ReplicationTask, []byte, error) {
@@ -85,7 +85,7 @@ func (d *dlqMessageHandlerImpl) Read(
 
 // PurgeMessages purges namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Purge(
-	lastMessageID int,
+	lastMessageID int64,
 ) error {
 
 	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
@@ -111,7 +111,7 @@ func (d *dlqMessageHandlerImpl) Purge(
 
 // MergeMessages merges namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Merge(
-	lastMessageID int,
+	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
 ) ([]byte, error) {
@@ -131,7 +131,7 @@ func (d *dlqMessageHandlerImpl) Merge(
 		return nil, err
 	}
 
-	var ackedMessageID int
+	var ackedMessageID int64
 	for _, message := range messages {
 		namespaceTask := message.GetNamespaceTaskAttributes()
 		if namespaceTask == nil {
@@ -143,7 +143,7 @@ func (d *dlqMessageHandlerImpl) Merge(
 		); err != nil {
 			return nil, err
 		}
-		ackedMessageID = int(message.SourceTaskId)
+		ackedMessageID = message.SourceTaskId
 	}
 
 	if err := d.namespaceReplicationQueue.RangeDeleteMessagesFromDLQ(

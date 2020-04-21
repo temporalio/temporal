@@ -39,8 +39,10 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 )
 
-const constNamespacePartition = 0
-const namespaceMetadataRecordName = "temporal-namespace-metadata"
+const (
+	constNamespacePartition     = 0
+	namespaceMetadataRecordName = "temporal-namespace-metadata"
+)
 
 const (
 	templateCreateNamespaceQuery = `INSERT INTO namespaces (` +

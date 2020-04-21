@@ -169,6 +169,11 @@ func QueryID(queryID string) Tag {
 	return newStringTag("query-id", queryID)
 }
 
+// BlobSizeViolationOperation returns tag for BlobSizeViolationOperation
+func BlobSizeViolationOperation(operation string) Tag {
+	return newStringTag("blob-size-violation-operation", operation)
+}
+
 // namespace related
 
 // WorkflowNamespaceID returns tag for WorkflowNamespaceID
@@ -529,6 +534,11 @@ func TaskVersion(taskVersion int64) Tag {
 	return newInt64("queue-task-version", taskVersion)
 }
 
+// TaskVisibilityTimestamp returns tag for task visibilityTimestamp
+func TaskVisibilityTimestamp(timestamp int64) Tag {
+	return newInt64("queue-task-visibility-timestamp", timestamp)
+}
+
 // NumberProcessed returns tag for NumberProcessed
 func NumberProcessed(n int) Tag {
 	return newInt("number-processed", n)
@@ -591,6 +601,12 @@ func ESResponseError(msg string) Tag {
 // ESKey returns tag for ESKey
 func ESKey(ESKey string) Tag {
 	return newStringTag("es-mapping-key", ESKey)
+}
+
+// ESValue returns tag for ESValue
+func ESValue(ESValue []byte) Tag {
+	// convert value to string type so that the value logged is human readable
+	return newStringTag("es-mapping-value", string(ESValue))
 }
 
 // ESConfig returns tag for ESConfig

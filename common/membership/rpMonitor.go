@@ -321,6 +321,10 @@ func (rpo *ringpopMonitor) WhoAmI() (*HostInfo, error) {
 	return NewHostInfo(serviceAddress, labels.AsMap()), nil
 }
 
+func (rpo *ringpopMonitor) EvictSelf() error {
+	return rpo.rp.SelfEvict()
+}
+
 func (rpo *ringpopMonitor) GetResolver(service string) (ServiceResolver, error) {
 	ring, found := rpo.rings[service]
 	if !found {
@@ -355,6 +359,14 @@ func (rpo *ringpopMonitor) RemoveListener(service string, name string) error {
 
 func (rpo *ringpopMonitor) GetReachableMembers() ([]string, error) {
 	return rpo.rp.GetReachableMembers()
+}
+
+func (rpo *ringpopMonitor) GetMemberCount(service string) (int, error) {
+	ring, err := rpo.GetResolver(service)
+	if err != nil {
+		return 0, err
+	}
+	return ring.MemberCount(), nil
 }
 
 func replaceServicePort(address string, servicePort int) (string, error) {

@@ -36,6 +36,7 @@ import (
 
 	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"
@@ -60,6 +61,7 @@ type indexProcessor struct {
 	isStopped       int32
 	shutdownWG      sync.WaitGroup
 	shutdownCh      chan struct{}
+	msgEncoder      *codec.JSONPBEncoder
 }
 
 const (
@@ -86,6 +88,7 @@ func newIndexProcessor(appName, consumerName string, kafkaClient messaging.Clien
 		logger:          logger.WithTags(tag.ComponentIndexerProcessor),
 		metricsClient:   metricsClient,
 		shutdownCh:      make(chan struct{}),
+		msgEncoder:      codec.NewJSONPBEncoder(),
 	}
 }
 
@@ -106,7 +109,7 @@ func (p *indexProcessor) Start() error {
 		return err
 	}
 
-	esProcessor, err := NewESProcessorAndStart(p.config, p.esClient, p.esProcessorName, p.logger, p.metricsClient)
+	esProcessor, err := NewESProcessorAndStart(p.config, p.esClient, p.esProcessorName, p.logger, p.metricsClient, p.msgEncoder)
 	if err != nil {
 		p.logger.Info("", tag.LifeCycleStartFailed, tag.Error(err))
 		return err

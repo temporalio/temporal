@@ -35,7 +35,7 @@ var _ workflowservice.WorkflowServiceServer = (*WorkflowNilCheckHandler)(nil)
 type (
 	// WorkflowNilCheckHandler - gRPC handler interface for workflow workflowservice
 	WorkflowNilCheckHandler struct {
-		parentHandler workflowservice.WorkflowServiceServer
+		parentHandler Handler
 	}
 )
 
@@ -45,7 +45,7 @@ type (
 
 // NewWorkflowNilCheckHandler creates handler that never returns nil response when error is nil
 func NewWorkflowNilCheckHandler(
-	parentHandler workflowservice.WorkflowServiceServer,
+	parentHandler Handler,
 ) *WorkflowNilCheckHandler {
 	handler := &WorkflowNilCheckHandler{
 		parentHandler: parentHandler,
@@ -452,23 +452,6 @@ func (wh *WorkflowNilCheckHandler) DescribeTaskList(ctx context.Context, request
 	resp, err := wh.parentHandler.DescribeTaskList(ctx, request)
 	if resp == nil && err == nil {
 		resp = &workflowservice.DescribeTaskListResponse{}
-	}
-	return resp, err
-}
-
-func (wh *WorkflowNilCheckHandler) PollForWorkflowExecutionRawHistory(ctx context.Context, request *workflowservice.PollForWorkflowExecutionRawHistoryRequest) (_ *workflowservice.PollForWorkflowExecutionRawHistoryResponse, retError error) {
-	resp, err := wh.parentHandler.PollForWorkflowExecutionRawHistory(ctx, request)
-	if resp == nil && err == nil {
-		resp = &workflowservice.PollForWorkflowExecutionRawHistoryResponse{}
-	}
-	return resp, err
-}
-
-// GetWorkflowExecutionRawHistory retrieves raw history directly from DB layer.
-func (wh *WorkflowNilCheckHandler) GetWorkflowExecutionRawHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionRawHistoryRequest) (_ *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
-	resp, err := wh.parentHandler.GetWorkflowExecutionRawHistory(ctx, request)
-	if resp == nil && err == nil {
-		resp = &workflowservice.GetWorkflowExecutionRawHistoryResponse{}
 	}
 	return resp, err
 }
