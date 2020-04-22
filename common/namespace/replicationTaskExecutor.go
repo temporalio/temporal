@@ -118,11 +118,11 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 				Name:        task.Info.GetName(),
 				Status:      task.Info.Status,
 				Description: task.Info.GetDescription(),
-				Owner:  task.Info.GetOwnerEmail(),
+				Owner:       task.Info.GetOwnerEmail(),
 				Data:        task.Info.Data,
 			},
 			Config: &persistenceblobs.NamespaceConfig{
-				RetentionDays:                task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
+				RetentionDays:            task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 				EmitMetric:               task.Config.GetEmitMetric().GetValue(),
 				HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
 				HistoryArchivalURI:       task.Config.GetHistoryArchivalURI(),
@@ -133,8 +133,8 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
 				Clusters:          h.convertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
 			},
-			ConfigVersion:     task.GetConfigVersion(),
-			FailoverVersion:   task.GetFailoverVersion(),
+			ConfigVersion:   task.GetConfigVersion(),
+			FailoverVersion: task.GetFailoverVersion(),
 		},
 		IsGlobalNamespace: true, // local namespace will not be replicated
 	}
@@ -219,10 +219,9 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 
 	recordUpdated := false
 	request := &persistence.UpdateNamespaceRequest{
-		Namespace: resp.Namespace,
+		Namespace:           resp.Namespace,
 		NotificationVersion: notificationVersion,
 	}
-
 
 	if resp.Namespace.ConfigVersion < task.GetConfigVersion() {
 		recordUpdated = true
@@ -231,11 +230,11 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 			Name:        task.Info.GetName(),
 			Status:      task.Info.Status,
 			Description: task.Info.GetDescription(),
-			Owner:  task.Info.GetOwnerEmail(),
+			Owner:       task.Info.GetOwnerEmail(),
 			Data:        task.Info.Data,
 		}
 		request.Namespace.Config = &persistenceblobs.NamespaceConfig{
-			RetentionDays:                task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
+			RetentionDays:            task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 			EmitMetric:               task.Config.GetEmitMetric().GetValue(),
 			HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
 			HistoryArchivalURI:       task.Config.GetHistoryArchivalURI(),
@@ -289,7 +288,7 @@ func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFr
 	return output
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input namespacepb.NamespaceStatus) (error) {
+func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input namespacepb.NamespaceStatus) error {
 	switch input {
 	case namespacepb.NamespaceStatus_Registered, namespacepb.NamespaceStatus_Deprecated:
 		return nil

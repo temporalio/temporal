@@ -1419,7 +1419,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
 			Clusters: []string{
-"active", "standby",
+				"active", "standby",
 			},
 		},
 		afterResetVersion,
@@ -2717,7 +2717,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: "active",
 			Clusters: []string{
-"active", "standby",
+				"active", "standby",
 			},
 		},
 		afterResetVersion,

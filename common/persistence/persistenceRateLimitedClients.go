@@ -916,4 +916,3 @@ func (c *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(curren
 	}
 	return c.persistence.InitializeSystemNamespaces(currentClusterName)
 }
-

@@ -103,7 +103,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 			},
 			FailoverNotificationVersion: 0,
 		},
-		NotificationVersion:         namespaceNotificationVersion,
+		NotificationVersion: namespaceNotificationVersion,
 	}
 	entry1 := s.buildEntryFromRecord(namespaceRecord1)
 	namespaceNotificationVersion++
@@ -125,7 +125,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 			},
 			FailoverNotificationVersion: 0,
 		},
-		NotificationVersion:         namespaceNotificationVersion,
+		NotificationVersion: namespaceNotificationVersion,
 	}
 	entry2 := s.buildEntryFromRecord(namespaceRecord2)
 	namespaceNotificationVersion++
@@ -147,7 +147,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 			},
 			FailoverNotificationVersion: 0,
 		},
-		NotificationVersion:         namespaceNotificationVersion,
+		NotificationVersion: namespaceNotificationVersion,
 	}
 	// there is no namespaceNotificationVersion++ here
 	// this is to test that if new namespace change event happen during the pagination,
@@ -306,7 +306,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 			FailoverVersion:             11,
 			FailoverNotificationVersion: 0,
 		},
-		NotificationVersion:         namespaceNotificationVersion,
+		NotificationVersion: namespaceNotificationVersion,
 	}
 	entry1 := s.buildEntryFromRecord(namespaceRecord1)
 	namespaceNotificationVersion++
@@ -450,7 +450,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 			FailoverVersion:             namespaceRecord2Old.Namespace.FailoverVersion + 1,
 			FailoverNotificationVersion: namespaceNotificationVersion,
 		},
-		NotificationVersion:         namespaceNotificationVersion,
+		NotificationVersion: namespaceNotificationVersion,
 	}
 	entry2New := s.buildEntryFromRecord(namespaceRecord2New)
 	namespaceNotificationVersion++
@@ -470,7 +470,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 			FailoverVersion:             namespaceRecord1Old.Namespace.FailoverVersion,
 			FailoverNotificationVersion: namespaceRecord1Old.Namespace.FailoverNotificationVersion,
 		},
-		NotificationVersion:         namespaceNotificationVersion,
+		NotificationVersion: namespaceNotificationVersion,
 	}
 	entry1New := s.buildEntryFromRecord(namespaceRecord1New)
 	namespaceNotificationVersion++
