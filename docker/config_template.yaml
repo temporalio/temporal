@@ -226,3 +226,7 @@ publicClient:
 dynamicConfigClient:
     filepath: {{ default .Env.DYNAMIC_CONFIG_FILE_PATH "/etc/cadence/config/dynamicconfig" }}
     pollInterval: "60s"
+
+blobstore:
+  filestore:
+    outputDirectory: "/tmp/blobstore"

@@ -36,8 +36,8 @@ import (
 )
 
 const (
-	testDirMode  = os.FileMode(0700)
 	testFileMode = os.FileMode(0600)
+	testDirMode  = os.FileMode(0700)
 )
 
 type UtilSuite struct {
@@ -51,133 +51,6 @@ func TestUtilSuite(t *testing.T) {
 
 func (s *UtilSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-}
-
-func (s *UtilSuite) TestFileExists() {
-	dir, err := ioutil.TempDir("", "TestFileExists")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	s.assertDirectoryExists(dir)
-
-	exists, err := fileExists(dir)
-	s.Error(err)
-	s.False(exists)
-
-	filename := "test-file-name"
-	exists, err = fileExists(filepath.Join(dir, filename))
-	s.NoError(err)
-	s.False(exists)
-
-	s.createFile(dir, filename)
-	exists, err = fileExists(filepath.Join(dir, filename))
-	s.NoError(err)
-	s.True(exists)
-}
-
-func (s *UtilSuite) TestDirectoryExists() {
-	dir, err := ioutil.TempDir("", "TestDirectoryExists")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	s.assertDirectoryExists(dir)
-
-	subdir := "subdir"
-	exists, err := directoryExists(filepath.Join(dir, subdir))
-	s.NoError(err)
-	s.False(exists)
-
-	filename := "test-file-name"
-	s.createFile(dir, filename)
-	fpath := filepath.Join(dir, filename)
-	exists, err = directoryExists(fpath)
-	s.Error(err)
-	s.False(exists)
-}
-
-func (s *UtilSuite) TestMkdirAll() {
-	dir, err := ioutil.TempDir("", "TestMkdirAll")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	s.assertDirectoryExists(dir)
-
-	s.NoError(mkdirAll(dir, testDirMode))
-	s.assertDirectoryExists(dir)
-
-	subDirPath := filepath.Join(dir, "subdir_1", "subdir_2", "subdir_3")
-	s.assertDirectoryNotExists(subDirPath)
-	s.NoError(mkdirAll(subDirPath, testDirMode))
-	s.assertDirectoryExists(subDirPath)
-	s.assertCorrectFileMode(subDirPath)
-
-	filename := "test-file-name"
-	s.createFile(dir, filename)
-	fpath := filepath.Join(dir, filename)
-	s.Error(mkdirAll(fpath, testDirMode))
-}
-
-func (s *UtilSuite) TestWriteFile() {
-	dir, err := ioutil.TempDir("", "TestWriteFile")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	s.assertDirectoryExists(dir)
-
-	filename := "test-file-name"
-	fpath := filepath.Join(dir, filename)
-	s.NoError(writeFile(fpath, []byte("file body 1"), testFileMode))
-	s.assertFileExists(fpath)
-	s.assertCorrectFileMode(fpath)
-
-	s.NoError(writeFile(fpath, []byte("file body 2"), testFileMode))
-	s.assertFileExists(fpath)
-	s.assertCorrectFileMode(fpath)
-
-	s.Error(writeFile(dir, []byte(""), testFileMode))
-	s.assertFileExists(fpath)
-}
-
-func (s *UtilSuite) TestReadFile() {
-	dir, err := ioutil.TempDir("", "TestReadFile")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
-	s.assertDirectoryExists(dir)
-
-	filename := "test-file-name"
-	fpath := filepath.Join(dir, filename)
-	data, err := readFile(fpath)
-	s.Error(err)
-	s.Empty(data)
-
-	err = writeFile(fpath, []byte("file contents"), testFileMode)
-	s.NoError(err)
-	data, err = readFile(fpath)
-	s.NoError(err)
-	s.Equal("file contents", string(data))
-}
-
-func (s *UtilSuite) TestListFilesByPrefix() {
-	dir, err := ioutil.TempDir("", "TestListFiles")
-	s.NoError(err)
-	defer os.Remove(dir)
-	s.assertDirectoryExists(dir)
-
-	filename := "test-file-name"
-	fpath := filepath.Join(dir, filename)
-	files, err := listFilesByPrefix(fpath, "test-")
-	s.Error(err)
-	s.Nil(files)
-
-	subDirPath := filepath.Join(dir, "subdir")
-	s.NoError(mkdirAll(subDirPath, testDirMode))
-	s.assertDirectoryExists(subDirPath)
-	expectedFileNames := []string{"file_1", "file_2", "file_3"}
-	for _, f := range expectedFileNames {
-		s.createFile(dir, f)
-	}
-	for _, f := range []string{"randomFile", "fileWithOtherPrefix"} {
-		s.createFile(dir, f)
-	}
-	actualFileNames, err := listFilesByPrefix(dir, "file_")
-	s.NoError(err)
-	s.Equal(len(expectedFileNames), len(actualFileNames))
 }
 
 func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
@@ -247,7 +120,7 @@ func (s *UtilSuite) TestValidateDirPath() {
 		},
 		{
 			dirPath:     fpath,
-			expectedErr: errDirectoryExpected,
+			expectedErr: common.ErrDirectoryExpected,
 		},
 	}
 
@@ -440,30 +313,8 @@ func (s *UtilSuite) createFile(dir string, filename string) {
 	s.Nil(err)
 }
 
-func (s *UtilSuite) assertFileExists(filepath string) {
-	exists, err := fileExists(filepath)
-	s.NoError(err)
-	s.True(exists)
-}
-
 func (s *UtilSuite) assertDirectoryExists(path string) {
-	exists, err := directoryExists(path)
+	exists, err := common.DirectoryExists(path)
 	s.NoError(err)
 	s.True(exists)
-}
-
-func (s *UtilSuite) assertDirectoryNotExists(path string) {
-	exists, err := directoryExists(path)
-	s.NoError(err)
-	s.False(exists)
-}
-
-func (s *UtilSuite) assertCorrectFileMode(path string) {
-	info, err := os.Stat(path)
-	s.NoError(err)
-	mode := testFileMode
-	if info.IsDir() {
-		mode = testDirMode | os.ModeDir
-	}
-	s.Equal(mode, info.Mode())
 }

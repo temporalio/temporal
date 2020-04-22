@@ -38,6 +38,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
+	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
@@ -82,6 +83,7 @@ type (
 		payloadSerializer persistence.PayloadSerializer
 		metricsClient     metrics.Client
 		messagingClient   messaging.Client
+		blobstoreClient   blobstore.Client
 		archivalMetadata  archiver.ArchivalMetadata
 		archiverProvider  provider.ArchiverProvider
 
@@ -289,6 +291,7 @@ func New(
 		payloadSerializer: persistence.NewPayloadSerializer(),
 		metricsClient:     params.MetricsClient,
 		messagingClient:   params.MessagingClient,
+		blobstoreClient:   params.BlobstoreClient,
 		archivalMetadata:  params.ArchivalMetadata,
 		archiverProvider:  params.ArchiverProvider,
 
@@ -439,6 +442,11 @@ func (h *Impl) GetMetricsClient() metrics.Client {
 // GetMessagingClient return messaging client
 func (h *Impl) GetMessagingClient() messaging.Client {
 	return h.messagingClient
+}
+
+// GetBlobstoreClient returns blobstore client
+func (h *Impl) GetBlobstoreClient() blobstore.Client {
+	return h.blobstoreClient
 }
 
 // GetArchivalMetadata return archival metadata

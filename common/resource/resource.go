@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
+	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
@@ -65,6 +66,7 @@ type (
 		GetMetricsClient() metrics.Client
 		GetArchiverProvider() provider.ArchiverProvider
 		GetMessagingClient() messaging.Client
+		GetBlobstoreClient() blobstore.Client
 
 		// membership infos
 

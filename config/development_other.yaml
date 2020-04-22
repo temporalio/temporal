@@ -152,3 +152,7 @@ domainDefaults:
 
 publicClient:
   hostPort: "localhost:9933"
+
+blobstore:
+  filestore:
+    outputDirectory: "/tmp/blobstore"

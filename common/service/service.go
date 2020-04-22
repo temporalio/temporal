@@ -26,10 +26,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	persistenceClient "github.com/uber/cadence/common/persistence/client"
-
-	"github.com/uber/cadence/common/authorization"
-
 	"github.com/uber-go/tally"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc"
@@ -38,6 +34,8 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
+	"github.com/uber/cadence/common/authorization"
+	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	es "github.com/uber/cadence/common/elasticsearch"
@@ -47,6 +45,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	persistenceClient "github.com/uber/cadence/common/persistence/client"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -70,6 +69,7 @@ type (
 		ReplicatorConfig         config.Replicator
 		MetricsClient            metrics.Client
 		MessagingClient          messaging.Client
+		BlobstoreClient          blobstore.Client
 		ESClient                 es.Client
 		ESConfig                 *es.Config
 		DynamicConfig            dynamicconfig.Client
@@ -110,6 +110,7 @@ type (
 		metricsClient          metrics.Client
 		clusterMetadata        cluster.Metadata
 		messagingClient        messaging.Client
+		blobstoreClient        blobstore.Client
 		dynamicCollection      *dynamicconfig.Collection
 		dispatcherProvider     client.DispatcherProvider
 		archivalMetadata       archiver.ArchivalMetadata
@@ -137,6 +138,7 @@ func New(params *BootstrapParams) Service {
 		clusterMetadata:       params.ClusterMetadata,
 		metricsClient:         params.MetricsClient,
 		messagingClient:       params.MessagingClient,
+		blobstoreClient:       params.BlobstoreClient,
 		dispatcherProvider:    params.DispatcherProvider,
 		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 		archivalMetadata:      params.ArchivalMetadata,
@@ -274,6 +276,10 @@ func (h *serviceImpl) GetClusterMetadata() cluster.Metadata {
 // GetMessagingClient returns the messaging client against Kafka
 func (h *serviceImpl) GetMessagingClient() messaging.Client {
 	return h.messagingClient
+}
+
+func (h *serviceImpl) GetBlobstoreClient() blobstore.Client {
+	return h.blobstoreClient
 }
 
 func (h *serviceImpl) GetArchivalMetadata() archiver.ArchivalMetadata {

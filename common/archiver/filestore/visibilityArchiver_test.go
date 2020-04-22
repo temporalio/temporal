@@ -189,7 +189,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	filepath := path.Join(dir, testDomainID, expectedFilename)
 	s.assertFileExists(filepath)
 
-	data, err := readFile(filepath)
+	data, err := common.ReadFile(filepath)
 	s.NoError(err)
 
 	archivedRecord := &archiver.ArchiveVisibilityRequest{}
@@ -573,12 +573,12 @@ func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(record *visi
 	s.Require().NoError(err)
 	filename := constructVisibilityFilename(record.CloseTimestamp, record.RunID)
 	s.Require().NoError(os.MkdirAll(path.Join(s.testQueryDirectory, record.DomainID), testDirMode))
-	err = writeFile(path.Join(s.testQueryDirectory, record.DomainID, filename), data, testFileMode)
+	err = common.WriteFile(path.Join(s.testQueryDirectory, record.DomainID, filename), data, testFileMode)
 	s.Require().NoError(err)
 }
 
 func (s *visibilityArchiverSuite) assertFileExists(filepath string) {
-	exists, err := fileExists(filepath)
+	exists, err := common.FileExists(filepath)
 	s.NoError(err)
 	s.True(exists)
 }

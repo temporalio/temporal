@@ -110,7 +110,7 @@ func (v *visibilityArchiver) Archive(
 	}
 
 	dirPath := path.Join(URI.Path(), request.DomainID)
-	if err = mkdirAll(dirPath, v.dirMode); err != nil {
+	if err = common.MkdirAll(dirPath, v.dirMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errMakeDirectory), tag.Error(err))
 		return err
 	}
@@ -124,7 +124,7 @@ func (v *visibilityArchiver) Archive(
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
 	filename := constructVisibilityFilename(request.CloseTimestamp, request.RunID)
-	if err := writeFile(path.Join(dirPath, filename), encodedVisibilityRecord, v.fileMode); err != nil {
+	if err := common.WriteFile(path.Join(dirPath, filename), encodedVisibilityRecord, v.fileMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return err
 	}
@@ -177,7 +177,7 @@ func (v *visibilityArchiver) query(
 	}
 
 	dirPath := path.Join(URI.Path(), request.domainID)
-	exists, err := directoryExists(dirPath)
+	exists, err := common.DirectoryExists(dirPath)
 	if err != nil {
 		return nil, &shared.InternalServiceError{Message: err.Error()}
 	}
@@ -185,7 +185,7 @@ func (v *visibilityArchiver) query(
 		return &archiver.QueryVisibilityResponse{}, nil
 	}
 
-	files, err := listFiles(dirPath)
+	files, err := common.ListFiles(dirPath)
 	if err != nil {
 		return nil, &shared.InternalServiceError{Message: err.Error()}
 	}
@@ -200,7 +200,7 @@ func (v *visibilityArchiver) query(
 
 	response := &archiver.QueryVisibilityResponse{}
 	for idx, file := range files {
-		encodedRecord, err := readFile(path.Join(dirPath, file))
+		encodedRecord, err := common.ReadFile(path.Join(dirPath, file))
 		if err != nil {
 			return nil, &shared.InternalServiceError{Message: err.Error()}
 		}

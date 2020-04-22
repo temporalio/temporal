@@ -578,12 +578,12 @@ func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*s
 	data, err := encode(historyBatches)
 	s.Require().NoError(err)
 	filename := constructHistoryFilename(testDomainID, testWorkflowID, testRunID, version)
-	err = writeFile(path.Join(s.testGetDirectory, filename), data, testFileMode)
+	err = common.WriteFile(path.Join(s.testGetDirectory, filename), data, testFileMode)
 	s.Require().NoError(err)
 }
 
 func (s *historyArchiverSuite) assertFileExists(filepath string) {
-	exists, err := fileExists(filepath)
+	exists, err := common.FileExists(filepath)
 	s.NoError(err)
 	s.True(exists)
 }

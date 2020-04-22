@@ -131,3 +131,7 @@ kafka:
 
 publicClient:
   hostPort: "localhost:7933"
+
+blobstore:
+  filestore:
+    outputDirectory: "/tmp/blobstore"

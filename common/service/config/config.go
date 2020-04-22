@@ -68,6 +68,8 @@ type (
 		DynamicConfigClient dynamicconfig.FileBasedClientConfig `yaml:"dynamicConfigClient"`
 		// DomainDefaults is the default config for every domain
 		DomainDefaults DomainDefaults `yaml:"domainDefaults"`
+		// Blobstore is the config for setting up blobstore
+		Blobstore Blobstore `yaml:"blobstore"`
 	}
 
 	// Service contains the service specific config items
@@ -100,6 +102,16 @@ type (
 		DisableLogging bool `yaml:"disableLogging"`
 		// LogLevel is the desired log level
 		LogLevel string `yaml:"logLevel"`
+	}
+
+	// Blobstore contains the config for blobstore
+	Blobstore struct {
+		Filestore *FileBlobstore `yaml:"filestore"`
+	}
+
+	// FileBlobstore contains the config for a file backed blobstore
+	FileBlobstore struct {
+		OutputDirectory string `yaml:"outputDirectory"`
 	}
 
 	// Ringpop contains the ringpop config items

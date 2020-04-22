@@ -136,3 +136,6 @@ dynamicConfigClient:
   filepath: "config/dynamicconfig/development_es.yaml"
   pollInterval: "10s"
 
+blobstore:
+  filestore:
+    outputDirectory: "/tmp/blobstore"

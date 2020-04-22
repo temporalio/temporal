@@ -39,6 +39,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
+	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
@@ -69,6 +70,7 @@ type (
 		MetricsClient     metrics.Client
 		ArchivalMetadata  *archiver.MockArchivalMetadata
 		ArchiverProvider  *provider.MockArchiverProvider
+		BlobstoreClient   *blobstore.MockClient
 
 		// membership infos
 
@@ -179,6 +181,7 @@ func NewTest(
 		MetricsClient:     metrics.NewClient(scope, serviceMetricsIndex),
 		ArchivalMetadata:  &archiver.MockArchivalMetadata{},
 		ArchiverProvider:  &provider.MockArchiverProvider{},
+		BlobstoreClient:   &blobstore.MockClient{},
 
 		// membership infos
 
@@ -272,6 +275,11 @@ func (s *Test) GetMetricsClient() metrics.Client {
 // GetMessagingClient for testing
 func (s *Test) GetMessagingClient() messaging.Client {
 	panic("user should implement this method for test")
+}
+
+// GetBlobstoreClient for testing
+func (s *Test) GetBlobstoreClient() blobstore.Client {
+	return s.BlobstoreClient
 }
 
 // GetArchivalMetadata for testing

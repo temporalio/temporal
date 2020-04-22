@@ -24,6 +24,7 @@ import (
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
+	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -37,42 +38,24 @@ import (
 
 type (
 	// Service is the interface which must be implemented by all the services
+	// TODO: Service contains many methods that are not used now that we have resource bean, these should be cleaned up
 	Service interface {
-		// GetHostName returns the name of host running the service
 		GetHostName() string
-
-		// Start the service
 		Start()
-
-		// Stop stops the service
 		Stop()
-
 		GetLogger() log.Logger
-
 		GetThrottledLogger() log.Logger
-
 		GetMetricsClient() metrics.Client
-
 		GetClientBean() client.Bean
-
 		GetTimeSource() clock.TimeSource
-
 		GetDispatcher() *yarpc.Dispatcher
-
 		GetMembershipMonitor() membership.Monitor
-
 		GetHostInfo() *membership.HostInfo
-
-		// GetClusterMetadata returns the service cluster metadata
 		GetClusterMetadata() cluster.Metadata
-
-		// GetMessagingClient returns the messaging client against Kafka
 		GetMessagingClient() messaging.Client
-
+		GetBlobstoreClient() blobstore.Client
 		GetArchivalMetadata() archiver.ArchivalMetadata
-
 		GetArchiverProvider() provider.ArchiverProvider
-
 		GetPayloadSerializer() persistence.PayloadSerializer
 	}
 )
