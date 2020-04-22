@@ -28,7 +28,9 @@ import (
 	"context"
 	"time"
 
+	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/workflowservice"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -38,7 +40,7 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 )
 
-var _ workflowservice.WorkflowServiceServer = (*DCRedirectionHandlerImpl)(nil)
+var _ Handler = (*DCRedirectionHandlerImpl)(nil)
 
 type (
 	// DCRedirectionHandlerImpl is simple wrapper over frontend service, doing redirection based on policy
@@ -49,30 +51,66 @@ type (
 		config             *Config
 		redirectionPolicy  DCRedirectionPolicy
 		tokenSerializer    common.TaskTokenSerializer
-		frontendHandler    workflowservice.WorkflowServiceServer
+		frontendHandler    Handler
 	}
 )
 
 // NewDCRedirectionHandler creates a thrift handler for the temporal service, frontend
 func NewDCRedirectionHandler(
-	wfHandler *WorkflowHandler,
+	wfHandler Handler,
 	policy config.DCRedirectionPolicy,
 ) *DCRedirectionHandlerImpl {
+	resource := wfHandler.GetResource()
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
-		wfHandler.GetClusterMetadata(),
-		wfHandler.config,
-		wfHandler.GetNamespaceCache(),
+		resource.GetClusterMetadata(),
+		wfHandler.GetConfig(),
+		resource.GetNamespaceCache(),
 		policy,
 	)
 
 	return &DCRedirectionHandlerImpl{
-		Resource:           wfHandler.Resource,
-		currentClusterName: wfHandler.GetClusterMetadata().GetCurrentClusterName(),
-		config:             wfHandler.config,
+		Resource:           resource,
+		currentClusterName: resource.GetClusterMetadata().GetCurrentClusterName(),
+		config:             wfHandler.GetConfig(),
 		redirectionPolicy:  dcRedirectionPolicy,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		frontendHandler:    wfHandler,
 	}
+}
+
+// Start starts the handler
+func (handler *DCRedirectionHandlerImpl) Start() {
+	handler.frontendHandler.Start()
+}
+
+// Stop stops the handler
+func (handler *DCRedirectionHandlerImpl) Stop() {
+	handler.frontendHandler.Stop()
+}
+
+// GetResource return resource
+func (handler *DCRedirectionHandlerImpl) GetResource() resource.Resource {
+	return handler.Resource
+}
+
+// GetConfig return config
+func (handler *DCRedirectionHandlerImpl) GetConfig() *Config {
+	return handler.frontendHandler.GetConfig()
+}
+
+// UpdateHealthStatus sets the health status for this rpc handler.
+// This health status will be used within the rpc health check handler
+func (handler *DCRedirectionHandlerImpl) UpdateHealthStatus(status HealthStatus) {
+	handler.frontendHandler.UpdateHealthStatus(status)
+}
+
+// Check is for health check
+func (handler *DCRedirectionHandlerImpl) Check(ctx context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
+	return handler.frontendHandler.Check(ctx, request)
+}
+
+func (handler *DCRedirectionHandlerImpl) Watch(request *healthpb.HealthCheckRequest, server healthpb.Health_WatchServer) error {
+	return handler.frontendHandler.Watch(request, server)
 }
 
 // Namespace APIs, namespace APIs does not require redirection
@@ -242,66 +280,6 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
 			resp, err = remoteClient.GetWorkflowExecutionHistory(ctx, request)
-		}
-		return err
-	})
-
-	return resp, err
-}
-
-// GetWorkflowExecutionRawHistory API call
-func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
-) (resp *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
-
-	var apiName = "GetWorkflowExecutionRawHistory"
-	var err error
-	var cluster string
-
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionRawHistoryScope)
-	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
-	}()
-
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
-		cluster = targetDC
-		switch {
-		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.GetWorkflowExecutionRawHistory(ctx, request)
-		default:
-			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.GetWorkflowExecutionRawHistory(ctx, request)
-		}
-		return err
-	})
-
-	return resp, err
-}
-
-// PollForWorkflowExecutionRawHistory API call
-func (handler *DCRedirectionHandlerImpl) PollForWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.PollForWorkflowExecutionRawHistoryRequest,
-) (resp *workflowservice.PollForWorkflowExecutionRawHistoryResponse, retError error) {
-
-	var apiName = "PollForWorkflowExecutionRawHistory"
-	var err error
-	var cluster string
-
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollForWorkflowExecutionRawHistoryScope)
-	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
-	}()
-
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
-		cluster = targetDC
-		switch {
-		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.PollForWorkflowExecutionRawHistory(ctx, request)
-		default:
-			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.PollForWorkflowExecutionRawHistory(ctx, request)
 		}
 		return err
 	})
@@ -585,8 +563,15 @@ func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 		case targetDC == handler.currentClusterName:
 			resp, err = handler.frontendHandler.QueryWorkflow(ctx, request)
 		default:
-			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.QueryWorkflow(ctx, request)
+			// Only autofoward consistent queries, this is done for two reasons:
+			// 1. Query is meant to be fast, autoforwarding all queries will increase latency.
+			// 2. If eventual consistency was requested then the results from running out of local dc will be fine.
+			if request.GetQueryConsistencyLevel() == querypb.QueryConsistencyLevel_Strong {
+				remoteClient := handler.GetRemoteFrontendClient(targetDC)
+				resp, err = remoteClient.QueryWorkflow(ctx, request)
+			} else {
+				resp, err = handler.frontendHandler.QueryWorkflow(ctx, request)
+			}
 		}
 		return err
 	})

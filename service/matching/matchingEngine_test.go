@@ -80,12 +80,16 @@ type (
 		taskManager          *testTaskManager
 		mockExecutionManager *mocks.ExecutionManager
 		logger               log.Logger
-		callContext          context.Context
+		handlerContext       *handlerContext
 		sync.Mutex
 	}
 )
 
-const _minBurst = 10000
+const (
+	_minBurst             = 10000
+	matchingTestNamespace = "matching-test"
+	matchingTestTaskList  = "matching-test-tasklist"
+)
 
 func TestMatchingEngineSuite(t *testing.T) {
 	s := new(matchingEngineSuite)
@@ -95,13 +99,6 @@ func TestMatchingEngineSuite(t *testing.T) {
 func (s *matchingEngineSuite) SetupSuite() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	http.Handle("/test/tasks", http.HandlerFunc(s.TasksHandler))
-	// Get pprof HTTP UI at http://localhost:6060/debug/pprof/
-	// Add the following
-	// import _ "net/http/pprof"
-	// go func() {
-	//	log.Println(http.ListenAndServe("localhost:6060", nil))
-	// }()
-	s.callContext = context.Background()
 }
 
 // Renders content of taskManager and matchingEngine when called at http://localhost:6060/test/tasks
@@ -126,7 +123,14 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.taskManager = newTestTaskManager(s.logger)
 	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.CreateNamespaceCacheEntry("namespace"), nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.CreateNamespaceCacheEntry(matchingTestNamespace), nil).AnyTimes()
+	s.handlerContext = newHandlerContext(
+		context.Background(),
+		matchingTestNamespace,
+		&tasklistpb.TaskList{matchingTestTaskList, tasklistpb.TaskListKind_Normal},
+		metrics.NewClient(tally.NoopScope, metrics.Matching),
+		metrics.MatchingTaskListMgrScope,
+	)
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
@@ -212,23 +216,23 @@ func (s *matchingEngineSuite) TestAckManager() {
 }
 
 func (s *matchingEngineSuite) TestPollForActivityTasksEmptyResult() {
-	s.PollForTasksEmptyResultTest(s.callContext, persistence.TaskListTypeActivity)
+	s.PollForTasksEmptyResultTest(context.Background(), persistence.TaskListTypeActivity)
 }
 
 func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
-	s.PollForTasksEmptyResultTest(s.callContext, persistence.TaskListTypeDecision)
+	s.PollForTasksEmptyResultTest(context.Background(), persistence.TaskListTypeDecision)
 }
 
 func (s *matchingEngineSuite) TestPollForActivityTasksEmptyResultWithShortContext() {
 	shortContextTimeout := returnEmptyTaskTimeBudget + 10*time.Millisecond
-	callContext, cancel := context.WithTimeout(s.callContext, shortContextTimeout)
+	callContext, cancel := context.WithTimeout(context.Background(), shortContextTimeout)
 	defer cancel()
 	s.PollForTasksEmptyResultTest(callContext, persistence.TaskListTypeActivity)
 }
 
 func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResultWithShortContext() {
 	shortContextTimeout := returnEmptyTaskTimeBudget + 10*time.Millisecond
-	callContext, cancel := context.WithTimeout(s.callContext, shortContextTimeout)
+	callContext, cancel := context.WithTimeout(context.Background(), shortContextTimeout)
 	defer cancel()
 	s.PollForTasksEmptyResultTest(callContext, persistence.TaskListTypeDecision)
 }
@@ -280,10 +284,10 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 		ScheduleToStartTimeoutSeconds: 1,
 	}
 
-	_, err := s.matchingEngine.AddDecisionTask(context.Background(), &addRequest)
+	_, err := s.matchingEngine.AddDecisionTask(s.handlerContext, &addRequest)
 	s.NoError(err)
 
-	resp, err := s.matchingEngine.PollForDecisionTask(s.callContext, &matchingservice.PollForDecisionTaskRequest{
+	resp, err := s.matchingEngine.PollForDecisionTask(s.handlerContext, &matchingservice.PollForDecisionTaskRequest{
 		NamespaceId: namespaceID.String(),
 		PollRequest: &workflowservice.PollForDecisionTaskRequest{
 			TaskList: stickyTaskList,
@@ -330,11 +334,11 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 	taskList := &tasklistpb.TaskList{Name: tl}
 	var taskListType tasklistpb.TaskListType
 	tlID := newTestTaskListID(namespaceID.String(), tl, taskType)
-	// const rangeID = 123
+	s.handlerContext.Context = callContext
 	const pollCount = 10
 	for i := 0; i < pollCount; i++ {
 		if taskType == persistence.TaskListTypeActivity {
-			pollResp, err := s.matchingEngine.PollForActivityTask(callContext, &matchingservice.PollForActivityTaskRequest{
+			pollResp, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
 				NamespaceId: namespaceID.String(),
 				PollRequest: &workflowservice.PollForActivityTaskRequest{
 					TaskList: taskList,
@@ -346,7 +350,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 
 			taskListType = tasklistpb.TaskListType_Activity
 		} else {
-			resp, err := s.matchingEngine.PollForDecisionTask(callContext, &matchingservice.PollForDecisionTaskRequest{
+			resp, err := s.matchingEngine.PollForDecisionTask(s.handlerContext, &matchingservice.PollForDecisionTaskRequest{
 				NamespaceId: namespaceID.String(),
 				PollRequest: &workflowservice.PollForDecisionTaskRequest{
 					TaskList: taskList,
@@ -363,7 +367,8 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 		default:
 		}
 		// check the poller information
-		descResp, err := s.matchingEngine.DescribeTaskList(s.callContext, &matchingservice.DescribeTaskListRequest{
+		s.handlerContext.Context = context.Background()
+		descResp, err := s.matchingEngine.DescribeTaskList(s.handlerContext, &matchingservice.DescribeTaskListRequest{
 			NamespaceId: namespaceID.String(),
 			DescRequest: &workflowservice.DescribeTaskListRequest{
 				TaskList:              taskList,
@@ -422,7 +427,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int32, isForwarded bool) {
 			if isForwarded {
 				addRequest.ForwardedFrom = forwardedFrom
 			}
-			_, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+			_, err = s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 		} else {
 			addRequest := matchingservice.AddDecisionTaskRequest{
 				NamespaceId:                   namespaceID.String(),
@@ -434,7 +439,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int32, isForwarded bool) {
 			if isForwarded {
 				addRequest.ForwardedFrom = forwardedFrom
 			}
-			_, err = s.matchingEngine.AddDecisionTask(context.Background(), &addRequest)
+			_, err = s.matchingEngine.AddDecisionTask(s.handlerContext, &addRequest)
 		}
 
 		switch isForwarded {
@@ -485,12 +490,12 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	// now attempt to add a task
 	scheduleID := int64(5)
 	addRequest.ScheduleId = scheduleID
-	_, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	_, err = s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 	s.Error(err)
 
 	// test race
 	tlmImpl.taskWriter.stopped = 0
-	_, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	_, err = s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 	s.Error(err)
 	tlmImpl.taskWriter.stopped = 1 // reset it back to old value
 }
@@ -526,7 +531,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			ScheduleToStartTimeoutSeconds: 1,
 		}
 
-		_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+		_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 		s.NoError(err)
 	}
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
@@ -562,7 +567,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	for i := int64(0); i < taskCount; {
 		scheduleID := i * 3
 
-		result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
+		result, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
 			NamespaceId: namespaceID.String(),
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
 				TaskList: taskList,
@@ -670,7 +675,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		}).AnyTimes()
 
 	pollFunc := func(maxDispatch float64) (*matchingservice.PollForActivityTaskResponse, error) {
-		return s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
+		return s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
 			NamespaceId: namespaceID.String(),
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
 				TaskList:         taskList,
@@ -705,7 +710,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			TaskList:                      taskList,
 			ScheduleToStartTimeoutSeconds: 1,
 		}
-		_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+		_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 		wg.Wait()
 		s.NoError(err)
 		s.NoError(pollErr)
@@ -749,7 +754,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	}
 
 	time.Sleep(20 * time.Millisecond) // So any buffer tasks from 0 rps get picked up
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace=namespace,operation=TaskListMgr"]
+	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskListMgr,tasklist=makeToast"]
 	s.Equal(1, int(syncCtr.Value()))                         // Check times zero rps is set = throttle counter
 	s.EqualValues(1, s.taskManager.getCreateTaskCount(tlID)) // Check times zero rps is set = Tasks stored in persistence
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -762,7 +767,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	// check the poller information
 	tlType := tasklistpb.TaskListType_Activity
-	descResp, err := s.matchingEngine.DescribeTaskList(s.callContext, &matchingservice.DescribeTaskListRequest{
+	descResp, err := s.matchingEngine.DescribeTaskList(s.handlerContext, &matchingservice.DescribeTaskListRequest{
 		NamespaceId: namespaceID.String(),
 		DescRequest: &workflowservice.DescribeTaskListRequest{
 			TaskList:              taskList,
@@ -853,7 +858,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 					ScheduleToStartTimeoutSeconds: 1,
 				}
 
-				_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+				_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 				if err != nil {
 					s.logger.Info("Failure in AddActivityTask", tag.Error(err))
 					i--
@@ -897,7 +902,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			defer wg.Done()
 			for i := int64(0); i < taskCount; {
 				maxDispatch := dispatchLimitFn(wNum, i)
-				result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
+				result, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
 					NamespaceId: namespaceID.String(),
 					PollRequest: &workflowservice.PollForActivityTaskRequest{
 						TaskList:         taskList,
@@ -946,8 +951,8 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace=namespace,operation=TaskListMgr"]
-	bufCtr := scope.Snapshot().Counters()["test.buffer_throttle_count+namespace=namespace,operation=TaskListMgr"]
+	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskListMgr,tasklist=makeToast"]
+	bufCtr := scope.Snapshot().Counters()["test.buffer_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskListMgr,tasklist=makeToast"]
 	total := int64(0)
 	if syncCtr != nil {
 		total += syncCtr.Value()
@@ -992,7 +997,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 					ScheduleToStartTimeoutSeconds: 1,
 				}
 
-				_, err := s.matchingEngine.AddDecisionTask(context.Background(), &addRequest)
+				_, err := s.matchingEngine.AddDecisionTask(s.handlerContext, &addRequest)
 				if err != nil {
 					panic(err)
 				}
@@ -1019,7 +1024,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; {
-				result, err := s.matchingEngine.PollForDecisionTask(s.callContext, &matchingservice.PollForDecisionTaskRequest{
+				result, err := s.matchingEngine.PollForDecisionTask(s.handlerContext, &matchingservice.PollForDecisionTaskRequest{
 					NamespaceId: namespaceID.String(),
 					PollRequest: &workflowservice.PollForDecisionTaskRequest{
 						TaskList: taskList,
@@ -1079,7 +1084,8 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	// Try with cancelled context
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	cancel()
-	_, err := s.matchingEngine.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
+	s.handlerContext.Context = ctx
+	_, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
 		NamespaceId: namespaceID.String(),
 		PollRequest: &workflowservice.PollForActivityTaskRequest{
 			TaskList: taskList,
@@ -1091,7 +1097,8 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	// Try with expired context
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	resp, err := s.matchingEngine.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
+	s.handlerContext.Context = ctx
+	resp, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
 		NamespaceId: namespaceID.String(),
 		PollRequest: &workflowservice.PollForActivityTaskRequest{
 			TaskList: taskList,
@@ -1143,7 +1150,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					ScheduleToStartTimeoutSeconds: 600,
 				}
 
-				_, err := engine.AddActivityTask(context.Background(), &addRequest)
+				_, err := engine.AddActivityTask(s.handlerContext, &addRequest)
 				if err != nil {
 					if _, ok := err.(*persistence.ConditionFailedError); ok {
 						i-- // retry adding
@@ -1194,7 +1201,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
-				result, err := engine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
+				result, err := engine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
 					NamespaceId: namespaceID.String(),
 					PollRequest: &workflowservice.PollForActivityTaskRequest{
 						TaskList: taskList,
@@ -1291,7 +1298,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 					ScheduleToStartTimeoutSeconds: 600,
 				}
 
-				_, err := engine.AddDecisionTask(context.Background(), &addRequest)
+				_, err := engine.AddDecisionTask(s.handlerContext, &addRequest)
 				if err != nil {
 					if _, ok := err.(*persistence.ConditionFailedError); ok {
 						i-- // retry adding
@@ -1331,7 +1338,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
-				result, err := engine.PollForDecisionTask(s.callContext, &matchingservice.PollForDecisionTaskRequest{
+				result, err := engine.PollForDecisionTask(s.handlerContext, &matchingservice.PollForDecisionTaskRequest{
 					NamespaceId: namespaceID.String(),
 					PollRequest: &workflowservice.PollForDecisionTaskRequest{
 						TaskList: taskList,
@@ -1408,7 +1415,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 		ScheduleToStartTimeoutSeconds: 1,
 	}
 
-	_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
 
@@ -1456,7 +1463,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 			ScheduleToStartTimeoutSeconds: 1,
 		}
 
-		_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+		_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 		s.NoError(err)
 	}
 
@@ -1503,7 +1510,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	// complete rangeSize events
 	for i := int64(0); i < rangeSize; i++ {
 		identity := "nobody"
-		result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matchingservice.PollForActivityTaskRequest{
+		result, err := s.matchingEngine.PollForActivityTask(s.handlerContext, &matchingservice.PollForActivityTaskRequest{
 			NamespaceId: namespaceID.String(),
 			PollRequest: &workflowservice.PollForActivityTaskRequest{
 				TaskList: taskList,
@@ -1600,7 +1607,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 				// simulates creating a task whose scheduledToStartTimeout is already expired
 				addRequest.ScheduleToStartTimeoutSeconds = -5
 			}
-			_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+			_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 			s.NoError(err)
 		}
 
@@ -1626,7 +1633,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		for i := 0; i < 2; i++ {
 			// verify that (1) expired tasks are not returned in poll result (2) taskCleaner deletes tasks correctly
 			for i := int64(0); i < taskCount/4; i++ {
-				result, err := s.matchingEngine.PollForActivityTask(s.callContext, pollReq)
+				result, err := s.matchingEngine.PollForActivityTask(s.handlerContext, pollReq)
 				s.NoError(err)
 				s.NotNil(result)
 			}

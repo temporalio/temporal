@@ -848,7 +848,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string][]byte{
-			"CustomKeywordField": []byte("1"),
+			"CustomKeywordField": []byte(`"1"`),
 		},
 	}
 
@@ -1054,7 +1054,7 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string][]byte{
-			"CustomKeywordField": []byte("1"),
+			"CustomKeywordField": []byte(`"1"`),
 		},
 	}
 

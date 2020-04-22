@@ -598,7 +598,7 @@ type (
 		LastWorkerIdentity string
 		LastFailureDetails *commonpb.Payload
 		// Not written to database - This is used only for deduping heartbeat timer creation
-		LastHeartbeatTimeoutVisibility int64
+		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
 
 	// ChildExecutionInfo has details for pending child executions.
@@ -670,6 +670,18 @@ type (
 	GetCurrentExecutionRequest struct {
 		NamespaceID string
 		WorkflowID  string
+	}
+
+	// ListConcreteExecutionsRequest is request to ListConcreteExecutions
+	ListConcreteExecutionsRequest struct {
+		PageSize  int
+		PageToken []byte
+	}
+
+	// ListConcreteExecutionsResponse is response to ListConcreteExecutions
+	ListConcreteExecutionsResponse struct {
+		ExecutionInfos []*WorkflowExecutionInfo
+		PageToken      []byte
 	}
 
 	// GetCurrentExecutionResponse is the response to GetCurrentExecution
@@ -811,14 +823,6 @@ type (
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
-	}
-
-	// DeleteTaskRequest is used to detele a task that corrupted and need to be removed
-	// 	e.g. corrupted history event batch, eventID is not continouous
-	DeleteTaskRequest struct {
-		TaskID  int64
-		Type    int
-		ShardID int
 	}
 
 	// DeleteCurrentWorkflowExecutionRequest is used to delete the current workflow execution
@@ -1398,8 +1402,8 @@ type (
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
 
-		// Remove Task due to corrupted data
-		DeleteTask(request *DeleteTaskRequest) error
+		// Scan operations
+		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error)
 	}
 
 	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard

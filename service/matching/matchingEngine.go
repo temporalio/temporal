@@ -220,7 +220,10 @@ func (e *matchingEngineImpl) removeTaskListManager(id *taskListID) {
 }
 
 // AddDecisionTask either delivers task directly to waiting poller or save it into task list persistence.
-func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *matchingservice.AddDecisionTaskRequest) (bool, error) {
+func (e *matchingEngineImpl) AddDecisionTask(
+	hCtx *handlerContext,
+	addRequest *matchingservice.AddDecisionTaskRequest,
+) (bool, error) {
 	namespaceID := addRequest.GetNamespaceId()
 	taskListName := addRequest.TaskList.GetName()
 	taskListKind := addRequest.TaskList.GetKind()
@@ -256,7 +259,7 @@ func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *ma
 		CreatedTime: now,
 	}
 
-	return tlMgr.AddTask(ctx, addTaskParams{
+	return tlMgr.AddTask(hCtx.Context, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
@@ -265,7 +268,10 @@ func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *ma
 }
 
 // AddActivityTask either delivers task directly to waiting poller or save it into task list persistence.
-func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *matchingservice.AddActivityTaskRequest) (bool, error) {
+func (e *matchingEngineImpl) AddActivityTask(
+	hCtx *handlerContext,
+	addRequest *matchingservice.AddActivityTaskRequest,
+) (bool, error) {
 	namespaceID := addRequest.GetNamespaceId()
 	sourceNamespaceID := primitives.MustParseUUID(addRequest.GetSourceNamespaceId())
 	runID := primitives.MustParseUUID(addRequest.Execution.GetRunId())
@@ -300,7 +306,7 @@ func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *ma
 		Expiry:      expiry,
 	}
 
-	return tlMgr.AddTask(ctx, addTaskParams{
+	return tlMgr.AddTask(hCtx.Context, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
@@ -309,7 +315,10 @@ func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *ma
 }
 
 // PollForDecisionTask tries to get the decision task using exponential backoff.
-func (e *matchingEngineImpl) PollForDecisionTask(ctx context.Context, req *matchingservice.PollForDecisionTaskRequest) (*matchingservice.PollForDecisionTaskResponse, error) {
+func (e *matchingEngineImpl) PollForDecisionTask(
+	hCtx *handlerContext,
+	req *matchingservice.PollForDecisionTaskRequest,
+) (*matchingservice.PollForDecisionTaskResponse, error) {
 	namespaceID := req.GetNamespaceId()
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
@@ -317,13 +326,13 @@ func (e *matchingEngineImpl) PollForDecisionTask(ctx context.Context, req *match
 	e.logger.Debug("Received PollForDecisionTask for taskList", tag.WorkflowTaskListName(taskListName))
 pollLoop:
 	for {
-		err := common.IsValidContext(ctx)
+		err := common.IsValidContext(hCtx.Context)
 		if err != nil {
 			return nil, err
 		}
 		// Add frontend generated pollerID to context so tasklistMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
-		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
+		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		taskList, err := newTaskListID(namespaceID, taskListName, persistence.TaskListTypeDecision)
 		if err != nil {
@@ -339,7 +348,7 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedFromStats(metrics.MatchingPollForDecisionTaskScope, task.isForwarded(), req.GetForwardedFrom())
+		e.emitForwardedFromStats(hCtx.scope, task.isForwarded(), req.GetForwardedFrom())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -351,7 +360,7 @@ pollLoop:
 
 			// for query task, we don't need to update history to record decision task started. but we need to know
 			// the NextEventID so front end knows what are the history events to load for this decision task.
-			mutableStateResp, err := e.historyService.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+			mutableStateResp, err := e.historyService.GetMutableState(hCtx.Context, &historyservice.GetMutableStateRequest{
 				NamespaceId: req.GetNamespaceId(),
 				Execution:   task.workflowExecution(),
 			})
@@ -374,10 +383,10 @@ pollLoop:
 				BranchToken:               mutableStateResp.CurrentBranchToken,
 				StartedEventId:            common.EmptyEventID,
 			}
-			return e.createPollForDecisionTaskResponse(task, resp), nil
+			return e.createPollForDecisionTaskResponse(task, resp, hCtx.scope), nil
 		}
 
-		resp, err := e.recordDecisionTaskStarted(ctx, request, task)
+		resp, err := e.recordDecisionTaskStarted(hCtx.Context, request, task)
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
@@ -391,15 +400,17 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollForDecisionTaskResponse(task, resp), nil
+		return e.createPollForDecisionTaskResponse(task, resp, hCtx.scope), nil
 	}
 }
 
 // pollForActivityTaskOperation takes one task from the task manager, update workflow execution history, mark task as
 // completed and return it to user. If a task from task manager is already started, return an empty response, without
 // error. Timeouts handled by the timer queue.
-func (e *matchingEngineImpl) PollForActivityTask(ctx context.Context, req *matchingservice.PollForActivityTaskRequest) (
-	*matchingservice.PollForActivityTaskResponse, error) {
+func (e *matchingEngineImpl) PollForActivityTask(
+	hCtx *handlerContext,
+	req *matchingservice.PollForActivityTaskRequest,
+) (*matchingservice.PollForActivityTaskResponse, error) {
 	namespaceID := req.GetNamespaceId()
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
@@ -407,7 +418,7 @@ func (e *matchingEngineImpl) PollForActivityTask(ctx context.Context, req *match
 	e.logger.Debug("Received PollForActivityTask for taskList", tag.Name(taskListName))
 pollLoop:
 	for {
-		err := common.IsValidContext(ctx)
+		err := common.IsValidContext(hCtx.Context)
 		if err != nil {
 			return nil, err
 		}
@@ -423,7 +434,7 @@ pollLoop:
 		}
 		// Add frontend generated pollerID to context so tasklistMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
-		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
+		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		taskListKind := request.TaskList.GetKind()
 		task, err := e.getTask(pollerCtx, taskList, maxDispatch, taskListKind)
@@ -435,14 +446,14 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedFromStats(metrics.MatchingPollForActivityTaskScope, task.isForwarded(), req.GetForwardedFrom())
+		e.emitForwardedFromStats(hCtx.scope, task.isForwarded(), req.GetForwardedFrom())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
 			return task.pollForActivityResponse(), nil
 		}
 
-		resp, err := e.recordActivityTaskStarted(ctx, request, task)
+		resp, err := e.recordActivityTaskStarted(hCtx.Context, request, task)
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
@@ -455,7 +466,7 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollForActivityTaskResponse(task, resp), nil
+		return e.createPollForActivityTaskResponse(task, resp, hCtx.scope), nil
 	}
 }
 
@@ -466,7 +477,10 @@ type queryResult struct {
 
 // QueryWorkflow creates a DecisionTask with query data, send it through sync match channel, wait for that DecisionTask
 // to be processed by worker, and then return the query result.
-func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error) {
+func (e *matchingEngineImpl) QueryWorkflow(
+	hCtx *handlerContext,
+	queryRequest *matchingservice.QueryWorkflowRequest,
+) (*matchingservice.QueryWorkflowResponse, error) {
 	namespaceID := queryRequest.GetNamespaceId()
 	taskListName := queryRequest.TaskList.GetName()
 	taskListKind := queryRequest.TaskList.GetKind()
@@ -480,7 +494,7 @@ func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *ma
 		return nil, err
 	}
 	taskID := uuid.New()
-	resp, err := tlMgr.DispatchQueryTask(ctx, taskID, queryRequest)
+	resp, err := tlMgr.DispatchQueryTask(hCtx.Context, taskID, queryRequest)
 
 	// if get response or error it means that query task was handled by forwarding to another matching host
 	// this remote host's result can be returned directly
@@ -509,14 +523,17 @@ func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *ma
 		default:
 			return nil, serviceerror.NewInternal("unknown query completed type")
 		}
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	case <-hCtx.Done():
+		return nil, hCtx.Err()
 	}
 }
 
-func (e *matchingEngineImpl) RespondQueryTaskCompleted(ctx context.Context, request *matchingservice.RespondQueryTaskCompletedRequest) error {
+func (e *matchingEngineImpl) RespondQueryTaskCompleted(
+	hCtx *handlerContext,
+	request *matchingservice.RespondQueryTaskCompletedRequest,
+) error {
 	if err := e.deliverQueryResult(request.GetTaskId(), &queryResult{workerResponse: request}); err != nil {
-		e.metricsClient.IncCounter(metrics.MatchingRespondQueryTaskCompletedScope, metrics.RespondQueryTaskFailedCounter)
+		hCtx.scope.IncCounter(metrics.RespondQueryTaskFailedPerTaskListCounter)
 		return err
 	}
 	return nil
@@ -531,7 +548,10 @@ func (e *matchingEngineImpl) deliverQueryResult(taskID string, queryResult *quer
 	return nil
 }
 
-func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request *matchingservice.CancelOutstandingPollRequest) error {
+func (e *matchingEngineImpl) CancelOutstandingPoll(
+	hCtx *handlerContext,
+	request *matchingservice.CancelOutstandingPollRequest,
+) error {
 	namespaceID := request.GetNamespaceId()
 	taskListType := request.GetTaskListType()
 	taskListName := request.TaskList.GetName()
@@ -551,7 +571,10 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request 
 	return nil
 }
 
-func (e *matchingEngineImpl) DescribeTaskList(ctx context.Context, request *matchingservice.DescribeTaskListRequest) (*matchingservice.DescribeTaskListResponse, error) {
+func (e *matchingEngineImpl) DescribeTaskList(
+	hCtx *handlerContext,
+	request *matchingservice.DescribeTaskListRequest,
+) (*matchingservice.DescribeTaskListResponse, error) {
 	namespaceID := request.GetNamespaceId()
 	taskListType := persistence.TaskListTypeDecision
 	if request.DescRequest.GetTaskListType() == tasklistpb.TaskListType_Activity {
@@ -571,7 +594,10 @@ func (e *matchingEngineImpl) DescribeTaskList(ctx context.Context, request *matc
 	return tlMgr.DescribeTaskList(request.DescRequest.GetIncludeTaskListStatus()), nil
 }
 
-func (e *matchingEngineImpl) ListTaskListPartitions(ctx context.Context, request *matchingservice.ListTaskListPartitionsRequest) (*matchingservice.ListTaskListPartitionsResponse, error) {
+func (e *matchingEngineImpl) ListTaskListPartitions(
+	hCtx *handlerContext,
+	request *matchingservice.ListTaskListPartitionsRequest,
+) (*matchingservice.ListTaskListPartitionsResponse, error) {
 	activityTaskListInfo, err := e.listTaskListPartitions(request, persistence.TaskListTypeActivity)
 	if err != nil {
 		return nil, err
@@ -676,6 +702,7 @@ func (e *matchingEngineImpl) unloadTaskList(id *taskListID) {
 func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 	task *internalTask,
 	historyResponse *historyservice.RecordDecisionTaskStartedResponse,
+	scope metrics.Scope,
 ) *matchingservice.PollForDecisionTaskResponse {
 
 	var serializedToken []byte
@@ -698,9 +725,8 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		}
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
-			scope := e.metricsClient.Scope(metrics.MatchingPollForDecisionTaskScope)
 			ct, _ := types.TimestampFromProto(task.event.Data.CreatedTime)
-			scope.Tagged(metrics.NamespaceTag(task.namespace)).RecordTimer(metrics.AsyncMatchLatency, time.Since(ct))
+			scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskList, time.Since(ct))
 		}
 	}
 
@@ -719,6 +745,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	task *internalTask,
 	historyResponse *historyservice.RecordActivityTaskStartedResponse,
+	scope metrics.Scope,
 ) *matchingservice.PollForActivityTaskResponse {
 
 	scheduledEvent := historyResponse.ScheduledEvent
@@ -730,9 +757,8 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 		panic("ActivityTaskScheduledEventAttributes.ActivityID is not set")
 	}
 	if task.responseC == nil {
-		scope := e.metricsClient.Scope(metrics.MatchingPollForActivityTaskScope)
 		ct, _ := types.TimestampFromProto(task.event.Data.CreatedTime)
-		scope.Tagged(metrics.NamespaceTag(task.namespace)).RecordTimer(metrics.AsyncMatchLatency, time.Since(ct))
+		scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskList, time.Since(ct))
 	}
 
 	taskToken := &tokengenpb.Task{
@@ -825,17 +851,21 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	return resp, err
 }
 
-func (e *matchingEngineImpl) emitForwardedFromStats(scope int, isTaskForwarded bool, pollForwardedFrom string) {
+func (e *matchingEngineImpl) emitForwardedFromStats(
+	scope metrics.Scope,
+	isTaskForwarded bool,
+	pollForwardedFrom string,
+) {
 	isPollForwarded := len(pollForwardedFrom) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
-		e.metricsClient.IncCounter(scope, metrics.RemoteToRemoteMatchCounter)
+		scope.IncCounter(metrics.RemoteToRemoteMatchPerTaskListCounter)
 	case isTaskForwarded:
-		e.metricsClient.IncCounter(scope, metrics.RemoteToLocalMatchCounter)
+		scope.IncCounter(metrics.RemoteToLocalMatchPerTaskListCounter)
 	case isPollForwarded:
-		e.metricsClient.IncCounter(scope, metrics.LocalToRemoteMatchCounter)
+		scope.IncCounter(metrics.LocalToRemoteMatchPerTaskListCounter)
 	default:
-		e.metricsClient.IncCounter(scope, metrics.LocalToLocalMatchCounter)
+		scope.IncCounter(metrics.LocalToLocalMatchPerTaskListCounter)
 	}
 }
 

@@ -116,7 +116,6 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 		}},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    logger,
 		remoteClusterCurrentTime:  make(map[string]time.Time),
@@ -177,7 +176,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask() {
 			nil,
 			&persistenceblobs.NamespaceReplicationConfig{
 				Clusters: []string{
-	"test",
+					"test",
 				}},
 			0,
 			s.clusterMetadata,

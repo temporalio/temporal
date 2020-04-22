@@ -137,6 +137,7 @@ func New(
 	params *BootstrapParams,
 	serviceName string,
 	persistenceMaxQPS dynamicconfig.IntPropertyFn,
+	persistenceGlobalMaxQPS dynamicconfig.IntPropertyFn,
 	throttledLoggerMaxRPS dynamicconfig.IntPropertyFn,
 	visibilityManagerInitializer VisibilityManagerInitializer,
 ) (impl *Impl, retError error) {
@@ -156,7 +157,19 @@ func New(
 
 	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
 		&params.PersistenceConfig,
-		persistenceMaxQPS,
+		func(...dynamicconfig.FilterOption) int {
+			if persistenceGlobalMaxQPS() > 0 {
+				// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
+				// persistence to bootstrap membership ring, so we cannot have persistence rely on membership
+				// as it will cause circular dependency.
+				// ringSize, err := membershipMonitor.GetMemberCount(serviceName)
+				// if err == nil && ringSize > 0 {
+				// 	avgQuota := common.MaxInt(persistenceGlobalMaxQPS()/ringSize, 1)
+				// 	return common.MinInt(avgQuota, persistenceMaxQPS())
+				// }
+			}
+			return persistenceMaxQPS()
+		},
 		params.AbstractDatastoreFactory,
 		params.ClusterMetadata.GetCurrentClusterName(),
 		params.MetricsClient,

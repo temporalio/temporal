@@ -661,12 +661,6 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 	return nil
 }
 
-func (m *sqlExecutionManager) DeleteTask(request *p.DeleteTaskRequest) error {
-	//TODO: This needs implement when we use sql for tasks.
-	// 		https://github.com/uber/cadence/issues/2479
-	return nil
-}
-
 func (m *sqlExecutionManager) DeleteWorkflowExecution(
 	request *p.DeleteWorkflowExecutionRequest,
 ) error {
@@ -723,6 +717,12 @@ func (m *sqlExecutionManager) GetCurrentExecution(
 		Status:           row.Status,
 		LastWriteVersion: row.LastWriteVersion,
 	}, nil
+}
+
+func (m *sqlExecutionManager) ListConcreteExecutions(
+	_ *p.ListConcreteExecutionsRequest,
+) (*p.InternalListConcreteExecutionsResponse, error) {
+	return nil, serviceerror.NewUnimplemented("ListConcreteExecutions is not implemented")
 }
 
 func (m *sqlExecutionManager) GetTransferTasks(

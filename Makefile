@@ -13,6 +13,13 @@ clean: clean-bins clean-proto clean-test-results
 
 # Update proto submodule from remote and rebuild proto files.
 update-proto: clean-proto update-proto-submodule protoc update-proto-go proto-mock gomodtidy
+
+# Build all docker images.
+docker-images:
+	docker build --build-arg "TARGET=server" -t temporalio/server:$(DOCKER_IMAGE_TAG) .
+	docker build --build-arg "TARGET=tctl" -t temporalio/tctl:$(DOCKER_IMAGE_TAG) .
+	docker build --build-arg "TARGET=auto-setup" -t temporalio/auto-setup:$(DOCKER_IMAGE_TAG) .
+	docker build --build-arg "TARGET=admin-tools" -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) .
 ########################################################################
 
 .PHONY: proto
@@ -51,6 +58,8 @@ INTEG_TEST_NDC_OUT_DIR := hostndc
 
 GO_BUILD_LDFLAGS_CMD      := $(abspath ./scripts/go-build-ldflags.sh)
 GO_BUILD_LDFLAGS          := $(shell $(GO_BUILD_LDFLAGS_CMD) LDFLAG)
+
+DOCKER_IMAGE_TAG := $(shell (whoami | tr -d ' '))-local
 
 ifndef PERSISTENCE_TYPE
 override PERSISTENCE_TYPE := cassandra

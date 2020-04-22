@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.2",
+  "MinCompatibleVersion": "0.2",
+  "Description": "add task_list field to visibility",
+  "SchemaUpdateCqlFiles": [
+    "add_task_list.sql"
+  ]
+}

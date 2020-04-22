@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/temporal/client"
 
 	cliproto "github.com/temporalio/temporal/.gen/proto/cli"
+	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/service/history"
@@ -959,30 +960,11 @@ func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
 	indexedFields := searchAttributes.GetIndexedFields()
 	for k, v := range indexedFields {
 		valueType := validKeys[k]
-		switch valueType {
-		case commonpb.IndexedValueType_String, commonpb.IndexedValueType_Keyword:
-			var val string
-			json.Unmarshal(v, &val)
-			result.IndexedFields[k] = val
-		case commonpb.IndexedValueType_Int:
-			var val int64
-			json.Unmarshal(v, &val)
-			result.IndexedFields[k] = strconv.FormatInt(val, 10)
-		case commonpb.IndexedValueType_Double:
-			var val float64
-			json.Unmarshal(v, &val)
-			result.IndexedFields[k] = strconv.FormatFloat(val, 'f', 6, 64)
-		case commonpb.IndexedValueType_Bool:
-			var val bool
-			json.Unmarshal(v, &val)
-			result.IndexedFields[k] = strconv.FormatBool(val)
-		case commonpb.IndexedValueType_Datetime:
-			var val time.Time
-			json.Unmarshal(v, &val)
-			result.IndexedFields[k] = val.Format(time.RFC3339)
-		default:
-			ErrorAndExit(fmt.Sprintf("Error unknown index value type [%v]", valueType), nil)
+		deserializedValue, err := common.DeserializeSearchAttributeValue(v, valueType)
+		if err != nil {
+			ErrorAndExit("Error deserializing search attribute value", err)
 		}
+		result.IndexedFields[k] = fmt.Sprintf("%v", deserializedValue)
 	}
 
 	return result
@@ -992,8 +974,8 @@ func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *t
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	header := []string{"Workflow Type", "Workflow Id", "Run Id", "Start Time", "Execution Time"}
-	headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
+	header := []string{"Workflow Type", "Workflow Id", "Run Id", "Task List", "Start Time", "Execution Time"}
+	headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
 	if !queryOpen {
 		header = append(header, "End Time")
 		headerColor = append(headerColor, tableHeaderBlue)
@@ -1091,7 +1073,7 @@ func appendWorkflowExecutionsToTable(
 			executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
 			closeTime = convertTime(e.GetCloseTime().GetValue(), !printDateTime)
 		}
-		row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
+		row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), e.GetTaskList(), startTime, executionTime}
 		if !queryOpen {
 			row = append(row, closeTime)
 		}

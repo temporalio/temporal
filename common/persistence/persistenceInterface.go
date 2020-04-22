@@ -118,8 +118,8 @@ type (
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
 
-		// Remove corrupted task
-		DeleteTask(request *DeleteTaskRequest) error
+		// Scan related methods
+		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
 	}
 
 	// HistoryStore is to manager workflow history events
@@ -169,21 +169,21 @@ type (
 	Queue interface {
 		Closeable
 		EnqueueMessage(messagePayload []byte) error
-		ReadMessages(lastMessageID int, maxCount int) ([]*QueueMessage, error)
-		DeleteMessagesBefore(messageID int) error
-		UpdateAckLevel(messageID int, clusterName string) error
-		GetAckLevels() (map[string]int, error)
-		EnqueueMessageToDLQ(messagePayload []byte) (int, error)
-		ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
-		DeleteMessageFromDLQ(messageID int) error
-		RangeDeleteMessagesFromDLQ(firstMessageID int, lastMessageID int) error
-		UpdateDLQAckLevel(messageID int, clusterName string) error
-		GetDLQAckLevels() (map[string]int, error)
+		ReadMessages(lastMessageID int64, maxCount int) ([]*QueueMessage, error)
+		DeleteMessagesBefore(messageID int64) error
+		UpdateAckLevel(messageID int64, clusterName string) error
+		GetAckLevels() (map[string]int64, error)
+		EnqueueMessageToDLQ(messagePayload []byte) (int64, error)
+		ReadMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
+		DeleteMessageFromDLQ(messageID int64) error
+		RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error
+		UpdateDLQAckLevel(messageID int64, clusterName string) error
+		GetDLQAckLevels() (map[string]int64, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
 	QueueMessage struct {
-		ID        int       `json:"message_id"`
+		ID        int64     `json:"message_id"`
 		QueueType QueueType `json:"queue_type"`
 		Payload   []byte    `json:"message_payload"`
 	}
@@ -320,7 +320,7 @@ type (
 		LastWorkerIdentity string
 		LastFailureDetails *commonpb.Payload
 		// Not written to database - This is used only for deduping heartbeat timer creation
-		LastHeartbeatTimeoutVisibility int64
+		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
 
 	// InternalChildExecutionInfo has details for pending child executions for Persistence Interface
@@ -475,9 +475,15 @@ type (
 		ShardID int
 	}
 
-	// InternalGetWorkflowExecutionResponse is the response to GetworkflowExecutionRequest for Persistence Interface
+	// InternalGetWorkflowExecutionResponse is the response to GetworkflowExecution for Persistence Interface
 	InternalGetWorkflowExecutionResponse struct {
 		State *InternalWorkflowMutableState
+	}
+
+	// InternalListConcreteExecutionsResponse is the response to ListConcreteExecutions for Persistence Interface
+	InternalListConcreteExecutionsResponse struct {
+		ExecutionInfos []*InternalWorkflowExecutionInfo
+		NextPageToken  []byte
 	}
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
@@ -563,6 +569,7 @@ type (
 		Status           *executionpb.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *serialization.DataBlob
+		TaskList         string
 		SearchAttributes map[string]interface{}
 	}
 
@@ -590,6 +597,7 @@ type (
 		WorkflowTimeout    int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
+		TaskList           string
 		SearchAttributes   map[string][]byte
 	}
 
@@ -603,6 +611,7 @@ type (
 		ExecutionTimestamp int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
+		TaskList           string
 		SearchAttributes   map[string][]byte
 		CloseTimestamp     int64
 		Status             executionpb.WorkflowExecutionStatus
@@ -621,6 +630,7 @@ type (
 		WorkflowTimeout    int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
+		TaskList           string
 		SearchAttributes   map[string][]byte
 	}
 

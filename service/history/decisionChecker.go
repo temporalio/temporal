@@ -65,7 +65,7 @@ type (
 		completedID    int64
 		mutableState   mutableState
 		executionStats *persistence.ExecutionStats
-		metricsClient  metrics.Client
+		metricsScope   metrics.Scope
 		logger         log.Logger
 	}
 )
@@ -102,7 +102,7 @@ func newWorkflowSizeChecker(
 	completedID int64,
 	mutableState mutableState,
 	executionStats *persistence.ExecutionStats,
-	metricsClient metrics.Client,
+	metricsScope metrics.Scope,
 	logger log.Logger,
 ) *workflowSizeChecker {
 	return &workflowSizeChecker{
@@ -115,12 +115,13 @@ func newWorkflowSizeChecker(
 		completedID:            completedID,
 		mutableState:           mutableState,
 		executionStats:         executionStats,
-		metricsClient:          metricsClient,
+		metricsScope:           metricsScope,
 		logger:                 logger,
 	}
 }
 
-func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
+func (c *workflowSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
+	decisionTypeTag metrics.Tag,
 	payloadSize int,
 	message string,
 ) (bool, error) {
@@ -133,8 +134,9 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		executionInfo.NamespaceID,
 		executionInfo.WorkflowID,
 		executionInfo.RunID,
-		c.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope),
+		c.metricsScope.Tagged(decisionTypeTag),
 		c.logger,
+		tag.BlobSizeViolationOperation(decisionTypeTag.Value()),
 	)
 	if err == nil {
 		return false, nil

@@ -38,7 +38,7 @@ RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSI
 # Alpine base image
 FROM alpine:3.11 AS alpine
 
-RUN apk add --update --no-cache ca-certificates tzdata bash curl
+RUN apk add --update --no-cache ca-certificates tzdata bash curl vim
 
 # set up nsswitch.conf for Go's "netgo" implementation
 # https://github.com/gliderlabs/docker-alpine/issues/367#issuecomment-424546457
@@ -49,6 +49,9 @@ SHELL ["/bin/bash", "-c"]
 
 # Temporal server
 FROM alpine AS temporal-server
+
+RUN apk add --update --no-cache ca-certificates py-pip mysql-client \
+    && pip install cqlsh
 
 ENV TEMPORAL_HOME /etc/temporal
 RUN mkdir -p /etc/temporal
@@ -64,6 +67,7 @@ COPY docker/entrypoint.sh /docker-entrypoint.sh
 COPY config/dynamicconfig /etc/temporal/config/dynamicconfig
 COPY docker/config_template.yaml /etc/temporal/config
 COPY docker/start-temporal.sh /start-temporal.sh
+COPY docker/start.sh /start.sh
 
 WORKDIR /etc/temporal
 
@@ -71,17 +75,11 @@ ENV SERVICES="history,matching,frontend,worker"
 
 EXPOSE 7933 7934 7935 7939 6933 6934 6935 6939 7233 7234 7235 7239
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD /start-temporal.sh
+CMD /start.sh
 
 # All-in-one Temporal server
 FROM temporal-server AS temporal-auto-setup
-
-RUN apk add --update --no-cache ca-certificates py-pip mysql-client
-RUN pip install cqlsh
-
-COPY docker/start.sh /start.sh
-
-CMD /start.sh
+ENV AUTO_SETUP="true"
 
 # Temporal CLI
 FROM alpine AS temporal-tctl

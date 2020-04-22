@@ -74,7 +74,7 @@ const (
 	activityCancellationMsgActivityIDUnknown  = "ACTIVITY_ID_UNKNOWN"
 	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
 	timerCancellationMsgTimerIDUnknown        = "TIMER_ID_UNKNOWN"
-	queryFirstDecisionTaskWaitTime            = time.Second
+	defaultQueryFirstDecisionTaskWaitTime     = time.Second
 	queryFirstDecisionTaskCheckInterval       = 200 * time.Millisecond
 )
 
@@ -150,6 +150,7 @@ type (
 		archivalClient            archiver.Client
 		resetor                   workflowResetor
 		workflowResetter          workflowResetter
+		queueTaskProcessor        queueTaskProcessor
 		replicationTaskProcessors []ReplicationTaskProcessor
 		publicClient              sdkclient.Client
 		eventsReapplier           nDCEventsReapplier
@@ -194,7 +195,7 @@ var (
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
 	ErrQueryEnteredInvalidState = serviceerror.NewInvalidArgument("query entered invalid state, this should be impossible")
 	// ErrQueryWorkflowBeforeFirstDecision is error indicating that query was attempted before first decision task completed
-	ErrQueryWorkflowBeforeFirstDecision = serviceerror.NewInvalidArgument("workflow must handle at least one decision task before it can be queried")
+	ErrQueryWorkflowBeforeFirstDecision = serviceerror.NewQueryFailed("workflow must handle at least one decision task before it can be queried")
 	// ErrConsistentQueryNotEnabled is error indicating that consistent query was requested but either cluster or namespace does not enable consistent query
 	ErrConsistentQueryNotEnabled = serviceerror.NewInvalidArgument("cluster or namespace does not enable strongly consistent query but strongly consistent query was requested")
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
@@ -222,6 +223,7 @@ func NewEngineWithShardContext(
 	config *Config,
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matching.Client,
+	queueTaskProcessor queueTaskProcessor,
 ) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
@@ -252,14 +254,15 @@ func NewEngineWithShardContext(
 			shard.GetConfig().ArchiveRequestRPS,
 			shard.GetService().GetArchiverProvider(),
 		),
-		publicClient:      publicClient,
-		matchingClient:    matching,
-		rawMatchingClient: rawMatchingClient,
-		versionChecker:    headers.NewVersionChecker(),
+		publicClient:       publicClient,
+		matchingClient:     matching,
+		rawMatchingClient:  rawMatchingClient,
+		queueTaskProcessor: queueTaskProcessor,
+		versionChecker:     headers.NewVersionChecker(),
 	}
 
-	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
-	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
+	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
+	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	// Only start the replicator processor if valid publisher is passed in
@@ -319,6 +322,7 @@ func NewEngineWithShardContext(
 		},
 		shard.GetService().GetPayloadSerializer(),
 		replicationTimeout,
+		nil,
 		shard.GetLogger(),
 	)
 	replicationTaskExecutor := newReplicationTaskExecutor(
@@ -385,6 +389,10 @@ func (e *historyEngineImpl) Stop() {
 
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
 		replicationTaskProcessor.Stop()
+	}
+
+	if e.queueTaskProcessor != nil {
+		e.queueTaskProcessor.StopShardProcessor(e.shard)
 	}
 
 	// unset the failover callback
@@ -682,7 +690,7 @@ func (e *historyEngineImpl) PollMutableState(
 		CurrentBranchToken:  request.CurrentBranchToken})
 
 	if err != nil {
-		return nil, err
+		return nil, e.updateEntityNotExistsErrorOnPassiveCluster(err, request.GetNamespaceId())
 	}
 	return &historyservice.PollMutableStateResponse{
 		Execution:                            response.Execution,
@@ -702,6 +710,25 @@ func (e *historyEngineImpl) PollMutableState(
 		WorkflowState:                        response.WorkflowState,
 		WorkflowStatus:                       response.WorkflowStatus,
 	}, nil
+}
+
+func (e *historyEngineImpl) updateEntityNotExistsErrorOnPassiveCluster(err error, namespaceID string) error {
+	switch err.(type) {
+	case *serviceerror.NotFound:
+		namespaceCache, namespaceCacheErr := e.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+		if namespaceCacheErr != nil {
+			return err // if could not access namespace cache simply return original error
+		}
+		namespaceNotActiveErr := namespaceCache.GetNamespaceNotActiveErr().(*serviceerror.NamespaceNotActive)
+		if namespaceNotActiveErr != nil {
+			updatedErr := serviceerror.NewNotFound("Workflow execution not found in non-active cluster")
+			updatedErr.ActiveCluster = namespaceNotActiveErr.ActiveCluster
+			updatedErr.CurrentCluster = namespaceNotActiveErr.CurrentCluster
+
+			return updatedErr
+		}
+	}
+	return err
 }
 
 func (e *historyEngineImpl) getMutableStateOrPolling(
@@ -824,6 +851,14 @@ func (e *historyEngineImpl) QueryWorkflow(
 	if request.GetRequest().GetQueryConsistencyLevel() == querypb.QueryConsistencyLevel_Eventual {
 		// query cannot be processed unless at least one decision task has finished
 		// if first decision task has not finished wait for up to a second for it to complete
+		queryFirstDecisionTaskWaitTime := defaultQueryFirstDecisionTaskWaitTime
+		ctxDeadline, ok := ctx.Deadline()
+		if ok {
+			ctxWaitTime := ctxDeadline.Sub(time.Now()) - time.Second
+			if ctxWaitTime > queryFirstDecisionTaskWaitTime {
+				queryFirstDecisionTaskWaitTime = ctxWaitTime
+			}
+		}
 		deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
 		for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
 			<-time.After(queryFirstDecisionTaskCheckInterval)

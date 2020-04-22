@@ -26,6 +26,7 @@ package common
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -343,6 +344,22 @@ func MaxInt(a, b int) int {
 	return b
 }
 
+// MinDuration returns the smaller of two given time duration
+func MinDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// MaxDuration returns the greater of two given time durations
+func MaxDuration(a, b time.Duration) time.Duration {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // SortInt64Slice sorts the given int64 slice.
 // Sort is not guaranteed to be stable.
 func SortInt64Slice(slice []int64) {
@@ -402,13 +419,27 @@ func CreateHistoryStartWorkflowRequest(
 
 // CheckEventBlobSizeLimit checks if a blob data exceeds limits. It logs a warning if it exceeds warnLimit,
 // and return ErrBlobSizeExceedsLimit if it exceeds errorLimit.
-func CheckEventBlobSizeLimit(actualSize, warnLimit, errorLimit int, namespaceID, workflowID, runID string, scope metrics.Scope, logger log.Logger) error {
+func CheckEventBlobSizeLimit(
+	actualSize int,
+	warnLimit int,
+	errorLimit int,
+	namespaceID string,
+	workflowID string,
+	runID string,
+	scope metrics.Scope,
+	logger log.Logger,
+	blobSizeViolationOperationTag tag.Tag,
+) error {
 	scope.RecordTimer(metrics.EventBlobSize, time.Duration(actualSize))
 
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob size exceeds limit.",
-				tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(workflowID), tag.WorkflowRunID(runID), tag.WorkflowSize(int64(actualSize)))
+				tag.WorkflowNamespaceID(namespaceID),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(runID),
+				tag.WorkflowSize(int64(actualSize)),
+				blobSizeViolationOperationTag)
 		}
 
 		if actualSize > errorLimit {
@@ -483,6 +514,55 @@ func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger
 		// Unknown fieldType, please make sure dynamic config return correct value type
 		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))
 		return fieldType.(commonpb.IndexedValueType) // it will panic and been captured by logger
+	}
+}
+
+// DeserializeSearchAttributeValue takes json encoded search attribute value and it's type as input, then
+// unmarshal the value into a concrete type and return the value
+func DeserializeSearchAttributeValue(value []byte, valueType commonpb.IndexedValueType) (interface{}, error) {
+	switch valueType {
+	case commonpb.IndexedValueType_String, commonpb.IndexedValueType_Keyword:
+		var val string
+		if err := json.Unmarshal(value, &val); err != nil {
+			var listVal []string
+			err = json.Unmarshal(value, &listVal)
+			return listVal, err
+		}
+		return val, nil
+	case commonpb.IndexedValueType_Int:
+		var val int64
+		if err := json.Unmarshal(value, &val); err != nil {
+			var listVal []int64
+			err = json.Unmarshal(value, &listVal)
+			return listVal, err
+		}
+		return val, nil
+	case commonpb.IndexedValueType_Double:
+		var val float64
+		if err := json.Unmarshal(value, &val); err != nil {
+			var listVal []float64
+			err = json.Unmarshal(value, &listVal)
+			return listVal, err
+		}
+		return val, nil
+	case commonpb.IndexedValueType_Bool:
+		var val bool
+		if err := json.Unmarshal(value, &val); err != nil {
+			var listVal []bool
+			err = json.Unmarshal(value, &listVal)
+			return listVal, err
+		}
+		return val, nil
+	case commonpb.IndexedValueType_Datetime:
+		var val time.Time
+		if err := json.Unmarshal(value, &val); err != nil {
+			var listVal []time.Time
+			err = json.Unmarshal(value, &listVal)
+			return listVal, err
+		}
+		return val, nil
+	default:
+		return nil, fmt.Errorf("error: unknown index value type [%v]", valueType)
 	}
 }
 

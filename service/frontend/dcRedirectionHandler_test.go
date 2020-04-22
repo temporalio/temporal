@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	querypb "go.temporal.io/temporal-proto/query"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal-proto/workflowservicemock"
@@ -43,6 +44,8 @@ import (
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
+
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -66,7 +69,15 @@ type (
 
 		handler *DCRedirectionHandlerImpl
 	}
+
+	testServerHandler struct {
+		*workflowservicemock.MockWorkflowServiceServer
+	}
 )
+
+func newTestServerHandler(mockHandler *workflowservicemock.MockWorkflowServiceServer) Handler {
+	return &testServerHandler{mockHandler}
+}
 
 func TestDCRedirectionHandlerSuite(t *testing.T) {
 	s := new(dcRedirectionHandlerSuite)
@@ -103,7 +114,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 
 	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)
 	s.handler = NewDCRedirectionHandler(frontendHandlerGRPC, config.DCRedirectionPolicy{})
-	s.handler.frontendHandler = s.mockFrontendHandler
+	s.handler.frontendHandler = newTestServerHandler(s.mockFrontendHandler)
 	s.handler.redirectionPolicy = s.mockDCRedirectionPolicy
 }
 
@@ -373,7 +384,8 @@ func (s *dcRedirectionHandlerSuite) TestQueryWorkflow() {
 		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
 
 	req := &workflowservice.QueryWorkflowRequest{
-		Namespace: s.namespace,
+		Namespace:             s.namespace,
+		QueryConsistencyLevel: querypb.QueryConsistencyLevel_Strong,
 	}
 	resp, err := s.handler.QueryWorkflow(context.Background(), req)
 	s.Nil(err)
@@ -845,4 +857,29 @@ func (s *dcRedirectionHandlerSuite) TestListTaskListPartitions() {
 	s.mockRemoteFrontendClient.EXPECT().ListTaskListPartitions(gomock.Any(), req).Return(&workflowservice.ListTaskListPartitionsResponse{}, nil).Times(1)
 	err = callFn(s.alternativeClusterName)
 	s.Nil(err)
+}
+
+func (serverHandler *testServerHandler) Start() {
+}
+
+func (serverHandler *testServerHandler) Stop() {
+}
+
+func (serverHandler *testServerHandler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
+	return nil, nil
+}
+
+func (serverHandler *testServerHandler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
+	return nil
+}
+
+func (serverHandler *testServerHandler) UpdateHealthStatus(status HealthStatus) {
+}
+
+func (serverHandler *testServerHandler) GetResource() resource.Resource {
+	return nil
+}
+
+func (serverHandler *testServerHandler) GetConfig() *Config {
+	return nil
 }

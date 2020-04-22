@@ -160,20 +160,6 @@ func (_m *ExecutionManager) ResetWorkflowExecution(request *persistence.ResetWor
 	return r0
 }
 
-// DeleteTask provides a mock function with given fields: request
-func (_m *ExecutionManager) DeleteTask(request *persistence.DeleteTaskRequest) error {
-	ret := _m.Called(request)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(executionRequest *persistence.DeleteTaskRequest) error); ok {
-		r0 = rf(request)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
 // DeleteWorkflowExecution provides a mock function with given fields: request
 func (_m *ExecutionManager) DeleteWorkflowExecution(request *persistence.DeleteWorkflowExecutionRequest) error {
 	ret := _m.Called(request)
@@ -217,6 +203,29 @@ func (_m *ExecutionManager) GetCurrentExecution(request *persistence.GetCurrentE
 
 	var r1 error
 	if rf, ok := ret.Get(1).(func(*persistence.GetCurrentExecutionRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// ListConcreteExecutions provides a mock function with given fields: request
+func (_m *ExecutionManager) ListConcreteExecutions(request *persistence.ListConcreteExecutionsRequest) (*persistence.ListConcreteExecutionsResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.ListConcreteExecutionsResponse
+	if rf, ok := ret.Get(0).(func(*persistence.ListConcreteExecutionsRequest) *persistence.ListConcreteExecutionsResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.ListConcreteExecutionsResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.ListConcreteExecutionsRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)

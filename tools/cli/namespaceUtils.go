@@ -175,6 +175,8 @@ var (
 		},
 	}
 
+	listNamespacesFlags = []cli.Flag{}
+
 	adminNamespaceCommonFlags = []cli.Flag{
 		cli.StringFlag{
 			Name:  FlagServiceConfigDirWithAlias,

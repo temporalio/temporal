@@ -131,6 +131,10 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockHistoryArchiver = &archiver.HistoryArchiverMock{}
 	s.mockVisibilityArchiver = &archiver.VisibilityArchiverMock{}
+
+	mockMonitor := s.mockResource.MembershipMonitor
+	mockMonitor.EXPECT().GetMemberCount(common.FrontendServiceName).Return(5, nil).AnyTimes()
+
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {
@@ -142,7 +146,7 @@ func (s *workflowHandlerSuite) TearDownTest() {
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
-	return NewWorkflowHandler(s.mockResource, config, s.mockProducer)
+	return NewWorkflowHandler(s.mockResource, config, s.mockProducer).(*WorkflowHandler)
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
@@ -248,8 +252,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 		TaskList: &tasklistpb.TaskList{
 			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: 1,
-		TaskStartToCloseTimeoutSeconds:      1,
+		TaskStartToCloseTimeoutSeconds: 1,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
 			BackoffCoefficient:          2,
@@ -375,8 +378,6 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 		TaskList: &tasklistpb.TaskList{
 			Name: "",
 		},
-		ExecutionStartToCloseTimeoutSeconds: 1,
-		TaskStartToCloseTimeoutSeconds:      1,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
 			BackoffCoefficient:          2,
@@ -405,7 +406,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 		TaskList: &tasklistpb.TaskList{
 			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: 0,
+		ExecutionStartToCloseTimeoutSeconds: -1,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
 			BackoffCoefficient:          2,

@@ -216,6 +216,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		metrics.DecisionTypeTag(decisionpb.DecisionType_ScheduleActivityTask.String()),
 		attr.GetInput().Size(),
 		"ScheduleActivityTaskDecisionAttributes.Input exceeds size limit.",
 	)
@@ -345,6 +346,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		metrics.DecisionTypeTag(decisionpb.DecisionType_CompleteWorkflowExecution.String()),
 		attr.GetResult().Size(),
 		"CompleteWorkflowExecutionDecisionAttributes.Result exceeds size limit.",
 	)
@@ -420,6 +422,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionFailWorkflow(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		metrics.DecisionTypeTag(decisionpb.DecisionType_FailWorkflowExecution.String()),
 		attr.GetDetails().Size(),
 		"FailWorkflowExecutionDecisionAttributes.Details exceeds size limit.",
 	)
@@ -619,6 +622,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRecordMarker(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		metrics.DecisionTypeTag(decisionpb.DecisionType_RecordMarker.String()),
 		attr.GetDetails().Size(),
 		"RecordMarkerDecisionAttributes.Details exceeds size limit.",
 	)
@@ -659,6 +663,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		metrics.DecisionTypeTag(decisionpb.DecisionType_ContinueAsNewWorkflowExecution.String()),
 		attr.GetInput().Size(),
 		"ContinueAsNewWorkflowExecutionDecisionAttributes.Input exceeds size limit.",
 	)
@@ -741,6 +746,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		metrics.DecisionTypeTag(decisionpb.DecisionType_StartChildWorkflowExecution.String()),
 		attr.GetInput().Size(),
 		"StartChildWorkflowExecutionDecisionAttributes.Input exceeds size limit.",
 	)
@@ -795,6 +801,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		metrics.DecisionTypeTag(decisionpb.DecisionType_SignalExternalWorkflowExecution.String()),
 		attr.GetInput().Size(),
 		"SignalExternalWorkflowExecutionDecisionAttributes.Input exceeds size limit.",
 	)
@@ -842,7 +849,8 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 	}
 
 	// blob size limit check
-	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
+		metrics.DecisionTypeTag(decisionpb.DecisionType_UpsertWorkflowSearchAttributes.String()),
 		attr.GetSearchAttributes().Size(),
 		"UpsertWorkflowSearchAttributesDecisionAttributes exceeds size limit.",
 	)

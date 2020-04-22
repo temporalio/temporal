@@ -143,6 +143,12 @@ func NewCliApp() *cli.App {
 					Usage:       "Run admin operation on DLQ",
 					Subcommands: newAdminDLQCommands(),
 				},
+				{
+					Name:        "db",
+					Aliases:     []string{"db"},
+					Usage:       "Run admin operations on database",
+					Subcommands: newDBCommands(),
+				},
 			},
 		},
 		{

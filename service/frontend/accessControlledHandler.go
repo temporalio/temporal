@@ -27,11 +27,11 @@ package frontend
 import (
 	"context"
 
-	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/temporalio/temporal/common/authorization"
+	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/resource"
 )
 
@@ -39,39 +39,57 @@ import (
 
 // AccessControlledWorkflowHandler frontend handler wrapper for authentication and authorization
 type AccessControlledWorkflowHandler struct {
-	resource.Resource
-
-	frontendHandler workflowservice.WorkflowServiceServer
+	frontendHandler Handler
 	authorizer      authorization.Authorizer
 }
 
-var _ workflowservice.WorkflowServiceServer = (*AccessControlledWorkflowHandler)(nil)
+var _ Handler = (*AccessControlledWorkflowHandler)(nil)
 
 // NewAccessControlledHandlerImpl creates frontend handler with authentication support
-func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authorizer authorization.Authorizer) *AccessControlledWorkflowHandler {
+func NewAccessControlledHandlerImpl(wfHandler Handler, authorizer authorization.Authorizer) *AccessControlledWorkflowHandler {
 	if authorizer == nil {
 		authorizer = authorization.NewNopAuthorizer()
 	}
 
 	return &AccessControlledWorkflowHandler{
-		Resource:        wfHandler.Resource,
 		frontendHandler: wfHandler,
 		authorizer:      authorizer,
 	}
 }
 
-// TODO(vancexu): refactor frontend handler
+// GetResource return resource
+func (a *AccessControlledWorkflowHandler) GetResource() resource.Resource {
+	return a.frontendHandler.GetResource()
+}
+
+// GetConfig return config
+func (a *AccessControlledWorkflowHandler) GetConfig() *Config {
+	return a.frontendHandler.GetConfig()
+}
+
+// UpdateHealthStatus sets the health status for this rpc handler.
+// This health status will be used within the rpc health check handler
+func (a *AccessControlledWorkflowHandler) UpdateHealthStatus(status HealthStatus) {
+	a.frontendHandler.UpdateHealthStatus(status)
+}
 
 // https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (a *AccessControlledWorkflowHandler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	a.GetLogger().Debug("Frontend service health check endpoint (gRPC) reached.")
-	hs := &healthpb.HealthCheckResponse{
-		Status: healthpb.HealthCheckResponse_SERVING,
-	}
-	return hs, nil
+func (a *AccessControlledWorkflowHandler) Check(ctx context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
+	return a.frontendHandler.Check(ctx, request)
 }
-func (a *AccessControlledWorkflowHandler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
-	return serviceerror.NewUnimplemented("Watch is not implemented.")
+
+func (a *AccessControlledWorkflowHandler) Watch(request *healthpb.HealthCheckRequest, server healthpb.Health_WatchServer) error {
+	return a.frontendHandler.Watch(request, server)
+}
+
+// Start starts the handler
+func (a *AccessControlledWorkflowHandler) Start() {
+	a.frontendHandler.Start()
+}
+
+// Stop stops the handler
+func (a *AccessControlledWorkflowHandler) Stop() {
+	a.frontendHandler.Stop()
 }
 
 // CountWorkflowExecutions API call
@@ -80,11 +98,13 @@ func (a *AccessControlledWorkflowHandler) CountWorkflowExecutions(
 	request *workflowservice.CountWorkflowExecutionsRequest,
 ) (*workflowservice.CountWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendCountWorkflowExecutionsScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "CountWorkflowExecutions",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -101,11 +121,13 @@ func (a *AccessControlledWorkflowHandler) DeprecateNamespace(
 	request *workflowservice.DeprecateNamespaceRequest,
 ) (*workflowservice.DeprecateNamespaceResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendDeprecateNamespaceScope, request.GetName())
+
 	attr := &authorization.Attributes{
 		APIName:   "DeprecateNamespace",
 		Namespace: request.GetName(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -122,11 +144,13 @@ func (a *AccessControlledWorkflowHandler) DescribeNamespace(
 	request *workflowservice.DescribeNamespaceRequest,
 ) (*workflowservice.DescribeNamespaceResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendDescribeNamespaceScope, request.GetName())
+
 	attr := &authorization.Attributes{
 		APIName:   "DescribeNamespace",
 		Namespace: request.GetName(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -143,11 +167,13 @@ func (a *AccessControlledWorkflowHandler) DescribeTaskList(
 	request *workflowservice.DescribeTaskListRequest,
 ) (*workflowservice.DescribeTaskListResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendDescribeTaskListScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "DescribeTaskList",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -164,11 +190,13 @@ func (a *AccessControlledWorkflowHandler) DescribeWorkflowExecution(
 	request *workflowservice.DescribeWorkflowExecutionRequest,
 ) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendDescribeWorkflowExecutionScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "DescribeWorkflowExecution",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -193,11 +221,13 @@ func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionHistory(
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,
 ) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendGetWorkflowExecutionHistoryScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "GetWorkflowExecutionHistory",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -208,59 +238,19 @@ func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionHistory(
 	return a.frontendHandler.GetWorkflowExecutionHistory(ctx, request)
 }
 
-// GetWorkflowExecutionRawHistory API call
-func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
-) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
-
-	attr := &authorization.Attributes{
-		APIName:   "GetWorkflowExecutionRawHistory",
-		Namespace: request.GetNamespace(),
-	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
-	if err != nil {
-		return nil, err
-	}
-	if !isAuthorized {
-		return nil, errUnauthorized
-	}
-
-	return a.frontendHandler.GetWorkflowExecutionRawHistory(ctx, request)
-}
-
-// PollForWorkflowExecutionRawHistory API call
-func (a *AccessControlledWorkflowHandler) PollForWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.PollForWorkflowExecutionRawHistoryRequest,
-) (*workflowservice.PollForWorkflowExecutionRawHistoryResponse, error) {
-
-	attr := &authorization.Attributes{
-		APIName:   "PollForWorkflowExecutionRawHistory",
-		Namespace: request.GetNamespace(),
-	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
-	if err != nil {
-		return nil, err
-	}
-	if !isAuthorized {
-		return nil, errUnauthorized
-	}
-
-	return a.frontendHandler.PollForWorkflowExecutionRawHistory(ctx, request)
-}
-
 // ListArchivedWorkflowExecutions API call
 func (a *AccessControlledWorkflowHandler) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
 ) (*workflowservice.ListArchivedWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendListArchivedWorkflowExecutionsScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "ListArchivedWorkflowExecutions",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -277,11 +267,13 @@ func (a *AccessControlledWorkflowHandler) ListClosedWorkflowExecutions(
 	request *workflowservice.ListClosedWorkflowExecutionsRequest,
 ) (*workflowservice.ListClosedWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendListClosedWorkflowExecutionsScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "ListClosedWorkflowExecutions",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -298,10 +290,12 @@ func (a *AccessControlledWorkflowHandler) ListNamespaces(
 	request *workflowservice.ListNamespacesRequest,
 ) (*workflowservice.ListNamespacesResponse, error) {
 
+	scope := a.GetResource().GetMetricsClient().Scope(metrics.FrontendListNamespacesScope)
+
 	attr := &authorization.Attributes{
 		APIName: "ListNamespaces",
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -318,11 +312,13 @@ func (a *AccessControlledWorkflowHandler) ListOpenWorkflowExecutions(
 	request *workflowservice.ListOpenWorkflowExecutionsRequest,
 ) (*workflowservice.ListOpenWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendListOpenWorkflowExecutionsScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "ListOpenWorkflowExecutions",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -339,11 +335,13 @@ func (a *AccessControlledWorkflowHandler) ListWorkflowExecutions(
 	request *workflowservice.ListWorkflowExecutionsRequest,
 ) (*workflowservice.ListWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendListWorkflowExecutionsScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "ListWorkflowExecutions",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -360,11 +358,13 @@ func (a *AccessControlledWorkflowHandler) PollForActivityTask(
 	request *workflowservice.PollForActivityTaskRequest,
 ) (*workflowservice.PollForActivityTaskResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendPollForActivityTaskScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "PollForActivityTask",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -381,11 +381,13 @@ func (a *AccessControlledWorkflowHandler) PollForDecisionTask(
 	request *workflowservice.PollForDecisionTaskRequest,
 ) (*workflowservice.PollForDecisionTaskResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendPollForDecisionTaskScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "PollForDecisionTask",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -402,11 +404,13 @@ func (a *AccessControlledWorkflowHandler) QueryWorkflow(
 	request *workflowservice.QueryWorkflowRequest,
 ) (*workflowservice.QueryWorkflowResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendQueryWorkflowScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "QueryWorkflow",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -448,11 +452,13 @@ func (a *AccessControlledWorkflowHandler) RegisterNamespace(
 	request *workflowservice.RegisterNamespaceRequest,
 ) (*workflowservice.RegisterNamespaceResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendRegisterNamespaceScope, request.GetName())
+
 	attr := &authorization.Attributes{
 		APIName:   "RegisterNamespace",
 		Namespace: request.GetName(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -469,11 +475,13 @@ func (a *AccessControlledWorkflowHandler) RequestCancelWorkflowExecution(
 	request *workflowservice.RequestCancelWorkflowExecutionRequest,
 ) (*workflowservice.RequestCancelWorkflowExecutionResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendRequestCancelWorkflowExecutionScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "RequestCancelWorkflowExecution",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -490,11 +498,13 @@ func (a *AccessControlledWorkflowHandler) ResetStickyTaskList(
 	request *workflowservice.ResetStickyTaskListRequest,
 ) (*workflowservice.ResetStickyTaskListResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendResetStickyTaskListScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "ResetStickyTaskList",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -511,11 +521,13 @@ func (a *AccessControlledWorkflowHandler) ResetWorkflowExecution(
 	request *workflowservice.ResetWorkflowExecutionRequest,
 ) (*workflowservice.ResetWorkflowExecutionResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendResetWorkflowExecutionScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "ResetWorkflowExecution",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -604,11 +616,13 @@ func (a *AccessControlledWorkflowHandler) ScanWorkflowExecutions(
 	request *workflowservice.ScanWorkflowExecutionsRequest,
 ) (*workflowservice.ScanWorkflowExecutionsResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendScanWorkflowExecutionsScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "ScanWorkflowExecutions",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -625,11 +639,13 @@ func (a *AccessControlledWorkflowHandler) SignalWithStartWorkflowExecution(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendSignalWithStartWorkflowExecutionScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "SignalWithStartWorkflowExecution",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -646,11 +662,13 @@ func (a *AccessControlledWorkflowHandler) SignalWorkflowExecution(
 	request *workflowservice.SignalWorkflowExecutionRequest,
 ) (*workflowservice.SignalWorkflowExecutionResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendSignalWorkflowExecutionScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "SignalWorkflowExecution",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -667,11 +685,13 @@ func (a *AccessControlledWorkflowHandler) StartWorkflowExecution(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendStartWorkflowExecutionScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "StartWorkflowExecution",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -688,11 +708,13 @@ func (a *AccessControlledWorkflowHandler) TerminateWorkflowExecution(
 	request *workflowservice.TerminateWorkflowExecutionRequest,
 ) (*workflowservice.TerminateWorkflowExecutionResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendTerminateWorkflowExecutionScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "TerminateWorkflowExecution",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -709,11 +731,13 @@ func (a *AccessControlledWorkflowHandler) ListTaskListPartitions(
 	request *workflowservice.ListTaskListPartitionsRequest,
 ) (*workflowservice.ListTaskListPartitionsResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendListTaskListPartitionsScope, request.GetNamespace())
+
 	attr := &authorization.Attributes{
 		APIName:   "ListTaskListPartitions",
 		Namespace: request.GetNamespace(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -730,11 +754,13 @@ func (a *AccessControlledWorkflowHandler) UpdateNamespace(
 	request *workflowservice.UpdateNamespaceRequest,
 ) (*workflowservice.UpdateNamespaceResponse, error) {
 
+	scope := a.getMetricsScopeWithNamespace(metrics.FrontendUpdateNamespaceScope, request.GetName())
+
 	attr := &authorization.Attributes{
 		APIName:   "UpdateNamespace",
 		Namespace: request.GetName(),
 	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
+	isAuthorized, err := a.isAuthorized(ctx, attr, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -748,10 +774,42 @@ func (a *AccessControlledWorkflowHandler) UpdateNamespace(
 func (a *AccessControlledWorkflowHandler) isAuthorized(
 	ctx context.Context,
 	attr *authorization.Attributes,
+	scope metrics.Scope,
 ) (bool, error) {
+	sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
+	defer sw.Stop()
+
 	result, err := a.authorizer.Authorize(ctx, attr)
 	if err != nil {
+		scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
 		return false, err
 	}
-	return result.Decision == authorization.DecisionAllow, nil
+	isAuth := result.Decision == authorization.DecisionAllow
+	if !isAuth {
+		scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
+	}
+	return isAuth, nil
+}
+
+// getMetricsScopeWithNamespace return metrics scope with namespace tag
+func (a *AccessControlledWorkflowHandler) getMetricsScopeWithNamespace(
+	scope int,
+	namespace string,
+) metrics.Scope {
+	return getMetricsScopeWithNamespace(scope, namespace, a.GetResource().GetMetricsClient())
+}
+
+func getMetricsScopeWithNamespace(
+	scope int,
+	namespace string,
+	metricsClient metrics.Client,
+) metrics.Scope {
+	var metricsScope metrics.Scope
+	if namespace != "" {
+		metricsScope = metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespace))
+	} else {
+		metricsScope = metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
+	}
+
+	return metricsScope
 }

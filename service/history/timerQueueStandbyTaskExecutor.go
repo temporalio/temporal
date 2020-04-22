@@ -213,8 +213,15 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
+
+		// NOTE: LastHeartbeatTimeoutVisibilityInSeconds is for deduping heartbeat timer creation as it's possible
+		// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
+		// for updating workflow execution. In that case, only one new heartbeat timeout task should be
+		// created.
 		isHeartBeatTask := timerTask.TimeoutType == int32(eventpb.TimeoutType_Heartbeat)
-		if activityInfo, ok := mutableState.GetActivityInfo(timerTask.GetEventId()); isHeartBeatTask && ok {
+		activityInfo, ok := mutableState.GetActivityInfo(timerTask.GetEventId())
+		goTS, _ := types.TimestampFromProto(timerTask.VisibilityTimestamp)
+		if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goTS.Unix() {
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 			if err := mutableState.UpdateActivity(activityInfo); err != nil {
 				return nil, err

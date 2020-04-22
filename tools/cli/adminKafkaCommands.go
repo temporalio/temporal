@@ -850,29 +850,33 @@ func parseReplicationTask(in string) (tasks []*replicationgenpb.ReplicationTask,
 	}
 	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
+	reader := bufio.NewReaderSize(file, 1024*1024*3)
 	idx := 0
 	encoder := codec.NewJSONPBEncoder()
-	for scanner.Scan() {
+	for {
 		idx++
-		line := strings.TrimSpace(scanner.Text())
+		line, _, err := reader.ReadLine()
+		if err != nil {
+			if err != io.EOF {
+				ErrorAndExit("Failed to read line", err)
+			}
+			break
+		}
+
 		if len(line) == 0 {
 			fmt.Printf("line %v is empty, skipped\n", idx)
 			continue
 		}
 
 		t := &replicationgenpb.ReplicationTask{}
-		err := encoder.Decode([]byte(line), t)
+		err = encoder.Decode(line, t)
 		if err != nil {
-			fmt.Printf("line %v cannot be deserialized to replicaiton task: %v.\n", idx, line)
+			fmt.Printf("line %v cannot be deserialized to replicaiton task: %v.\n", idx, string(line))
 			return nil, err
 		}
 		tasks = append(tasks, t)
 	}
 
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
 	return tasks, nil
 }
 

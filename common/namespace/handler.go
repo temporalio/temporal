@@ -548,7 +548,7 @@ func (d *HandlerImpl) UpdateNamespace(
 				FailoverVersion:             failoverVersion,
 				FailoverNotificationVersion: failoverNotificationVersion,
 			},
-			NotificationVersion:         notificationVersion,
+			NotificationVersion: notificationVersion,
 		}
 		err = d.metadataMgr.UpdateNamespace(updateReq)
 		if err != nil {
@@ -618,7 +618,7 @@ func (d *HandlerImpl) DeprecateNamespace(
 			FailoverVersion:             getResponse.Namespace.FailoverVersion,
 			FailoverNotificationVersion: getResponse.Namespace.FailoverNotificationVersion,
 		},
-		NotificationVersion:         notificationVersion,
+		NotificationVersion: notificationVersion,
 	}
 	err = d.metadataMgr.UpdateNamespace(updateReq)
 	if err != nil {
@@ -661,7 +661,7 @@ func (d *HandlerImpl) createResponse(
 	}
 	replicationConfigResult := &replicationpb.NamespaceReplicationConfiguration{
 		ActiveClusterName: replicationConfig.ActiveClusterName,
-		Clusters: clusters,
+		Clusters:          clusters,
 	}
 
 	return infoResult, configResult, replicationConfigResult

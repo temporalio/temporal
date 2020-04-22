@@ -95,5 +95,14 @@ func newNamespaceCommands() []cli.Command {
 				newNamespaceCLI(c, false).DescribeNamespace(c)
 			},
 		},
+		{
+			Name:    "list",
+			Aliases: []string{"l"},
+			Usage:   "List all namespaces",
+			Flags:   listNamespacesFlags,
+			Action: func(c *cli.Context) {
+				newNamespaceCLI(c, false).ListNamespaces(c)
+			},
+		},
 	}
 }

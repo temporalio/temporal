@@ -156,6 +156,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	executionTimeUnixNano int64,
 	workflowTimeout int32,
 	taskID int64,
+	taskList string,
 	visibilityMemo *commonpb.Memo,
 	searchAttributes map[string][]byte,
 ) error {
@@ -188,6 +189,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 		WorkflowTimeout:    int64(workflowTimeout),
 		TaskID:             taskID,
 		Memo:               visibilityMemo,
+		TaskList:           taskList,
 		SearchAttributes:   searchAttributes,
 	}
 
@@ -203,6 +205,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	executionTimeUnixNano int64,
 	workflowTimeout int32,
 	taskID int64,
+	taskList string,
 	visibilityMemo *commonpb.Memo,
 	searchAttributes map[string][]byte,
 ) error {
@@ -230,6 +233,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 		WorkflowTimeout:    int64(workflowTimeout),
 		TaskID:             taskID,
 		Memo:               visibilityMemo,
+		TaskList:           taskList,
 		SearchAttributes:   searchAttributes,
 	}
 
@@ -248,6 +252,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	historyLength int64,
 	taskID int64,
 	visibilityMemo *commonpb.Memo,
+	taskList string,
 	searchAttributes map[string][]byte,
 ) error {
 
@@ -294,6 +299,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 			RetentionSeconds:   retentionSeconds,
 			TaskID:             taskID,
 			Memo:               visibilityMemo,
+			TaskList:           taskList,
 			SearchAttributes:   searchAttributes,
 		}); err != nil {
 			return err

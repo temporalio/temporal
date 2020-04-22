@@ -107,7 +107,6 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 		shardInfo:                 &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{RangeId: 1, TransferAckLevel: 0}},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    logger,
 		remoteClusterCurrentTime:  make(map[string]time.Time),

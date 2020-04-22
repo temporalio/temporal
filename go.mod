@@ -29,7 +29,6 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/hashicorp/go-version v1.2.0
-	github.com/hhatto/gocloc v0.3.3 // indirect
 	github.com/iancoleman/strcase v0.0.0-20190422225806-e506e3ef7365
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/jonboulle/clockwork v0.1.0
@@ -63,8 +62,8 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/temporal v0.20.5
-	go.temporal.io/temporal-proto v0.20.15
+	go.temporal.io/temporal v0.22.1
+	go.temporal.io/temporal-proto v0.20.24
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
 	go.uber.org/zap v1.14.1
@@ -83,6 +82,6 @@ require (
 // TODO https://github.com/uber/cadence/issues/2863
 replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
 
-replace go.temporal.io/temporal-proto v0.20.15 => ../temporal-proto-go
+replace go.temporal.io/temporal-proto v0.20.24 => ../temporal-proto-go
 
-replace go.temporal.io/temporal v0.20.5 => ../temporal-go-sdk
+replace go.temporal.io/temporal v0.22.1 => ../temporal-go-sdk

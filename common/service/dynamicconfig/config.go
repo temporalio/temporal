@@ -99,6 +99,9 @@ type DurationPropertyFn func(opts ...FilterOption) time.Duration
 // DurationPropertyFnWithNamespaceFilter is a wrapper to get duration property from dynamic config with namespace as filter
 type DurationPropertyFnWithNamespaceFilter func(namespace string) time.Duration
 
+// DurationPropertyFnWithNamespaceIDFilter is a wrapper to get duration property from dynamic config with namespaceID as filter
+type DurationPropertyFnWithNamespaceIDFilter func(namespaceID string) time.Duration
+
 // DurationPropertyFnWithTaskListInfoFilters is a wrapper to get duration property from dynamic config  with three filters: namespace, taskList, taskType
 type DurationPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType int32) time.Duration
 
@@ -209,6 +212,18 @@ func (c *Collection) GetDurationProperty(key Key, defaultValue time.Duration) Du
 func (c *Collection) GetDurationPropertyFilteredByNamespace(key Key, defaultValue time.Duration) DurationPropertyFnWithNamespaceFilter {
 	return func(namespace string) time.Duration {
 		val, err := c.client.GetDurationValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, durationCompareEquals)
+		return val
+	}
+}
+
+// GetDurationPropertyFilteredByNamespaceID gets property with namespaceID filter and asserts that it's a duration
+func (c *Collection) GetDurationPropertyFilteredByNamespaceID(key Key, defaultValue time.Duration) DurationPropertyFnWithNamespaceIDFilter {
+	return func(namespaceID string) time.Duration {
+		val, err := c.client.GetDurationValue(key, getFilterMap(NamespaceIDFilter(namespaceID)), defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}

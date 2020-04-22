@@ -89,7 +89,7 @@ func TestMetricDefsMapped(t *testing.T) {
 		require.True(t, ok)
 		require.NotEmpty(t, key)
 	}
-	for i := PollSuccessCounter; i < NumMatchingMetrics; i++ {
+	for i := PollSuccessPerTaskListCounter; i < NumMatchingMetrics; i++ {
 		key, ok := MetricDefs[Matching][i]
 		require.True(t, ok)
 		require.NotEmpty(t, key)

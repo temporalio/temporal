@@ -86,7 +86,7 @@ func (q *sqlQueue) EnqueueMessage(
 }
 
 func (q *sqlQueue) ReadMessages(
-	lastMessageID int,
+	lastMessageID int64,
 	maxCount int,
 ) ([]*persistence.QueueMessage, error) {
 
@@ -104,7 +104,7 @@ func (q *sqlQueue) ReadMessages(
 
 func newQueueRow(
 	queueType persistence.QueueType,
-	messageID int,
+	messageID int64,
 	payload []byte,
 ) *sqlplugin.QueueRow {
 
@@ -112,7 +112,7 @@ func newQueueRow(
 }
 
 func (q *sqlQueue) DeleteMessagesBefore(
-	messageID int,
+	messageID int64,
 ) error {
 
 	_, err := q.db.DeleteMessagesBefore(q.queueType, messageID)
@@ -123,7 +123,7 @@ func (q *sqlQueue) DeleteMessagesBefore(
 }
 
 func (q *sqlQueue) UpdateAckLevel(
-	messageID int,
+	messageID int64,
 	clusterName string,
 ) error {
 
@@ -160,15 +160,15 @@ func (q *sqlQueue) UpdateAckLevel(
 	return nil
 }
 
-func (q *sqlQueue) GetAckLevels() (map[string]int, error) {
+func (q *sqlQueue) GetAckLevels() (map[string]int64, error) {
 	return q.db.GetAckLevels(q.queueType, false)
 }
 
 func (q *sqlQueue) EnqueueMessageToDLQ(
 	messagePayload []byte,
-) (int, error) {
+) (int64, error) {
 
-	var lastMessageID int
+	var lastMessageID int64
 	err := q.txExecute("EnqueueMessageToDLQ", func(tx sqlplugin.Tx) error {
 		var err error
 		lastMessageID, err = tx.GetLastEnqueuedMessageIDForUpdate(q.getDLQTypeFromQueueType())
@@ -189,8 +189,8 @@ func (q *sqlQueue) EnqueueMessageToDLQ(
 }
 
 func (q *sqlQueue) ReadMessagesFromDLQ(
-	firstMessageID int,
-	lastMessageID int,
+	firstMessageID int64,
+	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
 ) ([]*persistence.QueueMessage, []byte, error) {
@@ -200,7 +200,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 		if err != nil {
 			return nil, nil, serviceerror.NewInternal(fmt.Sprintf("invalid next page token %v", pageToken))
 		}
-		firstMessageID = int(lastReadMessageID)
+		firstMessageID = lastReadMessageID
 	}
 
 	rows, err := q.db.GetMessagesBetween(q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID, pageSize)
@@ -222,7 +222,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 }
 
 func (q *sqlQueue) DeleteMessageFromDLQ(
-	messageID int,
+	messageID int64,
 ) error {
 
 	_, err := q.db.DeleteMessage(q.getDLQTypeFromQueueType(), messageID)
@@ -233,8 +233,8 @@ func (q *sqlQueue) DeleteMessageFromDLQ(
 }
 
 func (q *sqlQueue) RangeDeleteMessagesFromDLQ(
-	firstMessageID int,
-	lastMessageID int,
+	firstMessageID int64,
+	lastMessageID int64,
 ) error {
 
 	_, err := q.db.RangeDeleteMessages(q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID)
@@ -245,7 +245,7 @@ func (q *sqlQueue) RangeDeleteMessagesFromDLQ(
 }
 
 func (q *sqlQueue) UpdateDLQAckLevel(
-	messageID int,
+	messageID int64,
 	clusterName string,
 ) error {
 
@@ -282,7 +282,7 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 	return nil
 }
 
-func (q *sqlQueue) GetDLQAckLevels() (map[string]int, error) {
+func (q *sqlQueue) GetDLQAckLevels() (map[string]int64, error) {
 
 	return q.db.GetAckLevels(q.getDLQTypeFromQueueType(), false)
 }
