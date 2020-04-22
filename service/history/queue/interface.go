@@ -31,7 +31,7 @@ import (
 type (
 	// DomainFilter filters domain
 	DomainFilter struct {
-		Domains map[string]struct{}
+		DomainIDs map[string]struct{}
 		// by default, a DomainFilter matches domains listed in the Domains field
 		// if reverseMatch is true then the DomainFilter matches domains that are
 		// not in the Domains field.
