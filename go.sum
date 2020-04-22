@@ -236,6 +236,7 @@ go.opencensus.io v0.21.0 h1:mU6zScU4U1YAFPHEHYk+3JC4SY7JxgkqS10ZOSyksNg=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
 go.temporal.io/temporal v0.22.0 h1:N4P+GGUmEyGo3mRs7N/Fy1a+4eYFzYtPwKS9xRfWlZc=
 go.temporal.io/temporal v0.22.0/go.mod h1:TOtCf34hTUyK+Caf4e2NGl/WwF09438v4BDtNuoy2Go=
+go.temporal.io/temporal v0.22.1/go.mod h1:xCj8uu43/Yib/U25lsYMjW8oMsYxu+8wMsGlpA8OvZg=
 go.temporal.io/temporal-proto v0.20.14 h1:dpDmpCGy/eQbusg1b0b32/4HnFZXtrY1sZKxvQa2WiY=
 go.temporal.io/temporal-proto v0.20.14/go.mod h1:Lv8L8YBpbp0Z7V5nbvw5UD0j7x0isebhCOIDLkBqn6s=
 go.temporal.io/temporal-proto v0.20.24/go.mod h1:Lv8L8YBpbp0Z7V5nbvw5UD0j7x0isebhCOIDLkBqn6s=
