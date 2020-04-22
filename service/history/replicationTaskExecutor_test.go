@@ -176,7 +176,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask() {
 			nil,
 			&persistenceblobs.NamespaceReplicationConfig{
 				Clusters: []string{
-	"test",
+					"test",
 				}},
 			0,
 			s.clusterMetadata,

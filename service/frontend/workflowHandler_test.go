@@ -252,7 +252,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 		TaskList: &tasklistpb.TaskList{
 			Name: "task-list",
 		},
-		TaskStartToCloseTimeoutSeconds:      1,
+		TaskStartToCloseTimeoutSeconds: 1,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
 			BackoffCoefficient:          2,

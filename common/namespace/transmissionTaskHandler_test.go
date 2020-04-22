@@ -89,8 +89,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []string{ clusterActive, clusterStandby }
-
+	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := replicationgenpb.NamespaceOperation_Create
 	info := &persistenceblobs.NamespaceInfo{
@@ -98,7 +97,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		Name:        name,
 		Status:      namespacepb.NamespaceStatus_Registered,
 		Description: description,
-		Owner:  ownerEmail,
+		Owner:       ownerEmail,
 		Data:        data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
@@ -168,7 +167,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []string{ clusterActive, clusterStandby }
+	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := replicationgenpb.NamespaceOperation_Create
 	info := &persistenceblobs.NamespaceInfo{
@@ -216,7 +215,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []string{ clusterActive, clusterStandby }
+	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := replicationgenpb.NamespaceOperation_Update
 	info := &persistenceblobs.NamespaceInfo{
@@ -224,7 +223,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		Name:        name,
 		Status:      namespacepb.NamespaceStatus_Deprecated,
 		Description: description,
-		Owner:  ownerEmail,
+		Owner:       ownerEmail,
 		Data:        data,
 	}
 	config := &persistenceblobs.NamespaceConfig{
@@ -293,7 +292,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []string{ clusterActive, clusterStandby }
+	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := replicationgenpb.NamespaceOperation_Update
 	info := &persistenceblobs.NamespaceInfo{
@@ -301,7 +300,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		Name:        name,
 		Status:      namespacepb.NamespaceStatus_Deprecated,
 		Description: description,
-		Owner:  ownerEmail,
+		Owner:       ownerEmail,
 		Data:        data,
 	}
 	config := &persistenceblobs.NamespaceConfig{

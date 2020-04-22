@@ -104,7 +104,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 
 	return namespaceReplicator.replicationMessageSink.Publish(
 		&replicationgenpb.ReplicationTask{
-			TaskType: taskType,
+			TaskType:   taskType,
 			Attributes: task,
 		})
 }
