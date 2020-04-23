@@ -885,10 +885,18 @@ func showNextPage() bool {
 }
 
 // prompt will show input msg, then waiting user input y/yes to continue
-func prompt(msg string) {
+func prompt(msg string, autoConfirm bool) {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println(msg)
-	text, _ := reader.ReadString('\n')
+	fmt.Print(msg, " ")
+	var text string
+	if autoConfirm {
+		text = "y"
+		fmt.Print("y")
+	} else {
+		text, _ = reader.ReadString('\n')
+	}
+	fmt.Println()
+
 	textLower := strings.ToLower(strings.TrimRight(text, "\n"))
 	if textLower != "y" && textLower != "yes" {
 		os.Exit(0)

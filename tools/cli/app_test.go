@@ -539,7 +539,14 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow_Failed() {
 }
 
 func (s *cliAppSuite) TestAdminAddSearchAttribute() {
-	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "1"})
+	request := &adminservice.AddSearchAttributeRequest{
+		SearchAttribute: map[string]commonpb.IndexedValueType{
+			"testKey": commonpb.IndexedValueType(1),
+		},
+	}
+	s.serverAdminClient.EXPECT().AddSearchAttribute(gomock.Any(), request).Times(1)
+
+	err := s.app.Run([]string{"", "--auto_confirm", "--ns", cliTestNamespace, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "1"})
 	s.Nil(err)
 }
 
