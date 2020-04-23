@@ -25,12 +25,11 @@
 package persistence
 
 import (
-	"encoding/json"
-
 	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/common"
@@ -235,11 +234,11 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 }
 
 func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{}) (*commonpb.SearchAttributes, error) {
-	indexedFields := make(map[string][]byte)
+	indexedFields := make(map[string]*commonpb.Payload)
 	var err error
-	var valBytes []byte
+	var valBytes *commonpb.Payload
 	for k, val := range attr {
-		valBytes, err = json.Marshal(val)
+		valBytes, err = codec.Encode(val)
 		if err != nil {
 			v.logger.Error("error when encode search attributes", tag.Value(val))
 			continue

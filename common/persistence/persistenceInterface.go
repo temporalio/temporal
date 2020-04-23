@@ -260,7 +260,7 @@ type (
 		CronSchedule       string
 		ExpirationSeconds  int32
 		Memo               map[string]*commonpb.Payload
-		SearchAttributes   map[string][]byte
+		SearchAttributes   map[string]*commonpb.Payload
 
 		// attributes which are not related to mutable state at all
 		HistorySize int64
@@ -598,7 +598,7 @@ type (
 		TaskID             int64
 		Memo               *serialization.DataBlob
 		TaskList           string
-		SearchAttributes   map[string][]byte
+		SearchAttributes   map[string]*commonpb.Payload
 	}
 
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
@@ -612,7 +612,7 @@ type (
 		TaskID             int64
 		Memo               *serialization.DataBlob
 		TaskList           string
-		SearchAttributes   map[string][]byte
+		SearchAttributes   map[string]*commonpb.Payload
 		CloseTimestamp     int64
 		Status             executionpb.WorkflowExecutionStatus
 		HistoryLength      int64
@@ -631,7 +631,7 @@ type (
 		TaskID             int64
 		Memo               *serialization.DataBlob
 		TaskList           string
-		SearchAttributes   map[string][]byte
+		SearchAttributes   map[string]*commonpb.Payload
 	}
 
 	// InternalCreateNamespaceRequest is used to create the namespace

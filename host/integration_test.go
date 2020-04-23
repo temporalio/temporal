@@ -27,7 +27,6 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -847,8 +846,8 @@ func (s *integrationSuite) TestCronWorkflow() {
 		Fields: map[string]*commonpb.Payload{"memoKey": codec.EncodeString("memoVal")},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string][]byte{
-			"CustomKeywordField": []byte(`"1"`),
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": codec.EncodeString("1"),
 		},
 	}
 
@@ -1053,8 +1052,8 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 		},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string][]byte{
-			"CustomKeywordField": []byte(`"1"`),
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": codec.EncodeString("1"),
 		},
 	}
 
@@ -1729,10 +1728,10 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 			"Info": codec.EncodeString("memo"),
 		},
 	}
-	attrValBytes, _ := json.Marshal("attrVal")
+	attrValPayload := codec.EncodeString("attrVal")
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string][]byte{
-			"CustomKeywordField": attrValBytes,
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": attrValPayload,
 		},
 	}
 

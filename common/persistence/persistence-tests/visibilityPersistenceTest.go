@@ -32,9 +32,11 @@ import (
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
 	p "github.com/temporalio/temporal/common/persistence"
 )
@@ -691,8 +693,8 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 				WorkflowTimeout:    0,
 				TaskID:             0,
 				Memo:               nil,
-				SearchAttributes: map[string][]byte{
-					definition.TemporalChangeVersion: []byte("dummy"),
+				SearchAttributes: map[string]*commonpb.Payload{
+					definition.TemporalChangeVersion: codec.EncodeString("dummy"),
 				},
 			},
 			expected: nil,

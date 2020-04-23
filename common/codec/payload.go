@@ -45,6 +45,10 @@ func EncodeBytes(bytes []byte) *commonpb.Payload {
 	return payload
 }
 
+func Encode(valuePtr ...interface{}) (*commonpb.Payload, error) {
+	return dataConverter.ToData(valuePtr)
+}
+
 func Decode(payload *commonpb.Payload, valuePtr ...interface{}) error {
 	return dataConverter.FromData(payload, valuePtr...)
 }

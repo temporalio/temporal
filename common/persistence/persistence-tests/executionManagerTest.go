@@ -25,7 +25,6 @@
 package persistencetests
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -36,6 +35,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
@@ -44,7 +44,6 @@ import (
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal/encoded"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -1216,8 +1215,8 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 		},
 	}
 	testSearchAttrKey := "env"
-	testSearchAttrVal, _ := json.Marshal("test")
-	testSearchAttr := map[string][]byte{
+	testSearchAttrVal := codec.EncodeString("test")
+	testSearchAttr := map[string]*commonpb.Payload{
 		testSearchAttrKey: testSearchAttrVal,
 	}
 
@@ -1335,10 +1334,10 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionStats.HistorySize, state.ExecutionStats.HistorySize)
 	saVal, ok := info.SearchAttributes[testSearchAttrKey]
 	s.True(ok)
-	s.Equal(testSearchAttrVal, saVal)
+	s.True(proto.Equal(testSearchAttrVal, saVal))
 	memoVal, ok := info.Memo[testMemoKey]
 	s.True(ok)
-	s.Equal(testMemoVal, memoVal)
+	s.True(proto.Equal(testMemoVal, memoVal))
 
 	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.LastWriteEventID, state.ReplicationState.LastWriteEventID)
 	s.Equal(createReq.NewWorkflowSnapshot.ReplicationState.LastWriteVersion, state.ReplicationState.LastWriteVersion)
@@ -1428,12 +1427,11 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.ExpirationTime = time.Now()
 	updatedInfo.NonRetriableErrors = []string{"accessDenied", "badRequest"}
 	searchAttrKey := "env"
-	searchAttrVal := []byte("test")
-	updatedInfo.SearchAttributes = map[string][]byte{searchAttrKey: searchAttrVal}
+	searchAttrVal := codec.EncodeString("test")
+	updatedInfo.SearchAttributes = map[string]*commonpb.Payload{searchAttrKey: searchAttrVal}
 
-	dc := encoded.GetDefaultDataConverter()
 	memoKey := "memoKey"
-	memoVal, _ := dc.ToData("memoVal")
+	memoVal := codec.EncodeString("memoVal")
 	updatedInfo.Memo = map[string]*commonpb.Payload{memoKey: memoVal}
 	updatedStats.HistorySize = math.MaxInt64
 
@@ -2605,8 +2603,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	currentTime := time.Now()
-	dc := encoded.GetDefaultDataConverter()
-	details, _ := dc.ToData(uuid.New())
+	details := codec.EncodeString(uuid.New())
 
 	activityInfos := []*p.ActivityInfo{{
 		Version:                  7789,

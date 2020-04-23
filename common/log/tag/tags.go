@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	commonpb "go.temporal.io/temporal-proto/common"
 )
 
 // All logging tags are defined in this file.
@@ -860,4 +861,9 @@ func QueryLevel(s time.Time) Tag {
 // TaskListInfo returns tag for task list info
 func TaskListInfo(s interface{}) Tag {
 	return newObjectTag("task-list-info", s)
+}
+
+// TaskListInfo returns tag for task list info
+func Payload(s *commonpb.Payload) Tag {
+	return newStringTag("payload", s.String())
 }

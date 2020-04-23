@@ -420,7 +420,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 						ActivityId:                    "1",
 						ActivityType:                  &commonpb.ActivityType{Name: activityName},
 						TaskList:                      taskList,
-						Input:                         buf.Bytes(),
+						Input:                         codec.EncodeBytes(buf.Bytes()),
 						ScheduleToCloseTimeoutSeconds: 100,
 						ScheduleToStartTimeoutSeconds: 25,
 						StartToCloseTimeoutSeconds:    50,
@@ -434,16 +434,16 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{
 				CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: []byte("Done"),
+					Result: codec.EncodeString("Done"),
 				}},
 		}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return codec.EncodeString("Activity Result."), false, nil
 	}
 
 	poller := &TaskPoller{

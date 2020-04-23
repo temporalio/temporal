@@ -60,7 +60,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		Fields: map[string]*commonpb.Payload{"memoKey": codec.EncodeString("memoVal")},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string][]byte{"CustomKeywordField": []byte(`"1"`)},
+		IndexedFields: map[string]*commonpb.Payload{"CustomKeywordField": codec.EncodeString("1")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{

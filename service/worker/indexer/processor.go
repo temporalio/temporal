@@ -25,7 +25,6 @@
 package indexer
 
 import (
-	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -235,16 +234,6 @@ func (p *indexProcessor) generateESDoc(msg *indexergenpb.Message, keyToKafkaMsg 
 	return doc
 }
 
-func (p *indexProcessor) decodeSearchAttrBinary(bytes []byte, key string) interface{} {
-	var val interface{}
-	err := json.Unmarshal(bytes, &val)
-	if err != nil {
-		p.logger.Error("Error when decode search attributes values.", tag.Error(err), tag.ESField(key))
-		p.metricsClient.IncCounter(metrics.IndexProcessorScope, metrics.IndexProcessorCorruptedData)
-	}
-	return val
-}
-
 func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexergenpb.Field) map[string]interface{} {
 	doc := make(map[string]interface{})
 	attr := make(map[string]interface{})
@@ -266,7 +255,7 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexergenpb.Field) 
 			if k == definition.Memo {
 				doc[k] = v.GetBinaryData()
 			} else { // custom search attributes
-				attr[k] = p.decodeSearchAttrBinary(v.GetBinaryData(), k)
+				attr[k] = string(v.GetBinaryData())
 			}
 		default:
 			// must be bug in code and bad deployment, check data sent from producer

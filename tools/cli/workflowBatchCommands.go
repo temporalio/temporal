@@ -34,7 +34,6 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/encoded"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
@@ -108,21 +107,24 @@ func ListBatchJobs(c *cli.Context) {
 		ErrorAndExit("Failed to list batch jobs", err)
 	}
 
-	dc := encoded.GetDefaultDataConverter()
-
 	output := make([]interface{}, 0, len(resp.Executions))
 	for _, wf := range resp.Executions {
-		var reason string
-		err = dc.FromData(wf.Memo.Fields["Reason"], &reason)
+		var reason, operator string
+		err = codec.Decode(wf.Memo.Fields["Reason"], &reason)
 		if err != nil {
 			ErrorAndExit("Failed to deserialize reason memo field", err)
+		}
+
+		err = codec.Decode(wf.SearchAttributes.IndexedFields["Operator"], &operator)
+		if err != nil {
+			ErrorAndExit("Failed to deserialize operator search attribute", err)
 		}
 
 		job := map[string]string{
 			"jobID":     wf.Execution.GetWorkflowId(),
 			"startTime": convertTime(wf.GetStartTime().GetValue(), false),
 			"reason":    reason,
-			"operator":  string(wf.SearchAttributes.IndexedFields["Operator"]),
+			"operator":  operator,
 		}
 
 		if wf.GetStatus() != executionpb.WorkflowExecutionStatus_Running {
@@ -196,8 +198,7 @@ func StartBatchJob(c *cli.Context) {
 		},
 	}
 
-	dc := encoded.GetDefaultDataConverter()
-	sigInput, err := dc.ToData(sigVal)
+	sigInput, err := codec.Encode(sigVal)
 	if err != nil {
 		ErrorAndExit("Failed to serialize signal value", err)
 	}

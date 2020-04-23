@@ -25,7 +25,6 @@
 package history
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"time"
@@ -50,6 +49,7 @@ import (
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -1985,12 +1985,12 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	exeInfo.AutoResetPoints = &executionpb.ResetPoints{
 		Points: currResetPoints,
 	}
-	bytes, err := json.Marshal(recentBinaryChecksums)
+	bytes, err := codec.Encode(recentBinaryChecksums)
 	if err != nil {
 		return err
 	}
 	if exeInfo.SearchAttributes == nil {
-		exeInfo.SearchAttributes = make(map[string][]byte)
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload)
 	}
 	exeInfo.SearchAttributes[definition.BinaryChecksums] = bytes
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
@@ -2930,12 +2930,12 @@ func (e *mutableStateBuilder) ReplicateUpsertWorkflowSearchAttributesEvent(
 }
 
 func mergeMapOfByteArray(
-	current map[string][]byte,
-	upsert map[string][]byte,
-) map[string][]byte {
+	current map[string]*commonpb.Payload,
+	upsert map[string]*commonpb.Payload,
+) map[string]*commonpb.Payload {
 
 	if current == nil {
-		current = make(map[string][]byte)
+		current = make(map[string]*commonpb.Payload)
 	}
 	for k, v := range upsert {
 		current[k] = v

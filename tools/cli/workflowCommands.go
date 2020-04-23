@@ -28,7 +28,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -273,7 +272,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 }
 
-func processSearchAttr(c *cli.Context) map[string][]byte {
+func processSearchAttr(c *cli.Context) map[string]*commonpb.Payload {
 	rawSearchAttrKey := c.String(FlagSearchAttributesKey)
 	var searchAttrKeys []string
 	if strings.TrimSpace(rawSearchAttrKey) != "" {
@@ -294,9 +293,9 @@ func processSearchAttr(c *cli.Context) map[string][]byte {
 		ErrorAndExit("Number of search attributes keys and values are not equal.", nil)
 	}
 
-	fields := map[string][]byte{}
+	fields := map[string]*commonpb.Payload{}
 	for i, key := range searchAttrKeys {
-		val, err := json.Marshal(searchAttrVals[i])
+		val, err := codec.Encode(searchAttrVals[i])
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Encode value %v error", val), err)
 		}
@@ -353,8 +352,8 @@ func getPrintableSearchAttr(searchAttr *commonpb.SearchAttributes) string {
 	buf := new(bytes.Buffer)
 	for k, v := range searchAttr.IndexedFields {
 		var decodedVal interface{}
-		json.Unmarshal(v, &decodedVal)
-		fmt.Fprintf(buf, "%s=%v\n", k, decodedVal)
+		_ = codec.Decode(v, &decodedVal)
+		_, _ = fmt.Fprintf(buf, "%s=%v\n", k, decodedVal)
 	}
 	return buf.String()
 }

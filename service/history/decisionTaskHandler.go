@@ -849,7 +849,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 	}
 
 	// blob size limit check
-	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfBlobSizeExceedsLimit(
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
 		metrics.DecisionTypeTag(decisionpb.DecisionType_UpsertWorkflowSearchAttributes.String()),
 		attr.GetSearchAttributes().Size(),
 		"UpsertWorkflowSearchAttributesDecisionAttributes exceeds size limit.",

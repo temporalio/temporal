@@ -145,7 +145,7 @@ func (b *historyBuilder) AddActivityTaskStartedEvent(
 	requestID string,
 	identity string,
 	lastFailureReason string,
-	lastFailureDetails []byte,
+	lastFailureDetails *commonpb.Payload,
 ) *eventpb.HistoryEvent {
 	event := b.newActivityTaskStartedEvent(scheduleEventID, attempt, requestID, identity, lastFailureReason,
 		lastFailureDetails)
@@ -613,7 +613,7 @@ func (b *historyBuilder) newActivityTaskStartedEvent(
 	requestID string,
 	identity string,
 	lastFailureReason string,
-	lastFailureDetails []byte,
+	lastFailureDetails *commonpb.Payload,
 ) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_ActivityTaskStarted)
 	attributes := &eventpb.ActivityTaskStartedEventAttributes{}

@@ -305,7 +305,7 @@ type (
 		ClientImpl                         string
 		AutoResetPoints                    *executionpb.ResetPoints
 		Memo                               map[string]*commonpb.Payload
-		SearchAttributes                   map[string][]byte
+		SearchAttributes                   map[string]*commonpb.Payload
 		// for retry
 		Attempt            int32
 		HasRetryPolicy     bool

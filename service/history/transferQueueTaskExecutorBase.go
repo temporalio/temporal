@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
@@ -158,7 +159,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	taskID int64,
 	taskList string,
 	visibilityMemo *commonpb.Memo,
-	searchAttributes map[string][]byte,
+	searchAttributes map[string]*commonpb.Payload,
 ) error {
 
 	namespace := defaultNamespace
@@ -207,7 +208,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	taskID int64,
 	taskList string,
 	visibilityMemo *commonpb.Memo,
-	searchAttributes map[string][]byte,
+	searchAttributes map[string]*commonpb.Payload,
 ) error {
 
 	namespace := defaultNamespace
@@ -253,7 +254,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	taskID int64,
 	visibilityMemo *commonpb.Memo,
 	taskList string,
-	searchAttributes map[string][]byte,
+	searchAttributes map[string]*commonpb.Payload,
 ) error {
 
 	// Record closing in visibility store
@@ -366,18 +367,16 @@ func getWorkflowMemo(
 }
 
 func copySearchAttributes(
-	input map[string][]byte,
-) map[string][]byte {
+	input map[string]*commonpb.Payload,
+) map[string]*commonpb.Payload {
 
 	if input == nil {
 		return nil
 	}
 
-	result := make(map[string][]byte)
+	result := make(map[string]*commonpb.Payload)
 	for k, v := range input {
-		val := make([]byte, len(v))
-		copy(val, v)
-		result[k] = val
+		result[k] = proto.Clone(v).(*commonpb.Payload)
 	}
 	return result
 }

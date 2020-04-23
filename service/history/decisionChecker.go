@@ -120,7 +120,7 @@ func newWorkflowSizeChecker(
 	}
 }
 
-func (c *workflowSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
+func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 	decisionTypeTag metrics.Tag,
 	payloadSize int,
 	message string,

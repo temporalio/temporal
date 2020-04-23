@@ -46,6 +46,7 @@ import (
 
 	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"
@@ -895,7 +896,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 
 func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskList string,
 	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType,
-	searchAttributes map[string][]byte) *indexergenpb.Message {
+	searchAttributes map[string]*commonpb.Payload) *indexergenpb.Message {
 
 	msgType := indexergenpb.MessageType_Index
 	fields := map[string]*indexergenpb.Field{
@@ -909,7 +910,9 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
 	}
 	for k, v := range searchAttributes {
-		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: v}
+		var data string
+		_ = codec.Decode(v, &data)
+		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: []byte(data)}
 	}
 
 	msg := &indexergenpb.Message{
@@ -926,7 +929,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, workflowTypeName string,
 	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status executionpb.WorkflowExecutionStatus,
 	historyLength int64, taskID int64, memo []byte, taskList string, encoding common.EncodingType,
-	searchAttributes map[string][]byte) *indexergenpb.Message {
+	searchAttributes map[string]*commonpb.Payload) *indexergenpb.Message {
 
 	msgType := indexergenpb.MessageType_Index
 	fields := map[string]*indexergenpb.Field{
@@ -943,7 +946,9 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
 	}
 	for k, v := range searchAttributes {
-		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: v}
+		var data string
+		_ = codec.Decode(v, &data)
+		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: []byte(data)}
 	}
 
 	msg := &indexergenpb.Message{
