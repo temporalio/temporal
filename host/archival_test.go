@@ -233,8 +233,8 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -285,8 +285,8 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 					WorkflowType:                        workflowType,
 					TaskList:                            &tasklistpb.TaskList{Name: tl},
 					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: 100,
-					TaskStartToCloseTimeoutSeconds:      1,
+					WorkflowRunTimeoutSeconds: 100,
+					WorkflowTaskTimeoutSeconds:      1,
 				}},
 			}}, nil
 		}

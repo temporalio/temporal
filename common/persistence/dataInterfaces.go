@@ -308,18 +308,17 @@ type (
 		Memo                               map[string][]byte
 		SearchAttributes                   map[string][]byte
 		// for retry
-		Attempt            int32
-		HasRetryPolicy     bool
-		InitialInterval    int32
-		BackoffCoefficient float64
-		MaximumInterval    int32
-		ExpirationTime     time.Time
-		MaximumAttempts    int32
-		NonRetriableErrors []string
-		BranchToken        []byte
+		Attempt             int32
+		HasRetryPolicy      bool
+		InitialInterval     int32
+		BackoffCoefficient  float64
+		MaximumInterval     int32
+		WorkflowTimeoutTime time.Time
+		MaximumAttempts     int32
+		NonRetriableErrors  []string
+		BranchToken         []byte
 		// Cron
 		CronSchedule      string
-		ExpirationSeconds int32
 	}
 
 	// ExecutionStats is the statistics about workflow execution

@@ -510,26 +510,26 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	continueAsnewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-		WorkflowType:                        startAttributes.WorkflowType,
-		TaskList:                            startAttributes.TaskList,
-		Input:                               startAttributes.Input,
-		ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
-		TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
-		BackoffStartIntervalInSeconds:       int32(backoffInterval.Seconds()),
-		RetryPolicy:                         startAttributes.RetryPolicy,
-		Initiator:                           continueAsNewInitiator,
-		FailureReason:                       timeoutReason,
-		CronSchedule:                        mutableState.GetExecutionInfo().CronSchedule,
-		Header:                              startAttributes.Header,
-		Memo:                                startAttributes.Memo,
-		SearchAttributes:                    startAttributes.SearchAttributes,
+	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+		WorkflowType:                    startAttributes.WorkflowType,
+		TaskList:                        startAttributes.TaskList,
+		Input:                           startAttributes.Input,
+		WorkflowRunTimeoutSeconds:       startAttributes.WorkflowRunTimeoutSeconds,
+		WorkflowTaskTimeoutSeconds:      startAttributes.WorkflowTaskTimeoutSeconds,
+		BackoffStartIntervalInSeconds:   int32(backoffInterval.Seconds()),
+		RetryPolicy:                     startAttributes.RetryPolicy,
+		Initiator:                       continueAsNewInitiator,
+		FailureReason:                   timeoutReason,
+		CronSchedule:                    mutableState.GetExecutionInfo().CronSchedule,
+		Header:                          startAttributes.Header,
+		Memo:                            startAttributes.Memo,
+		SearchAttributes:                startAttributes.SearchAttributes,
 	}
 	newMutableState, err := retryWorkflow(
 		mutableState,
 		eventBatchFirstEventID,
 		startAttributes.GetParentWorkflowNamespace(),
-		continueAsnewAttributes,
+		continueAsNewAttributes,
 	)
 	if err != nil {
 		return err

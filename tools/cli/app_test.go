@@ -240,11 +240,11 @@ var (
 				{
 					EventType: eventType,
 					Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-						WorkflowType:                        &commonpb.WorkflowType{Name: "TestWorkflow"},
-						TaskList:                            &tasklistpb.TaskList{Name: "taskList"},
-						ExecutionStartToCloseTimeoutSeconds: 60,
-						TaskStartToCloseTimeoutSeconds:      10,
-						Identity:                            "tester",
+						WorkflowType:               &commonpb.WorkflowType{Name: "TestWorkflow"},
+						TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
+						WorkflowRunTimeoutSeconds:  60,
+						WorkflowTaskTimeoutSeconds: 10,
+						Identity:                   "tester",
 					}},
 				},
 			},
@@ -695,12 +695,12 @@ func (s *cliAppSuite) TestAnyToString() {
 		EventId:   1,
 		EventType: eventType,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonpb.WorkflowType{Name: "helloworldWorkflow"},
-			TaskList:                            &tasklistpb.TaskList{Name: "taskList"},
-			ExecutionStartToCloseTimeoutSeconds: 60,
-			TaskStartToCloseTimeoutSeconds:      10,
-			Identity:                            "tester",
-			Input:                               []byte(arg),
+			WorkflowType:               &commonpb.WorkflowType{Name: "helloworldWorkflow"},
+			TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
+			WorkflowRunTimeoutSeconds:  60,
+			WorkflowTaskTimeoutSeconds: 10,
+			Identity:                   "tester",
+			Input:                      []byte(arg),
 		}},
 	}
 	res := anyToString(event, false, defaultMaxFieldLength)
@@ -899,11 +899,11 @@ func historyEventIterator() sdkclient.HistoryEventIterator {
 			event := &eventpb.HistoryEvent{
 				EventType: eventType,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-					WorkflowType:                        &commonpb.WorkflowType{Name: "TestWorkflow"},
-					TaskList:                            &tasklistpb.TaskList{Name: "taskList"},
-					ExecutionStartToCloseTimeoutSeconds: 60,
-					TaskStartToCloseTimeoutSeconds:      10,
-					Identity:                            "tester",
+					WorkflowType:               &commonpb.WorkflowType{Name: "TestWorkflow"},
+					TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
+					WorkflowRunTimeoutSeconds:  60,
+					WorkflowTaskTimeoutSeconds: 10,
+					Identity:                   "tester",
 				}},
 			}
 			counter++

@@ -563,6 +563,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	workflowType := "some random workflow type"
 	tasklist := "some random tasklist"
 	workflowTimeoutSecond := int32(222)
+	runTimeoutSecond := int32(111)
 	decisionTimeoutSecond := int32(11)
 	decisionAttempt := int64(0)
 
@@ -573,11 +574,12 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventType_WorkflowExecutionStarted,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                            &tasklistpb.TaskList{Name: tasklist},
-			Input:                               nil,
-			ExecutionStartToCloseTimeoutSeconds: workflowTimeoutSecond,
-			TaskStartToCloseTimeoutSeconds:      decisionTimeoutSecond,
+			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+			Input:                           nil,
+			WorkflowExecutionTimeoutSeconds: workflowTimeoutSecond,
+			WorkflowRunTimeoutSeconds:       runTimeoutSecond,
+			WorkflowTaskTimeoutSeconds:      decisionTimeoutSecond,
 		}},
 	}
 	eventID++

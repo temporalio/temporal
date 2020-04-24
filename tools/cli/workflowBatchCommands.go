@@ -176,7 +176,6 @@ func StartBatchJob(c *cli.Context) {
 	defer cancel()
 	options := sdkclient.StartWorkflowOptions{
 		TaskList:                     batcher.BatcherTaskListName,
-		ExecutionStartToCloseTimeout: batcher.InfiniteDuration,
 		Memo: map[string]interface{}{
 			"Reason": reason,
 		},

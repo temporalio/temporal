@@ -259,7 +259,6 @@ type (
 		NonRetriableErrors []string
 		BranchToken        []byte
 		CronSchedule       string
-		ExpirationSeconds  int32
 		Memo               map[string][]byte
 		SearchAttributes   map[string][]byte
 
@@ -588,7 +587,7 @@ type (
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
-		WorkflowTimeout    int64
+		RunTimeout         int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
 		SearchAttributes   map[string][]byte
@@ -768,7 +767,6 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		RetryBackoffCoefficient:                 executionInfo.BackoffCoefficient,
 		RetryMaximumIntervalSeconds:             executionInfo.MaximumInterval,
 		RetryMaximumAttempts:                    executionInfo.MaximumAttempts,
-		RetryExpirationSeconds:                  executionInfo.ExpirationSeconds,
 		RetryNonRetryableErrors:                 executionInfo.NonRetriableErrors,
 		EventStoreVersion:                       EventStoreVersion,
 		EventBranchToken:                        executionInfo.BranchToken,
@@ -825,6 +823,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		NextEventID:                        nextEventID,
 		TaskList:                           info.GetTaskList(),
 		WorkflowTypeName:                   info.GetWorkflowTypeName(),
+		WorkflowExecutionTimeout:           info.GetWorkflowExecutionTimeoutSeconds(),
 		WorkflowRunTimeout:                 info.GetWorkflowRunTimeoutSeconds(),
 		WorkflowTaskTimeout:                info.GetWorkflowTaskTimeoutSeconds(),
 		State:                              int(state.GetState()),
@@ -858,7 +857,6 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		BackoffCoefficient:                 info.GetRetryBackoffCoefficient(),
 		MaximumInterval:                    info.GetRetryMaximumIntervalSeconds(),
 		MaximumAttempts:                    info.GetRetryMaximumAttempts(),
-		ExpirationSeconds:                  info.GetRetryExpirationSeconds(),
 		BranchToken:                        info.GetEventBranchToken(),
 		ExecutionContext:                   info.GetExecutionContext(),
 		NonRetriableErrors:                 info.GetRetryNonRetryableErrors(),

@@ -248,13 +248,12 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 		TaskList: &tasklistpb.TaskList{
 			Name: "task-list",
 		},
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowTaskTimeoutSeconds: 1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
-			ExpirationIntervalInSeconds: 1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
@@ -285,14 +284,14 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 		TaskList: &tasklistpb.TaskList{
 			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: 1,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowExecutionTimeoutSeconds: 1,
+		WorkflowRunTimeoutSeconds:       1,
+		WorkflowTaskTimeoutSeconds:      1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
-			ExpirationIntervalInSeconds: 1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -314,14 +313,14 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 		TaskList: &tasklistpb.TaskList{
 			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: 1,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowExecutionTimeoutSeconds: 1,
+		WorkflowRunTimeoutSeconds:       1,
+		WorkflowTaskTimeoutSeconds:      1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
-			ExpirationIntervalInSeconds: 1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -344,14 +343,14 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 		TaskList: &tasklistpb.TaskList{
 			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: 1,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowExecutionTimeoutSeconds: 1,
+		WorkflowRunTimeoutSeconds:       1,
+		WorkflowTaskTimeoutSeconds:      1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
-			ExpirationIntervalInSeconds: 1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -379,7 +378,6 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 			BackoffCoefficient:          2,
 			MaximumIntervalInSeconds:    2,
 			MaximumAttempts:             1,
-			ExpirationIntervalInSeconds: 1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -388,7 +386,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 	s.Equal(errTaskListNotSet, err)
 }
 
-func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionStartToCloseTimeout() {
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionTimeout() {
 	config := s.newConfig()
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
@@ -402,22 +400,22 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 		TaskList: &tasklistpb.TaskList{
 			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: -1,
+		WorkflowExecutionTimeoutSeconds: -1,
+		WorkflowRunTimeoutSeconds:       1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
-			ExpirationIntervalInSeconds: 1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errInvalidExecutionStartToCloseTimeoutSeconds, err)
+	s.Equal(errInvalidWorkflowExecutionTimeoutSeconds, err)
 }
 
-func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStartToCloseTimeout() {
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeout() {
 	config := s.newConfig()
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
@@ -431,20 +429,49 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStar
 		TaskList: &tasklistpb.TaskList{
 			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: 1,
-		TaskStartToCloseTimeoutSeconds:      -1,
+		WorkflowExecutionTimeoutSeconds: 1,
+		WorkflowRunTimeoutSeconds:       -1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
-			ExpirationIntervalInSeconds: 1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errInvalidTaskStartToCloseTimeoutSeconds, err)
+	s.Equal(errInvalidWorkflowRunTimeoutSeconds, err)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTimeout() {
+	config := s.newConfig()
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := s.getWorkflowHandler(config)
+
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskList: &tasklistpb.TaskList{
+			Name: "task-list",
+		},
+		WorkflowExecutionTimeoutSeconds: 1,
+		WorkflowRunTimeoutSeconds:       1,
+		WorkflowTaskTimeoutSeconds:      -1,
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
+		},
+		RequestId: uuid.New(),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.Error(err)
+	s.Equal(errInvalidWorkflowTaskTimeoutSeconds, err)
 }
 
 func (s *workflowHandlerSuite) TestRegisterNamespace_Failure_InvalidArchivalURI() {

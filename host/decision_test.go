@@ -65,8 +65,8 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 20,
-		TaskStartToCloseTimeoutSeconds:      3,
+		WorkflowRunTimeoutSeconds: 20,
+		WorkflowTaskTimeoutSeconds:      3,
 		Identity:                            identity,
 	}
 
@@ -171,8 +171,8 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 20,
-		TaskStartToCloseTimeoutSeconds:      5,
+		WorkflowRunTimeoutSeconds: 20,
+		WorkflowTaskTimeoutSeconds:      5,
 		Identity:                            identity,
 	}
 
@@ -307,8 +307,8 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds: 3,
+		WorkflowTaskTimeoutSeconds:      10,
 		Identity:                            identity,
 	}
 
@@ -380,8 +380,8 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds: 3,
+		WorkflowTaskTimeoutSeconds:      10,
 		Identity:                            identity,
 	}
 
@@ -453,8 +453,8 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds: 3,
+		WorkflowTaskTimeoutSeconds:      10,
 		Identity:                            identity,
 	}
 
@@ -538,8 +538,8 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds: 3,
+		WorkflowTaskTimeoutSeconds:      10,
 		Identity:                            identity,
 	}
 
@@ -641,8 +641,8 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds: 3,
+		WorkflowTaskTimeoutSeconds:      10,
 		Identity:                            identity,
 	}
 
@@ -741,8 +741,8 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds: 3,
+		WorkflowTaskTimeoutSeconds:      10,
 		Identity:                            identity,
 	}
 
