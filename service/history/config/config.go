@@ -203,6 +203,9 @@ type Config struct {
 	ReplicationTaskProcessorNoTaskRetryWait          dynamicconfig.DurationPropertyFn
 	ReplicationTaskProcessorCleanupInterval          dynamicconfig.DurationPropertyFn
 	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFn
+	// TODO: those two flags are for migration. Consider remove them after the migration complete
+	EnableRPCReplication   dynamicconfig.BoolPropertyFn
+	EnableKafkaReplication dynamicconfig.BoolPropertyFn
 
 	// The following are used by consistent query
 	EnableConsistentQuery         dynamicconfig.BoolPropertyFn
@@ -366,6 +369,8 @@ func New(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isA
 		ReplicationTaskProcessorNoTaskRetryWait:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
 		ReplicationTaskProcessorCleanupInterval:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorCleanupInterval, 1*time.Minute),
 		ReplicationTaskProcessorCleanupJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient, 0.15),
+		EnableRPCReplication:                             dc.GetBoolProperty(dynamicconfig.HistoryEnableRPCReplication, false),
+		EnableKafkaReplication:                           dc.GetBoolProperty(dynamicconfig.HistoryEnableKafkaReplication, true),
 
 		EnableConsistentQuery:                 dc.GetBoolProperty(dynamicconfig.EnableConsistentQuery, true),
 		EnableConsistentQueryByDomain:         dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableConsistentQueryByDomain, false),
