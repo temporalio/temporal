@@ -34,6 +34,7 @@ import (
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -90,9 +91,14 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 		}
 		// verify: value has the correct type
 		if !sv.isValidSearchAttributesValue(validAttr, key, val) {
-			sv.logger.WithTags(tag.ESKey(key), tag.Payload(val), tag.WorkflowNamespace(namespace)).
+			var invalidValue interface{}
+			if err := payload.Decode(val, &invalidValue); err != nil {
+				invalidValue = fmt.Sprintf("value from %q", val.String())
+			}
+
+			sv.logger.WithTags(tag.ESKey(key), tag.Value(invalidValue), tag.WorkflowNamespace(namespace)).
 				Error("invalid search attribute value")
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not a valid search attribute value for key %s", val, key))
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not a valid search attribute value for key %s", invalidValue, key))
 		}
 		// verify: key is not system reserved
 		if definition.IsSystemIndexedKey(key) {
@@ -101,12 +107,16 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is read-only Temporal reservered attribute", key))
 		}
 		// verify: size of single value <= limit
-		if val.Size() > sv.searchAttributesSizeOfValueLimit(namespace) {
-			sv.logger.WithTags(tag.ESKey(key), tag.Number(int64(val.Size())), tag.WorkflowNamespace(namespace)).
+		dataSize := 0
+		for _, payloadItem := range val.Items {
+			dataSize += len(payloadItem.GetData())
+		}
+		if dataSize > sv.searchAttributesSizeOfValueLimit(namespace) {
+			sv.logger.WithTags(tag.ESKey(key), tag.Number(int64(dataSize)), tag.WorkflowNamespace(namespace)).
 				Error("value size of search attribute exceed limit")
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("size limit exceed for key %s", key))
 		}
-		totalSize += len(key) + val.Size()
+		totalSize += len(key) + dataSize
 	}
 
 	// verify: total size <= limit

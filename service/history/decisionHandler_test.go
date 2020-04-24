@@ -31,12 +31,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonpb "go.temporal.io/temporal-proto/common"
 	querypb "go.temporal.io/temporal-proto/query"
 
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -119,11 +119,7 @@ func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize in
 	for _, id := range ids {
 		results[id] = &querypb.WorkflowQueryResult{
 			ResultType: querypb.QueryResultType_Answered,
-			Answer: &commonpb.Payload{Items: []*commonpb.PayloadItem{{
-				Metadata: map[string][]byte{
-					"encoding": []byte("raw"),
-				},
-				Data: make([]byte, resultSize, resultSize)}}},
+			Answer:     payload.EncodeBytes(make([]byte, resultSize, resultSize)),
 		}
 	}
 	return results
