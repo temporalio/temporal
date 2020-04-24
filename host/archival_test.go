@@ -32,12 +32,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
@@ -45,6 +39,13 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
+
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/convert"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 const (
@@ -267,7 +268,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         codec.EncodeBytes(buf.Bytes()),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -296,7 +297,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: codec.EncodeString("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -313,14 +314,14 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		id, _ := strconv.Atoi(activityID)
 		s.Equal(int(expectedActivityID), id)
 		var b []byte
-		err := codec.Decode(input, &b)
+		err := payload.Decode(input, &b)
 		s.NoError(err)
 		buf := bytes.NewReader(b)
 		var in int32
 		binary.Read(buf, binary.LittleEndian, &in)
 		s.Equal(expectedActivityID, in)
 		expectedActivityID++
-		return codec.EncodeString("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{

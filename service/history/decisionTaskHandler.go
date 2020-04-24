@@ -36,10 +36,10 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/primitives"
 )
 
@@ -271,7 +271,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 				ai.ScheduleID,
 				ai.StartedID,
 				actCancelReqEvent.GetEventId(),
-				codec.EncodeString(activityCancellationMsgActivityNotStarted),
+				payload.EncodeString(activityCancellationMsgActivityNotStarted),
 				handler.identity,
 			)
 			if err != nil {

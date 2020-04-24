@@ -42,11 +42,11 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -257,7 +257,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                        &commonpb.WorkflowType{Name: "some random workflow type"},
 			TaskList:                            &tasklistpb.TaskList{Name: "some random workflow type"},
-			Input:                               codec.EncodeString("some random input"),
+			Input:                               payload.EncodeString("some random input"),
 			ExecutionStartToCloseTimeoutSeconds: 123,
 			TaskStartToCloseTimeoutSeconds:      233,
 			Identity:                            "some random identity",
@@ -269,7 +269,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		EventType: eventpb.EventType_WorkflowExecutionSignaled,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
-			Input:      codec.EncodeString("some random signal input"),
+			Input:      payload.EncodeString("some random signal input"),
 			Identity:   "some random identity",
 		}},
 	}}

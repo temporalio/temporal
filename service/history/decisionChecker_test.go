@@ -39,9 +39,9 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -136,7 +136,7 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 
-	attributes.Input = codec.EncodeString("test input")
+	attributes.Input = payload.EncodeString("test input")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 }

@@ -55,10 +55,10 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
@@ -773,7 +773,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 						Name: "child workflow type",
 					},
 					TaskList:          &tasklistpb.TaskList{Name: taskListName},
-					Input:             codec.EncodeString("random input"),
+					Input:             payload.EncodeString("random input"),
 					ParentClosePolicy: parentClosePolicy1,
 				}},
 			},
@@ -785,7 +785,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 						Name: "child workflow type",
 					},
 					TaskList:          &tasklistpb.TaskList{Name: taskListName},
-					Input:             codec.EncodeString("random input"),
+					Input:             payload.EncodeString("random input"),
 					ParentClosePolicy: parentClosePolicy2,
 				}},
 			},
@@ -797,7 +797,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 						Name: "child workflow type",
 					},
 					TaskList:          &tasklistpb.TaskList{Name: taskListName},
-					Input:             codec.EncodeString("random input"),
+					Input:             payload.EncodeString("random input"),
 					ParentClosePolicy: parentClosePolicy3,
 				}},
 			},
@@ -810,7 +810,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 			Name: "child workflow type",
 		},
 		TaskList:          &tasklistpb.TaskList{Name: taskListName},
-		Input:             codec.EncodeString("random input"),
+		Input:             payload.EncodeString("random input"),
 		ParentClosePolicy: parentClosePolicy1,
 	})
 	s.Nil(err)
@@ -820,7 +820,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 			Name: "child workflow type",
 		},
 		TaskList:          &tasklistpb.TaskList{Name: taskListName},
-		Input:             codec.EncodeString("random input"),
+		Input:             payload.EncodeString("random input"),
 		ParentClosePolicy: parentClosePolicy2,
 	})
 	s.Nil(err)
@@ -830,7 +830,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 			Name: "child workflow type",
 		},
 		TaskList:          &tasklistpb.TaskList{Name: taskListName},
-		Input:             codec.EncodeString("random input"),
+		Input:             payload.EncodeString("random input"),
 		ParentClosePolicy: parentClosePolicy3,
 	})
 	s.Nil(err)
@@ -902,7 +902,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 					Name: "child workflow type",
 				},
 				TaskList:          &tasklistpb.TaskList{Name: taskListName},
-				Input:             codec.EncodeString("random input"),
+				Input:             payload.EncodeString("random input"),
 				ParentClosePolicy: parentClosePolicy,
 			}},
 		})
@@ -921,7 +921,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 				Name: "child workflow type",
 			},
 			TaskList:          &tasklistpb.TaskList{Name: taskListName},
-			Input:             codec.EncodeString("random input"),
+			Input:             payload.EncodeString("random input"),
 			ParentClosePolicy: parentClosePolicy,
 		})
 		s.Nil(err)
@@ -993,7 +993,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 					Name: "child workflow type",
 				},
 				TaskList:          &tasklistpb.TaskList{Name: taskListName},
-				Input:             codec.EncodeString("random input"),
+				Input:             payload.EncodeString("random input"),
 				ParentClosePolicy: parentClosePolicy,
 			}},
 		})
@@ -1012,7 +1012,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 				Name: "child workflow type",
 			},
 			TaskList:          &tasklistpb.TaskList{Name: taskListName},
-			Input:             codec.EncodeString("random input"),
+			Input:             payload.EncodeString("random input"),
 			ParentClosePolicy: parentClosePolicy,
 		})
 		s.Nil(err)
@@ -1241,7 +1241,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 		RunId:      uuid.New(),
 	}
 	signalName := "some random signal name"
-	signalInput := codec.EncodeString("some random signal input")
+	signalInput := payload.EncodeString("some random signal input")
 	signalControl := []byte("some random signal control")
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
@@ -1316,7 +1316,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 		RunId:      uuid.New(),
 	}
 	signalName := "some random signal name"
-	signalInput := codec.EncodeString("some random signal input")
+	signalInput := payload.EncodeString("some random signal input")
 	signalControl := []byte("some random signal control")
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
@@ -1382,7 +1382,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 		RunId:      uuid.New(),
 	}
 	signalName := "some random signal name"
-	signalInput := codec.EncodeString("some random signal input")
+	signalInput := payload.EncodeString("some random signal input")
 	signalControl := []byte("some random signal control")
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
@@ -1738,7 +1738,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), testChildNamespaceID, childExecution.GetWorkflowId(), childExecution.GetRunId(), childWorkflowType)
 	ci.StartedID = event.GetEventId()
 	event = addChildWorkflowExecutionCompletedEvent(mutableState, ci.InitiatedID, &childExecution, &eventpb.WorkflowExecutionCompletedEventAttributes{
-		Result:                       codec.EncodeString("some random child workflow execution result"),
+		Result:                       payload.EncodeString("some random child workflow execution result"),
 		DecisionTaskCompletedEventId: transferTask.GetScheduleId(),
 	})
 

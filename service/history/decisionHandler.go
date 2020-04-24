@@ -41,11 +41,11 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -454,7 +454,7 @@ Update_History_Loop:
 				tag.WorkflowID(token.GetWorkflowId()),
 				tag.WorkflowRunIDBytes(token.GetRunId()),
 				tag.WorkflowNamespaceIDBytes(namespaceID))
-			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, codec.EncodeString(failDecision.message), request)
+			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, payload.EncodeString(failDecision.message), request)
 			if err != nil {
 				return nil, err
 			}
@@ -540,7 +540,7 @@ Update_History_Loop:
 					msBuilder,
 					eventBatchFirstEventID,
 					common.FailureReasonTransactionSizeExceedsLimit,
-					codec.EncodeString(updateErr.Error()),
+					payload.EncodeString(updateErr.Error()),
 					identityHistoryService,
 				); err != nil {
 					return nil, err

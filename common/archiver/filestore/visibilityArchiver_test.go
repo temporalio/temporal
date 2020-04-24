@@ -36,15 +36,17 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/temporal-proto/common"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.uber.org/zap"
+
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/service/config"
-	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.uber.org/zap"
 )
 
 const (
@@ -178,7 +180,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		HistoryLength:      int64(101),
 		Memo: &commonpb.Memo{
 			Fields: map[string]*commonpb.Payload{
-				"testFields": codec.EncodeBytes([]byte{1, 2, 3}),
+				"testFields": payload.EncodeBytes([]byte{1, 2, 3}),
 			},
 		},
 		SearchAttributes: map[string]string{

@@ -45,10 +45,10 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -166,7 +166,7 @@ func (s *conflictResolverSuite) TestReset() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                        &commonpb.WorkflowType{Name: "some random workflow type"},
 			TaskList:                            &tasklistpb.TaskList{Name: "some random workflow type"},
-			Input:                               codec.EncodeString("some random input"),
+			Input:                               payload.EncodeString("some random input"),
 			ExecutionStartToCloseTimeoutSeconds: 123,
 			TaskStartToCloseTimeoutSeconds:      233,
 			Identity:                            "some random identity",

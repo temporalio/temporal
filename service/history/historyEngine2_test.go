@@ -51,12 +51,12 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/payload"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -180,7 +180,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.StickyTaskList = stickyTl
 
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, codec.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -249,7 +249,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	executionInfo.LastUpdatedTimestamp = time.Now()
 	executionInfo.StickyTaskList = stickyTl
 
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, codec.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -718,7 +718,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := codec.EncodeString("input1")
+	activityInput := payload.EncodeString("input1")
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, int64(2), int64(3), nil, identity)
@@ -827,7 +827,7 @@ func (s *engine2Suite) createExecutionStartedState(we executionpb.WorkflowExecut
 	startDecision bool) mutableState {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		s.logger, we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, codec.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	if startDecision {
 		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -855,12 +855,12 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	}
 	serializedTaskToken, _ := taskToken.Marshal()
 	identity := "testIdentity"
-	markerDetails := codec.EncodeString("marker details")
+	markerDetails := payload.EncodeString("marker details")
 	markerName := "marker name"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, codec.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -1164,7 +1164,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	runID := testRunID
 	identity := "testIdentity"
 	signalName := "my signal name"
-	input := codec.EncodeString("test input")
+	input := payload.EncodeString("test input")
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1205,7 +1205,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	taskList := "testTaskList"
 	identity := "testIdentity"
 	signalName := "my signal name"
-	input := codec.EncodeString("test input")
+	input := payload.EncodeString("test input")
 	requestID := uuid.New()
 
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
@@ -1246,7 +1246,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 	taskList := "testTaskList"
 	identity := "testIdentity"
 	signalName := "my signal name"
-	input := codec.EncodeString("test input")
+	input := payload.EncodeString("test input")
 	requestID := uuid.New()
 
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
@@ -1288,7 +1288,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	taskList := "testTaskList"
 	identity := "testIdentity"
 	signalName := "my signal name"
-	input := codec.EncodeString("test input")
+	input := payload.EncodeString("test input")
 	requestID := uuid.New()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
@@ -1340,7 +1340,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	taskList := "testTaskList"
 	identity := "testIdentity"
 	signalName := "my signal name"
-	input := codec.EncodeString("test input")
+	input := payload.EncodeString("test input")
 	requestID := "testRequestID"
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
@@ -1400,7 +1400,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	taskList := "testTaskList"
 	identity := "testIdentity"
 	signalName := "my signal name"
-	input := codec.EncodeString("test input")
+	input := payload.EncodeString("test input")
 	requestID := "testRequestID"
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,

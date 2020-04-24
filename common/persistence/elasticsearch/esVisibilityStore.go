@@ -46,12 +46,12 @@ import (
 
 	indexergenpb "github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
+	"github.com/temporalio/temporal/common/payload"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/config"
 )
@@ -911,7 +911,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 	}
 	for k, v := range searchAttributes {
 		var data string
-		_ = codec.Decode(v, &data)
+		_ = payload.Decode(v, &data)
 		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: []byte(data)}
 	}
 
@@ -947,7 +947,7 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 	}
 	for k, v := range searchAttributes {
 		var data string
-		_ = codec.Decode(v, &data)
+		_ = payload.Decode(v, &data)
 		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: []byte(data)}
 	}
 

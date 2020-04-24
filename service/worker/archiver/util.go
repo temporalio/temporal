@@ -33,9 +33,9 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal/activity"
 
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 )
 
 // MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow
@@ -104,7 +104,7 @@ func convertSearchAttributesToString(searchAttr map[string]*commonpb.Payload) ma
 	searchAttrStr := make(map[string]string)
 	for k, v := range searchAttr {
 		var s string
-		_ = codec.Decode(v, &s)
+		_ = payload.Decode(v, &s)
 		searchAttrStr[k] = s
 	}
 	return searchAttrStr

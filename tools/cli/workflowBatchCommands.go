@@ -36,7 +36,7 @@ import (
 	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/service/worker/batcher"
 )
 
@@ -81,7 +81,7 @@ func DescribeBatchJob(c *cli.Context) {
 		if len(wf.PendingActivities) > 0 {
 			hbdPayload := wf.PendingActivities[0].HeartbeatDetails
 			var hbd batcher.HeartBeatDetails
-			err := codec.Decode(hbdPayload, &hbd)
+			err := payload.Decode(hbdPayload, &hbd)
 			if err != nil {
 				ErrorAndExit("Failed to describe batch job", err)
 			}
@@ -110,12 +110,12 @@ func ListBatchJobs(c *cli.Context) {
 	output := make([]interface{}, 0, len(resp.Executions))
 	for _, wf := range resp.Executions {
 		var reason, operator string
-		err = codec.Decode(wf.Memo.Fields["Reason"], &reason)
+		err = payload.Decode(wf.Memo.Fields["Reason"], &reason)
 		if err != nil {
 			ErrorAndExit("Failed to deserialize reason memo field", err)
 		}
 
-		err = codec.Decode(wf.SearchAttributes.IndexedFields["Operator"], &operator)
+		err = payload.Decode(wf.SearchAttributes.IndexedFields["Operator"], &operator)
 		if err != nil {
 			ErrorAndExit("Failed to deserialize operator search attribute", err)
 		}
@@ -198,7 +198,7 @@ func StartBatchJob(c *cli.Context) {
 		},
 	}
 
-	sigInput, err := codec.Encode(sigVal)
+	sigInput, err := payload.Encode(sigVal)
 	if err != nil {
 		ErrorAndExit("Failed to serialize signal value", err)
 	}

@@ -44,10 +44,10 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/payload"
 )
 
 const (
@@ -523,41 +523,41 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 	switch valueType {
 	case commonpb.IndexedValueType_String, commonpb.IndexedValueType_Keyword:
 		var val string
-		if err := codec.Decode(value, &val); err != nil {
+		if err := payload.Decode(value, &val); err != nil {
 			var listVal []string
-			err = codec.Decode(value, &listVal)
+			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Int:
 		var val int64
-		if err := codec.Decode(value, &val); err != nil {
+		if err := payload.Decode(value, &val); err != nil {
 			var listVal []int64
-			err = codec.Decode(value, &listVal)
+			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Double:
 		var val float64
-		if err := codec.Decode(value, &val); err != nil {
+		if err := payload.Decode(value, &val); err != nil {
 			var listVal []float64
-			err = codec.Decode(value, &listVal)
+			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Bool:
 		var val bool
-		if err := codec.Decode(value, &val); err != nil {
+		if err := payload.Decode(value, &val); err != nil {
 			var listVal []bool
-			err = codec.Decode(value, &listVal)
+			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Datetime:
 		var val time.Time
-		if err := codec.Decode(value, &val); err != nil {
+		if err := payload.Decode(value, &val); err != nil {
 			var listVal []time.Time
-			err = codec.Decode(value, &listVal)
+			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil

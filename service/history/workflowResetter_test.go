@@ -37,12 +37,12 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -274,7 +274,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		Version:         12,
 		ScheduleID:      123,
 		StartedID:       124,
-		Details:         codec.EncodeString("some random activity 1 details"),
+		Details:         payload.EncodeString("some random activity 1 details"),
 		StartedIdentity: "some random activity 1 started identity",
 	}
 	activity2 := &persistence.ActivityInfo{
@@ -537,7 +537,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		EventType: eventpb.EventType_WorkflowExecutionSignaled,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
-			Input:      codec.EncodeString("some random signal input"),
+			Input:      payload.EncodeString("some random signal input"),
 			Identity:   "some random signal identity",
 		}},
 	}
@@ -551,7 +551,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		EventType: eventpb.EventType_WorkflowExecutionSignaled,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "another random signal name",
-			Input:      codec.EncodeString("another random signal input"),
+			Input:      payload.EncodeString("another random signal input"),
 			Identity:   "another random signal identity",
 		}},
 	}

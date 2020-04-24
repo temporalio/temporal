@@ -52,6 +52,7 @@ import (
 	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/rpc"
 )
 
@@ -148,7 +149,7 @@ func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string 
 				str += string(typedV)
 			case *commonpb.Payload:
 				var data string
-				err := codec.Decode(typedV, &data)
+				err := payload.Decode(typedV, &data)
 				if err == nil {
 					str += data
 				} else {

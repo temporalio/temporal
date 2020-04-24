@@ -38,7 +38,7 @@ import (
 
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/golang/mock/gomock"
@@ -444,7 +444,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 					MarkerName:                   "some marker name",
-					Details:                      codec.EncodeString("some marker details"),
+					Details:                      payload.EncodeString("some marker details"),
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
@@ -485,7 +485,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 1",
-					Input:      codec.EncodeString("some signal details 1"),
+					Input:      payload.EncodeString("some signal details 1"),
 					Identity:   identity,
 				}},
 			},
@@ -529,7 +529,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 2",
-					Input:      codec.EncodeString("some signal details 2"),
+					Input:      payload.EncodeString("some signal details 2"),
 					Identity:   identity,
 				}},
 			},
@@ -749,7 +749,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 					MarkerName:                   "some marker name",
-					Details:                      codec.EncodeString("some marker details"),
+					Details:                      payload.EncodeString("some marker details"),
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
@@ -790,7 +790,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 1",
-					Input:      codec.EncodeString("some signal details 1"),
+					Input:      payload.EncodeString("some signal details 1"),
 					Identity:   identity,
 				}},
 			},
@@ -834,7 +834,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 2",
-					Input:      codec.EncodeString("some signal details 2"),
+					Input:      payload.EncodeString("some signal details 2"),
 					Identity:   identity,
 				}},
 			},
@@ -1104,7 +1104,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 					TaskId:    taskID,
 					Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 						SignalName: "signal",
-						Input:      codec.EncodeBytes([]byte{}),
+						Input:      payload.EncodeBytes([]byte{}),
 						Identity:   "ndc_integration_test",
 					}},
 				},
@@ -1216,7 +1216,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 					MarkerName:                   "some marker name",
-					Details:                      codec.EncodeString("some marker details"),
+					Details:                      payload.EncodeString("some marker details"),
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
@@ -1257,7 +1257,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 1",
-					Input:      codec.EncodeString("some signal details 1"),
+					Input:      payload.EncodeString("some signal details 1"),
 					Identity:   identity,
 				}},
 			},
@@ -1301,7 +1301,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 2",
-					Input:      codec.EncodeString("some signal details 2"),
+					Input:      payload.EncodeString("some signal details 2"),
 					Identity:   identity,
 				}},
 			},

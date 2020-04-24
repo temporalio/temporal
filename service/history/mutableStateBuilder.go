@@ -49,11 +49,11 @@ import (
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -1985,7 +1985,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	exeInfo.AutoResetPoints = &executionpb.ResetPoints{
 		Points: currResetPoints,
 	}
-	bytes, err := codec.Encode(recentBinaryChecksums)
+	bytes, err := payload.Encode(recentBinaryChecksums)
 	if err != nil {
 		return err
 	}

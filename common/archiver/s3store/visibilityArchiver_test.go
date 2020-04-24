@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
@@ -45,6 +46,8 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/payload"
+
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
@@ -206,7 +209,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		HistoryLength:      int64(101),
 		Memo: &commonpb.Memo{
 			Fields: map[string]*commonpb.Payload{
-				"testFields": codec.EncodeBytes([]byte{1, 2, 3}),
+				"testFields": payload.EncodeBytes([]byte{1, 2, 3}),
 			},
 		},
 		SearchAttributes: map[string]string{

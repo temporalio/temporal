@@ -37,9 +37,9 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/service/history"
 	"github.com/temporalio/temporal/service/matching"
 )
@@ -246,7 +246,7 @@ Loop:
 			_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 				TaskToken: response.TaskToken,
 				Cause:     eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
-				Details:   codec.EncodeString(err.Error()),
+				Details:   payload.EncodeString(err.Error()),
 				Identity:  p.Identity,
 			})
 			return isQueryTask, nil, err
@@ -316,7 +316,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 			TaskToken: response.TaskToken,
 			Cause:     eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
-			Details:   codec.EncodeString(err.Error()),
+			Details:   payload.EncodeString(err.Error()),
 			Identity:  p.Identity,
 		})
 		return nil, err
@@ -380,7 +380,7 @@ retry:
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
 			_, err := p.Engine.RespondActivityTaskCanceled(NewContext(), &workflowservice.RespondActivityTaskCanceledRequest{
 				TaskToken: response.TaskToken,
-				Details:   codec.EncodeString("details"),
+				Details:   payload.EncodeString("details"),
 				Identity:  p.Identity,
 			})
 			return err
@@ -390,7 +390,7 @@ retry:
 			_, err := p.Engine.RespondActivityTaskFailed(NewContext(), &workflowservice.RespondActivityTaskFailedRequest{
 				TaskToken: response.TaskToken,
 				Reason:    err2.Error(),
-				Details:   codec.EncodeString(err2.Error()),
+				Details:   payload.EncodeString(err2.Error()),
 				Identity:  p.Identity,
 			})
 			return err
@@ -451,7 +451,7 @@ retry:
 				WorkflowId: response.WorkflowExecution.GetWorkflowId(),
 				RunId:      response.WorkflowExecution.GetRunId(),
 				ActivityId: response.GetActivityId(),
-				Details:    codec.EncodeString("details"),
+				Details:    payload.EncodeString("details"),
 				Identity:   p.Identity,
 			})
 			return err
@@ -464,7 +464,7 @@ retry:
 				RunId:      response.WorkflowExecution.GetRunId(),
 				ActivityId: response.GetActivityId(),
 				Reason:     err2.Error(),
-				Details:    codec.EncodeString(err2.Error()),
+				Details:    payload.EncodeString(err2.Error()),
 				Identity:   p.Identity,
 			})
 			return err

@@ -47,8 +47,8 @@ import (
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/rpc"
 )
 
@@ -294,7 +294,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 		if event.GetEventType() == eventpb.EventType_ActivityTaskFailed {
 			failedAct++
 			var message string
-			err = codec.Decode(event.GetActivityTaskFailedEventAttributes().GetDetails(), &message)
+			err = payload.Decode(event.GetActivityTaskFailedEventAttributes().GetDetails(), &message)
 			s.NoError(err)
 			s.True(strings.HasPrefix(message, "unable to decode the activity function input payload with error"))
 		}

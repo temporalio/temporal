@@ -45,9 +45,9 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/checksum"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -179,7 +179,7 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 		newDecisionScheduleEvent.GetEventId(),
 		newDecisionStartedEvent.GetEventId(),
 		eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
-		codec.EncodeString("some random decision failure details"),
+		payload.EncodeString("some random decision failure details"),
 		"some random decision failure identity",
 		"", "", "", "", 0,
 	))
@@ -271,7 +271,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	}
 	tl := "testTaskList"
 	activityID := "activity_id"
-	activityResult := codec.EncodeString("activity_result")
+	activityResult := payload.EncodeString("activity_result")
 
 	info := &persistence.WorkflowExecutionInfo{
 		NamespaceID:                 namespaceID,
@@ -794,7 +794,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 			InitiatedEventBatchId: 17,
 			RequestId:             uuid.New(),
 			Name:                  "test-signal-75",
-			Input:                 codec.EncodeString("signal-input-75"),
+			Input:                 payload.EncodeString("signal-input-75"),
 		},
 	}
 
@@ -809,7 +809,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 			Version:   failoverVersion,
 			Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 				SignalName: "test-signal-buffered",
-				Input:      codec.EncodeString("test-signal-buffered-input"),
+				Input:      payload.EncodeString("test-signal-buffered-input"),
 			}},
 		},
 	}

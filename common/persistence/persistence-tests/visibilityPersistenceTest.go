@@ -36,8 +36,8 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/payload"
 	p "github.com/temporalio/temporal/common/persistence"
 )
 
@@ -694,7 +694,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 				TaskID:             0,
 				Memo:               nil,
 				SearchAttributes: map[string]*commonpb.Payload{
-					definition.TemporalChangeVersion: codec.EncodeString("dummy"),
+					definition.TemporalChangeVersion: payload.EncodeString("dummy"),
 				},
 			},
 			expected: nil,

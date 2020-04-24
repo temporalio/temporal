@@ -55,11 +55,11 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/environment"
 	"github.com/temporalio/temporal/host"
 )
@@ -318,7 +318,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
-	terminateDetails := codec.EncodeString("terminate details")
+	terminateDetails := payload.EncodeString("terminate details")
 	_, err = client1.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{

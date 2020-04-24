@@ -42,8 +42,8 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/atomic"
 
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/rpc"
 	"github.com/temporalio/temporal/service/history"
 )
@@ -98,7 +98,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         codec.EncodeBytes(buf.Bytes()),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -110,7 +110,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: codec.EncodeString("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -119,14 +119,14 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return codec.EncodeString("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
-			return codec.EncodeString("query-result"), nil
+			return payload.EncodeString("query-result"), nil
 		}
 
 		return nil, errors.New("unknown-query-type")
@@ -188,7 +188,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
 	var queryResultString string
-	err = codec.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
+	err = payload.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
 	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 
@@ -258,7 +258,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         codec.EncodeBytes(buf.Bytes()),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -270,7 +270,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: codec.EncodeString("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -279,14 +279,14 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return codec.EncodeString("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
-			return codec.EncodeString("query-result"), nil
+			return payload.EncodeString("query-result"), nil
 		}
 
 		return nil, errors.New("unknown-query-type")
@@ -350,7 +350,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
 	var queryResultString string
-	err = codec.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
+	err = payload.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
 	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 }
@@ -402,7 +402,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         codec.EncodeBytes(buf.Bytes()),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -414,7 +414,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: codec.EncodeString("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -422,14 +422,14 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
-		return codec.EncodeString("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
-			return codec.EncodeString("query-result"), nil
+			return payload.EncodeString("query-result"), nil
 		}
 
 		return nil, errors.New("unknown-query-type")
@@ -490,7 +490,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
 	var queryResultString string
-	err = codec.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
+	err = payload.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
 	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 
@@ -529,7 +529,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
-	err = codec.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
+	err = payload.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
 	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 
@@ -558,7 +558,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
-	err = codec.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
+	err = payload.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
 	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 }
@@ -611,7 +611,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         codec.EncodeBytes(buf.Bytes()),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -630,7 +630,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: codec.EncodeString("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -638,14 +638,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
-		return codec.EncodeString("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
-			return codec.EncodeString("query-result"), nil
+			return payload.EncodeString("query-result"), nil
 		}
 
 		return nil, errors.New("unknown-query-type")
@@ -698,7 +698,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	// send signal to ensure there is an outstanding decision task to dispatch query on
 	// otherwise query will just go through matching
 	signalName := "my signal"
-	signalInput := codec.EncodeString("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -730,7 +730,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		false,
 		&querypb.WorkflowQueryResult{
 			ResultType: querypb.QueryResultType_Answered,
-			Answer:     codec.EncodeString("consistent query result"),
+			Answer:     payload.EncodeString("consistent query result"),
 		})
 
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
@@ -743,7 +743,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
 	var queryResultString string
-	err = codec.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
+	err = payload.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
 	s.NoError(err)
 	s.Equal("consistent query result", queryResultString)
 }
@@ -795,7 +795,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         codec.EncodeBytes(buf.Bytes()),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10, // ensure longer than time it takes to handle signal
 					StartToCloseTimeoutSeconds:    50, // ensure longer than time takes to handle signal
@@ -814,7 +814,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: codec.EncodeString("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -822,14 +822,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
-		return codec.EncodeString("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
-			return codec.EncodeString("query-result"), nil
+			return payload.EncodeString("query-result"), nil
 		}
 
 		return nil, errors.New("unknown-query-type")
@@ -876,7 +876,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	}
 
 	signalName := "my signal"
-	signalInput := codec.EncodeString("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -955,7 +955,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         codec.EncodeBytes(buf.Bytes()),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10, // ensure longer than time it takes to handle signal
 					StartToCloseTimeoutSeconds:    50, // ensure longer than time takes to handle signal
@@ -976,7 +976,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: codec.EncodeString("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -984,14 +984,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
-		return codec.EncodeString("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
-			return codec.EncodeString("query-result"), nil
+			return payload.EncodeString("query-result"), nil
 		}
 
 		return nil, errors.New("unknown-query-type")
@@ -1040,7 +1040,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	// send a signal that will take 5 seconds to handle
 	// this causes the signal to still be outstanding at the time query arrives
 	signalName := "my signal"
-	signalInput := codec.EncodeString("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -1086,7 +1086,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
 	var queryResultString string
-	err = codec.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
+	err = payload.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
 	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 }
@@ -1143,7 +1143,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         codec.EncodeBytes(buf.Bytes()),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10, // ensure longer than time it takes to handle signal
 					StartToCloseTimeoutSeconds:    50, // ensure longer than time takes to handle signal
@@ -1164,7 +1164,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: codec.EncodeString("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1172,14 +1172,14 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
-		return codec.EncodeString("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
-			return codec.EncodeString("query-result"), nil
+			return payload.EncodeString("query-result"), nil
 		}
 
 		return nil, errors.New("unknown-query-type")
@@ -1230,7 +1230,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	// send a signal that will take 5 seconds to handle
 	// this causes the signal to still be outstanding at the time query arrives
 	signalName := "my signal"
-	signalInput := codec.EncodeString("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -1252,7 +1252,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 
 		// at this point there is a decision task started on the worker so this second signal will become buffered
 		signalName := "my signal"
-		signalInput := codec.EncodeString("my signal input")
+		signalInput := payload.EncodeString("my signal input")
 		_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			WorkflowExecution: &executionpb.WorkflowExecution{
@@ -1291,7 +1291,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		false,
 		&querypb.WorkflowQueryResult{
 			ResultType: querypb.QueryResultType_Answered,
-			Answer:     codec.EncodeString("consistent query result"),
+			Answer:     payload.EncodeString("consistent query result"),
 		})
 
 	// the task should not be a query task because at the time outstanding decision task completed
@@ -1305,7 +1305,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
 	var queryResultString string
-	err = codec.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
+	err = payload.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
 	s.NoError(err)
 	s.Equal("consistent query result", queryResultString)
 }
