@@ -68,7 +68,7 @@ var keys = map[Key]string{
 	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
 	TransactionSizeLimit:                   "system.transactionSizeLimit",
 	MinRetentionDays:                       "system.minRetentionDays",
-	MaxDecisionTaskStartToCloseTimeout:     "system.maxDecisionTaskStartToCloseTimeout",
+	MaxWorkflowTaskTimeout:                 "system.maxWorkflowTaskTimeout",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
@@ -204,7 +204,7 @@ var keys = map[Key]string{
 	MaxWorkflowExecutionTimeout:                           "history.maximumWorkflowExecutionTimeout",
 	MaxWorkflowRunTimeout:                                 "history.maximumWorkflowRunTimeout",
 	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
-	DefaultDecisionTaskStartToCloseTimeout:                "history.defaultDecisionTaskStartToCloseTimeout",
+	DefaultWorkflowTaskTimeout:                            "history.defaultWorkflowTaskTimeout",
 	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
 	NumParentClosePolicySystemWorkflows:                   "history.numParentClosePolicySystemWorkflows",
 	ReplicationTaskFetcherParallelism:                     "history.ReplicationTaskFetcherParallelism",
@@ -302,8 +302,8 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
-	// MaxDecisionTaskStartToCloseTimeout  is the maximum allowed decision start to close timeout
-	MaxDecisionTaskStartToCloseTimeout
+	// MaxWorkflowTaskTimeout  is the maximum allowed decision start to close timeout
+	MaxWorkflowTaskTimeout
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
 	// BlobSizeLimitError is the per event blob size limit
@@ -569,8 +569,8 @@ const (
 	MaxWorkflowExecutionTimeout
 	// MaxWorkflowRunTimeout maximum allowed workflow run timeout
 	MaxWorkflowRunTimeout
-	// DefaultDecisionTaskStartToCloseTimeout for a decision task
-	DefaultDecisionTaskStartToCloseTimeout
+	// DefaultWorkflowTaskTimeout for a decision task
+	DefaultWorkflowTaskTimeout
 
 	// key for worker
 

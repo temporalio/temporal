@@ -205,11 +205,11 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		TaskList: &tasklistpb.TaskList{
 			Name: taskList,
 		},
-		Input:                               []byte(input),
-		ExecutionStartToCloseTimeoutSeconds: int32(et),
-		TaskStartToCloseTimeoutSeconds:      int32(dt),
-		Identity:                            getCliIdentity(),
-		WorkflowIdReusePolicy:               reusePolicy,
+		Input:                           []byte(input),
+		WorkflowExecutionTimeoutSeconds: int32(et),
+		WorkflowTaskTimeoutSeconds:      int32(dt),
+		Identity:                        getCliIdentity(),
+		WorkflowIdReusePolicy:           reusePolicy,
 	}
 	if c.IsSet(FlagCronSchedule) {
 		startRequest.CronSchedule = c.String(FlagCronSchedule)

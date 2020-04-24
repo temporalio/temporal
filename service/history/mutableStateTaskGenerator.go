@@ -138,11 +138,11 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 	executionInfo := r.mutableState.GetExecutionInfo()
 	startVersion := startEvent.GetVersion()
 
-	workflowTimeoutDuration := time.Duration(executionInfo.WorkflowRunTimeout) * time.Second
-	workflowTimeoutDuration = workflowTimeoutDuration + firstDecisionDelayDuration
-	workflowTimeoutTimestamp := now.Add(workflowTimeoutDuration)
-	if !executionInfo.ExpirationTime.IsZero() && workflowTimeoutTimestamp.After(executionInfo.ExpirationTime) {
-		workflowTimeoutTimestamp = executionInfo.ExpirationTime
+	runTimeoutDuration := time.Duration(executionInfo.WorkflowRunTimeout) * time.Second
+	runTimeoutDuration = runTimeoutDuration + firstDecisionDelayDuration
+	workflowTimeoutTimestamp := now.Add(runTimeoutDuration)
+	if !executionInfo.WorkflowTimeoutTime.IsZero() && workflowTimeoutTimestamp.After(executionInfo.WorkflowTimeoutTime) {
+		workflowTimeoutTimestamp = executionInfo.WorkflowTimeoutTime
 	}
 	r.mutableState.AddTimerTasks(&persistence.WorkflowTimeoutTask{
 		// TaskID is set by shard

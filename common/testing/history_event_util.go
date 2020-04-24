@@ -240,10 +240,11 @@ func InitializeHistoryEventGenerator(
 				Name: taskList,
 				Kind: tasklistpb.TaskListKind_Normal,
 			},
-			ExecutionStartToCloseTimeoutSeconds: timeout,
-			TaskStartToCloseTimeoutSeconds:      timeout,
-			Identity:                            identity,
-			FirstExecutionRunId:                 uuid.New(),
+			WorkflowExecutionTimeoutSeconds: timeout,
+			WorkflowRunTimeoutSeconds:       timeout,
+			WorkflowTaskTimeoutSeconds:      timeout,
+			Identity:                        identity,
+			FirstExecutionRunId:             uuid.New(),
 		}}
 		return historyEvent
 	})
@@ -288,10 +289,11 @@ func InitializeHistoryEventGenerator(
 				Name: taskList,
 				Kind: tasklistpb.TaskListKind_Normal,
 			},
-			ExecutionStartToCloseTimeoutSeconds: timeout,
-			TaskStartToCloseTimeoutSeconds:      timeout,
-			DecisionTaskCompletedEventId:        eventID - 1,
-			Initiator:                           commonpb.ContinueAsNewInitiator_Decider,
+			WorkflowExecutionTimeoutSeconds: timeout,
+			WorkflowRunTimeoutSeconds:       timeout,
+			WorkflowTaskTimeoutSeconds:      timeout,
+			DecisionTaskCompletedEventId:    eventID - 1,
+			Initiator:                       commonpb.ContinueAsNewInitiator_Decider,
 		}}
 		return historyEvent
 	})
@@ -624,10 +626,11 @@ func InitializeHistoryEventGenerator(
 				Name: taskList,
 				Kind: tasklistpb.TaskListKind_Normal,
 			},
-			ExecutionStartToCloseTimeoutSeconds: timeout,
-			TaskStartToCloseTimeoutSeconds:      timeout,
-			DecisionTaskCompletedEventId:        lastEvent.EventId,
-			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_RejectDuplicate,
+			WorkflowExecutionTimeoutSeconds: timeout,
+			WorkflowRunTimeoutSeconds:       timeout,
+			WorkflowTaskTimeoutSeconds:      timeout,
+			DecisionTaskCompletedEventId:    lastEvent.EventId,
+			WorkflowIdReusePolicy:           commonpb.WorkflowIdReusePolicy_RejectDuplicate,
 		}}
 		return historyEvent
 	})

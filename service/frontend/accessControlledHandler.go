@@ -208,48 +208,6 @@ func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionHistory(
 	return a.frontendHandler.GetWorkflowExecutionHistory(ctx, request)
 }
 
-// GetWorkflowExecutionRawHistory API call
-func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
-) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
-
-	attr := &authorization.Attributes{
-		APIName:   "GetWorkflowExecutionRawHistory",
-		Namespace: request.GetNamespace(),
-	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
-	if err != nil {
-		return nil, err
-	}
-	if !isAuthorized {
-		return nil, errUnauthorized
-	}
-
-	return a.frontendHandler.GetWorkflowExecutionRawHistory(ctx, request)
-}
-
-// PollForWorkflowExecutionRawHistory API call
-func (a *AccessControlledWorkflowHandler) PollForWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.PollForWorkflowExecutionRawHistoryRequest,
-) (*workflowservice.PollForWorkflowExecutionRawHistoryResponse, error) {
-
-	attr := &authorization.Attributes{
-		APIName:   "PollForWorkflowExecutionRawHistory",
-		Namespace: request.GetNamespace(),
-	}
-	isAuthorized, err := a.isAuthorized(ctx, attr)
-	if err != nil {
-		return nil, err
-	}
-	if !isAuthorized {
-		return nil, errUnauthorized
-	}
-
-	return a.frontendHandler.PollForWorkflowExecutionRawHistory(ctx, request)
-}
-
 // ListArchivedWorkflowExecutions API call
 func (a *AccessControlledWorkflowHandler) ListArchivedWorkflowExecutions(
 	ctx context.Context,

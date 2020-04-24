@@ -192,8 +192,8 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	workflowTimeout := executionInfo.WorkflowRunTimeout
-	decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
+	runTimeout := executionInfo.WorkflowRunTimeout
+	taskTimeout := common.MinInt32(runTimeout, common.MaxTaskTimeout)
 
 	// NOTE: previously this section check whether mutable state has enabled
 	// sticky decision, if so convert the decision to a sticky decision.
@@ -207,13 +207,13 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 		// this decision is an sticky decision
 		// there shall already be an timer set
 		taskList.Kind = tasklistpb.TaskListKind_Sticky
-		decisionTimeout = executionInfo.StickyScheduleToStartTimeout
+		taskTimeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushDecision(task, taskList, decisionTimeout)
+	return t.pushDecision(task, taskList, taskTimeout)
 }
 
 func (t *transferQueueActiveTaskExecutor) processCloseExecution(
@@ -672,7 +672,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	workflowTimeout := executionInfo.WorkflowRunTimeout
+	runTimeout := executionInfo.WorkflowRunTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
@@ -695,7 +695,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 			wfTypeName,
 			startTimestamp,
 			executionTimestamp.UnixNano(),
-			workflowTimeout,
+			runTimeout,
 			task.GetTaskId(),
 			visibilityMemo,
 			searchAttr,
@@ -708,7 +708,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 		wfTypeName,
 		startTimestamp,
 		executionTimestamp.UnixNano(),
-		workflowTimeout,
+		runTimeout,
 		task.GetTaskId(),
 		visibilityMemo,
 		searchAttr,
@@ -1193,14 +1193,15 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 	request := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                           targetNamespace,
-			WorkflowId:                          attributes.WorkflowId,
-			WorkflowType:                        attributes.WorkflowType,
-			TaskList:                            attributes.TaskList,
-			Input:                               attributes.Input,
-			Header:                              attributes.Header,
-			ExecutionStartToCloseTimeoutSeconds: attributes.ExecutionStartToCloseTimeoutSeconds,
-			TaskStartToCloseTimeoutSeconds:      attributes.TaskStartToCloseTimeoutSeconds,
+			Namespace:                       targetNamespace,
+			WorkflowId:                      attributes.WorkflowId,
+			WorkflowType:                    attributes.WorkflowType,
+			TaskList:                        attributes.TaskList,
+			Input:                           attributes.Input,
+			Header:                          attributes.Header,
+			WorkflowExecutionTimeoutSeconds: attributes.WorkflowExecutionTimeoutSeconds,
+			WorkflowRunTimeoutSeconds:       attributes.WorkflowRunTimeoutSeconds,
+			WorkflowTaskTimeoutSeconds:      attributes.WorkflowTaskTimeoutSeconds,
 			// Use the same request ID to dedupe StartWorkflowExecution calls
 			RequestId:             childInfo.CreateRequestID,
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,

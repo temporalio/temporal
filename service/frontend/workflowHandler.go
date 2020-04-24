@@ -338,12 +338,16 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
+	}
+
+	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
 	if request.GetRequestId() == "" {
@@ -1913,12 +1917,16 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errRequestIDTooLong, scope)
 	}
 
-	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
+	}
+
+	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
@@ -2825,347 +2833,6 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workfl
 	return &workflowservice.DescribeTaskListResponse{
 		Pollers:        matchingResponse.Pollers,
 		TaskListStatus: matchingResponse.TaskListStatus,
-	}, nil
-}
-
-func (wh *WorkflowHandler) PollForWorkflowExecutionRawHistory(ctx context.Context, request *workflowservice.PollForWorkflowExecutionRawHistoryRequest) (_ *workflowservice.PollForWorkflowExecutionRawHistoryResponse, retError error) {
-	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
-
-	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendPollForWorkflowExecutionRawHistoryScope, request.GetNamespace())
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if request == nil {
-		return nil, wh.error(errRequestNotSet, scope)
-	}
-
-	if ok := wh.allow(request.GetNamespace()); !ok {
-		return nil, wh.error(errServiceBusy, scope)
-	}
-
-	if request.GetNamespace() == "" {
-		return nil, wh.error(errNamespaceNotSet, scope)
-	}
-
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
-		return nil, err
-	}
-
-	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
-	}
-
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	// force limit page size if exceed
-	if request.GetMaximumPageSize() > common.GetHistoryMaxPageSize {
-		wh.GetThrottledLogger().Warn("GetHistory page size is larger than threshold",
-			tag.WorkflowID(request.Execution.GetWorkflowId()),
-			tag.WorkflowRunID(request.Execution.GetRunId()),
-			tag.WorkflowNamespaceID(namespaceID), tag.WorkflowSize(int64(request.GetMaximumPageSize())))
-		request.MaximumPageSize = common.GetHistoryMaxPageSize
-	}
-
-	// this function return the following 5 things,
-	// 1. the workflow run ID
-	// 2. the last first event ID (the event ID of the last batch of events in the history)
-	// 3. the next event ID
-	// 4. whether the workflow is closed
-	// 5. error if any
-	queryHistory := func(
-		namespaceUUID string,
-		execution *executionpb.WorkflowExecution,
-		expectedNextEventID int64,
-		currentBranchToken []byte,
-	) ([]byte, string, int64, int64, bool, error) {
-		response, err := wh.GetHistoryClient().PollMutableState(ctx, &historyservice.PollMutableStateRequest{
-			NamespaceId:         namespaceUUID,
-			Execution:           execution,
-			ExpectedNextEventId: expectedNextEventID,
-			CurrentBranchToken:  currentBranchToken,
-		})
-
-		if err != nil {
-			return nil, "", 0, 0, false, err
-		}
-		isWorkflowRunning := response.GetWorkflowStatus() == executionpb.WorkflowExecutionStatus_Running
-
-		return response.CurrentBranchToken,
-			response.Execution.GetRunId(),
-			response.GetLastFirstEventId(),
-			response.GetNextEventId(),
-			isWorkflowRunning,
-			nil
-	}
-
-	isCloseEventOnly := request.GetHistoryEventFilterType() == filterpb.HistoryEventFilterType_CloseEvent
-	execution := request.Execution
-	token := &tokengenpb.HistoryContinuation{}
-
-	var runID string
-	lastFirstEventID := common.FirstEventID
-	var nextEventID int64
-	var isWorkflowRunning bool
-
-	// process the token for paging
-	queryNextEventID := common.EndEventID
-	if request.NextPageToken != nil {
-		token, err = deserializeHistoryToken(request.NextPageToken)
-		if err != nil {
-			return nil, wh.error(errInvalidNextPageToken, scope)
-		}
-		if execution.GetRunId() != "" && execution.GetRunId() != token.RunId {
-			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
-		}
-
-		execution.RunId = token.RunId
-
-		// we need to update the current next event ID and whether workflow is running
-		if len(token.PersistenceToken) == 0 && token.IsWorkflowRunning {
-			if !isCloseEventOnly {
-				queryNextEventID = token.NextEventId
-			}
-			token.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-				queryHistory(namespaceID, execution, queryNextEventID, token.BranchToken)
-			if err != nil {
-				return nil, wh.error(err, scope)
-			}
-			token.FirstEventId = token.NextEventId
-			token.NextEventId = nextEventID
-			token.IsWorkflowRunning = isWorkflowRunning
-		}
-	} else {
-		if !isCloseEventOnly {
-			queryNextEventID = common.FirstEventID
-		}
-		token.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-			queryHistory(namespaceID, execution, queryNextEventID, nil)
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
-
-		execution.RunId = runID
-		token.RunId = runID
-		token.FirstEventId = common.FirstEventID
-		token.NextEventId = nextEventID
-		token.IsWorkflowRunning = isWorkflowRunning
-		token.PersistenceToken = nil
-	}
-
-	history := []*commonpb.DataBlob{}
-	if isCloseEventOnly {
-		if !isWorkflowRunning {
-			history, _, err = wh.getRawHistory(
-				scope,
-				namespaceID,
-				*execution,
-				lastFirstEventID,
-				nextEventID,
-				request.GetMaximumPageSize(),
-				nil,
-				token.TransientDecision,
-				token.BranchToken,
-			)
-			if err != nil {
-				return nil, wh.error(err, scope)
-			}
-			// since getHistory func will not return empty history, so the below is safe
-			history = history[len(history)-1 : len(history)]
-			token = nil
-		} else {
-			// set the persistence token to be nil so next time we will query history for updates
-			token.PersistenceToken = nil
-		}
-	} else {
-		// return all events
-		if token.FirstEventId >= token.NextEventId {
-			// currently there is no new event
-			if !isWorkflowRunning {
-				token = nil
-			}
-		} else {
-			history, token.PersistenceToken, err = wh.getRawHistory(
-				scope,
-				namespaceID,
-				*execution,
-				token.FirstEventId,
-				token.NextEventId,
-				request.GetMaximumPageSize(),
-				token.PersistenceToken,
-				token.TransientDecision,
-				token.BranchToken,
-			)
-			if err != nil {
-				return nil, wh.error(err, scope)
-			}
-
-			// here, for long pull on history events, we need to intercept the paging token from cassandra
-			// and do something clever
-			if len(token.PersistenceToken) == 0 && (!token.IsWorkflowRunning) {
-				// meaning, there is no more history to be returned
-				token = nil
-			}
-		}
-	}
-
-	nextToken, err := serializeHistoryToken(token)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-	return &workflowservice.PollForWorkflowExecutionRawHistoryResponse{
-		RawHistory:    history,
-		NextPageToken: nextToken,
-	}, nil
-}
-
-// GetWorkflowExecutionRawHistory retrieves raw history directly from DB layer.
-func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionRawHistoryRequest) (_ *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
-	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
-
-	scope, sw := wh.startRequestProfileWithNamespace(metrics.FrontendGetWorkflowExecutionRawHistoryScope, request.GetNamespace())
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if request == nil {
-		return nil, wh.error(errRequestNotSet, scope)
-	}
-
-	if ok := wh.allow(request.GetNamespace()); !ok {
-		return nil, wh.error(errServiceBusy, scope)
-	}
-
-	if request.GetNamespace() == "" {
-		return nil, wh.error(errNamespaceNotSet, scope)
-	}
-
-	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
-		return nil, err
-	}
-
-	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
-	}
-
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	// force limit page size if exceed
-	if request.GetMaximumPageSize() > common.GetHistoryMaxPageSize {
-		wh.GetThrottledLogger().Warn("GetHistory page size is larger than threshold",
-			tag.WorkflowID(request.Execution.GetWorkflowId()),
-			tag.WorkflowRunID(request.Execution.GetRunId()),
-			tag.WorkflowNamespaceID(namespaceID), tag.WorkflowSize(int64(request.GetMaximumPageSize())))
-		request.MaximumPageSize = common.GetHistoryMaxPageSize
-	}
-
-	// this function return the following 5 things,
-	// 1. current branch token
-	// 2. the workflow run ID
-	// 3. the next event ID
-	// 4. error if any
-	queryHistory := func(
-		namespaceUUID string,
-		execution *executionpb.WorkflowExecution,
-		currentBranchToken []byte,
-	) ([]byte, string, int64, error) {
-		response, err := wh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-			NamespaceId:         namespaceUUID,
-			Execution:           execution,
-			ExpectedNextEventId: common.EmptyEventID,
-			CurrentBranchToken:  currentBranchToken,
-		})
-
-		if err != nil {
-			return nil, "", 0, err
-		}
-
-		return response.CurrentBranchToken,
-			response.Execution.GetRunId(),
-			response.GetNextEventId(),
-			nil
-	}
-
-	execution := request.Execution
-	var continuationToken *tokengenpb.HistoryContinuation
-
-	var runID string
-	var nextEventID int64
-
-	// process the token for paging
-	if request.NextPageToken != nil {
-		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
-		if err != nil {
-			return nil, wh.error(errInvalidNextPageToken, scope)
-		}
-		if execution.GetRunId() != continuationToken.GetRunId() {
-			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
-		}
-
-		execution.RunId = continuationToken.GetRunId()
-
-	} else {
-		continuationToken = &tokengenpb.HistoryContinuation{}
-		continuationToken.BranchToken, runID, nextEventID, err =
-			queryHistory(namespaceID, execution, nil)
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
-
-		execution.RunId = runID
-
-		continuationToken.RunId = runID
-		continuationToken.FirstEventId = common.FirstEventID
-		continuationToken.NextEventId = nextEventID
-		continuationToken.PersistenceToken = nil
-	}
-
-	var history []*commonpb.DataBlob
-	// return all events
-	if continuationToken.GetFirstEventId() >= continuationToken.GetNextEventId() {
-		return &workflowservice.GetWorkflowExecutionRawHistoryResponse{
-			RawHistory:    []*commonpb.DataBlob{},
-			NextPageToken: nil,
-		}, nil
-	}
-
-	history, continuationToken.PersistenceToken, err = wh.getRawHistory(
-		scope,
-		namespaceID,
-		*execution,
-		continuationToken.GetFirstEventId(),
-		continuationToken.GetNextEventId(),
-		request.GetMaximumPageSize(),
-		continuationToken.PersistenceToken,
-		continuationToken.TransientDecision,
-		continuationToken.BranchToken,
-	)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if len(continuationToken.PersistenceToken) == 0 {
-		// meaning, there is no more history to be returned
-		continuationToken = nil
-	}
-
-	nextToken, err := serializeHistoryToken(continuationToken)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-	return &workflowservice.GetWorkflowExecutionRawHistoryResponse{
-		RawHistory:    history,
-		NextPageToken: nextToken,
 	}, nil
 }
 

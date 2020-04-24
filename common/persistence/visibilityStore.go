@@ -76,7 +76,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWo
 		WorkflowTypeName:   request.WorkflowTypeName,
 		StartTimestamp:     request.StartTimestamp,
 		ExecutionTimestamp: request.ExecutionTimestamp,
-		WorkflowTimeout:    request.WorkflowTimeout,
+		RunTimeout:         request.RunTimeout,
 		TaskID:             request.TaskID,
 		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
 		SearchAttributes:   request.SearchAttributes,

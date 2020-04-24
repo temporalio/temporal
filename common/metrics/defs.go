@@ -1786,7 +1786,7 @@ const (
 	QueryBufferExceededCount
 	QueryRegistryInvalidStateCount
 	WorkerNotSupportsConsistentQueryCount
-	DecisionStartToCloseTimeoutOverrideCount
+	WorkflowTaskTimeoutOverrideCount
 	WorkflowRunTimeoutOverrideCount
 	WorkflowExecutionTimeoutOverrideCount
 	ReplicationTaskCleanupCount
@@ -2126,23 +2126,23 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		DirectQueryDispatchStickyLatency:                  {metricName: "direct_query_dispatch_sticky_latency", metricType: Timer},
 		DirectQueryDispatchNonStickyLatency:               {metricName: "direct_query_dispatch_non_sticky_latency", metricType: Timer},
 		DirectQueryDispatchStickySuccessCount:             {metricName: "direct_query_dispatch_sticky_success", metricType: Counter},
-		DirectQueryDispatchNonStickySuccessCount:          {metricName: "direct_query_dispatch_non_sticky_success", metricType: Counter},
-		DirectQueryDispatchClearStickinessLatency:         {metricName: "direct_query_dispatch_clear_stickiness_latency", metricType: Timer},
-		DirectQueryDispatchClearStickinessSuccessCount:    {metricName: "direct_query_dispatch_clear_stickiness_success", metricType: Counter},
-		DirectQueryDispatchTimeoutBeforeNonStickyCount:    {metricName: "direct_query_dispatch_timeout_before_non_sticky", metricType: Counter},
-		DecisionTaskQueryLatency:                          {metricName: "decision_task_query_latency", metricType: Timer},
-		ConsistentQueryTimeoutCount:                       {metricName: "consistent_query_timeout", metricType: Counter},
-		QueryBeforeFirstDecisionCount:                     {metricName: "query_before_first_decision", metricType: Counter},
-		QueryBufferExceededCount:                          {metricName: "query_buffer_exceeded", metricType: Counter},
-		QueryRegistryInvalidStateCount:                    {metricName: "query_registry_invalid_state", metricType: Counter},
-		WorkerNotSupportsConsistentQueryCount:             {metricName: "worker_not_supports_consistent_query", metricType: Counter},
-		DecisionStartToCloseTimeoutOverrideCount:          {metricName: "decision_start_to_close_timeout_overrides", metricType: Counter},
-		WorkflowRunTimeoutOverrideCount:                   {metricName: "workflow_run_timeout_overrides", metricType: Counter},
-		WorkflowExecutionTimeoutOverrideCount:             {metricName: "workflow_execution_timeout_overrides", metricType: Counter},
-		ReplicationTaskCleanupCount:                       {metricName: "replication_task_cleanup_count", metricType: Counter},
-		ReplicationTaskCleanupFailure:                     {metricName: "replication_task_cleanup_failed", metricType: Counter},
-		MutableStateChecksumMismatch:                      {metricName: "mutable_state_checksum_mismatch", metricType: Counter},
-		MutableStateChecksumInvalidated:                   {metricName: "mutable_state_checksum_invalidated", metricType: Counter},
+		DirectQueryDispatchNonStickySuccessCount:       {metricName: "direct_query_dispatch_non_sticky_success", metricType: Counter},
+		DirectQueryDispatchClearStickinessLatency:      {metricName: "direct_query_dispatch_clear_stickiness_latency", metricType: Timer},
+		DirectQueryDispatchClearStickinessSuccessCount: {metricName: "direct_query_dispatch_clear_stickiness_success", metricType: Counter},
+		DirectQueryDispatchTimeoutBeforeNonStickyCount: {metricName: "direct_query_dispatch_timeout_before_non_sticky", metricType: Counter},
+		DecisionTaskQueryLatency:                       {metricName: "decision_task_query_latency", metricType: Timer},
+		ConsistentQueryTimeoutCount:                    {metricName: "consistent_query_timeout", metricType: Counter},
+		QueryBeforeFirstDecisionCount:                  {metricName: "query_before_first_decision", metricType: Counter},
+		QueryBufferExceededCount:                       {metricName: "query_buffer_exceeded", metricType: Counter},
+		QueryRegistryInvalidStateCount:                 {metricName: "query_registry_invalid_state", metricType: Counter},
+		WorkerNotSupportsConsistentQueryCount:          {metricName: "worker_not_supports_consistent_query", metricType: Counter},
+		WorkflowTaskTimeoutOverrideCount:               {metricName: "workflow_task_timeout_overrides", metricType: Counter},
+		WorkflowRunTimeoutOverrideCount:                {metricName: "workflow_run_timeout_overrides", metricType: Counter},
+		WorkflowExecutionTimeoutOverrideCount:          {metricName: "workflow_execution_timeout_overrides", metricType: Counter},
+		ReplicationTaskCleanupCount:                    {metricName: "replication_task_cleanup_count", metricType: Counter},
+		ReplicationTaskCleanupFailure:                  {metricName: "replication_task_cleanup_failed", metricType: Counter},
+		MutableStateChecksumMismatch:                   {metricName: "mutable_state_checksum_mismatch", metricType: Counter},
+		MutableStateChecksumInvalidated:                {metricName: "mutable_state_checksum_invalidated", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll_success"},

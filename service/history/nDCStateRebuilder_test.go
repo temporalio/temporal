@@ -254,12 +254,13 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Version:   version,
 		EventType: eventpb.EventType_WorkflowExecutionStarted,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonpb.WorkflowType{Name: "some random workflow type"},
-			TaskList:                            &tasklistpb.TaskList{Name: "some random workflow type"},
-			Input:                               []byte("some random input"),
-			ExecutionStartToCloseTimeoutSeconds: 123,
-			TaskStartToCloseTimeoutSeconds:      233,
-			Identity:                            "some random identity",
+			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
+			TaskList:                        &tasklistpb.TaskList{Name: "some random workflow type"},
+			Input:                           []byte("some random input"),
+			WorkflowExecutionTimeoutSeconds: 123,
+			WorkflowRunTimeoutSeconds:       233,
+			WorkflowTaskTimeoutSeconds:      45,
+			Identity:                        "some random identity",
 		}},
 	}}
 	events2 := []*eventpb.HistoryEvent{{

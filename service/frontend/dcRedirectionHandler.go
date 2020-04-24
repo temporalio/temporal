@@ -249,66 +249,6 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 	return resp, err
 }
 
-// GetWorkflowExecutionRawHistory API call
-func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
-) (resp *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
-
-	var apiName = "GetWorkflowExecutionRawHistory"
-	var err error
-	var cluster string
-
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionRawHistoryScope)
-	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
-	}()
-
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
-		cluster = targetDC
-		switch {
-		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.GetWorkflowExecutionRawHistory(ctx, request)
-		default:
-			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.GetWorkflowExecutionRawHistory(ctx, request)
-		}
-		return err
-	})
-
-	return resp, err
-}
-
-// PollForWorkflowExecutionRawHistory API call
-func (handler *DCRedirectionHandlerImpl) PollForWorkflowExecutionRawHistory(
-	ctx context.Context,
-	request *workflowservice.PollForWorkflowExecutionRawHistoryRequest,
-) (resp *workflowservice.PollForWorkflowExecutionRawHistoryResponse, retError error) {
-
-	var apiName = "PollForWorkflowExecutionRawHistory"
-	var err error
-	var cluster string
-
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollForWorkflowExecutionRawHistoryScope)
-	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
-	}()
-
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
-		cluster = targetDC
-		switch {
-		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.PollForWorkflowExecutionRawHistory(ctx, request)
-		default:
-			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			resp, err = remoteClient.PollForWorkflowExecutionRawHistory(ctx, request)
-		}
-		return err
-	})
-
-	return resp, err
-}
-
 // ListArchivedWorkflowExecutions API call
 func (handler *DCRedirectionHandlerImpl) ListArchivedWorkflowExecutions(
 	ctx context.Context,

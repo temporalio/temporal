@@ -176,7 +176,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	executionInfo.LastUpdatedTimestamp = time.Now()
 	executionInfo.StickyTaskList = stickyTl
 
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -249,14 +249,14 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                           namespaceID,
-			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                            &tasklistpb.TaskList{Name: taskList},
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
-			Identity:                            identity,
-			RequestId:                           requestID,
+			Namespace:                       namespaceID,
+			WorkflowId:                      workflowID,
+			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			WorkflowExecutionTimeoutSeconds: 1,
+			WorkflowTaskTimeoutSeconds:      2,
+			Identity:                        identity,
+			RequestId:                       requestID,
 		},
 	})
 	s.Nil(err)
@@ -331,16 +331,16 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                           namespaceID,
-			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                            &tasklistpb.TaskList{Name: taskList},
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
-			Identity:                            identity,
-			SignalName:                          signalName,
-			Input:                               input,
-			RequestId:                           requestID,
+			Namespace:                       namespaceID,
+			WorkflowId:                      workflowID,
+			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			WorkflowExecutionTimeoutSeconds: 1,
+			WorkflowTaskTimeoutSeconds:      2,
+			Identity:                        identity,
+			SignalName:                      signalName,
+			Input:                           input,
+			RequestId:                       requestID,
 		},
 	}
 

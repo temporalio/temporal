@@ -58,7 +58,7 @@ type TaskMatcher struct {
 
 const (
 	_defaultTaskDispatchRPS    = 100000.0
-	_defaultTaskDispatchRPSTTL = 60 * time.Second
+	_defaultTaskDispatchRPSTTL = time.Minute
 )
 
 var errTasklistThrottled = errors.New("cannot add to tasklist, limit exceeded")

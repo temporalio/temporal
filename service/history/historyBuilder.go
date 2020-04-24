@@ -877,7 +877,6 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(decisionTaskCom
 	attributes.TaskList = request.TaskList
 	attributes.Header = request.Header
 	attributes.Input = request.Input
-	attributes.WorkflowExecutionTimeoutSeconds = request.WorkflowExecutionTimeoutSeconds
 	attributes.WorkflowRunTimeoutSeconds = request.WorkflowRunTimeoutSeconds
 	attributes.WorkflowTaskTimeoutSeconds = request.WorkflowTaskTimeoutSeconds
 	attributes.DecisionTaskCompletedEventId = decisionTaskCompletedEventID
