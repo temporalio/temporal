@@ -26,6 +26,7 @@ package history
 
 import (
 	"fmt"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
@@ -893,21 +894,21 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 ) error {
 
 	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-		WorkflowType:                        attr.WorkflowType,
-		TaskList:                            attr.TaskList,
-		RetryPolicy:                         attr.RetryPolicy,
-		Input:                               attr.Input,
+		WorkflowType:                  attr.WorkflowType,
+		TaskList:                      attr.TaskList,
+		RetryPolicy:                   attr.RetryPolicy,
+		Input:                         attr.Input,
 		WorkflowRunTimeoutSeconds:     attr.WorkflowRunTimeoutSeconds,
 		WorkflowTaskTimeoutSeconds:    attr.WorkflowTaskTimeoutSeconds,
-		CronSchedule:                        attr.CronSchedule,
-		BackoffStartIntervalInSeconds:       backoffInterval,
-		Initiator:                           continueAsNewIter,
-		FailureReason:                       failureReason,
-		FailureDetails:                      failureDetails,
-		LastCompletionResult:                lastCompletionResult,
-		Header:                              attr.Header,
-		Memo:                                attr.Memo,
-		SearchAttributes:                    attr.SearchAttributes,
+		CronSchedule:                  attr.CronSchedule,
+		BackoffStartIntervalInSeconds: backoffInterval,
+		Initiator:                     continueAsNewIter,
+		FailureReason:                 failureReason,
+		FailureDetails:                failureDetails,
+		LastCompletionResult:          lastCompletionResult,
+		Header:                        attr.Header,
+		Memo:                          attr.Memo,
+		SearchAttributes:              attr.SearchAttributes,
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(

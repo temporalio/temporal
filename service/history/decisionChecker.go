@@ -26,14 +26,15 @@ package history
 
 import (
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/pborman/uuid"
 	"github.com/temporalio/temporal/common/convert"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"strings"
-	"time"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"

@@ -51,7 +51,7 @@ func archivalWorkflowHelper(
 	metricsClient metrics.Client,
 	config *Config,
 	handler Handler, // enables tests to inject mocks
-	pump Pump,       // enables tests to inject mocks
+	pump Pump, // enables tests to inject mocks
 	carryover []ArchiveRequest,
 ) error {
 	metricsClient = NewReplayMetricsClient(metricsClient, ctx)

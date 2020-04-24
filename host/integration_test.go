@@ -89,14 +89,14 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                 uuid.New(),
+		Namespace:                 s.namespace,
+		WorkflowId:                id,
+		WorkflowType:              &commonpb.WorkflowType{Name: wt},
+		TaskList:                  &tasklistpb.TaskList{Name: tl},
+		Input:                     nil,
 		WorkflowRunTimeoutSeconds: 100,
-		Identity:                            identity,
+		Identity:                  identity,
 	}
 
 	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -120,15 +120,15 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	s.Equal(we0.RunId, we1.RunId)
 
 	newRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 	we2, err2 := s.engine.StartWorkflowExecution(NewContext(), newRequest)
 	s.NotNil(err2)
@@ -145,15 +145,15 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	activityName := "activity_type1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -262,15 +262,15 @@ GetHistoryLoop:
 StartNewExecutionLoop:
 	for i := 0; i < 10; i++ {
 		request := &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:                           uuid.New(),
-			Namespace:                           s.namespace,
-			WorkflowId:                          id,
-			WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-			TaskList:                            &tasklistpb.TaskList{Name: tl},
-			Input:                               nil,
+			RequestId:                  uuid.New(),
+			Namespace:                  s.namespace,
+			WorkflowId:                 id,
+			WorkflowType:               &commonpb.WorkflowType{Name: wt},
+			TaskList:                   &tasklistpb.TaskList{Name: tl},
+			Input:                      nil,
 			WorkflowRunTimeoutSeconds:  100,
 			WorkflowTaskTimeoutSeconds: 1,
-			Identity:                            identity,
+			Identity:                   identity,
 		}
 
 		newExecution, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -297,15 +297,15 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	activityName := "activity_type1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -400,15 +400,15 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -479,15 +479,15 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	activityName := "activity_timer"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -598,21 +598,21 @@ func (s *integrationSuite) TestWorkflowRetry() {
 	backoffCoefficient := 1.5
 	maximumAttempts := 5
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    int32(initialIntervalInSeconds),
-			MaximumAttempts:             int32(maximumAttempts),
-			MaximumIntervalInSeconds:    1,
-			NonRetriableErrorReasons:    []string{"bad-bug"},
-			BackoffCoefficient:          backoffCoefficient,
+			InitialIntervalInSeconds: int32(initialIntervalInSeconds),
+			MaximumAttempts:          int32(maximumAttempts),
+			MaximumIntervalInSeconds: 1,
+			NonRetriableErrorReasons: []string{"bad-bug"},
+			BackoffCoefficient:       backoffCoefficient,
 		},
 	}
 
@@ -729,21 +729,21 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 
 	// Fail using attempt
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			MaximumAttempts:             3,
-			MaximumIntervalInSeconds:    1,
-			NonRetriableErrorReasons:    []string{"bad-bug"},
-			BackoffCoefficient:          1,
+			InitialIntervalInSeconds: 1,
+			MaximumAttempts:          3,
+			MaximumIntervalInSeconds: 1,
+			NonRetriableErrorReasons: []string{"bad-bug"},
+			BackoffCoefficient:       1,
 		},
 	}
 
@@ -784,21 +784,21 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 
 	// Fail error reason
 	request = &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			MaximumAttempts:             3,
-			MaximumIntervalInSeconds:    1,
-			NonRetriableErrorReasons:    []string{"bad-bug"},
-			BackoffCoefficient:          1,
+			InitialIntervalInSeconds: 1,
+			MaximumAttempts:          3,
+			MaximumIntervalInSeconds: 1,
+			NonRetriableErrorReasons: []string{"bad-bug"},
+			BackoffCoefficient:       1,
 		},
 	}
 
@@ -846,18 +846,18 @@ func (s *integrationSuite) TestCronWorkflow() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
-		CronSchedule:                        cronSchedule, //minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
-		Memo:                                memo,
-		SearchAttributes:                    searchAttr,
+		Identity:                   identity,
+		CronSchedule:               cronSchedule, //minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
+		Memo:                       memo,
+		SearchAttributes:           searchAttr,
 	}
 
 	startWorkflowTS := time.Now()
@@ -1045,18 +1045,18 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  1, // set workflow timeout to 1s
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
-		CronSchedule:                        cronSchedule, //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
-		Memo:                                memo,
-		SearchAttributes:                    searchAttr,
+		Identity:                   identity,
+		CronSchedule:               cronSchedule, //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
+		Memo:                       memo,
+		SearchAttributes:           searchAttr,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1133,15 +1133,15 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1207,15 +1207,15 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1304,15 +1304,15 @@ func (s *integrationSuite) TestBufferedEvents() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1420,15 +1420,15 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1544,15 +1544,15 @@ func (s *integrationSuite) TestVisibility() {
 	identity := "worker1"
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id1,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id1,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	startResponse, err0 := s.engine.StartWorkflowExecution(NewContext(), startRequest)
@@ -1606,15 +1606,15 @@ func (s *integrationSuite) TestVisibility() {
 	}
 
 	startRequest = &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id2,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id2,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	_, err2 := s.engine.StartWorkflowExecution(NewContext(), startRequest)
@@ -1688,16 +1688,16 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          parentID,
-		WorkflowType:                        parentWorkflowType,
-		TaskList:                            taskListParent,
-		Input:                               nil,
-		Header:                              header,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 parentID,
+		WorkflowType:               parentWorkflowType,
+		TaskList:                   taskListParent,
+		Input:                      nil,
+		Header:                     header,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1736,16 +1736,16 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 				return nil, []*decisionpb.Decision{{
 					DecisionType: decisionpb.DecisionType_StartChildWorkflowExecution,
 					Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
-						WorkflowId:                          childID,
-						WorkflowType:                        childWorkflowType,
-						TaskList:                            taskListChild,
-						Input:                               []byte("child-workflow-input"),
-						Header:                              header,
+						WorkflowId:                 childID,
+						WorkflowType:               childWorkflowType,
+						TaskList:                   taskListChild,
+						Input:                      []byte("child-workflow-input"),
+						Header:                     header,
 						WorkflowRunTimeoutSeconds:  200,
 						WorkflowTaskTimeoutSeconds: 2,
-						Control:                             nil,
-						Memo:                                memo,
-						SearchAttributes:                    searchAttr,
+						Control:                    nil,
+						Memo:                       memo,
+						SearchAttributes:           searchAttr,
 					}},
 				}}, nil
 			} else if previousStartedEventID > 0 {
@@ -1869,15 +1869,15 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	taskListChild := &tasklistpb.TaskList{Name: tlChild}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          parentID,
-		WorkflowType:                        parentWorkflowType,
-		TaskList:                            taskListParent,
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 parentID,
+		WorkflowType:               parentWorkflowType,
+		TaskList:                   taskListParent,
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	startParentWorkflowTS := time.Now()
@@ -1901,14 +1901,14 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 			return nil, []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_StartChildWorkflowExecution,
 				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
-					WorkflowId:                          childID,
-					WorkflowType:                        childWorkflowType,
-					TaskList:                            taskListChild,
-					Input:                               nil,
+					WorkflowId:                 childID,
+					WorkflowType:               childWorkflowType,
+					TaskList:                   taskListChild,
+					Input:                      nil,
 					WorkflowRunTimeoutSeconds:  200,
 					WorkflowTaskTimeoutSeconds: 2,
-					Control:                             nil,
-					CronSchedule:                        cronSchedule,
+					Control:                    nil,
+					CronSchedule:               cronSchedule,
 				}},
 			}}, nil
 		}
@@ -2059,15 +2059,15 @@ func (s *integrationSuite) TestWorkflowTimeout() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  1,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2139,15 +2139,15 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2337,15 +2337,15 @@ func (s *integrationSuite) TestDescribeTaskList() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          workflowID,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 workflowID,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2456,15 +2456,15 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 2,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2546,15 +2546,15 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 20,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2586,9 +2586,9 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 			return nil, []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-					WorkflowType:                        workflowType,
-					TaskList:                            &tasklistpb.TaskList{Name: tl},
-					Input:                               nil,
+					WorkflowType:               workflowType,
+					TaskList:                   &tasklistpb.TaskList{Name: tl},
+					Input:                      nil,
 					WorkflowRunTimeoutSeconds:  1000,
 					WorkflowTaskTimeoutSeconds: 100,
 				}},
@@ -2637,15 +2637,15 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 2,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2732,15 +2732,15 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  601,
 		WorkflowTaskTimeoutSeconds: 600,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2848,15 +2848,15 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -3016,15 +3016,15 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -3173,15 +3173,15 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 20,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -3338,16 +3338,16 @@ func (s *integrationSuite) TestStartWithMemo() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
-		Memo:                                memo,
+		Identity:                   identity,
+		Memo:                       memo,
 	}
 
 	fn := func() (RunIdGetter, error) {
@@ -3372,18 +3372,18 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 	signalName := "my signal"
 	signalInput := []byte("my signal input")
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		SignalName:                          signalName,
-		SignalInput:                         signalInput,
-		Identity:                            identity,
-		Memo:                                memo,
+		SignalName:                 signalName,
+		SignalInput:                signalInput,
+		Identity:                   identity,
+		Memo:                       memo,
 	}
 
 	fn := func() (RunIdGetter, error) {
@@ -3399,15 +3399,15 @@ func (s *integrationSuite) TestCancelTimer() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1000,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	creatResp, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -3530,15 +3530,15 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1000,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	creatResp, err0 := s.engine.StartWorkflowExecution(NewContext(), request)

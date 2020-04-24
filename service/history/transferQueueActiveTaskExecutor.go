@@ -1196,12 +1196,12 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 	request := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId: primitives.UUID(task.GetTargetNamespaceId()).String(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                           targetNamespace,
-			WorkflowId:                          attributes.WorkflowId,
-			WorkflowType:                        attributes.WorkflowType,
-			TaskList:                            attributes.TaskList,
-			Input:                               attributes.Input,
-			Header:                              attributes.Header,
+			Namespace:                       targetNamespace,
+			WorkflowId:                      attributes.WorkflowId,
+			WorkflowType:                    attributes.WorkflowType,
+			TaskList:                        attributes.TaskList,
+			Input:                           attributes.Input,
+			Header:                          attributes.Header,
 			WorkflowExecutionTimeoutSeconds: attributes.WorkflowExecutionTimeoutSeconds,
 			WorkflowRunTimeoutSeconds:       attributes.WorkflowRunTimeoutSeconds,
 			WorkflowTaskTimeoutSeconds:      attributes.WorkflowTaskTimeoutSeconds,

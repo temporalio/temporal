@@ -1649,20 +1649,20 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	runTimeout := attributes.GetWorkflowRunTimeoutSeconds()
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           e.namespaceEntry.GetInfo().Name,
-		WorkflowId:                          execution.WorkflowId,
-		TaskList:                            tl,
-		WorkflowType:                        wType,
+		RequestId:                       uuid.New(),
+		Namespace:                       e.namespaceEntry.GetInfo().Name,
+		WorkflowId:                      execution.WorkflowId,
+		TaskList:                        tl,
+		WorkflowType:                    wType,
 		WorkflowExecutionTimeoutSeconds: previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout,
 		WorkflowRunTimeoutSeconds:       runTimeout,
 		WorkflowTaskTimeoutSeconds:      taskTimeout,
-		Input:                               attributes.Input,
-		Header:                              attributes.Header,
-		RetryPolicy:                         attributes.RetryPolicy,
-		CronSchedule:                        attributes.CronSchedule,
-		Memo:                                attributes.Memo,
-		SearchAttributes:                    attributes.SearchAttributes,
+		Input:                           attributes.Input,
+		Header:                          attributes.Header,
+		RetryPolicy:                     attributes.RetryPolicy,
+		CronSchedule:                    attributes.CronSchedule,
+		Memo:                            attributes.Memo,
+		SearchAttributes:                attributes.SearchAttributes,
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -1677,7 +1677,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 	if attributes.GetInitiator() == commonpb.ContinueAsNewInitiator_Retry {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
-		}
+	}
 	workflowTimeoutTime := previousExecutionState.GetExecutionInfo().WorkflowTimeoutTime
 	if !workflowTimeoutTime.IsZero() {
 		req.WorkflowExecutionTimeoutTimestamp = workflowTimeoutTime.UnixNano()

@@ -350,14 +350,14 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowId:                          we.WorkflowId,
-				WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-				TaskList:                            &tasklistpb.TaskList{Name: tl},
-				Input:                               input,
+				WorkflowId:                      we.WorkflowId,
+				WorkflowType:                    &commonpb.WorkflowType{Name: wt},
+				TaskList:                        &tasklistpb.TaskList{Name: tl},
+				Input:                           input,
 				WorkflowExecutionTimeoutSeconds: execTimeout,
 				WorkflowRunTimeoutSeconds:       runTimeout,
 				WorkflowTaskTimeoutSeconds:      taskTimeout,
-				Identity:                            identity,
+				Identity:                        identity,
 			},
 		})
 	s.NotNil(err)
@@ -796,14 +796,14 @@ func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we executionpb.Wo
 	identity string) *eventpb.HistoryEvent {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		WorkflowId:                          we.WorkflowId,
-		WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-		TaskList:                            &tasklistpb.TaskList{Name: taskList},
-		Input:                               input,
+		WorkflowId:                      we.WorkflowId,
+		WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+		TaskList:                        &tasklistpb.TaskList{Name: taskList},
+		Input:                           input,
 		WorkflowExecutionTimeoutSeconds: executionTimeout,
 		WorkflowRunTimeoutSeconds:       runTimeout,
 		WorkflowTaskTimeoutSeconds:      taskTimeout,
-		Identity:                            identity,
+		Identity:                        identity,
 	}
 
 	event, err := s.msBuilder.AddWorkflowExecutionStartedEvent(

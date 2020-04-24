@@ -1183,14 +1183,14 @@ func (s *engineSuite) TestValidateSignalRequest() {
 	workflowType := "testType"
 	input := []byte("input")
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
-		WorkflowId:                          "ID",
-		WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-		TaskList:                            &tasklistpb.TaskList{Name: "taskptr"},
-		Input:                               input,
+		WorkflowId:                      "ID",
+		WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+		TaskList:                        &tasklistpb.TaskList{Name: "taskptr"},
+		Input:                           input,
 		WorkflowExecutionTimeoutSeconds: 20,
 		WorkflowRunTimeoutSeconds:       10,
 		WorkflowTaskTimeoutSeconds:      10,
-		Identity:                            "identity",
+		Identity:                        "identity",
 	}
 	err := validateStartWorkflowExecutionRequest(startRequest, 999)
 	s.Error(err, "startRequest doesn't have request id, it should error out")
@@ -4877,14 +4877,14 @@ func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowEx
 	parentInfo *executiongenpb.ParentExecutionInfo, identity string) *eventpb.HistoryEvent {
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
-		WorkflowId:                          workflowExecution.WorkflowId,
-		WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-		TaskList:                            &tasklistpb.TaskList{Name: taskList},
-		Input:                               input,
+		WorkflowId:                      workflowExecution.WorkflowId,
+		WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+		TaskList:                        &tasklistpb.TaskList{Name: taskList},
+		Input:                           input,
 		WorkflowExecutionTimeoutSeconds: executionTimeout,
 		WorkflowRunTimeoutSeconds:       runTimeout,
 		WorkflowTaskTimeoutSeconds:      taskTimeout,
-		Identity:                            identity,
+		Identity:                        identity,
 	}
 
 	event, _ := builder.AddWorkflowExecutionStartedEvent(
@@ -5081,15 +5081,15 @@ func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, decision
 
 	event, cei, _ := builder.AddStartChildWorkflowExecutionInitiatedEvent(decisionCompletedID, createRequestID,
 		&decisionpb.StartChildWorkflowExecutionDecisionAttributes{
-			Namespace:                           namespace,
-			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                            &tasklistpb.TaskList{Name: tasklist},
-			Input:                               input,
+			Namespace:                       namespace,
+			WorkflowId:                      workflowID,
+			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+			Input:                           input,
 			WorkflowExecutionTimeoutSeconds: executionTimeout,
 			WorkflowRunTimeoutSeconds:       runTimeout,
 			WorkflowTaskTimeoutSeconds:      taskTimeout,
-			Control:                             nil,
+			Control:                         nil,
 		})
 	return event, cei
 }

@@ -59,15 +59,15 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		WorkflowRunTimeoutSeconds: 20,
-		WorkflowTaskTimeoutSeconds:      3,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  20,
+		WorkflowTaskTimeoutSeconds: 3,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -165,15 +165,15 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		WorkflowRunTimeoutSeconds: 20,
-		WorkflowTaskTimeoutSeconds:      5,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  20,
+		WorkflowTaskTimeoutSeconds: 5,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -301,15 +301,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		WorkflowRunTimeoutSeconds: 3,
-		WorkflowTaskTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -374,15 +374,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		WorkflowRunTimeoutSeconds: 3,
-		WorkflowTaskTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -447,15 +447,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		WorkflowRunTimeoutSeconds: 3,
-		WorkflowTaskTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -532,15 +532,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		WorkflowRunTimeoutSeconds: 3,
-		WorkflowTaskTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -635,15 +635,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		WorkflowRunTimeoutSeconds: 3,
-		WorkflowTaskTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -735,15 +735,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		WorkflowRunTimeoutSeconds: 3,
-		WorkflowTaskTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)

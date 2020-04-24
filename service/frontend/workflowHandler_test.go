@@ -254,10 +254,10 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 		},
 		WorkflowTaskTimeoutSeconds: 1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
@@ -292,10 +292,10 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 		WorkflowRunTimeoutSeconds:       1,
 		WorkflowTaskTimeoutSeconds:      1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -321,10 +321,10 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 		WorkflowRunTimeoutSeconds:       1,
 		WorkflowTaskTimeoutSeconds:      1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -351,10 +351,10 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 		WorkflowRunTimeoutSeconds:       1,
 		WorkflowTaskTimeoutSeconds:      1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -378,10 +378,10 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 			Name: "",
 		},
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -407,10 +407,10 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 		WorkflowExecutionTimeoutSeconds: -1,
 		WorkflowRunTimeoutSeconds:       1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 		RequestId: uuid.New(),
 	}
@@ -436,10 +436,10 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 		WorkflowExecutionTimeoutSeconds: 1,
 		WorkflowRunTimeoutSeconds:       -1,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			BackoffCoefficient:          2,
-			MaximumIntervalInSeconds:    2,
-			MaximumAttempts:             1,
+			InitialIntervalInSeconds: 1,
+			BackoffCoefficient:       2,
+			MaximumIntervalInSeconds: 2,
+			MaximumAttempts:          1,
 		},
 		RequestId: uuid.New(),
 	}

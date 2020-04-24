@@ -1251,7 +1251,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	executionInfo := mutableState.GetExecutionInfo()
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfiguration: &executionpb.WorkflowExecutionConfiguration{
-			TaskList:                            &tasklistpb.TaskList{Name: executionInfo.TaskList},
+			TaskList:                        &tasklistpb.TaskList{Name: executionInfo.TaskList},
 			WorkflowExecutionTimeoutSeconds: executionInfo.WorkflowExecutionTimeout,
 			WorkflowRunTimeoutSeconds:       executionInfo.WorkflowRunTimeout,
 			WorkflowTaskTimeoutSeconds:      executionInfo.WorkflowTaskTimeout,
@@ -2783,22 +2783,22 @@ func getStartRequest(
 ) *historyservice.StartWorkflowExecutionRequest {
 
 	req := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                           request.GetNamespace(),
-		WorkflowId:                          request.GetWorkflowId(),
-		WorkflowType:                        request.GetWorkflowType(),
-		TaskList:                            request.GetTaskList(),
-		Input:                               request.GetInput(),
+		Namespace:                       request.GetNamespace(),
+		WorkflowId:                      request.GetWorkflowId(),
+		WorkflowType:                    request.GetWorkflowType(),
+		TaskList:                        request.GetTaskList(),
+		Input:                           request.GetInput(),
 		WorkflowExecutionTimeoutSeconds: request.GetWorkflowExecutionTimeoutSeconds(),
 		WorkflowRunTimeoutSeconds:       request.GetWorkflowRunTimeoutSeconds(),
 		WorkflowTaskTimeoutSeconds:      request.GetWorkflowTaskTimeoutSeconds(),
-		Identity:                            request.GetIdentity(),
-		RequestId:                           request.GetRequestId(),
-		WorkflowIdReusePolicy:               request.GetWorkflowIdReusePolicy(),
-		RetryPolicy:                         request.GetRetryPolicy(),
-		CronSchedule:                        request.GetCronSchedule(),
-		Memo:                                request.GetMemo(),
-		SearchAttributes:                    request.GetSearchAttributes(),
-		Header:                              request.GetHeader(),
+		Identity:                        request.GetIdentity(),
+		RequestId:                       request.GetRequestId(),
+		WorkflowIdReusePolicy:           request.GetWorkflowIdReusePolicy(),
+		RetryPolicy:                     request.GetRetryPolicy(),
+		CronSchedule:                    request.GetCronSchedule(),
+		Memo:                            request.GetMemo(),
+		SearchAttributes:                request.GetSearchAttributes(),
+		Header:                          request.GetHeader(),
 	}
 
 	return common.CreateHistoryStartWorkflowRequest(namespaceID, req)

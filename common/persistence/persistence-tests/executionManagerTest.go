@@ -4346,7 +4346,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		DecisionStartedID:   222,
 		DecisionRequestID:   uuid.New(),
 		DecisionTimeout:     0,
-		AutoResetPoints:             &executionpb.ResetPoints{},
+		AutoResetPoints:     &executionpb.ResetPoints{},
 	}
 	resetReplicationState := &p.ReplicationState{
 		CurrentVersion:      int64(8789),
@@ -4493,7 +4493,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		DecisionStartedID:   222,
 		DecisionRequestID:   uuid.New(),
 		DecisionTimeout:     0,
-		AutoResetPoints:             &executionpb.ResetPoints{},
+		AutoResetPoints:     &executionpb.ResetPoints{},
 	}
 	newWorkflowExecutionInfo := copyWorkflowExecutionInfo(resetExecutionInfo)
 	newWorkflowExecutionStats := &p.ExecutionStats{}
@@ -4649,7 +4649,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		DecisionStartedID:   222,
 		DecisionRequestID:   uuid.New(),
 		DecisionTimeout:     0,
-		AutoResetPoints:             &executionpb.ResetPoints{},
+		AutoResetPoints:     &executionpb.ResetPoints{},
 	}
 	resetReplicationState := &p.ReplicationState{
 		CurrentVersion:      int64(8789),
@@ -4752,7 +4752,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		DecisionStartedID:   222,
 		DecisionRequestID:   uuid.New(),
 		DecisionTimeout:     0,
-		AutoResetPoints:             &executionpb.ResetPoints{},
+		AutoResetPoints:     &executionpb.ResetPoints{},
 	}
 	newWorkflowExecutionInfo := copyWorkflowExecutionInfo(resetExecutionInfo)
 	newWorkflowExecutionStats := &p.ExecutionStats{}
@@ -4905,7 +4905,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		DecisionStartedID:   222,
 		DecisionRequestID:   uuid.New(),
 		DecisionTimeout:     0,
-		AutoResetPoints:             &executionpb.ResetPoints{},
+		AutoResetPoints:     &executionpb.ResetPoints{},
 	}
 	resetReplicationState := &p.ReplicationState{
 		CurrentVersion:      int64(8789),
@@ -5021,7 +5021,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		DecisionStartedID:   222,
 		DecisionRequestID:   uuid.New(),
 		DecisionTimeout:     0,
-		AutoResetPoints:             &executionpb.ResetPoints{},
+		AutoResetPoints:     &executionpb.ResetPoints{},
 	}
 	newWorkflowExecutionInfo := copyWorkflowExecutionInfo(resetExecutionInfo)
 	newWorkflowExecutionStats := &p.ExecutionStats{}
@@ -5320,11 +5320,11 @@ func copyWorkflowExecutionInfo(sourceInfo *p.WorkflowExecutionInfo) *p.WorkflowE
 		CreateRequestID:      sourceInfo.CreateRequestID,
 		DecisionVersion:      sourceInfo.DecisionVersion,
 		DecisionScheduleID:   sourceInfo.DecisionScheduleID,
-		DecisionStartedID:           sourceInfo.DecisionStartedID,
-		DecisionRequestID:           sourceInfo.DecisionRequestID,
-		DecisionTimeout:             sourceInfo.DecisionTimeout,
-		BranchToken:                 sourceInfo.BranchToken,
-		AutoResetPoints:             sourceInfo.AutoResetPoints,
+		DecisionStartedID:    sourceInfo.DecisionStartedID,
+		DecisionRequestID:    sourceInfo.DecisionRequestID,
+		DecisionTimeout:      sourceInfo.DecisionTimeout,
+		BranchToken:          sourceInfo.BranchToken,
+		AutoResetPoints:      sourceInfo.AutoResetPoints,
 	}
 }
 

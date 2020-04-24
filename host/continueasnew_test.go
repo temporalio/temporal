@@ -28,9 +28,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/temporalio/temporal/service/matching"
 	"strconv"
 	"time"
+
+	"github.com/temporalio/temporal/service/matching"
 
 	"github.com/pborman/uuid"
 
@@ -65,18 +66,18 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		Header:                              header,
-		Memo:                                memo,
-		SearchAttributes:                    searchAttr,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		Header:                     header,
+		Memo:                       memo,
+		SearchAttributes:           searchAttr,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -100,12 +101,12 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-					WorkflowType:                        workflowType,
-					TaskList:                            &tasklistpb.TaskList{Name: tl},
-					Input:                               buf.Bytes(),
-					Header:                              header,
-					Memo:                                memo,
-					SearchAttributes:                    searchAttr,
+					WorkflowType:               workflowType,
+					TaskList:                   &tasklistpb.TaskList{Name: tl},
+					Input:                      buf.Bytes(),
+					Header:                     header,
+					Memo:                       memo,
+					SearchAttributes:           searchAttr,
 					WorkflowRunTimeoutSeconds:  100,
 					WorkflowTaskTimeoutSeconds: 10,
 				}},
@@ -159,15 +160,15 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 10,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -188,9 +189,9 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-					WorkflowType:                        workflowType,
-					TaskList:                            &tasklistpb.TaskList{Name: tl},
-					Input:                               buf.Bytes(),
+					WorkflowType:               workflowType,
+					TaskList:                   &tasklistpb.TaskList{Name: tl},
+					Input:                      buf.Bytes(),
 					WorkflowRunTimeoutSeconds:  1, // set timeout to 1
 					WorkflowTaskTimeoutSeconds: 1,
 				}},
@@ -360,15 +361,15 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -389,9 +390,9 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 			return nil, []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-					WorkflowType:                        workflowType,
-					TaskList:                            taskList,
-					Input:                               nil,
+					WorkflowType:               workflowType,
+					TaskList:                   taskList,
+					Input:                      nil,
 					WorkflowRunTimeoutSeconds:  100,
 					WorkflowTaskTimeoutSeconds: 1,
 				}},
@@ -454,15 +455,15 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          parentID,
-		WorkflowType:                        parentWorkflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 parentID,
+		WorkflowType:               parentWorkflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
 		WorkflowRunTimeoutSeconds:  100,
 		WorkflowTaskTimeoutSeconds: 1,
-		Identity:                            identity,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
