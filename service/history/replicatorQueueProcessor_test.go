@@ -39,9 +39,9 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/constants"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/shard"
-	test "github.com/uber/cadence/service/history/testing"
 )
 
 type (
@@ -118,7 +118,7 @@ func (s *replicatorQueueProcessorSuite) TearDownTest() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	domainName := "some random domain name"
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -159,7 +159,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	domainName := "some random domain name"
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -207,7 +207,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	domainName := "some random domain name"
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -256,7 +256,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	domainName := "some random domain name"
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -366,7 +366,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	domainName := "some random domain name"
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -497,7 +497,7 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 		Size:             1,
 		LastFirstEventID: nextEventID,
 	}, nil).Once()
-	hEvents, bEvents, token, size, err := PaginateHistory(s.mockHistoryV2Mgr, false, []byte("asd"),
+	hEvents, bEvents, token, size, err := persistence.PaginateHistory(s.mockHistoryV2Mgr, false, []byte("asd"),
 		firstEventID, nextEventID, []byte{}, pageSize, shardID)
 	s.NotNil(hEvents)
 	s.NotNil(bEvents)

@@ -350,7 +350,7 @@ func GetAllHistory(
 	var pageHistorySize int
 
 	for hasMore := true; hasMore; hasMore = len(pageToken) > 0 {
-		pageHistoryEvents, pageHistoryBatches, pageToken, pageHistorySize, err = PaginateHistory(
+		pageHistoryEvents, pageHistoryBatches, pageToken, pageHistorySize, err = persistence.PaginateHistory(
 			historyV2Mgr, byBatch,
 			branchToken, firstEventID, nextEventID,
 			pageToken, defaultHistoryPageSize, shardID,
@@ -373,57 +373,6 @@ func GetAllHistory(
 		Events: historyEvents,
 	}
 	return history, historyBatches, nil
-}
-
-// PaginateHistory return paged history
-func PaginateHistory(
-	historyV2Mgr persistence.HistoryManager,
-	byBatch bool,
-	branchToken []byte,
-	firstEventID int64,
-	nextEventID int64,
-	tokenIn []byte,
-	pageSize int,
-	shardID *int,
-) ([]*shared.HistoryEvent, []*shared.History, []byte, int, error) {
-
-	historyEvents := []*shared.HistoryEvent{}
-	historyBatches := []*shared.History{}
-	var tokenOut []byte
-	var historySize int
-
-	req := &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
-		PageSize:      pageSize,
-		NextPageToken: tokenIn,
-		ShardID:       shardID,
-	}
-	if byBatch {
-		response, err := historyV2Mgr.ReadHistoryBranchByBatch(req)
-		if err != nil {
-			return nil, nil, nil, 0, err
-		}
-
-		// Keep track of total history size
-		historySize += response.Size
-		historyBatches = append(historyBatches, response.History...)
-		tokenOut = response.NextPageToken
-
-	} else {
-		response, err := historyV2Mgr.ReadHistoryBranch(req)
-		if err != nil {
-			return nil, nil, nil, 0, err
-		}
-
-		// Keep track of total history size
-		historySize += response.Size
-		historyEvents = append(historyEvents, response.HistoryEvents...)
-		tokenOut = response.NextPageToken
-	}
-
-	return historyEvents, historyBatches, tokenOut, historySize, nil
 }
 
 // TODO deprecate when 3+DC is released

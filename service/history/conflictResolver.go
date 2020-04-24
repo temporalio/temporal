@@ -90,7 +90,7 @@ func (r *conflictResolverImpl) reset(
 
 	var nextPageToken []byte
 	var resetMutableStateBuilder execution.MutableState
-	var sBuilder stateBuilder
+	var sBuilder execution.StateBuilder
 	var history []*shared.HistoryEvent
 	var totalSize int64
 
@@ -125,7 +125,7 @@ func (r *conflictResolverImpl) reset(
 				domainEntry,
 			)
 
-			sBuilder = newStateBuilder(
+			sBuilder = execution.NewStateBuilder(
 				r.shard,
 				r.logger,
 				resetMutableStateBuilder,
@@ -135,7 +135,7 @@ func (r *conflictResolverImpl) reset(
 			)
 		}
 
-		_, err = sBuilder.applyEvents(domainID, requestID, workflowExecution, history, nil, false)
+		_, err = sBuilder.ApplyEvents(domainID, requestID, workflowExecution, history, nil, false)
 		if err != nil {
 			r.logError("Conflict resolution err applying events.", err)
 			return nil, err

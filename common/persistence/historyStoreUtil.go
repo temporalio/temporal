@@ -80,6 +80,57 @@ func GetBeginNodeID(bi shared.HistoryBranch) int64 {
 	return *bi.Ancestors[idx].EndNodeID
 }
 
+// PaginateHistory return paged history
+func PaginateHistory(
+	historyV2Mgr HistoryManager,
+	byBatch bool,
+	branchToken []byte,
+	firstEventID int64,
+	nextEventID int64,
+	tokenIn []byte,
+	pageSize int,
+	shardID *int,
+) ([]*shared.HistoryEvent, []*shared.History, []byte, int, error) {
+
+	historyEvents := []*shared.HistoryEvent{}
+	historyBatches := []*shared.History{}
+	var tokenOut []byte
+	var historySize int
+
+	req := &ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      pageSize,
+		NextPageToken: tokenIn,
+		ShardID:       shardID,
+	}
+	if byBatch {
+		response, err := historyV2Mgr.ReadHistoryBranchByBatch(req)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+
+		// Keep track of total history size
+		historySize += response.Size
+		historyBatches = append(historyBatches, response.History...)
+		tokenOut = response.NextPageToken
+
+	} else {
+		response, err := historyV2Mgr.ReadHistoryBranch(req)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+
+		// Keep track of total history size
+		historySize += response.Size
+		historyEvents = append(historyEvents, response.HistoryEvents...)
+		tokenOut = response.NextPageToken
+	}
+
+	return historyEvents, historyBatches, tokenOut, historySize, nil
+}
+
 func getShardID(shardID *int) (int, error) {
 	if shardID == nil {
 		return 0, fmt.Errorf("shardID is not set for persistence operation")

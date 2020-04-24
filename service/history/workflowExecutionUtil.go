@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,7 +21,6 @@
 package history
 
 import (
-	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/service/history/execution"
 )
 
@@ -89,38 +88,11 @@ func newWorkflowContext(
 	context execution.Context,
 	releaseFn execution.ReleaseFunc,
 	mutableState execution.MutableState,
-) *workflowContextImpl {
+) workflowContext {
 
 	return &workflowContextImpl{
 		context:      context,
 		releaseFn:    releaseFn,
 		mutableState: mutableState,
 	}
-}
-
-func terminateWorkflow(
-	mutableState execution.MutableState,
-	eventBatchFirstEventID int64,
-	terminateReason string,
-	terminateDetails []byte,
-	terminateIdentity string,
-) error {
-
-	if decision, ok := mutableState.GetInFlightDecision(); ok {
-		if err := execution.FailDecision(
-			mutableState,
-			decision,
-			workflow.DecisionTaskFailedCauseForceCloseDecision,
-		); err != nil {
-			return err
-		}
-	}
-
-	_, err := mutableState.AddWorkflowExecutionTerminatedEvent(
-		eventBatchFirstEventID,
-		terminateReason,
-		terminateDetails,
-		terminateIdentity,
-	)
-	return err
 }

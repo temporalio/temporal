@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/cadence/.gen/go/shared"
 
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -45,11 +44,11 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/constants"
 	"github.com/uber/cadence/service/history/events"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/reset"
 	"github.com/uber/cadence/service/history/shard"
-	test "github.com/uber/cadence/service/history/testing"
 )
 
 type (
@@ -155,13 +154,13 @@ func (s *resetorSuite) TearDownTest() {
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: test.DomainID}, &p.DomainConfig{Retention: 1}, "", nil,
+		&p.DomainInfo{ID: constants.TestDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
 	)
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	request := &h.ResetWorkflowExecutionRequest{}
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	request.DomainUUID = &domainID
 	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{}
 
@@ -320,7 +319,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						Version:   common.Int64Ptr(common.EmptyVersion),
 						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
 						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+							MarkerName:                   common.StringPtr("TestVersion"),
 							Details:                      []byte("details"),
 							DecisionTaskCompletedEventId: common.Int64Ptr(4),
 						},
@@ -831,13 +830,13 @@ func (s *resetorSuite) assertActivityIDs(ids []string, timers []*p.ActivityInfo)
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCancel() {
 	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: test.DomainID}, &p.DomainConfig{Retention: 1}, "", nil,
+		&p.DomainInfo{ID: constants.TestDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
 	)
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	request := &h.ResetWorkflowExecutionRequest{}
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	request.DomainUUID = &domainID
 	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{}
 
@@ -998,7 +997,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						Version:   common.Int64Ptr(common.EmptyVersion),
 						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
 						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+							MarkerName:                   common.StringPtr("TestVersion"),
 							Details:                      []byte("details"),
 							DecisionTaskCompletedEventId: common.Int64Ptr(4),
 						},
@@ -1404,7 +1403,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("active").AnyTimes()
 
 	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: test.DomainID},
+		&p.DomainInfo{ID: constants.TestDomainID},
 		&p.DomainConfig{Retention: 1},
 		&p.DomainReplicationConfig{
 			ActiveClusterName: "active",
@@ -1424,7 +1423,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	request := &h.ResetWorkflowExecutionRequest{}
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	request.DomainUUID = &domainID
 	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{}
 
@@ -1595,7 +1594,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						Version:   common.Int64Ptr(beforeResetVersion),
 						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
 						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+							MarkerName:                   common.StringPtr("TestVersion"),
 							Details:                      []byte("details"),
 							DecisionTaskCompletedEventId: common.Int64Ptr(4),
 						},
@@ -2109,7 +2108,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("standby").AnyTimes()
 
 	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: test.DomainID},
+		&p.DomainInfo{ID: constants.TestDomainID},
 		&p.DomainConfig{Retention: 1},
 		&p.DomainReplicationConfig{
 			ActiveClusterName: "active",
@@ -2129,7 +2128,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	request := &h.ResetWorkflowExecutionRequest{}
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	request.DomainUUID = &domainID
 	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{}
 
@@ -2299,7 +2298,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						Version:   common.Int64Ptr(beforeResetVersion),
 						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
 						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+							MarkerName:                   common.StringPtr("TestVersion"),
 							Details:                      []byte("details"),
 							DecisionTaskCompletedEventId: common.Int64Ptr(4),
 						},
@@ -2697,7 +2696,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(forkResp, nil).Once()
 
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
-	s.IsType(&shared.DomainNotActiveError{}, err)
+	s.IsType(&workflow.DomainNotActiveError{}, err)
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurrent() {
@@ -2708,7 +2707,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("active").AnyTimes()
 
 	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: test.DomainID},
+		&p.DomainInfo{ID: constants.TestDomainID},
 		&p.DomainConfig{Retention: 1},
 		&p.DomainReplicationConfig{
 			ActiveClusterName: "active",
@@ -2728,7 +2727,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	request := &h.ResetWorkflowExecutionRequest{}
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	request.DomainUUID = &domainID
 	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{}
 
@@ -2900,7 +2899,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						Version:   common.Int64Ptr(beforeResetVersion),
 						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
 						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+							MarkerName:                   common.StringPtr("TestVersion"),
 							Details:                      []byte("details"),
 							DecisionTaskCompletedEventId: common.Int64Ptr(4),
 						},
@@ -3393,14 +3392,14 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 }
 
 func (s *resetorSuite) TestApplyReset() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	beforeResetVersion := int64(100)
 	afterResetVersion := int64(101)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(beforeResetVersion).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: test.DomainID},
+		&p.DomainInfo{ID: constants.TestDomainID},
 		&p.DomainConfig{Retention: 1},
 		&p.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -3574,7 +3573,7 @@ func (s *resetorSuite) TestApplyReset() {
 						Version:   common.Int64Ptr(beforeResetVersion),
 						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
 						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+							MarkerName:                   common.StringPtr("TestVersion"),
 							Details:                      []byte("details"),
 							DecisionTaskCompletedEventId: common.Int64Ptr(4),
 						},

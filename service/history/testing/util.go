@@ -26,6 +26,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/constants"
 	"github.com/uber/cadence/service/history/execution"
 )
 
@@ -55,7 +56,7 @@ func AddWorkflowExecutionStartedEventWithParent(
 	event, _ := builder.AddWorkflowExecutionStartedEvent(
 		workflowExecution,
 		&history.StartWorkflowExecutionRequest{
-			DomainUUID:          common.StringPtr(DomainID),
+			DomainUUID:          common.StringPtr(constants.TestDomainID),
 			StartRequest:        startRequest,
 			ParentExecutionInfo: parentInfo,
 		},
@@ -94,7 +95,7 @@ func AddDecisionTaskStartedEvent(
 	taskList string,
 	identity string,
 ) *workflow.HistoryEvent {
-	return AddDecisionTaskStartedEventWithRequestID(builder, scheduleID, RunID, taskList, identity)
+	return AddDecisionTaskStartedEventWithRequestID(builder, scheduleID, constants.TestRunID, taskList, identity)
 }
 
 // AddDecisionTaskStartedEventWithRequestID adds DecisionTaskStarted event with requestID
@@ -197,7 +198,7 @@ func AddActivityTaskStartedEvent(
 	identity string,
 ) *workflow.HistoryEvent {
 	ai, _ := builder.GetActivityInfo(scheduleID)
-	event, _ := builder.AddActivityTaskStartedEvent(ai, scheduleID, RunID, identity)
+	event, _ := builder.AddActivityTaskStartedEvent(ai, scheduleID, constants.TestRunID, identity)
 	return event
 }
 

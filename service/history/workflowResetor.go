@@ -37,6 +37,7 @@ import (
 	ce "github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/reset"
 )
 
@@ -239,7 +240,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	if retError != nil {
 		return
 	}
-	newMutableState = newStateBuilder.(*stateBuilderImpl).mutableState
+	newMutableState = newStateBuilder.GetMutableState()
 
 	// before this, the mutable state is in replay mode
 	// need to close / flush the mutable state for new changes
@@ -601,7 +602,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 	requestID string,
 	prevMutableState execution.MutableState,
 	newRunID string,
-) (forkEventVersion, wfTimeoutSecs int64, receivedSignalsAfterReset []*workflow.HistoryEvent, continueRunID string, sBuilder stateBuilder, newHistorySize int64, retError error) {
+) (forkEventVersion, wfTimeoutSecs int64, receivedSignalsAfterReset []*workflow.HistoryEvent, continueRunID string, sBuilder execution.StateBuilder, newHistorySize int64, retError error) {
 
 	prevExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(prevMutableState.GetExecutionInfo().WorkflowID),
@@ -678,7 +679,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 					resetMutableState = execution.NewMutableStateBuilder(w.eng.shard, w.eng.shard.GetEventsCache(), w.eng.logger, domainEntry)
 				}
 
-				sBuilder = newStateBuilder(
+				sBuilder = execution.NewStateBuilder(
 					w.eng.shard,
 					w.eng.logger,
 					resetMutableState,
@@ -696,7 +697,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 				return
 			}
 
-			_, retError = sBuilder.applyEvents(domainID, requestID, prevExecution, history, nil, false)
+			_, retError = sBuilder.ApplyEvents(domainID, requestID, prevExecution, history, nil, false)
 			if retError != nil {
 				return
 			}
@@ -792,7 +793,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 	}
 	if baseMutableState.GetNextEventID() < decisionFinishEventID {
 		// re-replicate the whole new run
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
+		return ndc.NewRetryTaskErrorWithHint(errWorkflowNotFoundMsg, domainID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
 	}
 
 	if currentRunID == resetAttr.GetBaseRunId() {
@@ -885,7 +886,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	resetAttr := firstEvent.GetDecisionTaskFailedEventAttributes()
 
 	requestID := uuid.New()
-	var sBuilder stateBuilder
+	var sBuilder execution.StateBuilder
 	var wfTimeoutSecs int64
 
 	domainEntry, retError := w.eng.shard.GetDomainCache().GetDomainByID(domainID)
@@ -933,7 +934,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 					return nil, 0, nil, nil, err
 				}
 
-				sBuilder = newStateBuilder(
+				sBuilder = execution.NewStateBuilder(
 					w.eng.shard,
 					w.eng.logger,
 					newMsBuilder,
@@ -942,7 +943,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 					},
 				)
 			}
-			_, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, events, nil, false)
+			_, retError = sBuilder.ApplyEvents(domainID, requestID, *baseExecution, events, nil, false)
 			if retError != nil {
 				return
 			}
@@ -956,7 +957,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	}
 	if lastEvent.GetEventId() != decisionFinishEventID-1 || lastEvent.GetVersion() != forkEventVersion {
 		// re-replicate the whole new run
-		retError = newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
+		retError = ndc.NewRetryTaskErrorWithHint(errWorkflowNotFoundMsg, domainID, workflowID, resetAttr.GetNewRunId(), common.FirstEventID)
 		return
 	}
 	startTime := time.Unix(0, firstEvent.GetTimestamp())
@@ -992,7 +993,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 
 	lastEvent = newRunHistory[len(newRunHistory)-1]
 	// replay new history (including decisionTaskScheduled)
-	_, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, newRunHistory, nil, false)
+	_, retError = sBuilder.ApplyEvents(domainID, requestID, *baseExecution, newRunHistory, nil, false)
 	if retError != nil {
 		return
 	}

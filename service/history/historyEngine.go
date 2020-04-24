@@ -87,8 +87,8 @@ type (
 		txProcessor               transferQueueProcessor
 		timerProcessor            timerQueueProcessor
 		replicator                *historyReplicator
-		nDCReplicator             nDCHistoryReplicator
-		nDCActivityReplicator     nDCActivityReplicator
+		nDCReplicator             ndc.HistoryReplicator
+		nDCActivityReplicator     ndc.ActivityReplicator
 		replicatorProcessor       ReplicatorQueueProcessor
 		historyEventNotifier      events.Notifier
 		tokenSerializer           common.TaskTokenSerializer
@@ -103,7 +103,7 @@ type (
 		queueTaskProcessor        task.Processor
 		replicationTaskProcessors []replication.TaskProcessor
 		publicClient              workflowserviceclient.Interface
-		eventsReapplier           nDCEventsReapplier
+		eventsReapplier           ndc.EventsReapplier
 		matchingClient            matching.Client
 		rawMatchingClient         matching.Client
 		clientChecker             client.VersionChecker
@@ -205,7 +205,7 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
-	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
+	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsClient(), logger)
 
 	// Only start the replicator processor if valid publisher is passed in
 	if publisher != nil {
@@ -226,20 +226,20 @@ func NewEngineWithShardContext(
 			historyV2Manager,
 			logger,
 		)
-		historyEngImpl.nDCReplicator = newNDCHistoryReplicator(
+		historyEngImpl.nDCReplicator = ndc.NewHistoryReplicator(
 			shard,
 			executionCache,
 			historyEngImpl.eventsReapplier,
 			logger,
 		)
-		historyEngImpl.nDCActivityReplicator = newNDCActivityReplicator(
+		historyEngImpl.nDCActivityReplicator = ndc.NewActivityReplicator(
 			shard,
 			executionCache,
 			logger,
 		)
 	}
 	historyEngImpl.resetor = newWorkflowResetor(historyEngImpl)
-	historyEngImpl.workflowResetter = newWorkflowResetter(
+	historyEngImpl.workflowResetter = reset.NewWorkflowResetter(
 		shard,
 		executionCache,
 		logger,
@@ -2107,7 +2107,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 			}
 
 			eventBatchFirstEventID := mutableState.GetNextEventID()
-			return updateWorkflowWithoutDecision, terminateWorkflow(
+			return updateWorkflowWithoutDecision, execution.TerminateWorkflow(
 				mutableState,
 				eventBatchFirstEventID,
 				request.GetReason(),
@@ -2340,7 +2340,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		baseNextEventID,
 		resetRunID,
 		request.GetRequestId(),
-		ndc.NewWorkflow(
+		execution.NewWorkflow(
 			ctx,
 			e.shard.GetDomainCache(),
 			e.shard.GetClusterMetadata(),
@@ -2897,7 +2897,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					baseNextEventID,
 					resetRunID,
 					uuid.New(),
-					ndc.NewWorkflow(
+					execution.NewWorkflow(
 						ctx,
 						e.shard.GetDomainCache(),
 						e.shard.GetClusterMetadata(),
@@ -2905,7 +2905,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 						mutableState,
 						execution.NoopReleaseFn,
 					),
-					eventsReapplicationResetWorkflowReason,
+					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
 				); err != nil {
 					return nil, err
@@ -2922,7 +2922,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingDecision() {
 				postActions.createDecision = false
 			}
-			reappliedEvents, err := e.eventsReapplier.reapplyEvents(
+			reappliedEvents, err := e.eventsReapplier.ReapplyEvents(
 				ctx,
 				mutableState,
 				toReapplyEvents,

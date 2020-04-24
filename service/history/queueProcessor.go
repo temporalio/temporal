@@ -23,6 +23,7 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -34,6 +35,7 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/execution"
@@ -382,4 +384,37 @@ func redispatchQueueTasks(
 		default:
 		}
 	}
+}
+
+func initializeLoggerForTask(
+	shardID int,
+	task task.Info,
+	logger log.Logger,
+) log.Logger {
+
+	taskLogger := logger.WithTags(
+		tag.ShardID(shardID),
+		tag.TaskID(task.GetTaskID()),
+		tag.TaskVisibilityTimestamp(task.GetVisibilityTimestamp().UnixNano()),
+		tag.FailoverVersion(task.GetVersion()),
+		tag.TaskType(task.GetTaskType()),
+		tag.WorkflowDomainID(task.GetDomainID()),
+		tag.WorkflowID(task.GetWorkflowID()),
+		tag.WorkflowRunID(task.GetRunID()),
+	)
+
+	switch task := task.(type) {
+	case *persistence.TimerTaskInfo:
+		taskLogger = taskLogger.WithTags(
+			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
+		)
+	case *persistence.TransferTaskInfo:
+		// noop
+	case *persistence.ReplicationTaskInfo:
+		// noop
+	default:
+		taskLogger.Error(fmt.Sprintf("Unknown queue task type: %v", task))
+	}
+
+	return taskLogger
 }

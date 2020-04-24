@@ -534,7 +534,7 @@ Update_History_Loop:
 				}
 
 				eventBatchFirstEventID := msBuilder.GetNextEventID()
-				if err := terminateWorkflow(
+				if err := execution.TerminateWorkflow(
 					msBuilder,
 					eventBatchFirstEventID,
 					common.FailureReasonTransactionSizeExceedsLimit,

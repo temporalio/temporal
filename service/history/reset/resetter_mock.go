@@ -28,13 +28,13 @@
 package reset
 
 import (
-	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	context "golang.org/x/net/context"
 
 	shared "github.com/uber/cadence/.gen/go/shared"
-	ndc "github.com/uber/cadence/service/history/ndc"
+	execution "github.com/uber/cadence/service/history/execution"
 )
 
 // MockWorkflowResetter is a mock of WorkflowResetter interface
@@ -61,7 +61,7 @@ func (m *MockWorkflowResetter) EXPECT() *MockWorkflowResetterMockRecorder {
 }
 
 // ResetWorkflow mocks base method
-func (m *MockWorkflowResetter) ResetWorkflow(ctx context.Context, domainID, workflowID, baseRunID string, baseBranchToken []byte, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID int64, resetRunID, resetRequestID string, currentWorkflow ndc.Workflow, resetReason string, additionalReapplyEvents []*shared.HistoryEvent) error {
+func (m *MockWorkflowResetter) ResetWorkflow(ctx context.Context, domainID, workflowID, baseRunID string, baseBranchToken []byte, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID int64, resetRunID, resetRequestID string, currentWorkflow execution.Workflow, resetReason string, additionalReapplyEvents []*shared.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetWorkflow", ctx, domainID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, currentWorkflow, resetReason, additionalReapplyEvents)
 	ret0, _ := ret[0].(error)

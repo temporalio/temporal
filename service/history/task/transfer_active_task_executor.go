@@ -38,7 +38,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/execution"
-	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/reset"
 	"github.com/uber/cadence/service/history/shard"
 	"github.com/uber/cadence/service/worker/archiver"
@@ -1330,7 +1329,7 @@ func (t *transferActiveTaskExecutor) resetWorkflow(
 			baseNextEventID,
 			resetRunID,
 			uuid.New(),
-			ndc.NewWorkflow(
+			execution.NewWorkflow(
 				ctx,
 				t.shard.GetDomainCache(),
 				t.shard.GetClusterMetadata(),

@@ -47,12 +47,12 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history/config"
+	"github.com/uber/cadence/service/history/constants"
 	"github.com/uber/cadence/service/history/events"
 	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/reset"
 	"github.com/uber/cadence/service/history/shard"
-	test "github.com/uber/cadence/service/history/testing"
 )
 
 const (
@@ -70,7 +70,7 @@ type (
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
-		mockStateBuilder         *MockstateBuilder
+		mockStateBuilder         *execution.MockStateBuilder
 		mockDomainCache          *cache.MockDomainCache
 		mockClusterMetadata      *cluster.MockMetadata
 
@@ -104,7 +104,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
-	s.mockStateBuilder = NewMockstateBuilder(s.controller)
+	s.mockStateBuilder = execution.NewMockStateBuilder(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
@@ -163,7 +163,7 @@ func (s *historyReplicatorSuite) TestApplyStartEvent() {
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_MissingCurrent() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -185,11 +185,11 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Missing
 	}).Return(nil, &shared.EntityNotExistsError{})
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(ctx.Background(), domainID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID), err)
+	s.Equal(ndc.NewRetryTaskErrorWithHint(errWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent_NoEventsReapplication() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -247,7 +247,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent_EventsReapplication_PendingDecision() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -330,7 +330,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent_EventsReapplication_NoPendingDecision() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -433,7 +433,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingEqualToCurrent_CurrentRunning() {
 	domainName := "some random domain name"
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -497,12 +497,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(ctx.Background(), domainID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, currentRunID, currentNextEventID), err)
+	s.Equal(ndc.NewRetryTaskErrorWithHint(errWorkflowNotFoundMsg, domainID, workflowID, currentRunID, currentNextEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingEqualToCurrent_CurrentRunning_OutOfOrder() {
 	domainName := "some random domain name"
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -574,7 +574,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLargerThanCurrent_CurrentRunning() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -640,17 +640,17 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		currentNextEventID, ndc.WorkflowTerminationReason, gomock.Any(), ndc.WorkflowTerminationIdentity,
+		currentNextEventID, execution.WorkflowTerminationReason, gomock.Any(), execution.WorkflowTerminationIdentity,
 	).Return(&workflow.HistoryEvent{}, nil).Times(1)
 	contextCurrent.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(ctx.Background(), domainID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID), err)
+	s.Equal(ndc.NewRetryTaskErrorWithHint(errWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingNotLessThanCurrent_CurrentFinished() {
 	domainName := "some random domain name"
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -714,12 +714,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(ctx.Background(), domainID, workflowID, runID, req, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID), err)
+	s.Equal(ndc.NewRetryTaskErrorWithHint(errWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestWorkflowReset() {
 	domainName := "some random domain name"
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -795,7 +795,7 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_IncomingLessThanCurrent() {
 	domainName := "some random domain name"
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(123)
@@ -860,7 +860,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsCurrent_NoEventsReapplication() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	incomingVersion := int64(110)
@@ -903,7 +903,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsNotCurrent_NoEventsReapplication() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	currentRunID := uuid.New()
@@ -961,7 +961,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsNotCurrent_EventsReapplication_PendingDecision() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	currentRunID := uuid.New()
@@ -1045,7 +1045,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLessThanCurrent_WorkflowClosed_WorkflowIsNotCurrent_EventsReapplication_NoPendingDecision() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	currentRunID := uuid.New()
@@ -1346,7 +1346,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn,
 		request, s.logger)
 	s.Nil(msBuilderOut)
-	s.Equal(ErrMoreThan2DC, err)
+	s.Equal(errMoreThan2DC, err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_MissingReplicationInfo() {
@@ -1515,7 +1515,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
 	s.Nil(msBuilderOut)
-	s.Equal(ErrImpossibleRemoteClaimSeenHigherVersion, err)
+	s.Equal(errImpossibleRemoteClaimSeenHigherVersion, err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_ReplicationInfoVersionEqual_ResolveConflict() {
@@ -1612,7 +1612,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
 	s.Nil(msBuilderOut)
-	s.Equal(ErrCorruptedReplicationInfo, err)
+	s.Equal(errCorruptedReplicationInfo, err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_ReplicationInfoVersionEqual_ResolveConflict_OtherCase() {
@@ -1781,7 +1781,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingEqualToCurrent() {
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	currentVersion := int64(4096)
@@ -1813,7 +1813,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 	msBuilder.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
 	err := s.historyReplicator.ApplyOtherEvents(ctx.Background(), context, msBuilder, request, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrRetryBufferEventsMsg, domainID, workflowID, runID, currentNextEventID), err)
+	s.Equal(ndc.NewRetryTaskErrorWithHint(errRetryBufferEventsMsg, domainID, workflowID, runID, currentNextEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestApplyReplicationTask() {
@@ -1848,7 +1848,7 @@ func (s *historyReplicatorSuite) TestApplyReplicationTask_WorkflowClosed() {
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -1858,7 +1858,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -1966,7 +1966,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -1976,7 +1976,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -2080,7 +2080,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2090,7 +2090,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -2200,7 +2200,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_IncomingLessThanCurrent() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2219,7 +2219,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	}
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -2353,7 +2353,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_IncomingEqualToThanCurrent() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2363,7 +2363,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -2489,7 +2489,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_IncomingNotLessThanCurrent() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2499,7 +2499,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -2625,7 +2625,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLessThanCurrent_NoEventsReapplication() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2635,7 +2635,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -2773,7 +2773,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLessThanCurrent_EventsReapplication_PendingDecision() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2783,7 +2783,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -2949,7 +2949,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLessThanCurrent_EventsReapplication_NoPendingDecision() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -2959,7 +2959,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -3137,7 +3137,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingEqualToCurrent() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -3147,7 +3147,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -3287,11 +3287,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	).AnyTimes()
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, s.mockStateBuilder, s.logger)
-	s.Equal(newRetryTaskErrorWithHint(ErrRetryExistingWorkflowMsg, domainID, workflowID, currentRunID, currentNextEventID), err)
+	s.Equal(ndc.NewRetryTaskErrorWithHint(errRetryExistingWorkflowMsg, domainID, workflowID, currentRunID, currentNextEventID), err)
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingEqualToCurrent_OutOfOrder() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -3301,7 +3301,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	decisionTimeout := int32(4411)
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 	lastEventTaskID := int64(2333)
@@ -3447,7 +3447,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_IncomingLargerThanCurrent() {
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(144)
@@ -3466,7 +3466,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}
 
 	initiatedID := int64(4810)
-	parentDomainID := test.DomainID
+	parentDomainID := constants.TestDomainID
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
@@ -3623,7 +3623,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(currentClusterName).AnyTimes()
 
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		currentNextEventID, ndc.WorkflowTerminationReason, gomock.Any(), ndc.WorkflowTerminationIdentity,
+		currentNextEventID, execution.WorkflowTerminationReason, gomock.Any(), execution.WorkflowTerminationIdentity,
 	).Return(&workflow.HistoryEvent{}, nil).Times(1)
 	contextCurrent.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
@@ -3662,7 +3662,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	incomingVersion := int64(4096)
 	incomingTimestamp := int64(11238)
 
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random target workflow ID"
 	targetRunID := uuid.New()
 
@@ -3708,7 +3708,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	incomingCluster := cluster.TestAlternativeClusterName
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(incomingVersion).Return(incomingCluster).AnyTimes()
 
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random target workflow ID"
 	targetRunID := uuid.New()
 
@@ -3761,7 +3761,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	}, nil)
 
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		currentNextEventID, ndc.WorkflowTerminationReason, gomock.Any(), ndc.WorkflowTerminationIdentity,
+		currentNextEventID, execution.WorkflowTerminationReason, gomock.Any(), execution.WorkflowTerminationIdentity,
 	).Return(&workflow.HistoryEvent{}, nil).Times(1)
 	contextCurrent.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
@@ -3778,7 +3778,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	incomingCluster := cluster.TestAlternativeClusterName
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(incomingVersion).Return(incomingCluster).AnyTimes()
 
-	domainID := test.DomainID
+	domainID := constants.TestDomainID
 	workflowID := "some random target workflow ID"
 	targetRunID := uuid.New()
 

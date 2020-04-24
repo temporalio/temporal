@@ -45,8 +45,51 @@ import (
 	"github.com/uber/cadence/service/history/shard"
 )
 
+var (
+	workflowResetReason = "Reset Workflow Due To Events Re-application."
+	// errRetryEntityNotExists is returned to indicate workflow execution is not created yet and replicator should
+	// try this task again after a small delay.
+	errRetryEntityNotExists = &shared.RetryTaskError{Message: "entity not exists"}
+	// errRetryRaceCondition is returned to indicate logic race condition encountered and replicator should
+	// try this task again after a small delay.
+	errRetryRaceCondition = &shared.RetryTaskError{Message: "encounter race condition, retry"}
+	// errRetryBufferEventsMsg is returned when events are arriving out of order, should retry, or specify force apply
+	errRetryBufferEventsMsg = "retry on applying buffer events"
+	// errWorkflowNotFoundMsg is returned when workflow not found
+	errWorkflowNotFoundMsg = "retry on workflow not found"
+	// errRetryExistingWorkflowMsg is returned when events are arriving out of order, and there is another workflow with same version running
+	errRetryExistingWorkflowMsg = "workflow with same version is running"
+	// errRetryExecutionAlreadyStarted is returned to indicate another workflow execution already started,
+	// this error can be return if we encounter race condition, i.e. terminating the target workflow while
+	// the target workflow has done continue as new.
+	// try this task again after a small delay.
+	errRetryExecutionAlreadyStarted = &shared.RetryTaskError{Message: "another workflow execution is running"}
+	// errCorruptedReplicationInfo is returned when replication task has corrupted replication information from source cluster
+	errCorruptedReplicationInfo = &shared.BadRequestError{Message: "replication task is has corrupted cluster replication info"}
+	// errCorruptedMutableStateDecision is returned when mutable state decision is corrupted
+	errCorruptedMutableStateDecision = &shared.BadRequestError{Message: "mutable state decision is corrupted"}
+	// errMoreThan2DC is returned when there are more than 2 data center
+	errMoreThan2DC = &shared.BadRequestError{Message: "more than 2 data center"}
+	// errImpossibleLocalRemoteMissingReplicationInfo is returned when replication task is missing replication info, as well as local replication info being empty
+	errImpossibleLocalRemoteMissingReplicationInfo = &shared.BadRequestError{Message: "local and remote both are missing replication info"}
+	// errImpossibleRemoteClaimSeenHigherVersion is returned when replication info contains higher version then this cluster ever emitted.
+	errImpossibleRemoteClaimSeenHigherVersion = &shared.BadRequestError{Message: "replication info contains higher version then this cluster ever emitted"}
+	// errInternalFailure is returned when encounter code bug
+	errInternalFailure = &shared.BadRequestError{Message: "fail to apply history events due bug"}
+	// errUnknownEncodingType indicate that the encoding type is unknown
+	errUnknownEncodingType = &shared.BadRequestError{Message: "unknown encoding type"}
+	// errUnreappliableEvent indicate that the event is not reappliable
+	errUnreappliableEvent = &shared.BadRequestError{Message: "event is not reappliable"}
+	// errWorkflowMutationDecision indicate that something is wrong with mutating workflow, i.e. adding decision to workflow
+	errWorkflowMutationDecision = &shared.BadRequestError{Message: "error encountered when mutating workflow adding decision"}
+	// errWorkflowMutationSignal indicate that something is wrong with mutating workflow, i.e. adding signal to workflow
+	errWorkflowMutationSignal = &shared.BadRequestError{Message: "error encountered when mutating workflow adding signal"}
+)
+
 type (
 	conflictResolverProvider func(context execution.Context, logger log.Logger) conflictResolver
+	mutableStateProvider     func(domainEntry *cache.DomainCacheEntry, logger log.Logger) execution.MutableState
+	stateBuilderProvider     func(mutableState execution.MutableState, logger log.Logger) execution.StateBuilder
 
 	historyReplicator struct {
 		shard             shard.Context
@@ -64,50 +107,6 @@ type (
 		getNewStateBuilder     stateBuilderProvider
 		getNewMutableState     mutableStateProvider
 	}
-)
-
-var (
-	// ErrRetryEntityNotExists is returned to indicate workflow execution is not created yet and replicator should
-	// try this task again after a small delay.
-	ErrRetryEntityNotExists = &shared.RetryTaskError{Message: "entity not exists"}
-	// ErrRetryRaceCondition is returned to indicate logic race condition encountered and replicator should
-	// try this task again after a small delay.
-	ErrRetryRaceCondition = &shared.RetryTaskError{Message: "encounter race condition, retry"}
-	// ErrRetrySyncActivityMsg is returned when sync activity replication tasks are arriving out of order, should retry
-	ErrRetrySyncActivityMsg = "retry on applying sync activity"
-	// ErrRetryBufferEventsMsg is returned when events are arriving out of order, should retry, or specify force apply
-	ErrRetryBufferEventsMsg = "retry on applying buffer events"
-	// ErrWorkflowNotFoundMsg is returned when workflow not found
-	ErrWorkflowNotFoundMsg = "retry on workflow not found"
-	// ErrRetryExistingWorkflowMsg is returned when events are arriving out of order, and there is another workflow with same version running
-	ErrRetryExistingWorkflowMsg = "workflow with same version is running"
-	// ErrRetryExecutionAlreadyStarted is returned to indicate another workflow execution already started,
-	// this error can be return if we encounter race condition, i.e. terminating the target workflow while
-	// the target workflow has done continue as new.
-	// try this task again after a small delay.
-	ErrRetryExecutionAlreadyStarted = &shared.RetryTaskError{Message: "another workflow execution is running"}
-	// ErrCorruptedReplicationInfo is returned when replication task has corrupted replication information from source cluster
-	ErrCorruptedReplicationInfo = &shared.BadRequestError{Message: "replication task is has corrupted cluster replication info"}
-	// ErrCorruptedMutableStateDecision is returned when mutable state decision is corrupted
-	ErrCorruptedMutableStateDecision = &shared.BadRequestError{Message: "mutable state decision is corrupted"}
-	// ErrMoreThan2DC is returned when there are more than 2 data center
-	ErrMoreThan2DC = &shared.BadRequestError{Message: "more than 2 data center"}
-	// ErrImpossibleLocalRemoteMissingReplicationInfo is returned when replication task is missing replication info, as well as local replication info being empty
-	ErrImpossibleLocalRemoteMissingReplicationInfo = &shared.BadRequestError{Message: "local and remote both are missing replication info"}
-	// ErrImpossibleRemoteClaimSeenHigherVersion is returned when replication info contains higher version then this cluster ever emitted.
-	ErrImpossibleRemoteClaimSeenHigherVersion = &shared.BadRequestError{Message: "replication info contains higher version then this cluster ever emitted"}
-	// ErrInternalFailure is returned when encounter code bug
-	ErrInternalFailure = &shared.BadRequestError{Message: "fail to apply history events due bug"}
-	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
-	ErrEmptyHistoryRawEventBatch = &shared.BadRequestError{Message: "encounter empty history batch"}
-	// ErrUnknownEncodingType indicate that the encoding type is unknown
-	ErrUnknownEncodingType = &shared.BadRequestError{Message: "unknown encoding type"}
-	// ErrUnreappliableEvent indicate that the event is not reappliable
-	ErrUnreappliableEvent = &shared.BadRequestError{Message: "event is not reappliable"}
-	// ErrWorkflowMutationDecision indicate that something is wrong with mutating workflow, i.e. adding decision to workflow
-	ErrWorkflowMutationDecision = &shared.BadRequestError{Message: "error encountered when mutating workflow adding decision"}
-	// ErrWorkflowMutationSignal indicate that something is wrong with mutating workflow, i.e. adding signal to workflow
-	ErrWorkflowMutationSignal = &shared.BadRequestError{Message: "error encountered when mutating workflow adding signal"}
 )
 
 func newHistoryReplicator(
@@ -134,8 +133,8 @@ func newHistoryReplicator(
 		getNewConflictResolver: func(context execution.Context, logger log.Logger) conflictResolver {
 			return newConflictResolver(shard, context, historyV2Mgr, logger)
 		},
-		getNewStateBuilder: func(msBuilder execution.MutableState, logger log.Logger) stateBuilder {
-			return newStateBuilder(
+		getNewStateBuilder: func(msBuilder execution.MutableState, logger log.Logger) execution.StateBuilder {
+			return execution.NewStateBuilder(
 				shard,
 				logger,
 				msBuilder,
@@ -224,16 +223,16 @@ func (r *historyReplicator) ApplyEvents(
 			switch retError.(type) {
 			case *shared.EntityNotExistsError:
 				logger.Debug(fmt.Sprintf("Encounter EntityNotExistsError: %v", retError))
-				retError = ErrRetryEntityNotExists
+				retError = errRetryEntityNotExists
 			case *shared.WorkflowExecutionAlreadyStartedError:
 				logger.Debug(fmt.Sprintf("Encounter WorkflowExecutionAlreadyStartedError: %v", retError))
-				retError = ErrRetryExecutionAlreadyStarted
+				retError = errRetryExecutionAlreadyStarted
 			case *persistence.WorkflowExecutionAlreadyStartedError:
 				logger.Debug(fmt.Sprintf("Encounter WorkflowExecutionAlreadyStartedError: %v", retError))
-				retError = ErrRetryExecutionAlreadyStarted
+				retError = errRetryExecutionAlreadyStarted
 			case *errors.InternalFailureError:
 				logError(logger, "Encounter InternalFailure.", retError)
-				retError = ErrInternalFailure
+				retError = errInternalFailure
 			}
 		}
 	}()
@@ -350,7 +349,7 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 		if _, ok := err.(*shared.EntityNotExistsError); !ok {
 			return err
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
+		return ndc.NewRetryTaskErrorWithHint(errWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
 	}
 	defer func() { currentRelease(retError) }()
 
@@ -383,7 +382,7 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 		if request.GetResetWorkflow() {
 			return r.resetor.ApplyResetEvent(ctx, request, domainID, workflowID, currentRunID)
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
+		return ndc.NewRetryTaskErrorWithHint(errWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
 	}
 
 	// currentLastWriteVersion == incomingVersion
@@ -392,14 +391,14 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 			// versions are the same, so not necessary to re-apply signals
 			return nil
 		}
-		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, currentRunID, currentNextEventID)
+		return ndc.NewRetryTaskErrorWithHint(errWorkflowNotFoundMsg, domainID, workflowID, currentRunID, currentNextEventID)
 	}
 
 	if request.GetResetWorkflow() {
 		//Note that at this point, current run is already closed and currentLastWriteVersion <= incomingVersion
 		return r.resetor.ApplyResetEvent(ctx, request, domainID, workflowID, currentRunID)
 	}
-	return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
+	return ndc.NewRetryTaskErrorWithHint(errWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
 }
 
 func (r *historyReplicator) ApplyOtherEventsVersionChecking(
@@ -476,7 +475,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 			return msBuilder, nil
 		}
 
-		err = ErrMoreThan2DC
+		err = errMoreThan2DC
 		logError(logger, err.Error(), err)
 		return nil, err
 	}
@@ -490,7 +489,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 		lastValidVersion, lastValidEventID := r.getLatestCheckpoint(replicationInfo, rState.LastReplicationInfo)
 
 		if lastValidVersion == common.EmptyVersion {
-			err = ErrImpossibleLocalRemoteMissingReplicationInfo
+			err = errImpossibleLocalRemoteMissingReplicationInfo
 			logError(logger, err.Error(), err)
 			return nil, err
 		}
@@ -502,7 +501,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 		return r.resetMutableState(ctx, context, msBuilder, lastValidEventID, incomingVersion, incomingTimestamp, logger)
 	}
 	if rState.LastWriteVersion < ri.GetVersion() {
-		err = ErrImpossibleRemoteClaimSeenHigherVersion
+		err = errImpossibleRemoteClaimSeenHigherVersion
 		logError(logger, err.Error(), err)
 		return nil, err
 	}
@@ -511,9 +510,9 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 	// Detect conflict
 	if ri.GetLastEventId() > rState.LastWriteEventID {
 		// if there is any bug in the replication protocol or implementation, this case can happen
-		logError(logger, "Conflict detected, but cannot resolve.", ErrCorruptedReplicationInfo)
+		logError(logger, "Conflict detected, but cannot resolve.", errCorruptedReplicationInfo)
 		// Returning BadRequestError to force the message to land into DLQ
-		return nil, ErrCorruptedReplicationInfo
+		return nil, errCorruptedReplicationInfo
 	}
 
 	err = r.flushEventsBuffer(context, msBuilder)
@@ -560,8 +559,8 @@ func (r *historyReplicator) ApplyOtherEvents(
 			return nil
 		}
 
-		return newRetryTaskErrorWithHint(
-			ErrRetryBufferEventsMsg,
+		return ndc.NewRetryTaskErrorWithHint(
+			errRetryBufferEventsMsg,
 			context.GetDomainID(),
 			context.GetExecution().GetWorkflowId(),
 			context.GetExecution().GetRunId(),
@@ -609,7 +608,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 	}
 
 	// directly use stateBuilder to apply events for other events(including continueAsNew)
-	newMutableState, err := sBuilder.applyEvents(
+	newMutableState, err := sBuilder.ApplyEvents(
 		domainID, requestID, workflowExecution, request.History.Events, newRunHistory, request.GetNewRunNDC(),
 	)
 	if err != nil {
@@ -652,7 +651,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	context execution.Context,
 	msBuilder execution.MutableState,
 	history *shared.History,
-	sBuilder stateBuilder,
+	sBuilder execution.StateBuilder,
 	logger log.Logger,
 ) (retError error) {
 
@@ -767,8 +766,8 @@ func (r *historyReplicator) replicateWorkflowStarted(
 			// versions are the same, so not necessary to re-apply signals
 			return nil
 		}
-		return newRetryTaskErrorWithHint(
-			ErrRetryExistingWorkflowMsg,
+		return ndc.NewRetryTaskErrorWithHint(
+			errRetryExistingWorkflowMsg,
 			domainID,
 			workflowExecution.GetWorkflowId(),
 			currentRunID,
@@ -946,8 +945,8 @@ func (r *historyReplicator) terminateWorkflow(
 				return err
 			}
 			if incomingVersion <= currentLastWriteVersion {
-				return newRetryTaskErrorWithHint(
-					ErrRetryExistingWorkflowMsg,
+				return ndc.NewRetryTaskErrorWithHint(
+					errRetryExistingWorkflowMsg,
 					domainID,
 					workflowID,
 					runID,
@@ -965,8 +964,8 @@ func (r *historyReplicator) terminateWorkflow(
 			// if last write version indicates not from current cluster, need to fetch from remote
 			sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(currentLastWriteVersion)
 			if sourceCluster != r.clusterMetadata.GetCurrentClusterName() {
-				return newRetryTaskErrorWithHint(
-					ErrRetryExistingWorkflowMsg,
+				return ndc.NewRetryTaskErrorWithHint(
+					errRetryExistingWorkflowMsg,
 					domainID,
 					workflowID,
 					runID,
@@ -982,9 +981,9 @@ func (r *historyReplicator) terminateWorkflow(
 			eventBatchFirstEventID := msBuilder.GetNextEventID()
 			if _, err := msBuilder.AddWorkflowExecutionTerminatedEvent(
 				eventBatchFirstEventID,
-				ndc.WorkflowTerminationReason,
+				execution.WorkflowTerminationReason,
 				[]byte(fmt.Sprintf("terminated by version: %v", incomingVersion)),
-				ndc.WorkflowTerminationIdentity,
+				execution.WorkflowTerminationIdentity,
 			); err != nil {
 				return &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
 			}
@@ -1082,7 +1081,7 @@ func (r *historyReplicator) deserializeBlob(
 ) ([]*workflow.HistoryEvent, error) {
 
 	if blob.GetEncodingType() != workflow.EncodingTypeThriftRW {
-		return nil, ErrUnknownEncodingType
+		return nil, errUnknownEncodingType
 	}
 	historyEvents, err := r.historySerializer.DeserializeBatchEvents(&persistence.DataBlob{
 		Encoding: common.EncodingTypeThriftRW,
@@ -1092,7 +1091,7 @@ func (r *historyReplicator) deserializeBlob(
 		return nil, err
 	}
 	if len(historyEvents) == 0 {
-		return nil, ErrEmptyHistoryRawEventBatch
+		return nil, ndc.ErrEmptyHistoryRawEventBatch
 	}
 	return historyEvents, nil
 }
@@ -1112,7 +1111,7 @@ func (r *historyReplicator) flushEventsBuffer(
 
 	decision, ok := msBuilder.GetInFlightDecision()
 	if !ok {
-		return ErrCorruptedMutableStateDecision
+		return errCorruptedMutableStateDecision
 	}
 	if _, err = msBuilder.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
@@ -1180,12 +1179,12 @@ func (r *historyReplicator) reapplyEventsToCurrentRunningWorkflow(
 				attr.GetSignalName(),
 				attr.Input,
 				attr.GetIdentity()); err != nil {
-				return ErrWorkflowMutationSignal
+				return errWorkflowMutationSignal
 			}
 			numSignals++
 
 		default:
-			return ErrUnreappliableEvent
+			return errUnreappliableEvent
 		}
 	}
 
@@ -1265,7 +1264,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 		return err
 	}
 	if resetNewMsBuilder.IsWorkflowExecutionRunning() {
-		return ErrRetryRaceCondition
+		return errRetryRaceCondition
 	}
 
 	return r.reapplyEventsToCurrentRunningWorkflow(ctx, resetNewContext, resetNewMsBuilder, events, logger)
@@ -1327,7 +1326,7 @@ func (r *historyReplicator) persistWorkflowMutation(
 	if !msBuilder.HasPendingDecision() {
 		_, err := msBuilder.AddDecisionTaskScheduledEvent(false)
 		if err != nil {
-			return ErrWorkflowMutationDecision
+			return errWorkflowMutationDecision
 		}
 	}
 
@@ -1341,23 +1340,6 @@ func logError(
 	err error,
 ) {
 	logger.Error(msg, tag.Error(err))
-}
-
-func newRetryTaskErrorWithHint(
-	msg string,
-	domainID string,
-	workflowID string,
-	runID string,
-	nextEventID int64,
-) *shared.RetryTaskError {
-
-	return &shared.RetryTaskError{
-		Message:     msg,
-		DomainId:    common.StringPtr(domainID),
-		WorkflowId:  common.StringPtr(workflowID),
-		RunId:       common.StringPtr(runID),
-		NextEventId: common.Int64Ptr(nextEventID),
-	}
 }
 
 func notify(
