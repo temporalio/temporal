@@ -162,8 +162,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 	}
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		WorkflowTimeout: 100,
-		CronSchedule:    cronSchedule,
+		WorkflowRunTimeout: 100,
+		CronSchedule:       cronSchedule,
 	}
 
 	now := time.Now()
@@ -209,8 +209,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	}
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		WorkflowTimeout: 100,
-		CronSchedule:    cronSchedule,
+		WorkflowRunTimeout: 100,
+		CronSchedule:       cronSchedule,
 	}
 
 	now := time.Now()
@@ -416,7 +416,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	tasklist := "some random tasklist"
 	workflowType := "some random workflow type"
 	workflowTimeoutSecond := int32(110)
-	decisionTimeoutSecond := int32(11)
+	taskTimeoutSeconds := int32(11)
 	newRunID := uuid.New()
 
 	continueAsNewEvent := &eventpb.HistoryEvent{
@@ -440,11 +440,11 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 				WorkflowId: parentWorkflowID,
 				RunId:      parentRunID,
 			},
-			ParentInitiatedEventId:              parentInitiatedEventID,
-			ExecutionStartToCloseTimeoutSeconds: workflowTimeoutSecond,
-			TaskStartToCloseTimeoutSeconds:      decisionTimeoutSecond,
-			TaskList:                            &tasklistpb.TaskList{Name: tasklist},
-			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
+			ParentInitiatedEventId:          parentInitiatedEventID,
+			WorkflowExecutionTimeoutSeconds: workflowTimeoutSecond,
+			WorkflowTaskTimeoutSeconds:      taskTimeoutSeconds,
+			TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
 		}},
 	}
 
@@ -468,7 +468,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		EventType: eventpb.EventType_DecisionTaskScheduled,
 		Attributes: &eventpb.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &eventpb.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &tasklistpb.TaskList{Name: tasklist},
-			StartToCloseTimeoutSeconds: decisionTimeoutSecond,
+			StartToCloseTimeoutSeconds: taskTimeoutSeconds,
 			Attempt:                    newRunDecisionAttempt,
 		}},
 	}

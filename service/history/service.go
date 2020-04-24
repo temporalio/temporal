@@ -203,17 +203,21 @@ type Config struct {
 	// StickyTTL is to expire a sticky tasklist if no update more than this duration
 	// TODO https://github.com/temporalio/temporal/issues/2357
 	StickyTTL dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// DefaultDecisionTaskStartToCloseTimeout the default decision task timeout
-	DefaultDecisionTaskStartToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	// DefaultWorkflowTaskTimeout the default decision task timeout
+	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// DecisionHeartbeatTimeout is to timeout behavior of: RespondDecisionTaskComplete with ForceCreateNewDecisionTask == true without any decisions
 	// So that decision will be scheduled to another worker(by clear stickyness)
 	DecisionHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// The execution timeout a workflow execution defaults to if not specified
-	DefaultExecutionStartToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	DefaultWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	// The run timeout a workflow run defaults to if not specified
+	DefaultWorkflowRunTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// Maximum workflow execution timeout permitted by the service
-	MaxExecutionStartToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// MaxDecisionTaskStartToCloseTimeout is the maximum allowed value for a decision task timeout
-	MaxDecisionTaskStartToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	MaxWorkflowExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	// Maximum workflow run timeout permitted by the service
+	MaxWorkflowRunTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	// MaxWorkflowTaskTimeout is the maximum allowed value for a decision task timeout
+	MaxWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	// The following is used by the new RPC replication stack
 	ReplicationTaskFetcherParallelism                dynamicconfig.IntPropertyFn
@@ -259,8 +263,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		VisibilityOpenMaxQPS:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityOpenMaxQPS, 300),
 		VisibilityClosedMaxQPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityClosedMaxQPS, 300),
 		MaxAutoResetPoints:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, defaultHistoryMaxAutoResetPoints),
-		DefaultDecisionTaskStartToCloseTimeout: dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultDecisionTaskStartToCloseTimeout, time.Second*10),
-		MaxDecisionTaskStartToCloseTimeout:     dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxDecisionTaskStartToCloseTimeout, time.Second*60),
+		DefaultWorkflowTaskTimeout:                            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, time.Second*10),
+		MaxWorkflowTaskTimeout:                                dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowTaskTimeout, time.Second*60),
 		AdvancedVisibilityWritingMode:          dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, common.GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist)),
 		EmitShardDiffLog:                       dc.GetBoolProperty(dynamicconfig.EmitShardDiffLog, false),
 		HistoryCacheInitialSize:                dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
@@ -370,8 +374,10 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		SearchAttributesTotalSizeLimit:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
 		StickyTTL:                                        dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.StickyTTL, time.Hour*24*365),
 		DecisionHeartbeatTimeout:                         dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DecisionHeartbeatTimeout, time.Minute*30),
-		DefaultExecutionStartToCloseTimeout:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultExecutionStartToCloseTimeout, time.Hour*24*365*10),
-		MaxExecutionStartToCloseTimeout:                  dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxExecutionStartToCloseTimeout, time.Hour*24*365*10),
+		DefaultWorkflowExecutionTimeout:                  dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowExecutionTimeout, time.Hour*24*365*10),
+		DefaultWorkflowRunTimeout:                        dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowRunTimeout, time.Hour*24*365*10),
+		MaxWorkflowExecutionTimeout:                      dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowExecutionTimeout, time.Hour*24*365*10),
+		MaxWorkflowRunTimeout:                            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MaxWorkflowRunTimeout, time.Hour*24*365*10),
 		ReplicationTaskFetcherParallelism:                dc.GetIntProperty(dynamicconfig.ReplicationTaskFetcherParallelism, 1),
 		ReplicationTaskFetcherAggregationInterval:        dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
 		ReplicationTaskFetcherTimerJitterCoefficient:     dc.GetFloat64Property(dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient, 0.15),

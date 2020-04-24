@@ -114,15 +114,16 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	tl := "dynamic-historybuilder-success-tasklist"
 	identity := "dynamic-historybuilder-success-worker"
 	input := []byte("dynamic-historybuilder-success-input")
-	execTimeout := int32(60)
+	execTimeout := int32(70)
+	runTimeout := int32(60)
 	taskTimeout := int32(10)
 	we := executionpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
 	}
 
-	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, taskTimeout, identity)
-	s.validateWorkflowExecutionStartedEvent(workflowStartedEvent, wt, tl, input, execTimeout, taskTimeout, identity)
+	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, runTimeout, taskTimeout, identity)
+	s.validateWorkflowExecutionStartedEvent(workflowStartedEvent, wt, tl, input, execTimeout, runTimeout, taskTimeout, identity)
 	s.Equal(int64(2), s.getNextEventID())
 
 	di := s.addDecisionTaskScheduledEvent()
@@ -324,15 +325,16 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 	tl := "historybuilder-workflowstart-failures-tasklist"
 	identity := "historybuilder-workflowstart-failures-worker"
 	input := []byte("historybuilder-workflowstart-failures-input")
-	execTimeout := int32(60)
+	execTimeout := int32(70)
+	runTimeout := int32(60)
 	taskTimeout := int32(10)
 	we := executionpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
 	}
 
-	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, taskTimeout, identity)
-	s.validateWorkflowExecutionStartedEvent(workflowStartedEvent, wt, tl, input, execTimeout, taskTimeout, identity)
+	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, runTimeout, taskTimeout, identity)
+	s.validateWorkflowExecutionStartedEvent(workflowStartedEvent, wt, tl, input, execTimeout, runTimeout, taskTimeout, identity)
 	s.Equal(int64(2), s.getNextEventID())
 
 	di := s.addDecisionTaskScheduledEvent()
@@ -352,8 +354,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 				WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 				TaskList:                            &tasklistpb.TaskList{Name: tl},
 				Input:                               input,
-				ExecutionStartToCloseTimeoutSeconds: execTimeout,
-				TaskStartToCloseTimeoutSeconds:      taskTimeout,
+				WorkflowExecutionTimeoutSeconds: execTimeout,
+				WorkflowRunTimeoutSeconds:       runTimeout,
+				WorkflowTaskTimeoutSeconds:      taskTimeout,
 				Identity:                            identity,
 			},
 		})
@@ -373,15 +376,16 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionScheduledFailures() {
 	tl := "historybuilder-decisionscheduled-failures-tasklist"
 	identity := "historybuilder-decisionscheduled-failures-worker"
 	input := []byte("historybuilder-decisionscheduled-failures-input")
-	execTimeout := int32(60)
+	execTimeout := int32(70)
+	runTimeout := int32(60)
 	taskTimeout := int32(10)
 	we := executionpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
 	}
 
-	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, taskTimeout, identity)
-	s.validateWorkflowExecutionStartedEvent(workflowStartedEvent, wt, tl, input, execTimeout, taskTimeout, identity)
+	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, runTimeout, taskTimeout, identity)
+	s.validateWorkflowExecutionStartedEvent(workflowStartedEvent, wt, tl, input, execTimeout, runTimeout, taskTimeout, identity)
 	s.Equal(int64(2), s.getNextEventID())
 
 	di := s.addDecisionTaskScheduledEvent()
@@ -408,15 +412,16 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionStartedFailures() {
 	tl := "historybuilder-decisionstarted-failures-tasklist"
 	identity := "historybuilder-decisionstarted-failures-worker"
 	input := []byte("historybuilder-decisionstarted-failures-input")
-	execTimeout := int32(60)
+	execTimeout := int32(70)
+	runTimeout := int32(60)
 	taskTimeout := int32(10)
 	we := executionpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
 	}
 
-	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, taskTimeout, identity)
-	s.validateWorkflowExecutionStartedEvent(workflowStartedEvent, wt, tl, input, execTimeout, taskTimeout, identity)
+	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, runTimeout, taskTimeout, identity)
+	s.validateWorkflowExecutionStartedEvent(workflowStartedEvent, wt, tl, input, execTimeout, runTimeout, taskTimeout, identity)
 	s.Equal(int64(2), s.getNextEventID())
 
 	_, _, err := s.msBuilder.AddDecisionTaskStartedEvent(2, uuid.New(), &workflowservice.PollForDecisionTaskRequest{
@@ -464,7 +469,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	tl := "flush-buffered-events-tasklist"
 	identity := "flush-buffered-events-worker"
 	input := []byte("flush-buffered-events-input")
-	execTimeout := int32(60)
+	execTimeout := int32(70)
+	runTimeout := int32(60)
 	taskTimeout := int32(10)
 	we := executionpb.WorkflowExecution{
 		WorkflowId: id,
@@ -472,8 +478,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	}
 
 	// 1 execution started
-	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, taskTimeout, identity)
-	s.validateWorkflowExecutionStartedEvent(workflowStartedEvent, wt, tl, input, execTimeout, taskTimeout, identity)
+	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, runTimeout, taskTimeout, identity)
+	s.validateWorkflowExecutionStartedEvent(workflowStartedEvent, wt, tl, input, execTimeout, runTimeout, taskTimeout, identity)
 	s.Equal(int64(2), s.getNextEventID())
 
 	// 2 decision scheduled
@@ -631,7 +637,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() 
 	tasklist := "some random tasklist"
 	identity := "some random identity"
 	input := []byte("some random workflow input")
-	execTimeout := int32(60)
+	execTimeout := int32(70)
+	runTimeout := int32(60)
 	taskTimeout := int32(10)
 	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -639,10 +646,10 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() 
 	}
 
 	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(
-		workflowExecution, workflowType, tasklist, input, execTimeout, taskTimeout, identity,
+		workflowExecution, workflowType, tasklist, input, execTimeout, runTimeout, taskTimeout, identity,
 	)
 	s.validateWorkflowExecutionStartedEvent(
-		workflowStartedEvent, workflowType, tasklist, input, execTimeout, taskTimeout, identity,
+		workflowStartedEvent, workflowType, tasklist, input, execTimeout, runTimeout, taskTimeout, identity,
 	)
 	s.Equal(int64(2), s.getNextEventID())
 
@@ -703,7 +710,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 	tasklist := "some random tasklist"
 	identity := "some random identity"
 	input := []byte("some random workflow input")
-	execTimeout := int32(60)
+	execTimeout := int32(70)
+	runTimeout := int32(60)
 	taskTimeout := int32(10)
 	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -711,10 +719,10 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 	}
 
 	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(
-		workflowExecution, workflowType, tasklist, input, execTimeout, taskTimeout, identity,
+		workflowExecution, workflowType, tasklist, input, execTimeout, runTimeout, taskTimeout, identity,
 	)
 	s.validateWorkflowExecutionStartedEvent(
-		workflowStartedEvent, workflowType, tasklist, input, execTimeout, taskTimeout, identity,
+		workflowStartedEvent, workflowType, tasklist, input, execTimeout, runTimeout, taskTimeout, identity,
 	)
 	s.Equal(int64(2), s.getNextEventID())
 
@@ -784,7 +792,7 @@ func (s *historyBuilderSuite) getPreviousDecisionStartedEventID() int64 {
 }
 
 func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we executionpb.WorkflowExecution, workflowType,
-	taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
+	taskList string, input []byte, executionTimeout, runTimeout, taskTimeout int32,
 	identity string) *eventpb.HistoryEvent {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -792,8 +800,9 @@ func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we executionpb.Wo
 		WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 		TaskList:                            &tasklistpb.TaskList{Name: taskList},
 		Input:                               input,
-		ExecutionStartToCloseTimeoutSeconds: executionStartToCloseTimeout,
-		TaskStartToCloseTimeoutSeconds:      taskStartToCloseTimeout,
+		WorkflowExecutionTimeoutSeconds: executionTimeout,
+		WorkflowRunTimeoutSeconds:       runTimeout,
+		WorkflowTaskTimeoutSeconds:      taskTimeout,
 		Identity:                            identity,
 	}
 
@@ -942,7 +951,7 @@ func (s *historyBuilderSuite) addRequestCancelExternalWorkflowExecutionFailedEve
 }
 
 func (s *historyBuilderSuite) validateWorkflowExecutionStartedEvent(event *eventpb.HistoryEvent, workflowType,
-	taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32, identity string) {
+	taskList string, input []byte, executionTimeout, runTimeout, taskTimeout int32, identity string) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_WorkflowExecutionStarted, event.EventType)
 	s.Equal(common.FirstEventID, event.EventId)
@@ -951,8 +960,9 @@ func (s *historyBuilderSuite) validateWorkflowExecutionStartedEvent(event *event
 	s.Equal(workflowType, attributes.WorkflowType.Name)
 	s.Equal(taskList, attributes.TaskList.Name)
 	s.Equal(input, attributes.Input)
-	s.Equal(executionStartToCloseTimeout, attributes.ExecutionStartToCloseTimeoutSeconds)
-	s.Equal(taskStartToCloseTimeout, attributes.TaskStartToCloseTimeoutSeconds)
+	s.Equal(executionTimeout, attributes.WorkflowExecutionTimeoutSeconds)
+	s.Equal(runTimeout, attributes.WorkflowRunTimeoutSeconds)
+	s.Equal(taskTimeout, attributes.WorkflowTaskTimeoutSeconds)
 	s.Equal(identity, attributes.Identity)
 }
 

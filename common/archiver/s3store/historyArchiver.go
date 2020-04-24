@@ -58,7 +58,7 @@ const (
 	URIScheme               = "s3"
 	errEncodeHistory        = "failed to encode history batches"
 	errWriteKey             = "failed to write history to s3"
-	defaultBlobstoreTimeout = 60 * time.Second
+	defaultBlobstoreTimeout = time.Minute
 	targetHistoryBlobSize   = 2 * 1024 * 1024 // 2MB
 )
 

@@ -238,8 +238,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -296,8 +296,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -353,8 +353,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDeci
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -399,8 +399,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstD
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -454,8 +454,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_No
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -513,8 +513,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionN
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -570,8 +570,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -626,8 +626,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 			ParentExecutionInfo: &executiongenpb.ParentExecutionInfo{
 				NamespaceId: parentNamespaceID,
@@ -691,8 +691,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -744,8 +744,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -878,8 +878,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -969,8 +969,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1064,8 +1064,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1126,8 +1126,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1188,8 +1188,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1251,8 +1251,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1326,8 +1326,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1392,8 +1392,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1453,8 +1453,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1468,7 +1468,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	taskID := int64(59)
 
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
-		s.childNamespace, childWorkflowID, childWorkflowType, childTaskListName, nil, 1, 1)
+		s.childNamespace, childWorkflowID, childWorkflowType, childTaskListName, nil, 1, 1, 1)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
@@ -1530,8 +1530,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1553,6 +1553,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		childWorkflowType,
 		childTaskListName,
 		nil,
+		1,
 		1,
 		1,
 	)
@@ -1610,8 +1611,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1633,6 +1634,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		childWorkflowType,
 		childTaskListName,
 		nil,
+		1,
 		1,
 		1,
 	)
@@ -1693,8 +1695,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1716,6 +1718,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		childWorkflowType,
 		childTaskListName,
 		nil,
+		1,
 		1,
 		1,
 	)
@@ -1768,8 +1771,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 				CronSchedule:                        cronSchedule,
 			},
 			FirstDecisionTaskBackoffSeconds: backoffSeconds,
@@ -1817,8 +1820,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAt
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
 	)
@@ -1889,7 +1892,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddDecisionTaskRequest(
 	}
 	taskList := &tasklistpb.TaskList{Name: task.TaskList}
 	executionInfo := mutableState.GetExecutionInfo()
-	timeout := executionInfo.WorkflowTimeout
+	timeout := executionInfo.WorkflowRunTimeout
 	if mutableState.GetExecutionInfo().TaskList != task.TaskList {
 		taskList.Kind = tasklistpb.TaskListKind_Sticky
 		timeout = executionInfo.StickyScheduleToStartTimeout
@@ -1925,7 +1928,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 		WorkflowTypeName:   executionInfo.WorkflowTypeName,
 		StartTimestamp:     startEvent.GetTimestamp(),
 		ExecutionTimestamp: executionTimestamp.UnixNano(),
-		WorkflowTimeout:    int64(executionInfo.WorkflowTimeout),
+		RunTimeout:         int64(executionInfo.WorkflowRunTimeout),
 		TaskID:             task.GetTaskId(),
 		TaskList:           task.TaskList,
 	}
@@ -2016,8 +2019,9 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			WorkflowType:                        attributes.WorkflowType,
 			TaskList:                            attributes.TaskList,
 			Input:                               attributes.Input,
-			ExecutionStartToCloseTimeoutSeconds: attributes.ExecutionStartToCloseTimeoutSeconds,
-			TaskStartToCloseTimeoutSeconds:      attributes.TaskStartToCloseTimeoutSeconds,
+			WorkflowExecutionTimeoutSeconds: attributes.WorkflowExecutionTimeoutSeconds,
+			WorkflowRunTimeoutSeconds:       attributes.WorkflowRunTimeoutSeconds,
+			WorkflowTaskTimeoutSeconds:      attributes.WorkflowTaskTimeoutSeconds,
 			// Use the same request ID to dedupe StartWorkflowExecution calls
 			RequestId:             ci.CreateRequestID,
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
@@ -2051,7 +2055,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttribu
 		Execution:        *execution,
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   startEvent.GetTimestamp(),
-		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
+		WorkflowTimeout:  int64(executionInfo.WorkflowRunTimeout),
 		TaskID:           task.GetTaskId(),
 		TaskList:         task.TaskList,
 	}

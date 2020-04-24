@@ -217,8 +217,9 @@ type (
 		CompletionEvent                    *serialization.DataBlob
 		TaskList                           string
 		WorkflowTypeName                   string
-		WorkflowTimeout                    int32
-		DecisionStartToCloseTimeout        int32
+		WorkflowRunTimeout                 int32
+		WorkflowExecutionTimeout           int32
+		WorkflowTaskTimeout                int32
 		ExecutionContext                   []byte
 		State                              int
 		Status                             executionpb.WorkflowExecutionStatus
@@ -258,7 +259,6 @@ type (
 		NonRetriableErrors []string
 		BranchToken        []byte
 		CronSchedule       string
-		ExpirationSeconds  int32
 		Memo               map[string][]byte
 		SearchAttributes   map[string][]byte
 
@@ -594,7 +594,7 @@ type (
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
-		WorkflowTimeout    int64
+		RunTimeout         int64
 		TaskID             int64
 		Memo               *serialization.DataBlob
 		TaskList           string
@@ -744,8 +744,9 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		WorkflowId:                              executionInfo.WorkflowID,
 		TaskList:                                executionInfo.TaskList,
 		WorkflowTypeName:                        executionInfo.WorkflowTypeName,
-		WorkflowTimeoutSeconds:                  executionInfo.WorkflowTimeout,
-		DecisionTaskTimeoutSeconds:              executionInfo.DecisionStartToCloseTimeout,
+		WorkflowRunTimeoutSeconds:               executionInfo.WorkflowRunTimeout,
+		WorkflowExecutionTimeoutSeconds:         executionInfo.WorkflowExecutionTimeout,
+		WorkflowTaskTimeoutSeconds:              executionInfo.WorkflowTaskTimeout,
 		ExecutionContext:                        executionInfo.ExecutionContext,
 		LastFirstEventId:                        executionInfo.LastFirstEventID,
 		LastEventTaskId:                         executionInfo.LastEventTaskID,
@@ -776,7 +777,6 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		RetryBackoffCoefficient:                 executionInfo.BackoffCoefficient,
 		RetryMaximumIntervalSeconds:             executionInfo.MaximumInterval,
 		RetryMaximumAttempts:                    executionInfo.MaximumAttempts,
-		RetryExpirationSeconds:                  executionInfo.ExpirationSeconds,
 		RetryNonRetryableErrors:                 executionInfo.NonRetriableErrors,
 		EventStoreVersion:                       EventStoreVersion,
 		EventBranchToken:                        executionInfo.BranchToken,
@@ -833,8 +833,9 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		NextEventID:                        nextEventID,
 		TaskList:                           info.GetTaskList(),
 		WorkflowTypeName:                   info.GetWorkflowTypeName(),
-		WorkflowTimeout:                    info.GetWorkflowTimeoutSeconds(),
-		DecisionStartToCloseTimeout:        info.GetDecisionTaskTimeoutSeconds(),
+		WorkflowExecutionTimeout:           info.GetWorkflowExecutionTimeoutSeconds(),
+		WorkflowRunTimeout:                 info.GetWorkflowRunTimeoutSeconds(),
+		WorkflowTaskTimeout:                info.GetWorkflowTaskTimeoutSeconds(),
 		State:                              int(state.GetState()),
 		Status:                             state.GetStatus(),
 		LastFirstEventID:                   info.GetLastFirstEventId(),
@@ -866,7 +867,6 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		BackoffCoefficient:                 info.GetRetryBackoffCoefficient(),
 		MaximumInterval:                    info.GetRetryMaximumIntervalSeconds(),
 		MaximumAttempts:                    info.GetRetryMaximumAttempts(),
-		ExpirationSeconds:                  info.GetRetryExpirationSeconds(),
 		BranchToken:                        info.GetEventBranchToken(),
 		ExecutionContext:                   info.GetExecutionContext(),
 		NonRetriableErrors:                 info.GetRetryNonRetryableErrors(),

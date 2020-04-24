@@ -179,7 +179,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.StickyTaskList = stickyTl
 
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -248,7 +248,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	executionInfo.LastUpdatedTimestamp = time.Now()
 	executionInfo.StickyTaskList = stickyTl
 
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -826,7 +826,7 @@ func (s *engine2Suite) createExecutionStartedState(we executionpb.WorkflowExecut
 	startDecision bool) mutableState {
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		s.logger, we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	if startDecision {
 		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -859,7 +859,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -915,8 +915,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 			WorkflowId:                          workflowID,
 			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 			TaskList:                            &tasklistpb.TaskList{Name: taskList},
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
+			WorkflowExecutionTimeoutSeconds: 20,
+			WorkflowRunTimeoutSeconds:       1,
+			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           requestID,
 		},
@@ -952,8 +953,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 			WorkflowId:                          workflowID,
 			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 			TaskList:                            &tasklistpb.TaskList{Name: taskList},
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
+			WorkflowExecutionTimeoutSeconds: 1,
+			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           requestID,
 		},
@@ -988,8 +989,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 			WorkflowId:                          workflowID,
 			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 			TaskList:                            &tasklistpb.TaskList{Name: taskList},
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
+			WorkflowExecutionTimeoutSeconds: 1,
+			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           "newRequestID",
 		},
@@ -1051,8 +1052,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 				WorkflowId:                          workflowID,
 				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                            &tasklistpb.TaskList{Name: taskList},
-				ExecutionStartToCloseTimeoutSeconds: 1,
-				TaskStartToCloseTimeoutSeconds:      2,
+				WorkflowExecutionTimeoutSeconds: 1,
+				WorkflowTaskTimeoutSeconds:      2,
 				Identity:                            identity,
 				RequestId:                           "newRequestID",
 				WorkflowIdReusePolicy:               option,
@@ -1132,8 +1133,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 					WorkflowId:                          workflowID,
 					WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 					TaskList:                            &tasklistpb.TaskList{Name: taskList},
-					ExecutionStartToCloseTimeoutSeconds: 1,
-					TaskStartToCloseTimeoutSeconds:      2,
+					WorkflowExecutionTimeoutSeconds: 1,
+					WorkflowTaskTimeoutSeconds:      2,
 					Identity:                            identity,
 					RequestId:                           "newRequestID",
 					WorkflowIdReusePolicy:               option,
@@ -1214,8 +1215,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 			WorkflowId:                          workflowID,
 			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 			TaskList:                            &tasklistpb.TaskList{Name: taskList},
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
+			WorkflowExecutionTimeoutSeconds: 1,
+			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                            identity,
 			SignalName:                          signalName,
 			Input:                               input,
@@ -1255,8 +1256,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 			WorkflowId:                          workflowID,
 			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 			TaskList:                            &tasklistpb.TaskList{Name: taskList},
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
+			WorkflowExecutionTimeoutSeconds: 1,
+			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                            identity,
 			SignalName:                          signalName,
 			Input:                               input,
@@ -1297,8 +1298,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			Input:                               input,
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
+			WorkflowExecutionTimeoutSeconds: 1,
+			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           requestID,
 			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_AllowDuplicate,
@@ -1349,8 +1350,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			Input:                               input,
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
+			WorkflowExecutionTimeoutSeconds: 1,
+			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           requestID,
 			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_AllowDuplicate,
@@ -1409,8 +1410,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
 			TaskList:                            &tasklistpb.TaskList{Name: taskList},
 			Input:                               input,
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
+			WorkflowExecutionTimeoutSeconds: 1,
+			WorkflowTaskTimeoutSeconds:      2,
 			Identity:                            identity,
 			RequestId:                           requestID,
 			WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_AllowDuplicate,

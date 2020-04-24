@@ -95,7 +95,7 @@ func (t *timerQueueActiveTaskExecutor) execute(
 		return t.executeActivityTimeoutTask(timerTask)
 	case persistence.TaskTypeDecisionTimeout:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case persistence.TaskTypeWorkflowTimeout:
+	case persistence.TaskTypeWorkflowRunTimeout:
 		return t.executeWorkflowTimeoutTask(timerTask)
 	case persistence.TaskTypeActivityRetryTimer:
 		return t.executeActivityRetryTimerTask(timerTask)
@@ -510,12 +510,12 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	continueAsnewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
+	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 		WorkflowType:                        startAttributes.WorkflowType,
 		TaskList:                            startAttributes.TaskList,
 		Input:                               startAttributes.Input,
-		ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
-		TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
+		WorkflowRunTimeoutSeconds:       startAttributes.WorkflowRunTimeoutSeconds,
+		WorkflowTaskTimeoutSeconds:      startAttributes.WorkflowTaskTimeoutSeconds,
 		BackoffStartIntervalInSeconds:       int32(backoffInterval.Seconds()),
 		RetryPolicy:                         startAttributes.RetryPolicy,
 		Initiator:                           continueAsNewInitiator,
@@ -529,7 +529,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		mutableState,
 		eventBatchFirstEventID,
 		startAttributes.GetParentWorkflowNamespace(),
-		continueAsnewAttributes,
+		continueAsNewAttributes,
 	)
 	if err != nil {
 		return err

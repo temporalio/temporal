@@ -207,8 +207,8 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 			Name: taskList,
 		},
 		Input:                               []byte(input),
-		ExecutionStartToCloseTimeoutSeconds: int32(et),
-		TaskStartToCloseTimeoutSeconds:      int32(dt),
+		WorkflowExecutionTimeoutSeconds: int32(et),
+		WorkflowTaskTimeoutSeconds:      int32(dt),
 		Identity:                            getCliIdentity(),
 		WorkflowIdReusePolicy:               reusePolicy,
 	}

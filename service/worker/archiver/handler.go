@@ -139,12 +139,11 @@ func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveReq
 	sw := h.metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleHistoryRequestLatency)
 	logger := tagLoggerWithHistoryRequest(h.logger, request)
 	ao := workflow.ActivityOptions{
-		ScheduleToStartTimeout: 1 * time.Minute,
+		ScheduleToCloseTimeout: 5 * time.Minute,
 		StartToCloseTimeout:    1 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
-			ExpirationInterval:       5 * time.Minute,
 			NonRetriableErrorReasons: uploadHistoryActivityNonRetryableErrors,
 		},
 	}
@@ -160,14 +159,15 @@ func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveReq
 	uploadSW.Stop()
 
 	lao := workflow.LocalActivityOptions{
-		ScheduleToCloseTimeout: 1 * time.Minute,
+		ScheduleToCloseTimeout: 5 * time.Minute,
+		StartToCloseTimeout:    time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
-			ExpirationInterval:       5 * time.Minute,
 			NonRetriableErrorReasons: deleteHistoryActivityNonRetryableErrors,
 		},
 	}
+
 	deleteSW := h.metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverDeleteWithRetriesLatency)
 	localActCtx := workflow.WithLocalActivityOptions(ctx, lao)
 	err = workflow.ExecuteLocalActivity(localActCtx, deleteHistoryActivity, *request).Get(localActCtx, nil)
@@ -185,12 +185,11 @@ func (h *handler) handleVisibilityRequest(ctx workflow.Context, request *Archive
 	sw := h.metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleVisibilityRequestLatency)
 	logger := tagLoggerWithVisibilityRequest(h.logger, request)
 	ao := workflow.ActivityOptions{
-		ScheduleToStartTimeout: 1 * time.Minute,
+		ScheduleToCloseTimeout: 5 * time.Minute,
 		StartToCloseTimeout:    1 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
-			ExpirationInterval:       5 * time.Minute,
 			NonRetriableErrorReasons: uploadHistoryActivityNonRetryableErrors,
 		},
 	}

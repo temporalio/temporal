@@ -65,8 +65,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -231,8 +231,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -592,8 +592,8 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -809,8 +809,8 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 

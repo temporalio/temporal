@@ -717,8 +717,8 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -763,8 +763,8 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow_PageToken() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -825,8 +825,8 @@ func (s *elasticsearchIntegrationSuite) createStartWorkflowExecutionRequest(id, 
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 	return request
@@ -849,8 +849,8 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -1048,8 +1048,8 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 

@@ -26,7 +26,6 @@ package history
 
 import (
 	"fmt"
-
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
@@ -206,7 +205,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 				namespaceID,
 				targetNamespaceID,
 				attr,
-				executionInfo.WorkflowTimeout,
+				executionInfo.WorkflowRunTimeout,
 			)
 		},
 		eventpb.DecisionTaskFailedCause_BadScheduleActivityAttributes,
@@ -671,6 +670,16 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 		return err
 	}
 
+	if attr.WorkflowRunTimeoutSeconds <= 0 {
+		// TODO(maxim): is decisionTaskCompletedID the correct id?
+		// TODO(maxim): should we introduce new TimeoutTypes (Workflow, Run) for workflows?
+		handler.stopProcessing = true
+		_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.decisionTaskCompletedID)
+		return err
+	}
+	handler.logger.Debug("!!!! Continued as new without timeout",
+		tag.WorkflowRunID(executionInfo.RunID))
+
 	// If the decision has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
@@ -888,8 +897,8 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 		TaskList:                            attr.TaskList,
 		RetryPolicy:                         attr.RetryPolicy,
 		Input:                               attr.Input,
-		ExecutionStartToCloseTimeoutSeconds: attr.ExecutionStartToCloseTimeoutSeconds,
-		TaskStartToCloseTimeoutSeconds:      attr.TaskStartToCloseTimeoutSeconds,
+		WorkflowRunTimeoutSeconds:     attr.WorkflowRunTimeoutSeconds,
+		WorkflowTaskTimeoutSeconds:    attr.WorkflowTaskTimeoutSeconds,
 		CronSchedule:                        attr.CronSchedule,
 		BackoffStartIntervalInSeconds:       backoffInterval,
 		Initiator:                           continueAsNewIter,

@@ -14,8 +14,9 @@
           "name": "temporal-archival-tl"
         },
         "input": "bnVsbAo=",
-        "executionStartToCloseTimeoutSeconds": 2592000,
-        "taskStartToCloseTimeoutSeconds": 60,
+        "workflowExecutionTimeoutSeconds": 2592000,
+        "workflowRunTimeoutSeconds": 2502000,
+        "workflowTaskTimeoutSeconds": 60,
         "originalExecutionRunId": "2dbedb91-4d8f-4c74-a979-4b7b9c204077",
         "identity": "59844@ycyang-C02XW41WJGH6@",
         "firstExecutionRunId": "2dbedb91-4d8f-4c74-a979-4b7b9c204077",
@@ -128,8 +129,7 @@
           "nonRetriableErrorReasons": [
             "temporalInternal:Panic",
             "upload non-retriable error"
-          ],
-          "expirationIntervalInSeconds": 300
+          ]
         },
         "header": {}
       }
@@ -289,8 +289,7 @@
           "nonRetriableErrorReasons": [
             "temporalInternal:Panic",
             "upload non-retriable error"
-          ],
-          "expirationIntervalInSeconds": 300
+          ]
         },
         "header": {}
       }
@@ -474,8 +473,7 @@
           "nonRetriableErrorReasons": [
             "temporalInternal:Panic",
             "upload non-retriable error"
-          ],
-          "expirationIntervalInSeconds": 300
+          ]
         },
         "header": {}
       }
@@ -508,8 +506,7 @@
           "nonRetriableErrorReasons": [
             "temporalInternal:Panic",
             "upload non-retriable error"
-          ],
-          "expirationIntervalInSeconds": 300
+          ]
         },
         "header": {}
       }
@@ -542,8 +539,7 @@
           "nonRetriableErrorReasons": [
             "temporalInternal:Panic",
             "upload non-retriable error"
-          ],
-          "expirationIntervalInSeconds": 300
+          ]
         },
         "header": {}
       }
@@ -777,8 +773,7 @@
           "nonRetriableErrorReasons": [
             "temporalInternal:Panic",
             "upload non-retriable error"
-          ],
-          "expirationIntervalInSeconds": 300
+          ]
         },
         "header": {}
       }
@@ -938,8 +933,7 @@
           "nonRetriableErrorReasons": [
             "temporalInternal:Panic",
             "upload non-retriable error"
-          ],
-          "expirationIntervalInSeconds": 300
+          ]
         },
         "header": {}
       }
@@ -1099,8 +1093,7 @@
           "nonRetriableErrorReasons": [
             "temporalInternal:Panic",
             "upload non-retriable error"
-          ],
-          "expirationIntervalInSeconds": 300
+          ]
         },
         "header": {}
       }
@@ -1260,8 +1253,7 @@
           "nonRetriableErrorReasons": [
             "temporalInternal:Panic",
             "upload non-retriable error"
-          ],
-          "expirationIntervalInSeconds": 300
+          ]
         },
         "header": {}
       }
@@ -1421,8 +1413,7 @@
           "nonRetriableErrorReasons": [
             "temporalInternal:Panic",
             "upload non-retriable error"
-          ],
-          "expirationIntervalInSeconds": 300
+          ]
         },
         "header": {}
       }
@@ -1582,8 +1573,7 @@
           "nonRetriableErrorReasons": [
             "temporalInternal:Panic",
             "upload non-retriable error"
-          ],
-          "expirationIntervalInSeconds": 300
+          ]
         },
         "header": {}
       }

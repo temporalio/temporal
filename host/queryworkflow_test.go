@@ -70,8 +70,8 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -228,8 +228,8 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -370,8 +370,8 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -574,8 +574,8 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -757,8 +757,8 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      10, // ensure longer than time takes to handle signal
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      10, // ensure longer than time takes to handle signal
 		Identity:                            identity,
 	}
 
@@ -916,8 +916,8 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      10, // ensure longer than time takes to handle signal
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      10, // ensure longer than time takes to handle signal
 		Identity:                            identity,
 	}
 
@@ -1103,8 +1103,8 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      10, // ensure longer than time takes to handle signal
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      10, // ensure longer than time takes to handle signal
 		Identity:                            identity,
 	}
 
@@ -1314,8 +1314,8 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 

@@ -60,8 +60,8 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -195,8 +195,8 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -210,8 +210,8 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(NewContext(), foreignRequest)
@@ -427,8 +427,8 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)

@@ -434,12 +434,16 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
+	}
+
+	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
 	if request.GetRequestId() == "" {
@@ -2116,12 +2120,16 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errRequestIDTooLong, scope)
 	}
 
-	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
+	}
+
+	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {

@@ -35,7 +35,7 @@ import (
 )
 
 const (
-	_defaultRPSTTL = 60 * time.Second
+	_defaultRPSTTL = time.Minute
 	_burstSize     = 1
 )
 

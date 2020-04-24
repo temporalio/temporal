@@ -69,8 +69,8 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		TaskList:                            taskList,
 		Input:                               nil,
 		Header:                              header,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -188,8 +188,8 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -222,7 +222,6 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 							MaximumAttempts:             3,
 							MaximumIntervalInSeconds:    1,
 							BackoffCoefficient:          1,
-							ExpirationIntervalInSeconds: 100,
 						},
 					},
 					}},
@@ -362,8 +361,8 @@ func (s *integrationSuite) TestActivityRetry() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -399,7 +398,6 @@ func (s *integrationSuite) TestActivityRetry() {
 							MaximumIntervalInSeconds:    1,
 							NonRetriableErrorReasons:    []string{"bad-bug"},
 							BackoffCoefficient:          1,
-							ExpirationIntervalInSeconds: 100,
 						},
 					}}},
 				{
@@ -572,8 +570,8 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -673,8 +671,8 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 300,
-		TaskStartToCloseTimeoutSeconds:      2,
+		WorkflowRunTimeoutSeconds: 300,
+		WorkflowTaskTimeoutSeconds:      2,
 		Identity:                            identity,
 	}
 
@@ -905,8 +903,8 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 70,
-		TaskStartToCloseTimeoutSeconds:      2,
+		WorkflowRunTimeoutSeconds: 70,
+		WorkflowTaskTimeoutSeconds:      2,
 		Identity:                            identity,
 	}
 
@@ -1094,8 +1092,8 @@ func (s *integrationSuite) TestActivityCancellation() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 
@@ -1219,8 +1217,8 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 

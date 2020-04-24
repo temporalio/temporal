@@ -273,22 +273,22 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	activityResult := []byte("activity_result")
 
 	info := &persistence.WorkflowExecutionInfo{
-		NamespaceID:                 namespaceID,
-		WorkflowID:                  we.GetWorkflowId(),
-		RunID:                       we.GetRunId(),
-		TaskList:                    tl,
-		WorkflowTypeName:            "wType",
-		WorkflowTimeout:             200,
-		DecisionStartToCloseTimeout: 100,
-		State:                       persistence.WorkflowStateRunning,
-		Status:                      executionpb.WorkflowExecutionStatus_Running,
-		NextEventID:                 int64(8),
-		LastProcessedEvent:          int64(3),
-		LastUpdatedTimestamp:        time.Now(),
-		DecisionVersion:             common.EmptyVersion,
-		DecisionScheduleID:          common.EmptyEventID,
-		DecisionStartedID:           common.EmptyEventID,
-		DecisionTimeout:             100,
+		NamespaceID:          namespaceID,
+		WorkflowID:           we.GetWorkflowId(),
+		RunID:                we.GetRunId(),
+		TaskList:             tl,
+		WorkflowTypeName:     "wType",
+		WorkflowRunTimeout:   200,
+		WorkflowTaskTimeout:  100,
+		State:                persistence.WorkflowStateRunning,
+		Status:               executionpb.WorkflowExecutionStatus_Running,
+		NextEventID:          int64(8),
+		LastProcessedEvent:   int64(3),
+		LastUpdatedTimestamp: time.Now(),
+		DecisionVersion:      common.EmptyVersion,
+		DecisionScheduleID:   common.EmptyEventID,
+		DecisionStartedID:    common.EmptyEventID,
+		DecisionTimeout:      100,
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{
@@ -563,6 +563,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	workflowType := "some random workflow type"
 	tasklist := "some random tasklist"
 	workflowTimeoutSecond := int32(222)
+	runTimeoutSecond := int32(111)
 	decisionTimeoutSecond := int32(11)
 	decisionAttempt := int64(0)
 
@@ -573,11 +574,12 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventType_WorkflowExecutionStarted,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                            &tasklistpb.TaskList{Name: tasklist},
-			Input:                               nil,
-			ExecutionStartToCloseTimeoutSeconds: workflowTimeoutSecond,
-			TaskStartToCloseTimeoutSeconds:      decisionTimeoutSecond,
+			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+			Input:                           nil,
+			WorkflowExecutionTimeoutSeconds: workflowTimeoutSecond,
+			WorkflowRunTimeoutSeconds:       runTimeoutSecond,
+			WorkflowTaskTimeoutSeconds:      decisionTimeoutSecond,
 		}},
 	}
 	eventID++
@@ -729,22 +731,22 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	failoverVersion := int64(300)
 
 	info := &persistence.WorkflowExecutionInfo{
-		NamespaceID:                 namespaceID,
-		WorkflowID:                  we.GetWorkflowId(),
-		RunID:                       we.GetRunId(),
-		TaskList:                    tl,
-		WorkflowTypeName:            "wType",
-		WorkflowTimeout:             200,
-		DecisionStartToCloseTimeout: 100,
-		State:                       persistence.WorkflowStateRunning,
-		Status:                      executionpb.WorkflowExecutionStatus_Running,
-		NextEventID:                 int64(101),
-		LastProcessedEvent:          int64(99),
-		LastUpdatedTimestamp:        time.Now(),
-		DecisionVersion:             failoverVersion,
-		DecisionScheduleID:          common.EmptyEventID,
-		DecisionStartedID:           common.EmptyEventID,
-		DecisionTimeout:             100,
+		NamespaceID:          namespaceID,
+		WorkflowID:           we.GetWorkflowId(),
+		RunID:                we.GetRunId(),
+		TaskList:             tl,
+		WorkflowTypeName:     "wType",
+		WorkflowRunTimeout:   200,
+		WorkflowTaskTimeout:  100,
+		State:                persistence.WorkflowStateRunning,
+		Status:               executionpb.WorkflowExecutionStatus_Running,
+		NextEventID:          int64(101),
+		LastProcessedEvent:   int64(99),
+		LastUpdatedTimestamp: time.Now(),
+		DecisionVersion:      failoverVersion,
+		DecisionScheduleID:   common.EmptyEventID,
+		DecisionStartedID:    common.EmptyEventID,
+		DecisionTimeout:      100,
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{

@@ -203,8 +203,8 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
@@ -261,8 +261,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
@@ -563,8 +563,8 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 2592000,
-		TaskStartToCloseTimeoutSeconds:      60,
+		WorkflowRunTimeoutSeconds: 2592000,
+		WorkflowTaskTimeoutSeconds:      60,
 		Identity:                            identity1,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
@@ -735,8 +735,8 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 		WorkflowIdReusePolicy:               commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 	}
@@ -868,8 +868,8 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
@@ -1053,8 +1053,8 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
@@ -1080,8 +1080,8 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 					WorkflowType:                        workflowType,
 					TaskList:                            &tasklistpb.TaskList{Name: tl},
 					Input:                               buf.Bytes(),
-					ExecutionStartToCloseTimeoutSeconds: 100,
-					TaskStartToCloseTimeoutSeconds:      10,
+					WorkflowRunTimeoutSeconds: 100,
+					WorkflowTaskTimeoutSeconds:      10,
 				}},
 			}}, nil
 		}
@@ -1191,8 +1191,8 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 300,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 300,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
@@ -1372,8 +1372,8 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 300,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds: 300,
+		WorkflowTaskTimeoutSeconds:      10,
 		Identity:                            identity,
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
@@ -1545,8 +1545,8 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 300,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds: 300,
+		WorkflowTaskTimeoutSeconds:      10,
 		Identity:                            identity1,
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
@@ -1584,7 +1584,6 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 						MaximumIntervalInSeconds:    1,
 						NonRetriableErrorReasons:    []string{"bad-bug"},
 						BackoffCoefficient:          1,
-						ExpirationIntervalInSeconds: 100,
 					},
 				}},
 			}}, nil
@@ -1754,8 +1753,8 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 300,
-		TaskStartToCloseTimeoutSeconds:      8,
+		WorkflowRunTimeoutSeconds: 300,
+		WorkflowTaskTimeoutSeconds:      8,
 		Identity:                            identity,
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
@@ -1875,8 +1874,8 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 		CronSchedule:                        "@every 5s",
 	}
@@ -1975,8 +1974,8 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds: 100,
+		WorkflowTaskTimeoutSeconds:      1,
 		Identity:                            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
@@ -1984,7 +1983,6 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 			MaximumIntervalInSeconds:    1,
 			NonRetriableErrorReasons:    []string{"bad-bug"},
 			BackoffCoefficient:          1,
-			ExpirationIntervalInSeconds: 100,
 		},
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)

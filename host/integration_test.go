@@ -95,14 +95,14 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
+		WorkflowRunTimeoutSeconds: 100,
 		Identity:                            identity,
 	}
 
 	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
-	// Validate the default value for TaskStartToCloseTimeoutSeconds
+	// Validate the default value for WorkflowTaskTimeoutSeconds
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
 		Execution: &executionpb.WorkflowExecution{
@@ -113,7 +113,7 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	s.NoError(err)
 	history := historyResponse.History
 	startedEvent := history.Events[0].GetWorkflowExecutionStartedEventAttributes()
-	s.Equal(int32(10), startedEvent.GetTaskStartToCloseTimeoutSeconds())
+	s.Equal(int32(10), startedEvent.GetWorkflowTaskTimeoutSeconds())
 
 	we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err1)
@@ -126,8 +126,8 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 	we2, err2 := s.engine.StartWorkflowExecution(NewContext(), newRequest)
@@ -151,8 +151,8 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -268,8 +268,8 @@ StartNewExecutionLoop:
 			WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 			TaskList:                            &tasklistpb.TaskList{Name: tl},
 			Input:                               nil,
-			ExecutionStartToCloseTimeoutSeconds: 100,
-			TaskStartToCloseTimeoutSeconds:      1,
+			WorkflowRunTimeoutSeconds:  100,
+			WorkflowTaskTimeoutSeconds: 1,
 			Identity:                            identity,
 		}
 
@@ -303,8 +303,8 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -406,8 +406,8 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -485,8 +485,8 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -604,8 +604,8 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    int32(initialIntervalInSeconds),
@@ -613,7 +613,6 @@ func (s *integrationSuite) TestWorkflowRetry() {
 			MaximumIntervalInSeconds:    1,
 			NonRetriableErrorReasons:    []string{"bad-bug"},
 			BackoffCoefficient:          backoffCoefficient,
-			ExpirationIntervalInSeconds: 100,
 		},
 	}
 
@@ -736,8 +735,8 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
@@ -745,7 +744,6 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 			MaximumIntervalInSeconds:    1,
 			NonRetriableErrorReasons:    []string{"bad-bug"},
 			BackoffCoefficient:          1,
-			ExpirationIntervalInSeconds: 100,
 		},
 	}
 
@@ -792,8 +790,8 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialIntervalInSeconds:    1,
@@ -801,7 +799,6 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 			MaximumIntervalInSeconds:    1,
 			NonRetriableErrorReasons:    []string{"bad-bug"},
 			BackoffCoefficient:          1,
-			ExpirationIntervalInSeconds: 100,
 		},
 	}
 
@@ -855,8 +852,8 @@ func (s *integrationSuite) TestCronWorkflow() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 		CronSchedule:                        cronSchedule, //minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
 		Memo:                                memo,
@@ -1054,8 +1051,8 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 1, // set workflow timeout to 1s
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  1, // set workflow timeout to 1s
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 		CronSchedule:                        cronSchedule, //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
 		Memo:                                memo,
@@ -1142,8 +1139,8 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -1216,8 +1213,8 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 10,
 		Identity:                            identity,
 	}
 
@@ -1313,8 +1310,8 @@ func (s *integrationSuite) TestBufferedEvents() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -1429,8 +1426,8 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -1553,8 +1550,8 @@ func (s *integrationSuite) TestVisibility() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 10,
 		Identity:                            identity,
 	}
 
@@ -1615,8 +1612,8 @@ func (s *integrationSuite) TestVisibility() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 10,
 		Identity:                            identity,
 	}
 
@@ -1698,8 +1695,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		TaskList:                            taskListParent,
 		Input:                               nil,
 		Header:                              header,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -1744,8 +1741,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						TaskList:                            taskListChild,
 						Input:                               []byte("child-workflow-input"),
 						Header:                              header,
-						ExecutionStartToCloseTimeoutSeconds: 200,
-						TaskStartToCloseTimeoutSeconds:      2,
+						WorkflowRunTimeoutSeconds:  200,
+						WorkflowTaskTimeoutSeconds: 2,
 						Control:                             nil,
 						Memo:                                memo,
 						SearchAttributes:                    searchAttr,
@@ -1878,8 +1875,8 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		WorkflowType:                        parentWorkflowType,
 		TaskList:                            taskListParent,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -1908,8 +1905,8 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 					WorkflowType:                        childWorkflowType,
 					TaskList:                            taskListChild,
 					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: 200,
-					TaskStartToCloseTimeoutSeconds:      2,
+					WorkflowRunTimeoutSeconds:  200,
+					WorkflowTaskTimeoutSeconds: 2,
 					Control:                             nil,
 					CronSchedule:                        cronSchedule,
 				}},
@@ -2068,8 +2065,8 @@ func (s *integrationSuite) TestWorkflowTimeout() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 1,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  1,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -2079,6 +2076,8 @@ func (s *integrationSuite) TestWorkflowTimeout() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowComplete := false
+
+	time.Sleep(time.Second)
 
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
@@ -2094,7 +2093,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if lastEvent.GetEventType() != eventpb.EventType_WorkflowExecutionTimedOut {
-			s.Logger.Warn("Execution not timedout yet")
+			s.Logger.Warn("Execution not timedout yet. Last event: " + lastEvent.GetEventType().String())
 			time.Sleep(200 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -2146,8 +2145,8 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      10,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 10,
 		Identity:                            identity,
 	}
 
@@ -2344,8 +2343,8 @@ func (s *integrationSuite) TestDescribeTaskList() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -2463,8 +2462,8 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      2,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 2,
 		Identity:                            identity,
 	}
 
@@ -2553,8 +2552,8 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      20,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 20,
 		Identity:                            identity,
 	}
 
@@ -2590,8 +2589,8 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 					WorkflowType:                        workflowType,
 					TaskList:                            &tasklistpb.TaskList{Name: tl},
 					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: 1000,
-					TaskStartToCloseTimeoutSeconds:      100,
+					WorkflowRunTimeoutSeconds:  1000,
+					WorkflowTaskTimeoutSeconds: 100,
 				}},
 			}}, nil
 		}
@@ -2644,8 +2643,8 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      2,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 2,
 		Identity:                            identity,
 	}
 
@@ -2739,8 +2738,8 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 601,
-		TaskStartToCloseTimeoutSeconds:      600,
+		WorkflowRunTimeoutSeconds:  601,
+		WorkflowTaskTimeoutSeconds: 600,
 		Identity:                            identity,
 	}
 
@@ -2855,8 +2854,8 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -3023,8 +3022,8 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 	}
 
@@ -3180,8 +3179,8 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      20,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 20,
 		Identity:                            identity,
 	}
 
@@ -3345,8 +3344,8 @@ func (s *integrationSuite) TestStartWithMemo() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		Identity:                            identity,
 		Memo:                                memo,
 	}
@@ -3379,8 +3378,8 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
 		SignalName:                          signalName,
 		SignalInput:                         signalInput,
 		Identity:                            identity,
@@ -3406,8 +3405,8 @@ func (s *integrationSuite) TestCancelTimer() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1000,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1000,
 		Identity:                            identity,
 	}
 
@@ -3537,8 +3536,8 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
 		TaskList:                            &tasklistpb.TaskList{Name: tl},
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1000,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1000,
 		Identity:                            identity,
 	}
 
