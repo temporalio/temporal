@@ -193,6 +193,8 @@ type Config struct {
 	ReplicationTaskProcessorCleanupInterval          dynamicconfig.DurationPropertyFn
 	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFn
 
+	EnableKafkaReplication       dynamicconfig.BoolPropertyFn
+	EnableRPCReplication         dynamicconfig.BoolPropertyFn
 	EnableCleanupReplicationTask dynamicconfig.BoolPropertyFn
 
 	// The following are used by consistent query
@@ -333,6 +335,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ReplicationTaskProcessorNoTaskRetryWait:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
 		ReplicationTaskProcessorCleanupInterval:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorCleanupInterval, 1*time.Minute),
 		ReplicationTaskProcessorCleanupJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient, 0.15),
+		EnableRPCReplication:                             dc.GetBoolProperty(dynamicconfig.HistoryEnableRPCReplication, true),
+		EnableKafkaReplication:                           dc.GetBoolProperty(dynamicconfig.HistoryEnableKafkaReplication, true),
 		EnableCleanupReplicationTask:                     dc.GetBoolProperty(dynamicconfig.HistoryEnableCleanupReplicationTask, true),
 
 		EnableConsistentQuery:                 dc.GetBoolProperty(dynamicconfig.EnableConsistentQuery, true),

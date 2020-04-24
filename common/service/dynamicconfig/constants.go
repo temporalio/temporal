@@ -241,6 +241,7 @@ var keys = map[Key]string{
 	WorkerReplicationTaskMaxRetryDuration:           "worker.replicationTaskMaxRetryDuration",
 	WorkerReplicationTaskContextDuration:            "worker.replicationTaskContextDuration",
 	WorkerReReplicationContextTimeout:               "worker.workerReReplicationContextTimeout",
+	WorkerEnableRPCReplication:                      "worker.enableWorkerRPCReplication",
 	WorkerIndexerConcurrency:                        "worker.indexerConcurrency",
 	WorkerESProcessorNumOfWorkers:                   "worker.ESProcessorNumOfWorkers",
 	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
@@ -625,6 +626,8 @@ const (
 	WorkerReplicationTaskContextDuration
 	// WorkerReReplicationContextTimeout is the context timeout for end to end  re-replication process
 	WorkerReReplicationContextTimeout
+	// WorkerEnableRPCReplication is the feature flag for RPC replication
+	WorkerEnableRPCReplication
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor

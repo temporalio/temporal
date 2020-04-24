@@ -227,7 +227,9 @@ func (s *Service) Start() {
 	clusterMetadata := s.GetClusterMetadata()
 	if clusterMetadata.IsGlobalDomainEnabled() {
 		consumerConfig := clusterMetadata.GetReplicationConsumerConfig()
-		if consumerConfig != nil && consumerConfig.Type == config.ReplicationConsumerTypeRPC {
+		if consumerConfig != nil &&
+			consumerConfig.Type == config.ReplicationConsumerTypeRPC &&
+			s.config.EnableRPCReplication() {
 			replicationMessageSink = s.GetDomainReplicationQueue()
 		} else {
 			var err error

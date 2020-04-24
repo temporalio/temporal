@@ -76,6 +76,7 @@ type (
 		ReplicationTaskMaxRetryDuration    dynamicconfig.DurationPropertyFn
 		ReplicationTaskContextTimeout      dynamicconfig.DurationPropertyFn
 		ReReplicationContextTimeout        dynamicconfig.DurationPropertyFnWithDomainIDFilter
+		EnableRPCReplication               dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -123,7 +124,7 @@ func (r *Replicator) Start() error {
 		}
 
 		if clusterName != currentClusterName {
-			if replicationConsumerConfig.Type == config.ReplicationConsumerTypeRPC {
+			if replicationConsumerConfig.Type == config.ReplicationConsumerTypeRPC && r.config.EnableRPCReplication() {
 				processor := newDomainReplicationMessageProcessor(
 					clusterName,
 					r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),

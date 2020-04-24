@@ -355,7 +355,9 @@ func (e *historyEngineImpl) Start() {
 	e.timerProcessor.Start()
 
 	clusterMetadata := e.shard.GetClusterMetadata()
-	if e.replicatorProcessor != nil && clusterMetadata.GetReplicationConsumerConfig().Type != config.ReplicationConsumerTypeRPC {
+	if e.replicatorProcessor != nil &&
+		clusterMetadata.GetReplicationConsumerConfig().Type != config.ReplicationConsumerTypeRPC &&
+		e.config.EnableKafkaReplication() {
 		e.replicatorProcessor.Start()
 	}
 
