@@ -111,8 +111,6 @@ var (
 	activityInfoColumns = []string{
 		"data",
 		"data_encoding",
-		"last_heartbeat_details",
-		"last_heartbeat_updated_time",
 	}
 	activityInfoTableName = "activity_info_maps"
 	activityInfoKey       = "schedule_id"
@@ -125,9 +123,6 @@ var (
 
 // ReplaceIntoActivityInfoMaps replaces one or more rows in activity_info_maps table
 func (mdb *db) ReplaceIntoActivityInfoMaps(rows []sqlplugin.ActivityInfoMapsRow) (sql.Result, error) {
-	for i := range rows {
-		rows[i].LastHeartbeatUpdatedTime = mdb.converter.ToMySQLDateTime(rows[i].LastHeartbeatUpdatedTime)
-	}
 	return mdb.conn.NamedExec(setKeyInActivityInfoMapQry, rows)
 }
 
@@ -140,7 +135,6 @@ func (mdb *db) SelectFromActivityInfoMaps(filter *sqlplugin.ActivityInfoMapsFilt
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
-		rows[i].LastHeartbeatUpdatedTime = mdb.converter.FromMySQLDateTime(rows[i].LastHeartbeatUpdatedTime)
 	}
 	return rows, err
 }

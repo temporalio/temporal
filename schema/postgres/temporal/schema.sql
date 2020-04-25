@@ -139,8 +139,6 @@ CREATE TABLE activity_info_maps (
 --
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16),
-  last_heartbeat_details BYTEA,
-  last_heartbeat_updated_time TIMESTAMP NOT NULL,
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, schedule_id)
 );
 
