@@ -146,8 +146,6 @@ var (
 	activityInfoColumns = []string{
 		"data",
 		"data_encoding",
-		"last_heartbeat_details",
-		"last_heartbeat_updated_time",
 	}
 	activityInfoTableName = "activity_info_maps"
 	activityInfoKey       = "schedule_id"
@@ -160,9 +158,6 @@ var (
 
 // ReplaceIntoActivityInfoMaps replaces one or more rows in activity_info_maps table
 func (pdb *db) ReplaceIntoActivityInfoMaps(rows []sqlplugin.ActivityInfoMapsRow) (sql.Result, error) {
-	for i := range rows {
-		rows[i].LastHeartbeatUpdatedTime = pdb.converter.ToPostgresDateTime(rows[i].LastHeartbeatUpdatedTime)
-	}
 	return pdb.conn.NamedExec(setKeyInActivityInfoMapQry, rows)
 }
 
@@ -175,7 +170,6 @@ func (pdb *db) SelectFromActivityInfoMaps(filter *sqlplugin.ActivityInfoMapsFilt
 		rows[i].NamespaceID = filter.NamespaceID
 		rows[i].WorkflowID = filter.WorkflowID
 		rows[i].RunID = filter.RunID
-		rows[i].LastHeartbeatUpdatedTime = pdb.converter.FromPostgresDateTime(rows[i].LastHeartbeatUpdatedTime)
 	}
 	return rows, err
 }

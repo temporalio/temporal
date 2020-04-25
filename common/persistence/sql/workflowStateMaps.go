@@ -57,15 +57,13 @@ func updateActivityInfos(
 			}
 
 			rows[i] = sqlplugin.ActivityInfoMapsRow{
-				ShardID:                  int64(shardID),
-				NamespaceID:              namespaceID,
-				WorkflowID:               workflowID,
-				RunID:                    runID,
-				ScheduleID:               v.ScheduleID,
-				LastHeartbeatUpdatedTime: v.LastHeartBeatUpdatedTime,
-				LastHeartbeatDetails:     v.Details,
-				Data:                     blob.Data,
-				DataEncoding:             string(blob.Encoding),
+				ShardID:      int64(shardID),
+				NamespaceID:  namespaceID,
+				WorkflowID:   workflowID,
+				RunID:        runID,
+				ScheduleID:   v.ScheduleID,
+				Data:         blob.Data,
+				DataEncoding: string(blob.Encoding),
 			}
 		}
 

@@ -1618,7 +1618,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	err = s.ResetWorkflowExecution(3,
 		insertInfo, insertStats, nil, insertActivityInfos, insertTimerInfos, nil, insertRequestCancelInfos, nil, nil, insertTransTasks, insertTimerTasks, nil,
 		false, updatedInfo, updatedStats, nil, nil, nil, info0.RunID, -1000)
-	s.Nil(err)
+	s.NoError(err)
 
 	//////////////////////////////
 	// start verifying resetWF

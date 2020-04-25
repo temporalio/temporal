@@ -28,7 +28,6 @@ import (
 	"database/sql"
 	"time"
 
-	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/persistence"
@@ -375,15 +374,13 @@ type (
 
 	// ActivityInfoMapsRow represents a row in activity_info_maps table
 	ActivityInfoMapsRow struct {
-		ShardID                  int64
-		NamespaceID              primitives.UUID
-		WorkflowID               string
-		RunID                    primitives.UUID
-		ScheduleID               int64
-		Data                     []byte
-		DataEncoding             string
-		LastHeartbeatDetails     *commonpb.Payload
-		LastHeartbeatUpdatedTime time.Time
+		ShardID      int64
+		NamespaceID  primitives.UUID
+		WorkflowID   string
+		RunID        primitives.UUID
+		ScheduleID   int64
+		Data         []byte
+		DataEncoding string
 	}
 
 	// ActivityInfoMapsFilter contains the column names within activity_info_maps table that
