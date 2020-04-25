@@ -74,7 +74,9 @@ type (
 		sourceCluster       string
 		firstEventID        int64
 		nextEventID         int64
+		version             *int64
 		historyRereplicator xdc.HistoryRereplicator
+		nDCHistoryResender  xdc.NDCHistoryResender
 	}
 
 	historyReplicationV2Task struct {
@@ -218,6 +220,7 @@ func newHistoryMetadataReplicationTask(
 	historyClient history.Client,
 	metricsClient metrics.Client,
 	historyRereplicator xdc.HistoryRereplicator,
+	nDCHistoryResender xdc.NDCHistoryResender,
 ) *historyMetadataReplicationTask {
 
 	attr := replicationTask.HistoryMetadataTaskAttributes
@@ -226,6 +229,11 @@ func newHistoryMetadataReplicationTask(
 		tag.WorkflowRunID(attr.GetRunId()),
 		tag.WorkflowFirstEventID(attr.GetFirstEventId()),
 		tag.WorkflowNextEventID(attr.GetNextEventId()))
+	var version *int64
+	if attr.IsSetVersion() {
+		version = attr.Version
+	}
+
 	return &historyMetadataReplicationTask{
 		workflowReplicationTask: workflowReplicationTask{
 			metricsScope: metrics.HistoryMetadataReplicationTaskScope,
@@ -246,7 +254,9 @@ func newHistoryMetadataReplicationTask(
 		sourceCluster:       sourceCluster,
 		firstEventID:        attr.GetFirstEventId(),
 		nextEventID:         attr.GetNextEventId(),
+		version:             version,
 		historyRereplicator: historyRereplicator,
+		nDCHistoryResender:  nDCHistoryResender,
 	}
 }
 
@@ -410,11 +420,22 @@ func (t *historyMetadataReplicationTask) Execute() error {
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryMetadataReplicationScope, metrics.CadenceClientLatency)
 	defer stopwatch.Stop()
 
-	return t.historyRereplicator.SendMultiWorkflowHistory(
-		t.queueID.DomainID, t.queueID.WorkflowID,
-		t.queueID.RunID, t.firstEventID,
-		t.queueID.RunID, t.nextEventID,
-	)
+	if t.version != nil {
+		return t.nDCHistoryResender.SendSingleWorkflowHistory(
+			t.queueID.DomainID,
+			t.queueID.WorkflowID,
+			t.queueID.RunID,
+			common.Int64Ptr(t.firstEventID-1), //NDC resend API is exclusive-exclusive.
+			t.version,
+			common.Int64Ptr(t.nextEventID),
+			t.version)
+	} else {
+		return t.historyRereplicator.SendMultiWorkflowHistory(
+			t.queueID.DomainID, t.queueID.WorkflowID,
+			t.queueID.RunID, t.firstEventID,
+			t.queueID.RunID, t.nextEventID,
+		)
+	}
 }
 
 func (t *historyMetadataReplicationTask) HandleErr(

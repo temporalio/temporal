@@ -409,6 +409,7 @@ func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
 		p.historyClient,
 		p.metricsClient,
 		p.historyRereplicator,
+		p.nDCHistoryResender,
 	)
 	return p.sequentialTaskProcessor.Submit(historyMetadataReplicationTask)
 }
