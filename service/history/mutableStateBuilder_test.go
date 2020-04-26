@@ -530,7 +530,7 @@ func (s *mutableStateSuite) TestMergeMapOfPayload() {
 	var currentMap map[string]*commonpb.Payload
 	var newMap map[string]*commonpb.Payload
 	resultMap := mergeMapOfPayload(currentMap, newMap)
-	s.Equal(make(map[string][]byte), resultMap)
+	s.Equal(make(map[string]*commonpb.Payload), resultMap)
 
 	newMap = map[string]*commonpb.Payload{"key": payload.EncodeString("val")}
 	resultMap = mergeMapOfPayload(currentMap, newMap)
