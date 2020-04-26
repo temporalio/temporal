@@ -212,27 +212,51 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
 	}
 
 	err = p.replicator.Publish(replicationTask)
-	if err == messaging.ErrMessageSizeLimit && replicationTask.HistoryTaskAttributes != nil {
+	if err == messaging.ErrMessageSizeLimit {
 		// message size exceeds the server messaging size limit
 		// for this specific case, just send out a metadata message and
 		// let receiver fetch from source (for the concrete history events)
-		err = p.replicator.Publish(p.generateHistoryMetadataTask(replicationTask.HistoryTaskAttributes.TargetClusters, task))
+		if metadataTask := p.generateHistoryMetadataTask(
+			task,
+			replicationTask,
+		); metadataTask != nil {
+			err = p.replicator.Publish(metadataTask)
+		}
 	}
 	return err
 }
 
-func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(targetClusters []string, task *persistence.ReplicationTaskInfo) *replicator.ReplicationTask {
-	return &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
-		HistoryMetadataTaskAttributes: &replicator.HistoryMetadataTaskAttributes{
-			TargetClusters: targetClusters,
-			DomainId:       common.StringPtr(task.DomainID),
-			WorkflowId:     common.StringPtr(task.WorkflowID),
-			RunId:          common.StringPtr(task.RunID),
-			FirstEventId:   common.Int64Ptr(task.FirstEventID),
-			NextEventId:    common.Int64Ptr(task.NextEventID),
-		},
+func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(
+	task *persistence.ReplicationTaskInfo,
+	replicationTask *replicator.ReplicationTask,
+) *replicator.ReplicationTask {
+
+	if replicationTask.HistoryTaskAttributes != nil {
+		return &replicator.ReplicationTask{
+			TaskType: replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
+			HistoryMetadataTaskAttributes: &replicator.HistoryMetadataTaskAttributes{
+				TargetClusters: replicationTask.HistoryTaskAttributes.TargetClusters,
+				DomainId:       common.StringPtr(task.DomainID),
+				WorkflowId:     common.StringPtr(task.WorkflowID),
+				RunId:          common.StringPtr(task.RunID),
+				FirstEventId:   common.Int64Ptr(task.FirstEventID),
+				NextEventId:    common.Int64Ptr(task.NextEventID),
+			},
+		}
+	} else if replicationTask.HistoryTaskV2Attributes != nil {
+		return &replicator.ReplicationTask{
+			TaskType: replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
+			HistoryMetadataTaskAttributes: &replicator.HistoryMetadataTaskAttributes{
+				DomainId:     common.StringPtr(task.DomainID),
+				WorkflowId:   common.StringPtr(task.WorkflowID),
+				RunId:        common.StringPtr(task.RunID),
+				FirstEventId: common.Int64Ptr(task.FirstEventID),
+				NextEventId:  common.Int64Ptr(task.NextEventID),
+				Version:      common.Int64Ptr(task.Version),
+			},
+		}
 	}
+	return nil
 }
 
 // GenerateReplicationTask generate replication task

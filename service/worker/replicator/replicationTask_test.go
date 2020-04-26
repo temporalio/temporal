@@ -90,6 +90,7 @@ type (
 		mockMsg           *messageMocks.Message
 		mockHistoryClient *historyservicetest.MockClient
 		mockRereplicator  *xdc.MockHistoryRereplicator
+		mockNDCResender   *xdc.MockNDCHistoryResender
 
 		controller *gomock.Controller
 	}
@@ -201,6 +202,7 @@ func (s *historyMetadataReplicationTaskSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
+	s.mockNDCResender = &xdc.MockNDCHistoryResender{}
 }
 
 func (s *historyMetadataReplicationTaskSuite) TearDownTest() {
@@ -635,6 +637,7 @@ func (s *historyMetadataReplicationTaskSuite) TestNewHistoryMetadataReplicationT
 		s.mockHistoryClient,
 		s.metricsClient,
 		s.mockRereplicator,
+		s.mockNDCResender,
 	)
 	// overwrite the logger for easy comparison
 	metadataTask.logger = s.logger
@@ -663,6 +666,7 @@ func (s *historyMetadataReplicationTaskSuite) TestNewHistoryMetadataReplicationT
 			firstEventID:        replicationAttr.GetFirstEventId(),
 			nextEventID:         replicationAttr.GetNextEventId(),
 			historyRereplicator: s.mockRereplicator,
+			nDCHistoryResender:  s.mockNDCResender,
 		},
 		metadataTask,
 	)
@@ -670,7 +674,7 @@ func (s *historyMetadataReplicationTaskSuite) TestNewHistoryMetadataReplicationT
 
 func (s *historyMetadataReplicationTaskSuite) TestExecute() {
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
+		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
 
 	randomErr := errors.New("some random error")
 	s.mockRereplicator.On("SendMultiWorkflowHistory",
@@ -685,7 +689,7 @@ func (s *historyMetadataReplicationTaskSuite) TestExecute() {
 
 func (s *historyMetadataReplicationTaskSuite) TestHandleErr_NotRetryErr() {
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
+		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
 	randomErr := errors.New("some random error")
 
 	err := task.HandleErr(randomErr)
@@ -694,7 +698,7 @@ func (s *historyMetadataReplicationTaskSuite) TestHandleErr_NotRetryErr() {
 
 func (s *historyMetadataReplicationTaskSuite) TestHandleErr_RetryErr() {
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
+		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
 	retryErr := &shared.RetryTaskError{
 		DomainId:    common.StringPtr(task.queueID.DomainID),
 		WorkflowId:  common.StringPtr(task.queueID.WorkflowID),
@@ -727,14 +731,14 @@ func (s *historyMetadataReplicationTaskSuite) TestHandleErr_RetryErr() {
 func (s *historyMetadataReplicationTaskSuite) TestRetryErr_NonRetryable() {
 	err := &shared.BadRequestError{}
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
+		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
 	s.False(task.RetryErr(err))
 }
 
 func (s *historyMetadataReplicationTaskSuite) TestRetryErr_Retryable() {
 	err := &shared.InternalServiceError{}
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
+		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
 	task.attempt = 0
 	s.True(task.RetryErr(err))
 }
@@ -742,7 +746,7 @@ func (s *historyMetadataReplicationTaskSuite) TestRetryErr_Retryable() {
 func (s *historyMetadataReplicationTaskSuite) TestRetryErr_Retryable_ExceedAttempt() {
 	err := &shared.InternalServiceError{}
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
+		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
 	task.attempt = s.config.ReplicationTaskMaxRetryCount() + 100
 	s.False(task.RetryErr(err))
 }
@@ -750,14 +754,14 @@ func (s *historyMetadataReplicationTaskSuite) TestRetryErr_Retryable_ExceedAttem
 func (s *historyMetadataReplicationTaskSuite) TestRetryErr_Retryable_ExceedDuration() {
 	err := &shared.InternalServiceError{}
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
+		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
 	task.startTime = s.mockTimeSource.Now().Add(-2 * s.config.ReplicationTaskMaxRetryDuration())
 	s.False(task.RetryErr(err))
 }
 
 func (s *historyMetadataReplicationTaskSuite) TestAck() {
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
+		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
 
 	s.mockMsg.On("Ack").Return(nil).Once()
 	task.Ack()
@@ -765,7 +769,7 @@ func (s *historyMetadataReplicationTaskSuite) TestAck() {
 
 func (s *historyMetadataReplicationTaskSuite) TestNack() {
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
+		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator, s.mockNDCResender)
 
 	s.mockMsg.On("Nack").Return(nil).Once()
 	task.Nack()
