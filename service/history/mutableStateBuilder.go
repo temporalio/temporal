@@ -2926,10 +2926,10 @@ func (e *mutableStateBuilder) ReplicateUpsertWorkflowSearchAttributesEvent(
 	upsertSearchAttr := event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes().GetIndexedFields()
 	currentSearchAttr := e.GetExecutionInfo().SearchAttributes
 
-	e.executionInfo.SearchAttributes = mergeMapOfByteArray(currentSearchAttr, upsertSearchAttr)
+	e.executionInfo.SearchAttributes = mergeMapOfPayload(currentSearchAttr, upsertSearchAttr)
 }
 
-func mergeMapOfByteArray(
+func mergeMapOfPayload(
 	current map[string]*commonpb.Payload,
 	upsert map[string]*commonpb.Payload,
 ) map[string]*commonpb.Payload {

@@ -526,18 +526,18 @@ func (s *mutableStateSuite) TestTrimEvents() {
 	}, output)
 }
 
-func (s *mutableStateSuite) TestMergeMapOfByteArray() {
-	var currentMap map[string][]byte
-	var newMap map[string][]byte
-	resultMap := mergeMapOfByteArray(currentMap, newMap)
+func (s *mutableStateSuite) TestMergeMapOfPayload() {
+	var currentMap map[string]*commonpb.Payload
+	var newMap map[string]*commonpb.Payload
+	resultMap := mergeMapOfPayload(currentMap, newMap)
 	s.Equal(make(map[string][]byte), resultMap)
 
-	newMap = map[string][]byte{"key": []byte("val")}
-	resultMap = mergeMapOfByteArray(currentMap, newMap)
+	newMap = map[string]*commonpb.Payload{"key": payload.EncodeString("val")}
+	resultMap = mergeMapOfPayload(currentMap, newMap)
 	s.Equal(newMap, resultMap)
 
-	currentMap = map[string][]byte{"number": []byte("1")}
-	resultMap = mergeMapOfByteArray(currentMap, newMap)
+	currentMap = map[string]*commonpb.Payload{"number": payload.EncodeString("1")}
+	resultMap = mergeMapOfPayload(currentMap, newMap)
 	s.Equal(2, len(resultMap))
 }
 

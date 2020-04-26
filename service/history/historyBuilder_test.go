@@ -188,7 +188,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 
 	activity3ID := "activity3"
 	activity3Type := "dynamic-historybuilder-success-activity3-type"
-	activity3Input := []byte("dynamic-historybuilder-success-activity3-input")
+	activity3Input := payload.EncodeString("dynamic-historybuilder-success-activity3-input")
 	activity3RetryPolicy := &commonpb.RetryPolicy{
 		InitialIntervalInSeconds:    1,
 		MaximumAttempts:             3,
@@ -271,7 +271,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
 	activity3Reason := "dynamic-historybuilder-success-activity3-failed"
-	activity3Details := []byte("dynamic-historybuilder-success-activity3-callstack")
+	activity3Details := payload.EncodeString("dynamic-historybuilder-success-activity3-callstack")
 	s.msBuilder.RetryActivity(ai5, activity3Reason, activity3Details)
 	ai6, activity3Running2 := s.msBuilder.GetActivityInfo(7)
 	s.Equal(activity3Reason, ai6.LastFailureReason)
@@ -286,7 +286,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(common.TransientEventID, ai7.StartedID)
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
-	activity3Result := []byte("dynamic-historybuilder-success-activity1-result")
+	activity3Result := payload.EncodeString("dynamic-historybuilder-success-activity1-result")
 	activity3CompletedEvent := s.addActivityTaskCompletedEvent(7, common.TransientEventID, activity3Result, identity)
 	s.validateActivityTaskCompletedEvent(activity3CompletedEvent, common.BufferedEventID, 7, common.TransientEventID,
 		activity3Result, identity)
@@ -1006,7 +1006,7 @@ func (s *historyBuilderSuite) validateActivityTaskScheduledEvent(event *eventpb.
 }
 
 func (s *historyBuilderSuite) validateActivityTaskStartedEvent(event *eventpb.HistoryEvent, eventID, scheduleID int64,
-	identity string, attempt int64, lastFailureReason string, lastFailureDetails []byte) {
+	identity string, attempt int64, lastFailureReason string, lastFailureDetails *commonpb.Payload) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_ActivityTaskStarted, event.EventType)
 	s.Equal(eventID, event.EventId)
