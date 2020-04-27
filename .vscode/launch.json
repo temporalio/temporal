@@ -1,0 +1,44 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Debug Server",
+			"type": "go",
+			"request": "launch",
+			"mode": "exec",
+			"program": "${workspaceFolder}/temporal-server",
+			"args": [
+				"start",
+			]
+		},
+		{
+			"name": "Debug CLI Namespace Describe",
+			"type": "go",
+			"request": "launch",
+			"mode": "exec",
+			"program": "${workspaceFolder}/tctl",
+			"args": [
+				"--ns",
+				"default",
+				"namespace",
+				"describe"
+			]
+		},
+		{
+			"name": "Debug CLI Admin Namespace Describe",
+			"type": "go",
+			"request": "launch",
+			"mode": "exec",
+			"program": "${workspaceFolder}/tctl",
+			"args": [
+				"--ns",
+				"default",
+				"admin",
+				"namespace",
+				"describe",
+				"--service_config_dir",
+				"./config"
+			]
+		}
+	]
+}
