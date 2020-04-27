@@ -45,12 +45,14 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	filterpb "go.temporal.io/temporal-proto/filter"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/rpc"
 )
 
@@ -142,9 +144,17 @@ func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string 
 		for i, key := range v.MapKeys() {
 			str += key.String() + ":"
 			val := v.MapIndex(key)
-			switch val.Interface().(type) {
+			switch typedV := val.Interface().(type) {
 			case []byte:
-				str += string(val.Interface().([]byte))
+				str += string(typedV)
+			case *commonpb.Payload:
+				var data string
+				err := payload.Decode(typedV, &data)
+				if err == nil {
+					str += data
+				} else {
+					str += anyToString(*typedV, printFully, maxFieldLength)
+				}
 			default:
 				str += val.String()
 			}
@@ -876,10 +886,18 @@ func showNextPage() bool {
 }
 
 // prompt will show input msg, then waiting user input y/yes to continue
-func prompt(msg string) {
+func prompt(msg string, autoConfirm bool) {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println(msg)
-	text, _ := reader.ReadString('\n')
+	fmt.Print(msg, " ")
+	var text string
+	if autoConfirm {
+		text = "y"
+		fmt.Print("y")
+	} else {
+		text, _ = reader.ReadString('\n')
+	}
+	fmt.Println()
+
 	textLower := strings.ToLower(strings.TrimRight(text, "\n"))
 	if textLower != "y" && textLower != "yes" {
 		os.Exit(0)

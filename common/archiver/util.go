@@ -27,9 +27,12 @@ package archiver
 import (
 	"errors"
 
+	commonpb "go.temporal.io/temporal-proto/common"
+
 	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 )
 
 var (
@@ -147,11 +150,11 @@ func ValidateQueryRequest(request *QueryVisibilityRequest) error {
 	return nil
 }
 
-// ConvertSearchAttrToBytes converts search attribute value from string back to byte array
-func ConvertSearchAttrToBytes(searchAttrStr map[string]string) map[string][]byte {
-	searchAttr := make(map[string][]byte)
+// ConvertSearchAttrToPayload converts search attribute value from string back to byte array
+func ConvertSearchAttrToPayload(searchAttrStr map[string]string) map[string]*commonpb.Payload {
+	searchAttr := make(map[string]*commonpb.Payload)
 	for k, v := range searchAttrStr {
-		searchAttr[k] = []byte(v)
+		searchAttr[k] = payload.EncodeBytes([]byte(v))
 	}
 	return searchAttr
 }

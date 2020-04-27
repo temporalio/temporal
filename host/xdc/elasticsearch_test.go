@@ -30,7 +30,6 @@
 package xdc
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -59,6 +58,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/environment"
 	"github.com/temporalio/temporal/host"
 )
@@ -185,9 +185,9 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskList := &tasklistpb.TaskList{Name: tl}
-	attrValBytes, _ := json.Marshal(s.testSearchAttributeVal)
+	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string][]byte{
+		IndexedFields: map[string]*commonpb.Payload{
 			s.testSearchAttributeKey: attrValBytes,
 		},
 	}
@@ -236,7 +236,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string
-		json.Unmarshal(searchValBytes, &searchVal)
+		payload.Decode(searchValBytes, &searchVal)
 		s.Equal(s.testSearchAttributeVal, searchVal)
 	}
 
@@ -295,12 +295,12 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 					fields := retrievedSearchAttr.GetIndexedFields()
 					searchValBytes := fields[s.testSearchAttributeKey]
 					var searchVal string
-					json.Unmarshal(searchValBytes, &searchVal)
+					payload.Decode(searchValBytes, &searchVal)
 					s.Equal("another string", searchVal)
 
 					searchValBytes2 := fields[definition.CustomIntField]
 					var searchVal2 int
-					json.Unmarshal(searchValBytes2, &searchVal2)
+					payload.Decode(searchValBytes2, &searchVal2)
 					s.Equal(123, searchVal2)
 
 					verified = true
@@ -317,7 +317,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
-	terminateDetails := []byte("terminate details")
+	terminateDetails := payload.EncodeString("terminate details")
 	_, err = client1.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -387,10 +387,10 @@ GetHistoryLoop2:
 }
 
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
-	attrValBytes1, _ := json.Marshal("another string")
-	attrValBytes2, _ := json.Marshal(123)
+	attrValBytes1, _ := payload.Encode("another string")
+	attrValBytes2, _ := payload.Encode(123)
 	upsertSearchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string][]byte{
+		IndexedFields: map[string]*commonpb.Payload{
 			definition.CustomStringField: attrValBytes1,
 			definition.CustomIntField:    attrValBytes2,
 		},

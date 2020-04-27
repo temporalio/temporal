@@ -25,7 +25,6 @@
 package history
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"time"
@@ -54,6 +53,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -1985,12 +1985,12 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	exeInfo.AutoResetPoints = &executionpb.ResetPoints{
 		Points: currResetPoints,
 	}
-	bytes, err := json.Marshal(recentBinaryChecksums)
+	bytes, err := payload.Encode(recentBinaryChecksums)
 	if err != nil {
 		return err
 	}
 	if exeInfo.SearchAttributes == nil {
-		exeInfo.SearchAttributes = make(map[string][]byte)
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload)
 	}
 	exeInfo.SearchAttributes[definition.BinaryChecksums] = bytes
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
@@ -2063,7 +2063,7 @@ func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	cause eventpb.DecisionTaskFailedCause,
-	details []byte,
+	details *commonpb.Payload,
 	identity string,
 	reason string,
 	binChecksum string,
@@ -2357,7 +2357,7 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	timeoutType eventpb.TimeoutType,
-	lastHeartBeatDetails []byte,
+	lastHeartBeatDetails *commonpb.Payload,
 ) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskTimedOut
@@ -2476,7 +2476,7 @@ func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	latestCancelRequestedEventID int64,
-	details []byte,
+	details *commonpb.Payload,
 	identity string,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -2926,16 +2926,16 @@ func (e *mutableStateBuilder) ReplicateUpsertWorkflowSearchAttributesEvent(
 	upsertSearchAttr := event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes().GetIndexedFields()
 	currentSearchAttr := e.GetExecutionInfo().SearchAttributes
 
-	e.executionInfo.SearchAttributes = mergeMapOfByteArray(currentSearchAttr, upsertSearchAttr)
+	e.executionInfo.SearchAttributes = mergeMapOfPayload(currentSearchAttr, upsertSearchAttr)
 }
 
-func mergeMapOfByteArray(
-	current map[string][]byte,
-	upsert map[string][]byte,
-) map[string][]byte {
+func mergeMapOfPayload(
+	current map[string]*commonpb.Payload,
+	upsert map[string]*commonpb.Payload,
+) map[string]*commonpb.Payload {
 
 	if current == nil {
-		current = make(map[string][]byte)
+		current = make(map[string]*commonpb.Payload)
 	}
 	for k, v := range upsert {
 		current[k] = v
@@ -3201,7 +3201,7 @@ func (e *mutableStateBuilder) AddRecordMarkerEvent(
 func (e *mutableStateBuilder) AddWorkflowExecutionTerminatedEvent(
 	firstEventID int64,
 	reason string,
-	details []byte,
+	details *commonpb.Payload,
 	identity string,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -3242,7 +3242,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTerminatedEvent(
 
 func (e *mutableStateBuilder) AddWorkflowExecutionSignaled(
 	signalName string,
-	input []byte,
+	input *commonpb.Payload,
 	identity string,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -3759,7 +3759,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTimedOutEvent(
 func (e *mutableStateBuilder) RetryActivity(
 	ai *persistence.ActivityInfo,
 	failureReason string,
-	failureDetails []byte,
+	failureDetails *commonpb.Payload,
 ) (bool, error) {
 
 	opTag := tag.WorkflowActionActivityTaskRetry

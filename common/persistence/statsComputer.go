@@ -198,7 +198,9 @@ func computeActivityInfoSize(ai *InternalActivityInfo) int {
 	if ai.StartedEvent != nil {
 		size += len(ai.StartedEvent.Data)
 	}
-	size += len(ai.Details)
+	if ai.Details != nil {
+		size += ai.Details.Size()
+	}
 
 	return size
 }
@@ -222,7 +224,7 @@ func computeChildInfoSize(ci *InternalChildExecutionInfo) int {
 
 func computeSignalInfoSize(si *persistenceblobs.SignalInfo) int {
 	size := len(si.Name)
-	size += len(si.Input)
+	size += si.GetInput().Size()
 	size += len(si.Control)
 
 	return size

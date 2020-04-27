@@ -345,7 +345,7 @@ func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *exe
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,
 		SearchAttributes: &commonpb.SearchAttributes{
-			IndexedFields: archiver.ConvertSearchAttrToBytes(record.SearchAttributes),
+			IndexedFields: archiver.ConvertSearchAttrToPayload(record.SearchAttributes),
 		},
 	}
 }

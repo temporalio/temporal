@@ -30,10 +30,12 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal/activity"
 
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 )
 
 // MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow
@@ -98,10 +100,12 @@ func tagLoggerWithActivityInfo(logger log.Logger, activityInfo activity.Info) lo
 		tag.Attempt(activityInfo.Attempt))
 }
 
-func convertSearchAttributesToString(searchAttr map[string][]byte) map[string]string {
+func convertSearchAttributesToString(searchAttr map[string]*commonpb.Payload) map[string]string {
 	searchAttrStr := make(map[string]string)
 	for k, v := range searchAttr {
-		searchAttrStr[k] = string(v)
+		var s string
+		_ = payload.Decode(v, &s)
+		searchAttrStr[k] = s
 	}
 	return searchAttrStr
 }

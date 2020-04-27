@@ -259,8 +259,8 @@ type (
 		BranchToken        []byte
 		CronSchedule       string
 		ExpirationSeconds  int32
-		Memo               map[string][]byte
-		SearchAttributes   map[string][]byte
+		Memo               map[string]*commonpb.Payload
+		SearchAttributes   map[string]*commonpb.Payload
 
 		// attributes which are not related to mutable state at all
 		HistorySize int64
@@ -295,7 +295,7 @@ type (
 		StartedTime              time.Time
 		ActivityID               string
 		RequestID                string
-		Details                  []byte
+		Details                  *commonpb.Payload
 		ScheduleToStartTimeout   int32
 		ScheduleToCloseTimeout   int32
 		StartToCloseTimeout      int32
@@ -318,7 +318,7 @@ type (
 		NonRetriableErrors []string
 		LastFailureReason  string
 		LastWorkerIdentity string
-		LastFailureDetails []byte
+		LastFailureDetails *commonpb.Payload
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
@@ -598,7 +598,7 @@ type (
 		TaskID             int64
 		Memo               *serialization.DataBlob
 		TaskList           string
-		SearchAttributes   map[string][]byte
+		SearchAttributes   map[string]*commonpb.Payload
 	}
 
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
@@ -612,7 +612,7 @@ type (
 		TaskID             int64
 		Memo               *serialization.DataBlob
 		TaskList           string
-		SearchAttributes   map[string][]byte
+		SearchAttributes   map[string]*commonpb.Payload
 		CloseTimestamp     int64
 		Status             executionpb.WorkflowExecutionStatus
 		HistoryLength      int64
@@ -631,7 +631,7 @@ type (
 		TaskID             int64
 		Memo               *serialization.DataBlob
 		TaskList           string
-		SearchAttributes   map[string][]byte
+		SearchAttributes   map[string]*commonpb.Payload
 	}
 
 	// InternalCreateNamespaceRequest is used to create the namespace

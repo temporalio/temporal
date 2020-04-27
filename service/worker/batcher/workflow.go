@@ -36,6 +36,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"go.temporal.io/temporal"
+	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -97,7 +98,7 @@ type (
 	// SignalParams is the parameters for signaling workflow
 	SignalParams struct {
 		SignalName string
-		Input      string
+		Input      *commonpb.Payload
 	}
 
 	// BatchParams is the parameters for batch operation workflow
@@ -387,7 +388,7 @@ func startTaskProcessor(
 							Identity:   BatchWFTypeName,
 							RequestId:  requestID,
 							SignalName: batchParams.SignalParams.SignalName,
-							Input:      []byte(batchParams.SignalParams.Input),
+							Input:      batchParams.SignalParams.Input,
 						})
 						return err
 					})

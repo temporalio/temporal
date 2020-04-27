@@ -13,7 +13,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "bnVsbAo=",
+        "input": null,
         "executionStartToCloseTimeoutSeconds": 2592000,
         "taskStartToCloseTimeoutSeconds": 60,
         "originalExecutionRunId": "2dbedb91-4d8f-4c74-a979-4b7b9c204077",
@@ -33,7 +33,7 @@
       "taskId": 6291587,
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "temporal-archival-signal",
-        "input": "eyJTaGFyZElEIjoyLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzQwZjhlZTY3LTAyMmYtNDA4ZC04M2U1LTFkYjU3ZTJjNWJmZiIsIlJ1bklEIjoiZjJiMzYwYTAtZDkwYS00YWZhLWFkODgtYmEwNDFmYWQ2YTQyIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1JtTW1Jek5qQmhNQzFrT1RCaExUUmhabUV0WVdRNE9DMWlZVEEwTVdaaFpEWmhORElMQUJRQUFBQWtPRFF3TXpBM1lqa3RPVEEzTmkwMFpXVXlMVGd5WVRBdE5EVm1NakZrTmpGa056RTVEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "identity": "59844@ycyang-C02XW41WJGH6@"
       }
     },
@@ -84,7 +84,7 @@
       "taskId": 6291599,
       "markerRecordedEventAttributes": {
         "markerName": "SideEffect",
-        "details": "MAoiZXlKQmNtTm9hWFpsY2tOdmJtTjFjbkpsYm1ONUlqbzFNQ3dpUVhKamFHbDJZV3h6VUdWeVNYUmxjbUYwYVc5dUlqb3hNREF3TENKVWFXMWxiR2x0YVhSUVpYSkpkR1Z5WVhScGIyNGlPakV5T1RZd01EQXdNREF3TURBd01EQjlDZz09Igo=",
+        "details": null,
         "decisionTaskCompletedEventId": 5
       }
     },
@@ -114,7 +114,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "eyJTaGFyZElEIjoyLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzQwZjhlZTY3LTAyMmYtNDA4ZC04M2U1LTFkYjU3ZTJjNWJmZiIsIlJ1bklEIjoiZjJiMzYwYTAtZDkwYS00YWZhLWFkODgtYmEwNDFmYWQ2YTQyIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1JtTW1Jek5qQmhNQzFrT1RCaExUUmhabUV0WVdRNE9DMWlZVEEwTVdaaFpEWmhORElMQUJRQUFBQWtPRFF3TXpBM1lqa3RPVEEzTmkwMFpXVXlMVGd5WVRBdE5EVm1NakZrTmpGa056RTVEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "scheduleToCloseTimeoutSeconds": 300,
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
@@ -206,7 +206,7 @@
       "taskId": 6291619,
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
-        "details": "eyJhY3Rpdml0eUlkIjoiMyIsImFjdGl2aXR5VHlwZSI6ImRlbGV0ZUhpc3RvcnlBY3Rpdml0eSIsInJlcGxheVRpbWUiOiIyMDE5LTA5LTI3VDEwOjQyOjAzLjY0OTczMTYxMy0wNzowMCJ9Cg==",
+        "details": null,
         "decisionTaskCompletedEventId": 13
       }
     },
@@ -218,7 +218,7 @@
       "taskId": 6291621,
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "temporal-archival-signal",
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzBjMGQxNDkxLWI1YzAtNGIxZC04NjliLTc0OWEwNWUwNDMyNiIsIlJ1bklEIjoiNGIwYjFiMjYtZjllMi00OGEwLWJjZGQtMTdlMmNlMTQwNzVkIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1EwWWpCaU1XSXlOaTFtT1dVeUxUUTRZVEF0WW1Oa1pDMHhOMlV5WTJVeE5EQTNOV1FMQUJRQUFBQWtZekptWVdKak4yWXROelJpT1MwMFlqYzFMVGhsT0RrdE1EbGlaakJsTlRJeU1qWmhEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "identity": "59844@ycyang-C02XW41WJGH6@"
       }
     },
@@ -275,7 +275,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzBjMGQxNDkxLWI1YzAtNGIxZC04NjliLTc0OWEwNWUwNDMyNiIsIlJ1bklEIjoiNGIwYjFiMjYtZjllMi00OGEwLWJjZGQtMTdlMmNlMTQwNzVkIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1EwWWpCaU1XSXlOaTFtT1dVeUxUUTRZVEF0WW1Oa1pDMHhOMlV5WTJVeE5EQTNOV1FMQUJRQUFBQWtZekptWVdKak4yWXROelJpT1MwMFlqYzFMVGhsT0RrdE1EbGlaakJsTlRJeU1qWmhEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "scheduleToCloseTimeoutSeconds": 300,
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
@@ -367,7 +367,7 @@
       "taskId": 6291648,
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
-        "details": "eyJhY3Rpdml0eUlkIjoiNSIsImFjdGl2aXR5VHlwZSI6ImRlbGV0ZUhpc3RvcnlBY3Rpdml0eSIsInJlcGxheVRpbWUiOiIyMDE5LTA5LTI3VDEwOjQyOjAzLjk0NDIyNDE3NS0wNzowMCJ9Cg==",
+        "details": null,
         "decisionTaskCompletedEventId": 24
       }
     },
@@ -379,7 +379,7 @@
       "taskId": 6291650,
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "temporal-archival-signal",
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzAzYzI4MDRkLWNjZGMtNDI0MS05MmM2LWMzNzM5MGJhM2NkZSIsIlJ1bklEIjoiNDk4MWQzMTUtYjEyZi00YWE4LWJhOWQtNzYwNzczZmMzYTllIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1EwT1RneFpETXhOUzFpTVRKbUxUUmhZVGd0WW1FNVpDMDNOakEzTnpObVl6TmhPV1VMQUJRQUFBQWtOakZrTnpBelltSXRaR0V5T1MwME56VmhMV0ZtWlRNdE9EVTJaRGN5TXpkaU1ETTJEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "identity": "59844@ycyang-C02XW41WJGH6@"
       }
     },
@@ -405,7 +405,7 @@
       "taskId": 6291656,
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "temporal-archival-signal",
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzI0ODFiMWMzLTkyZDMtNGEyZi04NmZiLWUyM2MyNTI2ZDhmMCIsIlJ1bklEIjoiODM1YTFhZGItMTkxNy00ZWU2LTgzMDAtZGE0YmQyMTUyYzgxIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1E0TXpWaE1XRmtZaTB4T1RFM0xUUmxaVFl0T0RNd01DMWtZVFJpWkRJeE5USmpPREVMQUJRQUFBQWtOMlJoWXpSak5qTXRZelk1WmkwME56QTJMVGd6TlRndFlXTTFNbU00TkRSbFpESTREd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "identity": "59844@ycyang-C02XW41WJGH6@"
       }
     },
@@ -417,7 +417,7 @@
       "taskId": 6291658,
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "temporal-archival-signal",
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkX2RmYzZiODBlLTA0NmEtNGU0Yy1iZTQyLWVlZmY0YmFlMjMxNyIsIlJ1bklEIjoiZjlmMzQwY2ItNGRkNS00YmU2LThmYTEtNDI4NWUwYTUyOTFkIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1JtT1dZek5EQmpZaTAwWkdRMUxUUmlaVFl0T0daaE1TMDBNamcxWlRCaE5USTVNV1FMQUJRQUFBQWtaRE13WmpFMVpUQXRPVFEzTkMwME9HVTVMVGcyWVdVdE56RTVOR1ExWVRreE1tUmpEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "identity": "59844@ycyang-C02XW41WJGH6@"
       }
     },
@@ -460,7 +460,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzAzYzI4MDRkLWNjZGMtNDI0MS05MmM2LWMzNzM5MGJhM2NkZSIsIlJ1bklEIjoiNDk4MWQzMTUtYjEyZi00YWE4LWJhOWQtNzYwNzczZmMzYTllIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1EwT1RneFpETXhOUzFpTVRKbUxUUmhZVGd0WW1FNVpDMDNOakEzTnpObVl6TmhPV1VMQUJRQUFBQWtOakZrTnpBelltSXRaR0V5T1MwME56VmhMV0ZtWlRNdE9EVTJaRGN5TXpkaU1ETTJEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "scheduleToCloseTimeoutSeconds": 300,
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
@@ -494,7 +494,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzI0ODFiMWMzLTkyZDMtNGEyZi04NmZiLWUyM2MyNTI2ZDhmMCIsIlJ1bklEIjoiODM1YTFhZGItMTkxNy00ZWU2LTgzMDAtZGE0YmQyMTUyYzgxIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1E0TXpWaE1XRmtZaTB4T1RFM0xUUmxaVFl0T0RNd01DMWtZVFJpWkRJeE5USmpPREVMQUJRQUFBQWtOMlJoWXpSak5qTXRZelk1WmkwME56QTJMVGd6TlRndFlXTTFNbU00TkRSbFpESTREd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "scheduleToCloseTimeoutSeconds": 300,
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
@@ -528,7 +528,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkX2RmYzZiODBlLTA0NmEtNGU0Yy1iZTQyLWVlZmY0YmFlMjMxNyIsIlJ1bklEIjoiZjlmMzQwY2ItNGRkNS00YmU2LThmYTEtNDI4NWUwYTUyOTFkIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1JtT1dZek5EQmpZaTAwWkdRMUxUUmlaVFl0T0daaE1TMDBNamcxWlRCaE5USTVNV1FMQUJRQUFBQWtaRE13WmpFMVpUQXRPVFEzTkMwME9HVTVMVGcyWVdVdE56RTVOR1ExWVRreE1tUmpEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "scheduleToCloseTimeoutSeconds": 300,
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
@@ -670,7 +670,7 @@
       "taskId": 6291714,
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
-        "details": "eyJhY3Rpdml0eUlkIjoiMTEiLCJhY3Rpdml0eVR5cGUiOiJkZWxldGVIaXN0b3J5QWN0aXZpdHkiLCJyZXBsYXlUaW1lIjoiMjAxOS0wOS0yN1QxMDo0MjowNC45NTkwODgxNDgtMDc6MDAifQo=",
+        "details": null,
         "decisionTaskCompletedEventId": 43
       }
     },
@@ -682,7 +682,7 @@
       "taskId": 6291715,
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
-        "details": "eyJhY3Rpdml0eUlkIjoiOSIsImFjdGl2aXR5VHlwZSI6ImRlbGV0ZUhpc3RvcnlBY3Rpdml0eSIsInJlcGxheVRpbWUiOiIyMDE5LTA5LTI3VDEwOjQyOjA0Ljk1OTQ2MzQyNi0wNzowMCJ9Cg==",
+        "details": null,
         "decisionTaskCompletedEventId": 43
       }
     },
@@ -694,7 +694,7 @@
       "taskId": 6291716,
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
-        "details": "eyJhY3Rpdml0eUlkIjoiMTAiLCJhY3Rpdml0eVR5cGUiOiJkZWxldGVIaXN0b3J5QWN0aXZpdHkiLCJyZXBsYXlUaW1lIjoiMjAxOS0wOS0yN1QxMDo0MjowNC45NTk3MTM3MzYtMDc6MDAifQo=",
+        "details": null,
         "decisionTaskCompletedEventId": 43
       }
     },
@@ -706,7 +706,7 @@
       "taskId": 6291728,
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "temporal-archival-signal",
-        "input": "eyJTaGFyZElEIjozLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzc0NmFkOGI5LTAyYTEtNGNlNy1iNzkzLTI3ZDgwNjllZGU3MyIsIlJ1bklEIjoiNTY0YTY2OWYtYmM4OS00M2I5LWE2ZjEtN2IwYzc4NGEyNmViIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1ExTmpSaE5qWTVaaTFpWXpnNUxUUXpZamt0WVRabU1TMDNZakJqTnpnMFlUSTJaV0lMQUJRQUFBQWtORGt6TVRKbFpERXRNR1kyTkMwME0yVmpMVGcwWXpRdFpXVXlaREZrWVRaak5tUmtEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "identity": "59844@ycyang-C02XW41WJGH6@"
       }
     },
@@ -763,7 +763,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "eyJTaGFyZElEIjozLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzc0NmFkOGI5LTAyYTEtNGNlNy1iNzkzLTI3ZDgwNjllZGU3MyIsIlJ1bklEIjoiNTY0YTY2OWYtYmM4OS00M2I5LWE2ZjEtN2IwYzc4NGEyNmViIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1ExTmpSaE5qWTVaaTFpWXpnNUxUUXpZamt0WVRabU1TMDNZakJqTnpnMFlUSTJaV0lMQUJRQUFBQWtORGt6TVRKbFpERXRNR1kyTkMwME0yVmpMVGcwWXpRdFpXVXlaREZrWVRaak5tUmtEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "scheduleToCloseTimeoutSeconds": 300,
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
@@ -855,7 +855,7 @@
       "taskId": 6291755,
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
-        "details": "eyJhY3Rpdml0eUlkIjoiMTMiLCJhY3Rpdml0eVR5cGUiOiJkZWxldGVIaXN0b3J5QWN0aXZpdHkiLCJyZXBsYXlUaW1lIjoiMjAxOS0wOS0yN1QxMDo0MjowNS4wMDI4NTU2NjItMDc6MDAifQo=",
+        "details": null,
         "decisionTaskCompletedEventId": 56
       }
     },
@@ -867,7 +867,7 @@
       "taskId": 6291757,
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "temporal-archival-signal",
-        "input": "eyJTaGFyZElEIjoyLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkX2NmMzNkNzJhLWZhYzktNDA4Zi1hZDJmLThjMTFlZjFkNTQ3NSIsIlJ1bklEIjoiMDJmMjE3M2QtY2EzZC00MDMyLWI5NjEtZDNjNTYyOGRiYjIwIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1F3TW1ZeU1UY3paQzFqWVROa0xUUXdNekl0WWprMk1TMWtNMk0xTmpJNFpHSmlNakFMQUJRQUFBQWtZV1kzTlRCa01UQXRaVFl4TkMwME56QmtMVGhtT1RVdE1UaGtOekU0WWpjeVlqbGhEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "identity": "59844@ycyang-C02XW41WJGH6@"
       }
     },
@@ -924,7 +924,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "eyJTaGFyZElEIjoyLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkX2NmMzNkNzJhLWZhYzktNDA4Zi1hZDJmLThjMTFlZjFkNTQ3NSIsIlJ1bklEIjoiMDJmMjE3M2QtY2EzZC00MDMyLWI5NjEtZDNjNTYyOGRiYjIwIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1F3TW1ZeU1UY3paQzFqWVROa0xUUXdNekl0WWprMk1TMWtNMk0xTmpJNFpHSmlNakFMQUJRQUFBQWtZV1kzTlRCa01UQXRaVFl4TkMwME56QmtMVGhtT1RVdE1UaGtOekU0WWpjeVlqbGhEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "scheduleToCloseTimeoutSeconds": 300,
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
@@ -1016,7 +1016,7 @@
       "taskId": 6291784,
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
-        "details": "eyJhY3Rpdml0eUlkIjoiMTUiLCJhY3Rpdml0eVR5cGUiOiJkZWxldGVIaXN0b3J5QWN0aXZpdHkiLCJyZXBsYXlUaW1lIjoiMjAxOS0wOS0yN1QxMDo0MjowNS4yMzk2NTkyOTUtMDc6MDAifQo=",
+        "details": null,
         "decisionTaskCompletedEventId": 67
       }
     },
@@ -1028,7 +1028,7 @@
       "taskId": 6291786,
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "temporal-archival-signal",
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzZhN2MxYjI5LTEzMjktNDgyYi04NTM3LTk4MmE5M2JjNjM3ZiIsIlJ1bklEIjoiNWQzMzQ4MDQtNzQ3ZC00ODAyLTkwYjctZmNiNjI2OWFiMDVkIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1ExWkRNek5EZ3dOQzAzTkRka0xUUTRNREl0T1RCaU55MW1ZMkkyTWpZNVlXSXdOV1FMQUJRQUFBQWtPREF6T0dKaU16Y3RPRE14TUMwME9UVm1MVGxqTlRNdE9HVmpPVEl5WVdVeE1tRTFEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "identity": "59844@ycyang-C02XW41WJGH6@"
       }
     },
@@ -1085,7 +1085,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzZhN2MxYjI5LTEzMjktNDgyYi04NTM3LTk4MmE5M2JjNjM3ZiIsIlJ1bklEIjoiNWQzMzQ4MDQtNzQ3ZC00ODAyLTkwYjctZmNiNjI2OWFiMDVkIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1ExWkRNek5EZ3dOQzAzTkRka0xUUTRNREl0T1RCaU55MW1ZMkkyTWpZNVlXSXdOV1FMQUJRQUFBQWtPREF6T0dKaU16Y3RPRE14TUMwME9UVm1MVGxqTlRNdE9HVmpPVEl5WVdVeE1tRTFEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "scheduleToCloseTimeoutSeconds": 300,
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
@@ -1177,7 +1177,7 @@
       "taskId": 6291813,
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
-        "details": "eyJhY3Rpdml0eUlkIjoiMTciLCJhY3Rpdml0eVR5cGUiOiJkZWxldGVIaXN0b3J5QWN0aXZpdHkiLCJyZXBsYXlUaW1lIjoiMjAxOS0wOS0yN1QxMDo0MjowNS45Mzc0NDI0NTEtMDc6MDAifQo=",
+        "details": null,
         "decisionTaskCompletedEventId": 78
       }
     },
@@ -1189,7 +1189,7 @@
       "taskId": 6291846,
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "temporal-archival-signal",
-        "input": "eyJTaGFyZElEIjozLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkX2I1YWJjYmNmLTZiZjAtNGE2My05YTM4LTU0NzhhM2MzOWM5MCIsIlJ1bklEIjoiY2VkYWRkZGEtZTM1My00MTQwLWI5MzktZjQ5OWFjMThlOGQ0IiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1JqWldSaFpHUmtZUzFsTXpVekxUUXhOREF0WWprek9TMW1ORGs1WVdNeE9HVTRaRFFMQUJRQUFBQWtaVGM0WXpBMFpURXRaRFJpTmkwME4yWTBMVGt5Wm1RdE1tTTRZell3WTJNeVkyUTJEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "identity": "59844@ycyang-C02XW41WJGH6@"
       }
     },
@@ -1246,7 +1246,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "eyJTaGFyZElEIjozLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkX2I1YWJjYmNmLTZiZjAtNGE2My05YTM4LTU0NzhhM2MzOWM5MCIsIlJ1bklEIjoiY2VkYWRkZGEtZTM1My00MTQwLWI5MzktZjQ5OWFjMThlOGQ0IiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1JqWldSaFpHUmtZUzFsTXpVekxUUXhOREF0WWprek9TMW1ORGs1WVdNeE9HVTRaRFFMQUJRQUFBQWtaVGM0WXpBMFpURXRaRFJpTmkwME4yWTBMVGt5Wm1RdE1tTTRZell3WTJNeVkyUTJEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "scheduleToCloseTimeoutSeconds": 300,
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
@@ -1338,7 +1338,7 @@
       "taskId": 6291873,
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
-        "details": "eyJhY3Rpdml0eUlkIjoiMTkiLCJhY3Rpdml0eVR5cGUiOiJkZWxldGVIaXN0b3J5QWN0aXZpdHkiLCJyZXBsYXlUaW1lIjoiMjAxOS0wOS0yN1QxMDo0MjowNi4wNjcyNDQ4OTEtMDc6MDAifQo=",
+        "details": null,
         "decisionTaskCompletedEventId": 89
       }
     },
@@ -1350,7 +1350,7 @@
       "taskId": 6291875,
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "temporal-archival-signal",
-        "input": "eyJTaGFyZElEIjoyLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkX2U5YTE2MDRiLWY1YjEtNGY3Yi1hNjY0LTQ1Yjg4ZjU5YjY2OSIsIlJ1bklEIjoiYzNkMTVhZWQtMWViNS00NGU2LWJmYTMtMWNlNmY2OTIzZDEzIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1JqTTJReE5XRmxaQzB4WldJMUxUUTBaVFl0WW1aaE15MHhZMlUyWmpZNU1qTmtNVE1MQUJRQUFBQWtPRGMyTjJFNVpqVXROMlJsWlMwME5HWTBMV0U0Wm1RdFkyWmpZVEEyTUdVeFpXWTJEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "identity": "59844@ycyang-C02XW41WJGH6@"
       }
     },
@@ -1407,7 +1407,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "eyJTaGFyZElEIjoyLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkX2U5YTE2MDRiLWY1YjEtNGY3Yi1hNjY0LTQ1Yjg4ZjU5YjY2OSIsIlJ1bklEIjoiYzNkMTVhZWQtMWViNS00NGU2LWJmYTMtMWNlNmY2OTIzZDEzIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1JqTTJReE5XRmxaQzB4WldJMUxUUTBaVFl0WW1aaE15MHhZMlUyWmpZNU1qTmtNVE1MQUJRQUFBQWtPRGMyTjJFNVpqVXROMlJsWlMwME5HWTBMV0U0Wm1RdFkyWmpZVEEyTUdVeFpXWTJEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "scheduleToCloseTimeoutSeconds": 300,
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
@@ -1499,7 +1499,7 @@
       "taskId": 6291902,
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
-        "details": "eyJhY3Rpdml0eUlkIjoiMjEiLCJhY3Rpdml0eVR5cGUiOiJkZWxldGVIaXN0b3J5QWN0aXZpdHkiLCJyZXBsYXlUaW1lIjoiMjAxOS0wOS0yN1QxMDo0MjowNi4yMzU0Njg2OTMtMDc6MDAifQo=",
+        "details": null,
         "decisionTaskCompletedEventId": 100
       }
     },
@@ -1511,7 +1511,7 @@
       "taskId": 6291904,
       "workflowExecutionSignaledEventAttributes": {
         "signalName": "temporal-archival-signal",
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzlmY2U4ZGEzLTMwNzMtNGY1Yi1iMjIxLWU3ZTFlZTM1ZWE0MCIsIlJ1bklEIjoiZGI3OTlhNWMtMmJkYS00OTZjLWI3MDMtNWY1ODNjN2IzZTkzIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1JrWWpjNU9XRTFZeTB5WW1SaExUUTVObU10WWpjd015MDFaalU0TTJNM1lqTmxPVE1MQUJRQUFBQWtNMkkwTW1SbU0yVXRNelJpWkMwME5USTNMV0k0T1RRdE1qQXlPRGhpWVdOaU1UZGpEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "identity": "59844@ycyang-C02XW41WJGH6@"
       }
     },
@@ -1568,7 +1568,7 @@
         "taskList": {
           "name": "temporal-archival-tl"
         },
-        "input": "eyJTaGFyZElEIjoxLCJEb21haW5JRCI6IjhlNjI3NmQ4LWZhOTQtNDZjMS1hYjY5LWFkOGRhOTEyZWE4MCIsIkRvbWFpbk5hbWUiOiJzYW1wbGVzLWRvbWFpbiIsIldvcmtmbG93SUQiOiJoZWxsb3dvcmxkXzlmY2U4ZGEzLTMwNzMtNGY1Yi1iMjIxLWU3ZTFlZTM1ZWE0MCIsIlJ1bklEIjoiZGI3OTlhNWMtMmJkYS00OTZjLWI3MDMtNWY1ODNjN2IzZTkzIiwiRXZlbnRTdG9yZVZlcnNpb24iOjIsIkJyYW5jaFRva2VuIjoiV1FzQUNnQUFBQ1JrWWpjNU9XRTFZeTB5WW1SaExUUTVObU10WWpjd015MDFaalU0TTJNM1lqTmxPVE1MQUJRQUFBQWtNMkkwTW1SbU0yVXRNelJpWkMwME5USTNMV0k0T1RRdE1qQXlPRGhpWVdOaU1UZGpEd0FlREFBQUFBQUEiLCJOZXh0RXZlbnRJRCI6MTIsIkNsb3NlRmFpbG92ZXJWZXJzaW9uIjotMjQsIlVSSSI6ImZpbGU6Ly8vdG1wL2NhZGVuY2VfYXJjaGl2YWwvZGV2ZWxvcG1lbnQifQo=",
+        "input": null,
         "scheduleToCloseTimeoutSeconds": 300,
         "scheduleToStartTimeoutSeconds": 300,
         "startToCloseTimeoutSeconds": 60,
@@ -1660,7 +1660,7 @@
       "taskId": 6291931,
       "markerRecordedEventAttributes": {
         "markerName": "LocalActivity",
-        "details": "eyJhY3Rpdml0eUlkIjoiMjMiLCJhY3Rpdml0eVR5cGUiOiJkZWxldGVIaXN0b3J5QWN0aXZpdHkiLCJyZXBsYXlUaW1lIjoiMjAxOS0wOS0yN1QxMDo0MjowNi45NDIzMTU2MjMtMDc6MDAifQo=",
+        "details": null,
         "decisionTaskCompletedEventId": 111
       }
     }

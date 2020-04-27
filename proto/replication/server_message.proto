@@ -137,11 +137,11 @@ message SyncActivityTaskAttributes {
     int64 startedId = 7;
     int64 startedTime = 8;
     int64 lastHeartbeatTime = 9;
-    bytes details = 10;
+    common.Payload details = 10;
     int32 attempt = 11;
     string lastFailureReason = 12;
     string lastWorkerIdentity = 13;
-    bytes lastFailureDetails = 14;
+    common.Payload lastFailureDetails = 14;
     event.VersionHistory versionHistory = 15;
 }
 

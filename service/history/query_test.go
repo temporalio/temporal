@@ -31,6 +31,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	querypb "go.temporal.io/temporal-proto/query"
+
+	"github.com/temporalio/temporal/common/payload"
 )
 
 type QuerySuite struct {
@@ -83,7 +85,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
 					ResultType:   querypb.QueryResultType_Answered,
-					Answer:       []byte{1, 2, 3},
+					Answer:       payload.EncodeBytes([]byte{1, 2, 3}),
 					ErrorMessage: "err",
 				},
 			},
@@ -94,7 +96,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
 					ResultType: querypb.QueryResultType_Failed,
-					Answer:     []byte{1, 2, 3},
+					Answer:     payload.EncodeBytes([]byte{1, 2, 3}),
 				},
 			},
 			expectErr: true,
@@ -114,7 +116,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
 					ResultType: querypb.QueryResultType_Answered,
-					Answer:     []byte{1, 2, 3},
+					Answer:     payload.EncodeBytes([]byte{1, 2, 3}),
 				},
 			},
 			expectErr: false,
@@ -184,7 +186,7 @@ func (s *QuerySuite) TestTerminationState_Completed() {
 		queryTerminationType: queryTerminationTypeCompleted,
 		queryResult: &querypb.WorkflowQueryResult{
 			ResultType: querypb.QueryResultType_Answered,
-			Answer:     []byte{1, 2, 3},
+			Answer:     payload.EncodeBytes([]byte{1, 2, 3}),
 		},
 	}
 	s.testSetTerminationState(answeredTerminationState)
