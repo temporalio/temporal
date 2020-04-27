@@ -39,6 +39,29 @@
 				"--service_config_dir",
 				"./config"
 			]
-		}
+		},
+		{
+			"name": "Debug CLI Workflow Run",
+			"type": "go",
+			"request": "launch",
+			"mode": "exec",
+			"program": "${workspaceFolder}/tctl",
+			"args": [
+				"--ns",
+				"default",
+				"workflow",
+				"run",
+				"--tasklist",
+				"TestTaskList",
+				"--workflow_type",
+				"TestWorkflow_test",
+				"--execution_timeout",
+				"100000000",
+				"--input",
+				"{}"
+			],
+			"env": {}
+		},
+
 	]
 }
