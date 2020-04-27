@@ -1427,11 +1427,11 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.ExpirationTime = time.Now()
 	updatedInfo.NonRetriableErrors = []string{"accessDenied", "badRequest"}
 	searchAttrKey := "env"
-	searchAttrVal := payload.EncodeString("test")
+	searchAttrVal := payload.EncodeBytes([]byte("test"))
 	updatedInfo.SearchAttributes = map[string]*commonpb.Payload{searchAttrKey: searchAttrVal}
 
 	memoKey := "memoKey"
-	memoVal := payload.EncodeString("memoVal")
+	memoVal := payload.EncodeBytes([]byte("memoVal"))
 	updatedInfo.Memo = map[string]*commonpb.Payload{memoKey: memoVal}
 	updatedStats.HistorySize = math.MaxInt64
 
@@ -2603,7 +2603,6 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	currentTime := time.Now()
-	details := payload.EncodeString(uuid.New())
 
 	activityInfos := []*p.ActivityInfo{{
 		Version:                  7789,
@@ -2613,7 +2612,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 		ScheduledTime:            currentTime,
 		ActivityID:               uuid.New(),
 		RequestID:                uuid.New(),
-		Details:                  details,
+		Details:                  payload.EncodeString(uuid.New()),
 		StartedID:                2,
 		StartedEvent:             &eventpb.HistoryEvent{EventId: 2},
 		StartedTime:              currentTime,

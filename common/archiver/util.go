@@ -154,7 +154,7 @@ func ValidateQueryRequest(request *QueryVisibilityRequest) error {
 func ConvertSearchAttrToPayload(searchAttrStr map[string]string) map[string]*commonpb.Payload {
 	searchAttr := make(map[string]*commonpb.Payload)
 	for k, v := range searchAttrStr {
-		searchAttr[k] = payload.EncodeString(v)
+		searchAttr[k] = payload.EncodeBytes([]byte(v))
 	}
 	return searchAttr
 }

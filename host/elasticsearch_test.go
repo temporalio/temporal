@@ -29,6 +29,7 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -507,10 +508,10 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 		s.NoError(err)
 		openExecutions = resp.GetExecutions()
-		var prevValNumber json.Number
-		err = payload.Decode(openExecutions[0].GetSearchAttributes().GetIndexedFields()[searchAttrKey], &prevValNumber)
+		dec := json.NewDecoder(bytes.NewReader(openExecutions[0].GetSearchAttributes().GetIndexedFields()[searchAttrKey].GetItems()[0].GetData()))
+		dec.UseNumber()
+		err = dec.Decode(&prevVal)
 		s.NoError(err)
-		prevVal = prevValNumber
 		for i := int32(1); i < pageSize; i++ {
 			indexedFields := openExecutions[i].GetSearchAttributes().GetIndexedFields()
 			searchAttrBytes, ok := indexedFields[searchAttrKey]
@@ -518,10 +519,10 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 				s.Equal(pageSize-1, i)
 				break
 			}
-			var curValNumber json.Number
-			err = payload.Decode(searchAttrBytes, &curValNumber)
+			dec := json.NewDecoder(bytes.NewReader(searchAttrBytes.GetItems()[0].GetData()))
+			dec.UseNumber()
+			err = dec.Decode(&currVal)
 			s.NoError(err)
-			currVal = curValNumber
 			var v1, v2 interface{}
 			switch searchAttrKey {
 			case definition.CustomIntField:
@@ -945,7 +946,8 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) > 0 {
 				searchValBytes := retrievedSearchAttr.GetIndexedFields()[s.testSearchAttributeKey]
 				var searchVal string
-				payload.Decode(searchValBytes, &searchVal)
+				err = payload.Decode(searchValBytes, &searchVal)
+				s.NoError(err)
 				s.Equal(s.testSearchAttributeVal, searchVal)
 				verified = true
 				break
@@ -1066,7 +1068,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 			Attributes: &decisionpb.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes{
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"INVALIDKEY": payload.EncodeString("1"),
+						"INVALIDKEY": payload.EncodeBytes([]byte("1")),
 					},
 				},
 			}}}

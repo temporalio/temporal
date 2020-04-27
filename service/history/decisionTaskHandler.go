@@ -851,7 +851,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 	// blob size limit check
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
 		metrics.DecisionTypeTag(decisionpb.DecisionType_UpsertWorkflowSearchAttributes.String()),
-		attr.GetSearchAttributes().Size(),
+		searchAttributesSize(attr.GetSearchAttributes().GetIndexedFields()),
 		"UpsertWorkflowSearchAttributesDecisionAttributes exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -863,6 +863,18 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 		handler.decisionTaskCompletedID, attr,
 	)
 	return err
+}
+
+func searchAttributesSize(fields map[string]*commonpb.Payload) int {
+	result := 0
+
+	for k, v := range fields {
+		result += len(k)
+		for _, payloadItem := range v.Items {
+			result += len(payloadItem.GetData())
+		}
+	}
+	return result
 }
 
 func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
