@@ -195,7 +195,6 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 		MaximumIntervalInSeconds:    1,
 		NonRetriableErrorReasons:    []string{"bad-bug"},
 		BackoffCoefficient:          1,
-		ExpirationIntervalInSeconds: 100,
 	}
 	activity3ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity3ID, activity3Type,
 		activityTaskList, activity3Input, activityTimeout, queueTimeout, hearbeatTimeout, activity3RetryPolicy)

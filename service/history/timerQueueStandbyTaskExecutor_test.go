@@ -551,10 +551,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                            &tasklistpb.TaskList{Name: taskListName},
-				ExecutionStartToCloseTimeoutSeconds: 2,
-				TaskStartToCloseTimeoutSeconds:      1,
+				WorkflowType:               &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                   &tasklistpb.TaskList{Name: taskListName},
+				WorkflowRunTimeoutSeconds:  2,
+				WorkflowTaskTimeoutSeconds: 1,
 			},
 		},
 	)
