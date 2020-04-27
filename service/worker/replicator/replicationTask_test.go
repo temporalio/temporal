@@ -47,6 +47,7 @@ import (
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	messageMocks "github.com/temporalio/temporal/common/messaging/mocks"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/common/task"
 	"github.com/temporalio/temporal/common/xdc"
@@ -791,11 +792,11 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication
 		StartedId:          1015,
 		StartedTime:        time.Now().UnixNano(),
 		LastHeartbeatTime:  time.Now().UnixNano(),
-		Details:            []byte("some random detail"),
+		Details:            payload.EncodeString("some random detail"),
 		Attempt:            59,
 		LastFailureReason:  "some random failure reason",
 		LastWorkerIdentity: "some random worker identity",
-		LastFailureDetails: []byte("some random failure details"),
+		LastFailureDetails: payload.EncodeString("some random failure details"),
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
 		TaskType:   replicationgenpb.ReplicationTaskType_SyncActivityTask,

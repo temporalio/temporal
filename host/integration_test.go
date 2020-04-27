@@ -27,7 +27,6 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -52,6 +51,7 @@ import (
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/service/matching"
 )
 
@@ -176,7 +176,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -188,15 +188,15 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -215,7 +215,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	s.NoError(err)
 
 	terminateReason := "terminate reason"
-	terminateDetails := []byte("terminate details")
+	terminateDetails := payload.EncodeString("terminate details")
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -329,7 +329,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -342,25 +342,28 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	expectedActivity := int32(1)
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 		s.EqualValues(id, execution.WorkflowId)
 		s.Equal(activityName, activityType.Name)
 		id, _ := strconv.Atoi(activityID)
 		s.Equal(int(expectedActivity), id)
-		buf := bytes.NewReader(input)
+		var b []byte
+		err := payload.Decode(input, &b)
+		s.NoError(err)
+		buf := bytes.NewReader(b)
 		var in int32
 		binary.Read(buf, binary.LittleEndian, &in)
 		s.Equal(expectedActivity, in)
 		expectedActivity++
 
-		return []byte("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -433,7 +436,7 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -512,7 +515,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 1,
 					ScheduleToStartTimeoutSeconds: 1,
 					StartToCloseTimeoutSeconds:    1,
@@ -527,17 +530,17 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 		s.EqualValues(id, execution.WorkflowId)
 		s.Equal(activityName, activityType.Name)
 		s.Logger.Info("Activity ID", tag.WorkflowActivityID(activityID))
-		return []byte("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -635,7 +638,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 				{
 					DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 					Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-						Result: []byte("succeed-after-retry"),
+						Result: payload.EncodeString("succeed-after-retry"),
 					}},
 				}}, nil
 		}
@@ -710,7 +713,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 					{
 						DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 						Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-							Result: []byte("succeed-after-retry"),
+							Result: payload.EncodeString("succeed-after-retry"),
 						}},
 					}}, nil
 			}
@@ -840,11 +843,11 @@ func (s *integrationSuite) TestCronWorkflow() {
 	backoffDurationTolerance := time.Millisecond * 500
 
 	memo := &commonpb.Memo{
-		Fields: map[string][]byte{"memoKey": []byte("memoVal")},
+		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string][]byte{
-			"CustomKeywordField": []byte(`"1"`),
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": payload.EncodeString("1"),
 		},
 	}
 
@@ -882,7 +885,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 				{
 					DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 					Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-						Result: []byte("cron-test-result"),
+						Result: payload.EncodeString("cron-test-result"),
 					}},
 				}}, nil
 		}
@@ -956,7 +959,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
 	s.Equal("cron-test-error", attributes.GetFailureReason())
-	s.Equal(0, len(attributes.GetLastCompletionResult()))
+	s.Nil(attributes.GetLastCompletionResult())
 	s.Equal(memo, attributes.Memo)
 	s.Equal(searchAttr, attributes.SearchAttributes)
 
@@ -966,7 +969,11 @@ func (s *integrationSuite) TestCronWorkflow() {
 	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
 	s.Equal("", attributes.GetFailureReason())
-	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
+
+	var r string
+	err = payload.Decode(attributes.GetLastCompletionResult(), &r)
+	s.NoError(err)
+	s.Equal("cron-test-result", r)
 	s.Equal(memo, attributes.Memo)
 	s.Equal(searchAttr, attributes.SearchAttributes)
 
@@ -976,7 +983,10 @@ func (s *integrationSuite) TestCronWorkflow() {
 	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
 	s.Equal("cron-test-error", attributes.GetFailureReason())
-	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
+
+	err = payload.Decode(attributes.GetLastCompletionResult(), &r)
+	s.NoError(err)
+	s.Equal("cron-test-result", r)
 	s.Equal(memo, attributes.Memo)
 	s.Equal(searchAttr, attributes.SearchAttributes)
 
@@ -1037,13 +1047,13 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	cronSchedule := "@every 3s"
 
 	memo := &commonpb.Memo{
-		Fields: map[string][]byte{
-			"memoKey": []byte("memoVal"),
+		Fields: map[string]*commonpb.Payload{
+			"memoKey": payload.EncodeString("memoVal"),
 		},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string][]byte{
-			"CustomKeywordField": []byte(`"1"`),
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": payload.EncodeString("1"),
 		},
 	}
 
@@ -1174,7 +1184,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 		return []byte(strconv.Itoa(int(timerCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1250,12 +1260,12 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 			for i := 0; i < 100; i++ {
 				buf := new(bytes.Buffer)
 				binary.Write(buf, binary.LittleEndian, i)
-				s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", buf.Bytes(), identity))
+				s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payload.EncodeBytes(buf.Bytes()), identity))
 			}
 
 			buf := new(bytes.Buffer)
 			binary.Write(buf, binary.LittleEndian, 101)
-			signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", buf.Bytes(), identity)
+			signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", payload.EncodeBytes(buf.Bytes()), identity)
 			s.Nil(signalErr)
 
 			// this decision will be ignored as he decision task is already failed
@@ -1266,7 +1276,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1340,7 +1350,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 						WorkflowId: id,
 					},
 					SignalName: "buffered-signal",
-					Input:      []byte("buffered-signal-input"),
+					Input:      payload.EncodeString("buffered-signal-input"),
 					Identity:   identity,
 				})
 			s.NoError(err)
@@ -1350,7 +1360,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: "test-activity-type"},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         []byte("test-input"),
+					Input:                         payload.EncodeString("test-input"),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -1369,7 +1379,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1469,7 +1479,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: "test-activity-type"},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         []byte("test-input"),
+					Input:                         payload.EncodeString("test-input"),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -1482,14 +1492,14 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result"), false, nil
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1567,7 +1577,7 @@ func (s *integrationSuite) TestVisibility() {
 		return []byte{}, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1713,16 +1723,15 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	var startedEvent *eventpb.HistoryEvent
 	var completedEvent *eventpb.HistoryEvent
 
-	memoInfo, _ := json.Marshal("memo")
 	memo := &commonpb.Memo{
-		Fields: map[string][]byte{
-			"Info": memoInfo,
+		Fields: map[string]*commonpb.Payload{
+			"Info": payload.EncodeString("memo"),
 		},
 	}
-	attrValBytes, _ := json.Marshal("attrVal")
+	attrValPayload := payload.EncodeString("attrVal")
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string][]byte{
-			"CustomKeywordField": attrValBytes,
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": attrValPayload,
 		},
 	}
 
@@ -1742,7 +1751,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						WorkflowId:                          childID,
 						WorkflowType:                        childWorkflowType,
 						TaskList:                            taskListChild,
-						Input:                               []byte("child-workflow-input"),
+						Input:                               payload.EncodeString("child-workflow-input"),
 						Header:                              header,
 						ExecutionStartToCloseTimeoutSeconds: 200,
 						TaskStartToCloseTimeoutSeconds:      2,
@@ -1763,7 +1772,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						return nil, []*decisionpb.Decision{{
 							DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 							Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-								Result: []byte("Done"),
+								Result: payload.EncodeString("Done"),
 							}},
 						}}, nil
 					}
@@ -1787,7 +1796,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Child Done"),
+				Result: payload.EncodeString("Child Done"),
 			}},
 		}}, nil
 	}
@@ -1849,7 +1858,10 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Empty(completedAttributes.Namespace)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
-	s.Equal([]byte("Child Done"), completedAttributes.Result)
+	var r string
+	err = payload.Decode(completedAttributes.GetResult(), &r)
+	s.NoError(err)
+	s.Equal("Child Done", r)
 }
 
 func (s *integrationSuite) TestCronChildWorkflowExecution() {
@@ -1921,7 +1933,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 				return nil, []*decisionpb.Decision{{
 					DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 					Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-						Result: []byte("Done"),
+						Result: payload.EncodeString("Done"),
 					}},
 				}}, nil
 			}
@@ -2201,7 +2213,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -2224,16 +2236,16 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -2372,7 +2384,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 25,
 					StartToCloseTimeoutSeconds:    50,
@@ -2384,14 +2396,14 @@ func (s *integrationSuite) TestDescribeTaskList() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result"), false, nil
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -2500,7 +2512,7 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -2579,7 +2591,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 						WorkflowId: id,
 					},
 					SignalName: "buffered-signal-1",
-					Input:      []byte("buffered-signal-input"),
+					Input:      payload.EncodeString("buffered-signal-input"),
 					Identity:   identity,
 				})
 			s.NoError(err)
@@ -2600,7 +2612,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -2783,7 +2795,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -2807,7 +2819,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	// Send one signal to create a new decision
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, 0)
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", buf.Bytes(), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payload.EncodeBytes(buf.Bytes()), identity))
 
 	// Drop decision to cause all events to be buffered from now on
 	_, err = poller.PollAndProcessDecisionTask(false, true)
@@ -2818,13 +2830,13 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	for i := 1; i < 101; i++ {
 		buf := new(bytes.Buffer)
 		binary.Write(buf, binary.LittleEndian, i)
-		s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", buf.Bytes(), identity))
+		s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payload.EncodeBytes(buf.Bytes()), identity))
 	}
 
 	// 101 signal, which will fail the decision
 	buf = new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, 101)
-	signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", buf.Bytes(), identity)
+	signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", payload.EncodeBytes(buf.Bytes()), identity)
 	s.Nil(signalErr)
 
 	// Process signal in decider
@@ -2882,7 +2894,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "local activity marker",
-					Details:    []byte("local activity data"),
+					Details:    payload.EncodeString("local activity data"),
 				}},
 			}}, nil
 		}
@@ -2894,7 +2906,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 					Namespace:            s.namespace,
 					WorkflowExecution: workflowExecution,
 					SignalName:        "signalB",
-					Input:             []byte("signal input"),
+					Input:             codec.EncodeString("signal input"),
 					Identity:          identity,
 					RequestId:         uuid.New(),
 				})
@@ -2907,7 +2919,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -2932,7 +2944,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
-		Input:             []byte("signal input"),
+		Input:             payload.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.New(),
 	})
@@ -2963,7 +2975,7 @@ WaitForStickyTimeoutLoop:
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",
-		Input:             []byte("signal input"),
+		Input:             payload.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.New(),
 	})
@@ -3050,7 +3062,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "local activity marker",
-					Details:    []byte("local activity data"),
+					Details:    payload.EncodeString("local activity data"),
 				}},
 			}}, nil
 		}
@@ -3063,7 +3075,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -3088,7 +3100,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
-		Input:             []byte("signal input"),
+		Input:             payload.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.New(),
 	})
@@ -3125,7 +3137,7 @@ WaitForStickyTimeoutLoop:
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",
-		Input:             []byte("signal input"),
+		Input:             payload.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.New(),
 	})
@@ -3209,7 +3221,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "some random marker name",
-					Details:    []byte("some random marker details"),
+					Details:    payload.EncodeString("some random marker details"),
 				}},
 			}, {
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
@@ -3218,7 +3230,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 					ActivityType:                  &commonpb.ActivityType{Name: "ActivityType"},
 					Namespace:                     s.namespace,
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         []byte("some random activity input"),
+					Input:                         payload.EncodeString("some random activity input"),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 100,
 					StartToCloseTimeoutSeconds:    100,
@@ -3233,7 +3245,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "some random marker name",
-					Details:    []byte("some random marker details"),
+					Details:    payload.EncodeString("some random marker details"),
 				}},
 			}}, nil
 		}
@@ -3242,14 +3254,14 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result"), false, nil
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -3331,10 +3343,9 @@ func (s *integrationSuite) TestStartWithMemo() {
 	tl := "integration-start-with-memo-test-tasklist"
 	identity := "worker1"
 
-	memoInfo, _ := json.Marshal(id)
 	memo := &commonpb.Memo{
-		Fields: map[string][]byte{
-			"Info": memoInfo,
+		Fields: map[string]*commonpb.Payload{
+			"Info": payload.EncodeString(id),
 		},
 	}
 
@@ -3363,15 +3374,14 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 	tl := "integration-signal-with-start-with-memo-test-tasklist"
 	identity := "worker1"
 
-	memoInfo, _ := json.Marshal(id)
 	memo := &commonpb.Memo{
-		Fields: map[string][]byte{
-			"Info": memoInfo,
+		Fields: map[string]*commonpb.Payload{
+			"Info": payload.EncodeString(id),
 		},
 	}
 
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           s.namespace,
@@ -3470,7 +3480,7 @@ func (s *integrationSuite) TestCancelTimer() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -3491,14 +3501,14 @@ func (s *integrationSuite) TestCancelTimer() {
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", []byte("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payload.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", []byte("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payload.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
@@ -3602,7 +3612,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -3623,14 +3633,14 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", []byte("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payload.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", []byte("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payload.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
@@ -3670,7 +3680,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 		return []byte(strconv.Itoa(1)), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -3767,7 +3777,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 }
 
 func (s *integrationSuite) sendSignal(namespace string, execution *executionpb.WorkflowExecution, signalName string,
-	input []byte, identity string) error {
+	input *commonpb.Payload, identity string) error {
 	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         namespace,
 		WorkflowExecution: execution,

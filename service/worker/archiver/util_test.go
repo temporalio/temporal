@@ -32,6 +32,8 @@ import (
 
 	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
+
+	"github.com/temporalio/temporal/common/payload"
 )
 
 type UtilSuite struct {
@@ -72,14 +74,14 @@ func (s *UtilSuite) TestHashDeterminism() {
 				NextEventID: int64(123),
 				Status:      executionpb.WorkflowExecutionStatus_ContinuedAsNew,
 				Memo: &commonpb.Memo{
-					Fields: map[string][]byte{
-						"memoKey1": []byte{1, 2, 3},
-						"memoKey2": []byte{4, 5, 6},
+					Fields: map[string]*commonpb.Payload{
+						"memoKey1": payload.EncodeBytes([]byte{1, 2, 3}),
+						"memoKey2": payload.EncodeBytes([]byte{4, 5, 6}),
 					},
 				},
-				SearchAttributes: map[string][]byte{
-					"customKey1": []byte{1, 2, 3},
-					"customKey2": []byte{4, 5, 6},
+				SearchAttributes: map[string]*commonpb.Payload{
+					"customKey1": payload.EncodeBytes([]byte{1, 2, 3}),
+					"customKey2": payload.EncodeBytes([]byte{4, 5, 6}),
 				},
 				Targets: []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 			},

@@ -276,7 +276,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 		inFlightDecision.ScheduleID,
 		inFlightDecision.StartedID,
 		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
-		[]byte(nil),
+		nil,
 		identityHistoryService,
 		"",
 		"",

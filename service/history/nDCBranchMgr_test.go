@@ -198,7 +198,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 		decisionInfo.ScheduleID,
 		decisionInfo.StartedID,
 		eventpb.DecisionTaskFailedCause_FailoverCloseDecision,
-		[]byte(nil),
+		nil,
 		identityHistoryService,
 		"",
 		"",

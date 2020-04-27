@@ -58,6 +58,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/environment"
 	"github.com/temporalio/temporal/host"
 )
@@ -289,7 +290,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 30,
 					StartToCloseTimeoutSeconds:    50,
@@ -302,23 +303,23 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	queryType := "test-query"
-	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error) {
+	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
-			return []byte("query-result"), nil
+			return payload.EncodeString("query-result"), nil
 		}
 
 		return nil, errors.New("unknown-query-type")
@@ -389,7 +390,9 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
-	queryResultString := string(queryResult.Resp.QueryResult)
+	var queryResultString string
+	err = payload.Decode(queryResult.Resp.QueryResult, &queryResultString)
+	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 
 	// Wait a while so the events are replicated.
@@ -412,7 +415,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
-	queryResultString = string(queryResult.Resp.QueryResult)
+	err = payload.Decode(queryResult.Resp.QueryResult, &queryResultString)
+	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 
 	// update namespace to fail over
@@ -470,7 +474,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
-	queryResultString = string(queryResult.Resp.QueryResult)
+	err = payload.Decode(queryResult.Resp.QueryResult, &queryResultString)
+	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 
 	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
@@ -490,7 +495,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
-	queryResultString = string(queryResult.Resp.QueryResult)
+	err = payload.Decode(queryResult.Resp.QueryResult, &queryResultString)
+	s.NoError(err)
 	s.Equal("query-result", queryResultString)
 
 	// make process in cluster 2
@@ -592,7 +598,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -628,7 +634,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 
 	// Send a signal in cluster
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -753,7 +759,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -892,7 +898,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -904,15 +910,15 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &host.TaskPoller{
@@ -949,7 +955,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 
 	// terminate workflow at cluster 2
 	terminateReason := "terminate reason"
-	terminateDetails := []byte("terminate details")
+	terminateDetails := payload.EncodeString("terminate details")
 	_, err = client2.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -1079,7 +1085,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
 					TaskList:                            &tasklistpb.TaskList{Name: tl},
-					Input:                               buf.Bytes(),
+					Input:                               payload.EncodeBytes(buf.Bytes()),
 					ExecutionStartToCloseTimeoutSeconds: 100,
 					TaskStartToCloseTimeoutSeconds:      10,
 				}},
@@ -1091,7 +1097,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1216,7 +1222,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1243,7 +1249,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 
 	// Send a signal in cluster 1
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -1301,7 +1307,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 
 	// Send another signal in cluster 2
 	signalName2 := "my signal 2"
-	signalInput2 := []byte("my signal input 2")
+	signalInput2 := payload.EncodeString("my signal input 2")
 	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -1400,7 +1406,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 
 			// Send a signal in cluster
 			signalName := "my signal"
-			signalInput := []byte("my signal input")
+			signalInput := payload.EncodeString("my signal input")
 			_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace: namespace,
 				WorkflowExecution: &executionpb.WorkflowExecution{
@@ -1444,7 +1450,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1573,7 +1579,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: "some random activity type"},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         []byte("some random input"),
+					Input:                         payload.EncodeString("some random input"),
 					ScheduleToCloseTimeoutSeconds: 1000,
 					ScheduleToStartTimeoutSeconds: 1000,
 					StartToCloseTimeoutSeconds:    1000,
@@ -1593,30 +1599,30 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
 	activity1Called := false
-	heartbeatDetails := []byte("details")
+	heartbeatDetails := payload.EncodeString("details")
 	atHandler1 := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 		activity1Called = true
 		_, err = client1.RecordActivityTaskHeartbeat(host.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: taskToken, Details: heartbeatDetails})
 		s.NoError(err)
 		time.Sleep(5 * time.Second)
-		return []byte("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	// activity handler
 	activity2Called := false
 	atHandler2 := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 		activity2Called = true
-		return []byte("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller1 := &host.TaskPoller{
@@ -1784,7 +1790,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1890,7 +1896,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 			{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: []byte("cron-test-result"),
+					Result: payload.EncodeString("cron-test-result"),
 				}},
 			}}, nil
 	}

@@ -45,6 +45,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -453,7 +454,7 @@ Update_History_Loop:
 				tag.WorkflowID(token.GetWorkflowId()),
 				tag.WorkflowRunIDBytes(token.GetRunId()),
 				tag.WorkflowNamespaceIDBytes(namespaceID))
-			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, []byte(failDecision.message), request)
+			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, payload.EncodeString(failDecision.message), request)
 			if err != nil {
 				return nil, err
 			}
@@ -539,7 +540,7 @@ Update_History_Loop:
 					msBuilder,
 					eventBatchFirstEventID,
 					common.FailureReasonTransactionSizeExceedsLimit,
-					[]byte(updateErr.Error()),
+					payload.EncodeString(updateErr.Error()),
 					identityHistoryService,
 				); err != nil {
 					return nil, err
@@ -662,7 +663,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 	// Complete or fail all queries we have results for
 	for id, result := range queryResults {
 		if err := common.CheckEventBlobSizeLimit(
-			len(result.GetAnswer()),
+			result.GetAnswer().Size(),
 			sizeLimitWarn,
 			sizeLimitError,
 			primitives.UUIDString(namespaceID),

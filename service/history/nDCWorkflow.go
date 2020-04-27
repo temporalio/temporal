@@ -36,6 +36,7 @@ import (
 
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -264,7 +265,7 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 	_, err := r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		eventBatchFirstEventID,
 		workflowTerminationReason,
-		[]byte(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
+		payload.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
 		workflowTerminationIdentity,
 	)
 

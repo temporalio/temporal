@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/rpc"
 )
 
@@ -107,7 +108,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -127,16 +128,16 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -157,7 +158,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Send first signal using RunID
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -183,7 +184,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Send another signal without RunID
 	signalName = "another signal"
-	signalInput = []byte("another signal input")
+	signalInput = payload.EncodeString("another signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -281,7 +282,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -303,16 +304,16 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -333,7 +334,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 
 	// Send first signal
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	requestID := uuid.New()
 	signalReqest := &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
@@ -420,7 +421,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
@@ -434,7 +435,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -458,8 +459,8 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result"), false, nil
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -490,7 +491,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -510,7 +511,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -624,7 +625,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoDecisionTaskCreated() {
 
 	// Send first signal using RunID
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -646,7 +647,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoDecisionTaskCreated() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -713,7 +714,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
@@ -727,7 +728,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -751,8 +752,8 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result"), false, nil
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -783,7 +784,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -803,7 +804,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -912,7 +913,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
@@ -926,7 +927,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -950,8 +951,8 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result"), false, nil
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1037,7 +1038,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
@@ -1051,7 +1052,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -1075,8 +1076,8 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result"), false, nil
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1187,7 +1188,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -1222,16 +1223,16 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		return nil, []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
 
-		return []byte("Activity Result"), false, nil
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1252,7 +1253,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Send a signal
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	wfIDReusePolicy := commonpb.WorkflowIdReusePolicy_AllowDuplicate
 	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -1298,7 +1299,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Send signal to terminated workflow
 	signalName = "signal to terminate"
-	signalInput = []byte("signal to terminate input")
+	signalInput = payload.EncodeString("signal to terminate input")
 	sRequest.SignalName = signalName
 	sRequest.SignalInput = signalInput
 	sRequest.WorkflowId = id
@@ -1325,7 +1326,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	// Send signal to not existed workflow
 	id = "integration-signal-with-start-workflow-test-non-exist"
 	signalName = "signal to non exist"
-	signalInput = []byte("signal to non exist input")
+	signalInput = payload.EncodeString("signal to non exist input")
 	sRequest.SignalName = signalName
 	sRequest.SignalInput = signalInput
 	sRequest.WorkflowId = id
@@ -1444,7 +1445,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         buf.Bytes(),
+					Input:                         payload.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -1457,14 +1458,14 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done"),
+				Result: payload.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result"), false, nil
+		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1489,7 +1490,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 
 	// test policy WorkflowIdReusePolicyRejectDuplicate
 	signalName := "my signal"
-	signalInput := []byte("my signal input")
+	signalInput := payload.EncodeString("my signal input")
 	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Namespace:                           s.namespace,

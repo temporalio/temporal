@@ -50,6 +50,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/common/payload"
 )
 
 type cliAppSuite struct {
@@ -371,7 +372,7 @@ func (s *cliAppSuite) TestSignalWorkflow_Failed() {
 
 func (s *cliAppSuite) TestQueryWorkflow() {
 	resp := &workflowservice.QueryWorkflowResponse{
-		QueryResult: []byte("query-result"),
+		QueryResult: payload.EncodeString("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil)
 	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
@@ -380,7 +381,7 @@ func (s *cliAppSuite) TestQueryWorkflow() {
 
 func (s *cliAppSuite) TestQueryWorkflowUsingStackTrace() {
 	resp := &workflowservice.QueryWorkflowResponse{
-		QueryResult: []byte("query-result"),
+		QueryResult: payload.EncodeString("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil)
 	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "stack", "-w", "wid"})
@@ -389,7 +390,7 @@ func (s *cliAppSuite) TestQueryWorkflowUsingStackTrace() {
 
 func (s *cliAppSuite) TestQueryWorkflow_Failed() {
 	resp := &workflowservice.QueryWorkflowResponse{
-		QueryResult: []byte("query-result"),
+		QueryResult: payload.EncodeString("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--ns", cliTestNamespace, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
@@ -538,7 +539,14 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow_Failed() {
 }
 
 func (s *cliAppSuite) TestAdminAddSearchAttribute() {
-	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "1"})
+	request := &adminservice.AddSearchAttributeRequest{
+		SearchAttribute: map[string]commonpb.IndexedValueType{
+			"testKey": commonpb.IndexedValueType(1),
+		},
+	}
+	s.serverAdminClient.EXPECT().AddSearchAttribute(gomock.Any(), request).Times(1)
+
+	err := s.app.Run([]string{"", "--auto_confirm", "--ns", cliTestNamespace, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "1"})
 	s.Nil(err)
 }
 
@@ -700,7 +708,7 @@ func (s *cliAppSuite) TestAnyToString() {
 			ExecutionStartToCloseTimeoutSeconds: 60,
 			TaskStartToCloseTimeoutSeconds:      10,
 			Identity:                            "tester",
-			Input:                               []byte(arg),
+			Input:                               payload.EncodeString(arg),
 		}},
 	}
 	res := anyToString(event, false, defaultMaxFieldLength)
@@ -710,8 +718,8 @@ func (s *cliAppSuite) TestAnyToString() {
 }
 
 func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
-	fields := map[string][]byte{
-		"TestKey": []byte("testValue"),
+	fields := map[string]*commonpb.Payload{
+		"TestKey": payload.EncodeString("testValue"),
 	}
 	execution := &executionpb.WorkflowExecutionInfo{
 		Status: executionpb.WorkflowExecutionStatus_Running,
@@ -719,7 +727,7 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 	}
 	s.Equal("{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
 
-	fields["TestKey2"] = []byte(`anotherTestValue`)
+	fields["TestKey2"] = payload.EncodeString(`anotherTestValue`)
 	execution.Memo = &commonpb.Memo{Fields: fields}
 	got := anyToString(execution, true, 0)
 	expected := got == "{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||

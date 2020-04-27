@@ -25,6 +25,7 @@
 package history
 
 import (
+	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -198,7 +199,7 @@ func terminateWorkflow(
 	mutableState mutableState,
 	eventBatchFirstEventID int64,
 	terminateReason string,
-	terminateDetails []byte,
+	terminateDetails *commonpb.Payload,
 	terminateIdentity string,
 ) error {
 

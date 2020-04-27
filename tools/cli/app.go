@@ -64,6 +64,11 @@ func NewCliApp() *cli.App {
 			Usage:  "optional timeout for context of RPC call in seconds",
 			EnvVar: "TEMPORAL_CONTEXT_TIMEOUT",
 		},
+		cli.BoolFlag{
+			Name:   FlagAutoConfirm,
+			Usage:  "automatically confirm all prompts",
+			Hidden: true,
+		},
 	}
 	app.Commands = []cli.Command{
 		{

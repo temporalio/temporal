@@ -36,6 +36,7 @@ import (
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -118,7 +119,7 @@ func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize in
 	for _, id := range ids {
 		results[id] = &querypb.WorkflowQueryResult{
 			ResultType: querypb.QueryResultType_Answered,
-			Answer:     make([]byte, resultSize, resultSize),
+			Answer:     payload.EncodeBytes(make([]byte, resultSize, resultSize)),
 		}
 	}
 	return results
