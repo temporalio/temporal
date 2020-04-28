@@ -446,7 +446,7 @@ func (mr *MockmutableStateMockRecorder) AddExternalWorkflowExecutionCancelReques
 }
 
 // AddExternalWorkflowExecutionSignaled mocks base method.
-func (m *MockmutableState) AddExternalWorkflowExecutionSignaled(arg0 int64, arg1, arg2, arg3 string, arg4 []uint8) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddExternalWorkflowExecutionSignaled(arg0 int64, arg1, arg2, arg3, arg4 string) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddExternalWorkflowExecutionSignaled", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -537,7 +537,7 @@ func (mr *MockmutableStateMockRecorder) AddRequestCancelExternalWorkflowExecutio
 }
 
 // AddSignalExternalWorkflowExecutionFailedEvent mocks base method.
-func (m *MockmutableState) AddSignalExternalWorkflowExecutionFailedEvent(arg0, arg1 int64, arg2, arg3, arg4 string, arg5 []uint8, arg6 event.WorkflowExecutionFailedCause) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddSignalExternalWorkflowExecutionFailedEvent(arg0, arg1 int64, arg2, arg3, arg4, arg5 string, arg6 event.WorkflowExecutionFailedCause) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddSignalExternalWorkflowExecutionFailedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -2422,7 +2422,7 @@ func (mr *MockmutableStateMockRecorder) StartTransaction(entry interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransaction", reflect.TypeOf((*MockmutableState)(nil).StartTransaction), entry)
 }
 
-// StartTransactionSkipDecisionFail mocks base method
+// StartTransactionSkipDecisionFail mocks base method.
 func (m *MockmutableState) StartTransactionSkipDecisionFail(entry *cache.NamespaceCacheEntry) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartTransactionSkipDecisionFail", entry)
@@ -2430,13 +2430,13 @@ func (m *MockmutableState) StartTransactionSkipDecisionFail(entry *cache.Namespa
 	return ret0
 }
 
-// StartTransactionSkipDecisionFail indicates an expected call of StartTransactionSkipDecisionFail
+// StartTransactionSkipDecisionFail indicates an expected call of StartTransactionSkipDecisionFail.
 func (mr *MockmutableStateMockRecorder) StartTransactionSkipDecisionFail(entry interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransactionSkipDecisionFail", reflect.TypeOf((*MockmutableState)(nil).StartTransactionSkipDecisionFail), entry)
 }
 
-// CloseTransactionAsMutation mocks base method
+// CloseTransactionAsMutation mocks base method.
 func (m *MockmutableState) CloseTransactionAsMutation(now time.Time, transactionPolicy transactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CloseTransactionAsMutation", now, transactionPolicy)
