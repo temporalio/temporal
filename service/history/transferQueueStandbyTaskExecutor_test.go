@@ -211,7 +211,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	taskID := int64(59)
 	activityID := "activity-1"
 	activityType := "some random activity type"
-	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, []byte{}, 1, 1, 1, 1)
+	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, &commonpb.Payload{}, 1, 1, 1, 1)
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{
@@ -266,7 +266,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 	taskID := int64(59)
 	activityID := "activity-1"
 	activityType := "some random activity type"
-	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, []byte{}, 1, 1, 1, 1)
+	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, &commonpb.Payload{}, 1, 1, 1, 1)
 
 	now := types.TimestampNow()
 	s.mockShard.SetCurrentTime(s.clusterName, time.Unix(now.Seconds, int64(now.Nanos)).UTC().Add(s.fetchHistoryDuration))
@@ -323,7 +323,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 	taskID := int64(59)
 	activityID := "activity-1"
 	activityType := "some random activity type"
-	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, []byte{}, 1, 1, 1, 1)
+	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, &commonpb.Payload{}, 1, 1, 1, 1)
 
 	now := types.TimestampNow()
 	transferTask := &persistenceblobs.TransferTaskInfo{

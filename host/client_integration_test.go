@@ -39,6 +39,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	sdkclient "go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/encoded"
@@ -47,6 +48,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/rpc"
 )
 
@@ -61,6 +63,11 @@ type (
 		worker    worker.Worker
 		taskList  string
 	}
+)
+
+var (
+	ErrEncodingIsNotSet       = errors.New("payload encoding metadata is not set")
+	ErrEncodingIsNotSupported = errors.New("payload encoding is not supported")
 )
 
 func TestClientIntegrationSuite(t *testing.T) {
@@ -114,26 +121,46 @@ type testDataConverter struct {
 	NumOfCallFromData int
 }
 
-func (tdc *testDataConverter) ToData(value ...interface{}) ([]byte, error) {
+func (tdc *testDataConverter) ToData(value ...interface{}) (*commonpb.Payload, error) {
+	payload := &commonpb.Payload{}
+
 	tdc.NumOfCallToData++
+	for i, obj := range value {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
-	for i, obj := range value {
 		if err := enc.Encode(obj); err != nil {
 			return nil, fmt.Errorf(
 				"unable to encode argument: %d, %v, with gob error: %v", i, reflect.TypeOf(obj), err)
 		}
+		payloadItem := &commonpb.PayloadItem{
+			Metadata: map[string][]byte{
+				"encoding": []byte("gob"),
+				"name":     []byte(fmt.Sprintf("args[%d]", i)),
+			},
+			Data: buf.Bytes(),
 	}
-	return buf.Bytes(), nil
+		payload.Items = append(payload.Items, payloadItem)
+	}
+	return payload, nil
 }
 
-func (tdc *testDataConverter) FromData(input []byte, valuePtr ...interface{}) error {
+func (tdc *testDataConverter) FromData(payload *commonpb.Payload, valuePtr ...interface{}) error {
 	tdc.NumOfCallFromData++
-	dec := gob.NewDecoder(bytes.NewBuffer(input))
-	for i, obj := range valuePtr {
-		if err := dec.Decode(obj); err != nil {
+	for i, payloadItem := range payload.GetItems() {
+		encoding, ok := payloadItem.GetMetadata()["encoding"]
+		if !ok {
+			return fmt.Errorf("args[%d]: %w", i, ErrEncodingIsNotSet)
+		}
+
+		e := string(encoding)
+		if e == "gob" {
+			dec := gob.NewDecoder(bytes.NewBuffer(payloadItem.GetData()))
+			if err := dec.Decode(valuePtr[i]); err != nil {
 			return fmt.Errorf(
-				"unable to decode argument: %d, %v, with gob error: %v", i, reflect.TypeOf(obj), err)
+					"unable to decode argument: %d, %v, with gob error: %v", i, reflect.TypeOf(valuePtr[i]), err)
+			}
+		} else {
+			return fmt.Errorf("args[%d], encoding %q: %w", i, e, ErrEncodingIsNotSupported)
 		}
 	}
 	return nil
@@ -266,8 +293,10 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 		}
 		if event.GetEventType() == eventpb.EventType_ActivityTaskFailed {
 			failedAct++
-			attr := event.GetActivityTaskFailedEventAttributes()
-			s.True(strings.HasPrefix(string(attr.Details), "unable to decode the activity function input bytes with error"))
+			var message string
+			err = payload.Decode(event.GetActivityTaskFailedEventAttributes().GetDetails(), &message)
+			s.NoError(err)
+			s.True(strings.HasPrefix(message, "unable to decode the activity function input payload with error"))
 		}
 	}
 	s.Equal(1, completedAct)

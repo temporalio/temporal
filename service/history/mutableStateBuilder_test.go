@@ -47,6 +47,7 @@ import (
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -178,7 +179,7 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 		newDecisionScheduleEvent.GetEventId(),
 		newDecisionStartedEvent.GetEventId(),
 		eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
-		[]byte("some random decision failure details"),
+		payload.EncodeString("some random decision failure details"),
 		"some random decision failure identity",
 		"", "", "", "", 0,
 	))
@@ -270,7 +271,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	}
 	tl := "testTaskList"
 	activityID := "activity_id"
-	activityResult := []byte("activity_result")
+	activityResult := payload.EncodeString("activity_result")
 
 	info := &persistence.WorkflowExecutionInfo{
 		NamespaceID:          namespaceID,
@@ -525,18 +526,18 @@ func (s *mutableStateSuite) TestTrimEvents() {
 	}, output)
 }
 
-func (s *mutableStateSuite) TestMergeMapOfByteArray() {
-	var currentMap map[string][]byte
-	var newMap map[string][]byte
-	resultMap := mergeMapOfByteArray(currentMap, newMap)
-	s.Equal(make(map[string][]byte), resultMap)
+func (s *mutableStateSuite) TestMergeMapOfPayload() {
+	var currentMap map[string]*commonpb.Payload
+	var newMap map[string]*commonpb.Payload
+	resultMap := mergeMapOfPayload(currentMap, newMap)
+	s.Equal(make(map[string]*commonpb.Payload), resultMap)
 
-	newMap = map[string][]byte{"key": []byte("val")}
-	resultMap = mergeMapOfByteArray(currentMap, newMap)
+	newMap = map[string]*commonpb.Payload{"key": payload.EncodeString("val")}
+	resultMap = mergeMapOfPayload(currentMap, newMap)
 	s.Equal(newMap, resultMap)
 
-	currentMap = map[string][]byte{"number": []byte("1")}
-	resultMap = mergeMapOfByteArray(currentMap, newMap)
+	currentMap = map[string]*commonpb.Payload{"number": payload.EncodeString("1")}
+	resultMap = mergeMapOfPayload(currentMap, newMap)
 	s.Equal(2, len(resultMap))
 }
 
@@ -795,7 +796,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 			InitiatedEventBatchId: 17,
 			RequestId:             uuid.New(),
 			Name:                  "test-signal-75",
-			Input:                 []byte("signal-input-75"),
+			Input:                 payload.EncodeString("signal-input-75"),
 		},
 	}
 
@@ -810,7 +811,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 			Version:   failoverVersion,
 			Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 				SignalName: "test-signal-buffered",
-				Input:      []byte("test-signal-buffered-input"),
+				Input:      payload.EncodeString("test-signal-buffered-input"),
 			}},
 		},
 	}

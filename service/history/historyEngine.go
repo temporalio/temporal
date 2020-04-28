@@ -36,6 +36,15 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	querypb "go.temporal.io/temporal-proto/query"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/temporal-proto/workflowservice"
+	sdkclient "go.temporal.io/temporal/client"
+
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -58,14 +67,6 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/xdc"
 	"github.com/temporalio/temporal/service/worker/archiver"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
-	sdkclient "go.temporal.io/temporal/client"
 )
 
 const (
@@ -2570,7 +2571,7 @@ func (e *historyEngineImpl) failDecision(
 	scheduleID int64,
 	startedID int64,
 	cause eventpb.DecisionTaskFailedCause,
-	details []byte,
+	details *commonpb.Payload,
 	request *workflowservice.RespondDecisionTaskCompletedRequest,
 ) (mutableState, error) {
 

@@ -39,6 +39,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/service/history"
 	"github.com/temporalio/temporal/service/matching"
 )
@@ -47,9 +48,9 @@ type (
 	decisionTaskHandler func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error)
 	activityTaskHandler func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input []byte, takeToken []byte) ([]byte, bool, error)
+		activityID string, input *commonpb.Payload, takeToken []byte) (*commonpb.Payload, bool, error)
 
-	queryHandler func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error)
+	queryHandler func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error)
 
 	// TaskPoller is used in integration tests to poll decision or activity tasks
 	TaskPoller struct {
@@ -245,7 +246,7 @@ Loop:
 			_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 				TaskToken: response.TaskToken,
 				Cause:     eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
-				Details:   []byte(err.Error()),
+				Details:   payload.EncodeString(err.Error()),
 				Identity:  p.Identity,
 			})
 			return isQueryTask, nil, err
@@ -315,7 +316,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 			TaskToken: response.TaskToken,
 			Cause:     eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
-			Details:   []byte(err.Error()),
+			Details:   payload.EncodeString(err.Error()),
 			Identity:  p.Identity,
 		})
 		return nil, err
@@ -379,7 +380,7 @@ retry:
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
 			_, err := p.Engine.RespondActivityTaskCanceled(NewContext(), &workflowservice.RespondActivityTaskCanceledRequest{
 				TaskToken: response.TaskToken,
-				Details:   []byte("details"),
+				Details:   payload.EncodeString("details"),
 				Identity:  p.Identity,
 			})
 			return err
@@ -389,7 +390,7 @@ retry:
 			_, err := p.Engine.RespondActivityTaskFailed(NewContext(), &workflowservice.RespondActivityTaskFailedRequest{
 				TaskToken: response.TaskToken,
 				Reason:    err2.Error(),
-				Details:   []byte(err2.Error()),
+				Details:   payload.EncodeString(err2.Error()),
 				Identity:  p.Identity,
 			})
 			return err
@@ -450,7 +451,7 @@ retry:
 				WorkflowId: response.WorkflowExecution.GetWorkflowId(),
 				RunId:      response.WorkflowExecution.GetRunId(),
 				ActivityId: response.GetActivityId(),
-				Details:    []byte("details"),
+				Details:    payload.EncodeString("details"),
 				Identity:   p.Identity,
 			})
 			return err
@@ -463,7 +464,7 @@ retry:
 				RunId:      response.WorkflowExecution.GetRunId(),
 				ActivityId: response.GetActivityId(),
 				Reason:     err2.Error(),
-				Details:    []byte(err2.Error()),
+				Details:    payload.EncodeString(err2.Error()),
 				Identity:   p.Identity,
 			})
 			return err

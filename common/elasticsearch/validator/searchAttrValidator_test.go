@@ -32,6 +32,7 @@ import (
 
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -61,8 +62,10 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	err := validator.ValidateSearchAttributes(attr, namespace)
 	s.Nil(err)
 
-	fields := map[string][]byte{
-		"CustomIntField": []byte("1"),
+	intPayload, err := payload.Encode(1)
+	s.NoError(err)
+	fields := map[string]*commonpb.Payload{
+		"CustomIntField": intPayload,
 	}
 	attr = &commonpb.SearchAttributes{
 		IndexedFields: fields,
@@ -70,54 +73,56 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Nil(err)
 
-	fields = map[string][]byte{
-		"CustomIntField":     []byte(`1`),
-		"CustomKeywordField": []byte(`"keyword"`),
-		"CustomBoolField":    []byte(`true`),
+	fields = map[string]*commonpb.Payload{
+		"CustomIntField":     intPayload,
+		"CustomKeywordField": payload.EncodeString("keyword"),
+		"CustomBoolField":    payload.EncodeString("true"),
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("number of keys 3 exceed limit", err.Error())
 
-	fields = map[string][]byte{
-		"InvalidKey": []byte(`"1"`),
+	fields = map[string]*commonpb.Payload{
+		"InvalidKey": payload.EncodeString("1"),
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("InvalidKey is not valid search attribute key", err.Error())
 
-	fields = map[string][]byte{
-		"CustomStringField": []byte(`"1"`),
-		"CustomBoolField":   []byte(`123`),
+	fields = map[string]*commonpb.Payload{
+		"CustomStringField": payload.EncodeString("1"),
+		"CustomBoolField":   payload.EncodeString("123"),
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("123 is not a valid search attribute value for key CustomBoolField", err.Error())
 
-	fields = map[string][]byte{
-		"CustomIntField": []byte(`[1,2]`),
+	intArrayPayload, err := payload.Encode([]int{1, 2})
+	s.NoError(err)
+	fields = map[string]*commonpb.Payload{
+		"CustomIntField": intArrayPayload,
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.NoError(err)
 
-	fields = map[string][]byte{
-		"StartTime": []byte("1"),
+	fields = map[string]*commonpb.Payload{
+		"StartTime": intPayload,
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("StartTime is read-only Temporal reservered attribute", err.Error())
 
-	fields = map[string][]byte{
-		"CustomKeywordField": []byte(`"123456"`),
+	fields = map[string]*commonpb.Payload{
+		"CustomKeywordField": payload.EncodeString("123456"),
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("size limit exceed for key CustomKeywordField", err.Error())
 
-	fields = map[string][]byte{
-		"CustomKeywordField": []byte(`"123"`),
-		"CustomStringField":  []byte(`"12"`),
+	fields = map[string]*commonpb.Payload{
+		"CustomKeywordField": payload.EncodeString("123"),
+		"CustomStringField":  payload.EncodeString("12"),
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)

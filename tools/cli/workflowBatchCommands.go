@@ -26,7 +26,6 @@ package cli
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -37,6 +36,7 @@ import (
 	sdkclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/service/worker/batcher"
 )
 
@@ -79,9 +79,9 @@ func DescribeBatchJob(c *cli.Context) {
 	} else {
 		output["msg"] = "batch job is running"
 		if len(wf.PendingActivities) > 0 {
-			hbdBinary := wf.PendingActivities[0].HeartbeatDetails
-			hbd := batcher.HeartBeatDetails{}
-			err := json.Unmarshal(hbdBinary, &hbd)
+			hbdPayload := wf.PendingActivities[0].HeartbeatDetails
+			var hbd batcher.HeartBeatDetails
+			err := payload.Decode(hbdPayload, &hbd)
 			if err != nil {
 				ErrorAndExit("Failed to describe batch job", err)
 			}
@@ -106,13 +106,25 @@ func ListBatchJobs(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Failed to list batch jobs", err)
 	}
+
 	output := make([]interface{}, 0, len(resp.Executions))
 	for _, wf := range resp.Executions {
+		var reason, operator string
+		err = payload.Decode(wf.Memo.Fields["Reason"], &reason)
+		if err != nil {
+			ErrorAndExit("Failed to deserialize reason memo field", err)
+		}
+
+		err = payload.Decode(wf.SearchAttributes.IndexedFields["Operator"], &operator)
+		if err != nil {
+			ErrorAndExit("Failed to deserialize operator search attribute", err)
+		}
+
 		job := map[string]string{
 			"jobID":     wf.Execution.GetWorkflowId(),
 			"startTime": convertTime(wf.GetStartTime().GetValue(), false),
-			"reason":    string(wf.Memo.Fields["Reason"]),
-			"operator":  string(wf.SearchAttributes.IndexedFields["Operator"]),
+			"reason":    reason,
+			"operator":  operator,
 		}
 
 		if wf.GetStatus() != executionpb.WorkflowExecutionStatus_Running {
@@ -184,6 +196,12 @@ func StartBatchJob(c *cli.Context) {
 			"Operator":        operator,
 		},
 	}
+
+	sigInput, err := payload.Encode(sigVal)
+	if err != nil {
+		ErrorAndExit("Failed to serialize signal value", err)
+	}
+
 	params := batcher.BatchParams{
 		Namespace: namespace,
 		Query:     query,
@@ -191,7 +209,7 @@ func StartBatchJob(c *cli.Context) {
 		BatchType: batchType,
 		SignalParams: batcher.SignalParams{
 			SignalName: sigName,
-			Input:      sigVal,
+			Input:      sigInput,
 		},
 		RPS: rps,
 	}

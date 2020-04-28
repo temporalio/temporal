@@ -42,6 +42,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -273,7 +274,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		Version:         12,
 		ScheduleID:      123,
 		StartedID:       124,
-		Details:         []byte("some random activity 1 details"),
+		Details:         payload.EncodeString("some random activity 1 details"),
 		StartedIdentity: "some random activity 1 started identity",
 	}
 	activity2 := &persistence.ActivityInfo{
@@ -338,7 +339,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		decision.ScheduleID,
 		decision.StartedID,
 		eventpb.DecisionTaskFailedCause_ForceCloseDecision,
-		([]byte)(nil),
+		nil,
 		identityHistoryService,
 		"",
 		"",
@@ -350,7 +351,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	mutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		nextEventID,
 		terminateReason,
-		([]byte)(nil),
+		nil,
 		identityHistoryService,
 	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 
@@ -536,7 +537,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		EventType: eventpb.EventType_WorkflowExecutionSignaled,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
-			Input:      []byte("some random signal input"),
+			Input:      payload.EncodeString("some random signal input"),
 			Identity:   "some random signal identity",
 		}},
 	}
@@ -550,7 +551,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		EventType: eventpb.EventType_WorkflowExecutionSignaled,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "another random signal name",
-			Input:      []byte("another random signal input"),
+			Input:      payload.EncodeString("another random signal input"),
 			Identity:   "another random signal identity",
 		}},
 	}

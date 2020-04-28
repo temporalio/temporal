@@ -46,6 +46,7 @@ import (
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -256,7 +257,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
 			TaskList:                        &tasklistpb.TaskList{Name: "some random workflow type"},
-			Input:                           []byte("some random input"),
+			Input:                           payload.EncodeString("some random input"),
 			WorkflowExecutionTimeoutSeconds: 123,
 			WorkflowRunTimeoutSeconds:       233,
 			WorkflowTaskTimeoutSeconds:      45,
@@ -269,7 +270,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		EventType: eventpb.EventType_WorkflowExecutionSignaled,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
-			Input:      []byte("some random signal input"),
+			Input:      payload.EncodeString("some random signal input"),
 			Identity:   "some random identity",
 		}},
 	}}

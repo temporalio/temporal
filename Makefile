@@ -59,7 +59,7 @@ INTEG_TEST_NDC_OUT_DIR := hostndc
 GO_BUILD_LDFLAGS_CMD      := $(abspath ./scripts/go-build-ldflags.sh)
 GO_BUILD_LDFLAGS          := $(shell $(GO_BUILD_LDFLAGS_CMD) LDFLAG)
 
-DOCKER_IMAGE_TAG := $(shell (whoami | tr -d ' '))-local
+DOCKER_IMAGE_TAG := $(shell whoami | tr -d " ")-local
 
 ifndef PERSISTENCE_TYPE
 override PERSISTENCE_TYPE := cassandra

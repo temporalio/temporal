@@ -43,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -121,15 +122,15 @@ func newWorkflowSizeChecker(
 	}
 }
 
-func (c *workflowSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
+func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 	decisionTypeTag metrics.Tag,
-	blob []byte,
+	payloadSize int,
 	message string,
 ) (bool, error) {
 
 	executionInfo := c.mutableState.GetExecutionInfo()
 	err := common.CheckEventBlobSizeLimit(
-		len(blob),
+		payloadSize,
 		c.blobSizeLimitWarn,
 		c.blobSizeLimitError,
 		executionInfo.NamespaceID,
@@ -145,7 +146,7 @@ func (c *workflowSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 
 	attributes := &decisionpb.FailWorkflowExecutionDecisionAttributes{
 		Reason:  common.FailureReasonDecisionBlobSizeExceedsLimit,
-		Details: []byte(message),
+		Details: payload.EncodeString(message),
 	}
 
 	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, attributes); err != nil {
@@ -170,7 +171,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 
 		attributes := &decisionpb.FailWorkflowExecutionDecisionAttributes{
 			Reason:  common.FailureReasonSizeExceedsLimit,
-			Details: []byte("Workflow history size / count exceeds limit."),
+			Details: payload.EncodeString("Workflow history size / count exceeds limit."),
 		}
 
 		if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, attributes); err != nil {

@@ -43,9 +43,8 @@ func AdminAddSearchAttribute(c *cli.Context) {
 	}
 
 	// ask user for confirmation
-	promptMsg := fmt.Sprintf("Are you trying to add key [%s] with Type [%s]? Y/N",
-		color.YellowString(key), color.YellowString(intValTypeToString(valType)))
-	prompt(promptMsg)
+	promptMsg := fmt.Sprintf("Are you trying to add key [%s] with Type [%s]? Y/N", color.YellowString(key), color.YellowString(intValTypeToString(valType)))
+	prompt(promptMsg, c.GlobalBool(FlagAutoConfirm))
 
 	adminClient := cFactory.AdminClient(c)
 	ctx, cancel := newContext(c)

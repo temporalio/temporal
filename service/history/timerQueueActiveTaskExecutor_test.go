@@ -358,7 +358,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 		activityID,
 		activityType,
 		tasklist,
-		[]byte(nil),
+		nil,
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
@@ -438,7 +438,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 		activityID,
 		activityType,
 		tasklist,
-		[]byte(nil),
+		nil,
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
@@ -466,7 +466,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 		EventId:             di.ScheduleID,
 	}
 
-	completeEvent := addActivityTaskCompletedEvent(mutableState, scheduledEvent.GetEventId(), startedEvent.GetEventId(), []byte(nil), identity)
+	completeEvent := addActivityTaskCompletedEvent(mutableState, scheduledEvent.GetEventId(), startedEvent.GetEventId(), nil, identity)
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completeEvent.GetEventId(), completeEvent.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -516,8 +516,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		activityID,
 		activityType,
 		tasklist,
-		[]byte(nil),
-		int32(99),
+		nil,
+		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
@@ -607,7 +607,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		activityID,
 		activityType,
 		tasklist,
-		[]byte(nil),
+		nil,
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
@@ -693,7 +693,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		activityID,
 		activityType,
 		tasklist,
-		[]byte(nil),
+		nil,
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
@@ -729,7 +729,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		EventId:             di.ScheduleID,
 	}
 
-	completeEvent := addActivityTaskCompletedEvent(mutableState, scheduledEvent.GetEventId(), common.TransientEventID, []byte(nil), identity)
+	completeEvent := addActivityTaskCompletedEvent(mutableState, scheduledEvent.GetEventId(), common.TransientEventID, nil, identity)
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completeEvent.GetEventId(), completeEvent.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -779,7 +779,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 		activityID,
 		activityType,
 		tasklist,
-		[]byte(nil),
+		nil,
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
@@ -1069,7 +1069,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 		activityID,
 		activityType,
 		tasklist,
-		[]byte(nil),
+		nil,
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
@@ -1159,7 +1159,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Noop() {
 		activityID,
 		activityType,
 		tasklist,
-		[]byte(nil),
+		nil,
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),
 		int32(timerTimeout.Seconds()),

@@ -305,8 +305,8 @@ type (
 		ClientFeatureVersion               string
 		ClientImpl                         string
 		AutoResetPoints                    *executionpb.ResetPoints
-		Memo                               map[string][]byte
-		SearchAttributes                   map[string][]byte
+		Memo                               map[string]*commonpb.Payload
+		SearchAttributes                   map[string]*commonpb.Payload
 		// for retry
 		Attempt             int32
 		HasRetryPolicy      bool
@@ -574,7 +574,7 @@ type (
 		NamespaceID              string
 		ActivityID               string
 		RequestID                string
-		Details                  []byte
+		Details                  *commonpb.Payload
 		ScheduleToStartTimeout   int32
 		ScheduleToCloseTimeout   int32
 		StartToCloseTimeout      int32
@@ -596,7 +596,7 @@ type (
 		NonRetriableErrors []string
 		LastFailureReason  string
 		LastWorkerIdentity string
-		LastFailureDetails []byte
+		LastFailureDetails *commonpb.Payload
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}

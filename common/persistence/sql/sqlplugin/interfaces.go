@@ -374,15 +374,13 @@ type (
 
 	// ActivityInfoMapsRow represents a row in activity_info_maps table
 	ActivityInfoMapsRow struct {
-		ShardID                  int64
-		NamespaceID              primitives.UUID
-		WorkflowID               string
-		RunID                    primitives.UUID
-		ScheduleID               int64
-		Data                     []byte
-		DataEncoding             string
-		LastHeartbeatDetails     []byte
-		LastHeartbeatUpdatedTime time.Time
+		ShardID      int64
+		NamespaceID  primitives.UUID
+		WorkflowID   string
+		RunID        primitives.UUID
+		ScheduleID   int64
+		Data         []byte
+		DataEncoding string
 	}
 
 	// ActivityInfoMapsFilter contains the column names within activity_info_maps table that
