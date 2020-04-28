@@ -74,13 +74,13 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
@@ -95,7 +95,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 			}}, nil
 		}
 
-		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CancelWorkflowExecution,
 			Attributes: &decisionpb.Decision_CancelWorkflowExecutionDecisionAttributes{CancelWorkflowExecutionDecisionAttributes: &decisionpb.CancelWorkflowExecutionDecisionAttributes{
 				Details: payload.EncodeString("Cancelled"),
@@ -225,13 +225,13 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
@@ -246,7 +246,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 			}}, nil
 		}
 
-		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_RequestCancelExternalWorkflowExecution,
 			Attributes: &decisionpb.Decision_RequestCancelExternalWorkflowExecutionDecisionAttributes{RequestCancelExternalWorkflowExecutionDecisionAttributes: &decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes{
 				Namespace:  s.foreignNamespace,
@@ -275,13 +275,13 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
 	foreignDtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
 
-			return []byte(strconv.Itoa(int(foreignActivityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
@@ -296,7 +296,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 			}}, nil
 		}
 
-		return []byte(strconv.Itoa(int(foreignActivityCounter))), []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CancelWorkflowExecution,
 			Attributes: &decisionpb.Decision_CancelWorkflowExecutionDecisionAttributes{CancelWorkflowExecutionDecisionAttributes: &decisionpb.CancelWorkflowExecutionDecisionAttributes{
 				Details: payload.EncodeString("Cancelled"),
@@ -445,13 +445,13 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
@@ -466,7 +466,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 			}}, nil
 		}
 
-		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_RequestCancelExternalWorkflowExecution,
 			Attributes: &decisionpb.Decision_RequestCancelExternalWorkflowExecutionDecisionAttributes{RequestCancelExternalWorkflowExecutionDecisionAttributes: &decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes{
 				Namespace:  s.foreignNamespace,

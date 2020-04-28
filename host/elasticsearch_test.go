@@ -201,7 +201,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 
 	// test upsert
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
 			DecisionType: decisionpb.DecisionType_UpsertWorkflowSearchAttributes,
@@ -209,7 +209,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 				SearchAttributes: getUpsertSearchAttributes(),
 			}}}
 
-		return nil, []*decisionpb.Decision{upsertDecision}, nil
+		return []*decisionpb.Decision{upsertDecision}, nil
 	}
 	taskList := &tasklistpb.TaskList{Name: tl}
 	poller := &TaskPoller{
@@ -862,7 +862,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 
 	decisionCount := 0
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
 			DecisionType: decisionpb.DecisionType_UpsertWorkflowSearchAttributes,
@@ -879,16 +879,16 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 				},
 			}
 			upsertDecision.GetUpsertWorkflowSearchAttributesDecisionAttributes().SearchAttributes = upsertSearchAttr
-			return nil, []*decisionpb.Decision{upsertDecision}, nil
+			return []*decisionpb.Decision{upsertDecision}, nil
 		}
 		// handle second upsert, which update existing field and add new field
 		if decisionCount == 1 {
 			decisionCount++
 			upsertDecision.GetUpsertWorkflowSearchAttributesDecisionAttributes().SearchAttributes = getUpsertSearchAttributes()
-			return nil, []*decisionpb.Decision{upsertDecision}, nil
+			return []*decisionpb.Decision{upsertDecision}, nil
 		}
 
-		return nil, []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payload.EncodeString("Done"),
@@ -1061,7 +1061,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
 			DecisionType: decisionpb.DecisionType_UpsertWorkflowSearchAttributes,
@@ -1072,7 +1072,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 					},
 				},
 			}}}
-		return nil, []*decisionpb.Decision{upsertDecision}, nil
+		return []*decisionpb.Decision{upsertDecision}, nil
 	}
 
 	poller := &TaskPoller{

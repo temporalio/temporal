@@ -429,7 +429,6 @@ Update_History_Loop:
 			)
 
 			if err := decisionTaskHandler.handleDecisions(
-				request.ExecutionContext,
 				request.Decisions,
 			); err != nil {
 				return nil, err
