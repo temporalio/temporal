@@ -60,7 +60,7 @@
 				"--input",
 				"{}"
 			],
-			"env": {}
+			"env": {"TEMPORAL_CLI_SHOW_STACKS": 1}
 		},
 
 	]
