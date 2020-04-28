@@ -221,6 +221,10 @@ const (
 	FlagUpperShardBound                   = "upper_shard_bound"
 	FlagInputDirectory                    = "input_directory"
 	FlagSkipHistoryChecks                 = "skip_history_checks"
+	FlagFailoverType                      = "failover_type"
+	FlagFailoverTypeWithAlias             = FlagFailoverType + ", ft"
+	FlagFailoverTimeout                   = "failover_timeout_seconds"
+	FlagFailoverTimeoutWithAlias          = FlagFailoverTimeout + ", fts"
 )
 
 var flagsForExecution = []cli.Flag{

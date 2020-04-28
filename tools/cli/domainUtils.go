@@ -162,6 +162,15 @@ var (
 			Name:  FlagReason,
 			Usage: "Reason for the operation",
 		},
+		cli.StringFlag{
+			Name:  FlagFailoverTypeWithAlias,
+			Usage: "Domain failover type. Default value: force. Options: [force,grace]",
+		},
+		cli.IntFlag{
+			Name:  FlagFailoverTimeoutWithAlias,
+			Value: defaultGracefulFailoverTimeoutInSeconds,
+			Usage: "[Optional] Domain failover timeout in seconds.",
+		},
 	}
 
 	describeDomainFlags = []cli.Flag{

@@ -39,6 +39,10 @@ import (
 	"github.com/uber/cadence/common/domain"
 )
 
+var (
+	gracefulFailoverType = "grace"
+)
+
 type (
 	domainCLIImpl struct {
 		// used when making RPC call to frontend service
@@ -243,13 +247,19 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 			badBinaryToDelete = common.StringPtr(c.String(FlagRemoveBadBinary))
 		}
 
+		var failoverTimeout *int32
+		if c.String(FlagFailoverType) == gracefulFailoverType {
+			timeout := int32(c.Int(FlagFailoverTimeout))
+			failoverTimeout = &timeout
+		}
+
 		updateInfo := &shared.UpdateDomainInfo{
 			Description: common.StringPtr(description),
 			OwnerEmail:  common.StringPtr(ownerEmail),
 			Data:        domainData,
 		}
 		updateConfig := &shared.DomainConfiguration{
-			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
+			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retentionDays),
 			EmitMetric:                             common.BoolPtr(emitMetric),
 			HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
 			HistoryArchivalURI:                     common.StringPtr(c.String(FlagHistoryArchivalURI)),
@@ -266,6 +276,7 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 			Configuration:            updateConfig,
 			ReplicationConfiguration: replicationConfig,
 			DeleteBadBinary:          badBinaryToDelete,
+			FailoverTimeoutInSeconds: failoverTimeout,
 		}
 	}
 

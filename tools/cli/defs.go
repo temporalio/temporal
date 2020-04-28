@@ -65,6 +65,8 @@ const (
 	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
 
 	searchAttrInputSeparator = "|"
+
+	defaultGracefulFailoverTimeoutInSeconds = 60
 )
 
 var envKeysForUserName = []string{
