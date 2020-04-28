@@ -62,7 +62,7 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/temporal v0.22.2
+	go.temporal.io/temporal v0.22.3
 	go.temporal.io/temporal-proto v0.20.27
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
@@ -81,5 +81,3 @@ require (
 
 // TODO https://github.com/uber/cadence/issues/2863
 replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
-
-replace go.temporal.io/temporal v0.22.2 => ../temporal-go-sdk
