@@ -234,10 +234,10 @@ github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2/go.mod h1:hzfGeI
 github.com/yuin/goldmark v1.1.25/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 go.opencensus.io v0.21.0 h1:mU6zScU4U1YAFPHEHYk+3JC4SY7JxgkqS10ZOSyksNg=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
-go.temporal.io/temporal v0.22.2 h1:Y8AfDnTTX+ODeDr6quwJUv/1UCK4GHFAWS6TMrSHVr4=
-go.temporal.io/temporal v0.22.2/go.mod h1:k3NVQbvr/jWj1EfeX6au/V2nChBNqeAqLB5BSr79NC0=
-go.temporal.io/temporal-proto v0.20.26 h1:EkAJ3nlpwk7WCjTenWMvsGClB5yReffTh20MVgb2vgs=
-go.temporal.io/temporal-proto v0.20.26/go.mod h1:Lv8L8YBpbp0Z7V5nbvw5UD0j7x0isebhCOIDLkBqn6s=
+go.temporal.io/temporal v0.22.3 h1:YtPE03/SvjVq4z6mDy9SuZQx66dyZrZQ5CSCHYOGcTY=
+go.temporal.io/temporal v0.22.3/go.mod h1:n4BXTeIur8rvP4rFVPRo5BgFlFyiDImWPr8QTAca/M8=
+go.temporal.io/temporal-proto v0.20.27 h1:g/UMo4TZyUGCGCAsvz81IIlkN6YQW7S5Ua4bwpjECvQ=
+go.temporal.io/temporal-proto v0.20.27/go.mod h1:Lv8L8YBpbp0Z7V5nbvw5UD0j7x0isebhCOIDLkBqn6s=
 go.uber.org/atomic v1.5.0 h1:OI5t8sDa1Or+q8AeE+yKeB/SDYioSHAgcVljj9JIETY=
 go.uber.org/atomic v1.5.0/go.mod h1:sABNBOSYdrvTF6hTgEIbc7YasKWGhgEQZyfxyTvoXHQ=
 go.uber.org/atomic v1.6.0 h1:Ezj3JGmsOnG1MoRWQkPBsKLe9DwWD9QeXzTRzzldNVk=

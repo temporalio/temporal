@@ -219,7 +219,6 @@ type (
 		WorkflowTypeName                   string
 		WorkflowTimeout                    int32
 		DecisionStartToCloseTimeout        int32
-		ExecutionContext                   []byte
 		State                              int
 		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
@@ -746,7 +745,6 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		WorkflowTypeName:                        executionInfo.WorkflowTypeName,
 		WorkflowTimeoutSeconds:                  executionInfo.WorkflowTimeout,
 		DecisionTaskTimeoutSeconds:              executionInfo.DecisionStartToCloseTimeout,
-		ExecutionContext:                        executionInfo.ExecutionContext,
 		LastFirstEventId:                        executionInfo.LastFirstEventID,
 		LastEventTaskId:                         executionInfo.LastEventTaskID,
 		LastProcessedEvent:                      executionInfo.LastProcessedEvent,
@@ -868,7 +866,6 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		MaximumAttempts:                    info.GetRetryMaximumAttempts(),
 		ExpirationSeconds:                  info.GetRetryExpirationSeconds(),
 		BranchToken:                        info.GetEventBranchToken(),
-		ExecutionContext:                   info.GetExecutionContext(),
 		NonRetriableErrors:                 info.GetRetryNonRetryableErrors(),
 		SearchAttributes:                   info.GetSearchAttributes(),
 		Memo:                               info.GetMemo(),

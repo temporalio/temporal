@@ -113,7 +113,6 @@ func newDecisionTaskHandler(
 }
 
 func (handler *decisionTaskHandlerImpl) handleDecisions(
-	executionContext []byte,
 	decisions []*decisionpb.Decision,
 ) error {
 
@@ -131,7 +130,6 @@ func (handler *decisionTaskHandlerImpl) handleDecisions(
 		}
 	}
 
-	handler.mutableState.GetExecutionInfo().ExecutionContext = executionContext
 	return nil
 }
 
