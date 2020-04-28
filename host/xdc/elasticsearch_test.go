@@ -250,7 +250,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	// upsert search attributes
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
 			DecisionType: decisionpb.DecisionType_UpsertWorkflowSearchAttributes,
@@ -258,7 +258,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 				SearchAttributes: getUpsertSearchAttributes(),
 			}}}
 
-		return nil, []*decisionpb.Decision{upsertDecision}, nil
+		return []*decisionpb.Decision{upsertDecision}, nil
 	}
 
 	poller := host.TaskPoller{

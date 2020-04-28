@@ -256,13 +256,13 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		previousStartedEventID int64,
 		startedEventID int64,
 		history *eventpb.History,
-	) ([]byte, []*decisionpb.Decision, error) {
+	) ([]*decisionpb.Decision, error) {
 		runIDs[runCounter-1] = execution.GetRunId()
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
@@ -281,7 +281,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 			activityCounter = int32(0)
 			expectedActivityID = int32(1)
 			runCounter++
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
@@ -294,7 +294,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		}
 
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payload.EncodeString("Done"),

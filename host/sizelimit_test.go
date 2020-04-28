@@ -106,13 +106,13 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	activityCount := int32(4)
 	activityCounter := int32(0)
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
@@ -127,7 +127,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 			}}, nil
 		}
 
-		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payload.EncodeString("Done"),
