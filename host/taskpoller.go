@@ -46,7 +46,7 @@ import (
 
 type (
 	decisionTaskHandler func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error)
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error)
 	activityTaskHandler func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payload, takeToken []byte) (*commonpb.Payload, bool, error)
 
@@ -240,7 +240,7 @@ Loop:
 			require.Equal(p.T, decisionAttempt, lastDecisionScheduleEvent.GetDecisionTaskScheduledEventAttributes().GetAttempt())
 		}
 
-		executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
+		decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
 		if err != nil {
 			p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 			_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
@@ -258,7 +258,6 @@ Loop:
 			newTask, err := p.Engine.RespondDecisionTaskCompleted(NewContext(), &workflowservice.RespondDecisionTaskCompletedRequest{
 				TaskToken:                  response.TaskToken,
 				Identity:                   p.Identity,
-				ExecutionContext:           executionCtx,
 				Decisions:                  decisions,
 				ReturnNewDecisionTask:      forceCreateNewDecision,
 				ForceCreateNewDecisionTask: forceCreateNewDecision,
@@ -270,10 +269,9 @@ Loop:
 		newTask, err := p.Engine.RespondDecisionTaskCompleted(
 			NewContext(),
 			&workflowservice.RespondDecisionTaskCompletedRequest{
-				TaskToken:        response.TaskToken,
-				Identity:         p.Identity,
-				ExecutionContext: executionCtx,
-				Decisions:        decisions,
+				TaskToken: response.TaskToken,
+				Identity:  p.Identity,
+				Decisions: decisions,
 				StickyAttributes: &decisionpb.StickyExecutionAttributes{
 					WorkerTaskList:                p.StickyTaskList,
 					ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
@@ -309,7 +307,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		p.Logger.Fatal("History Events are empty")
 	}
 
-	executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
+	decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
 		response.PreviousStartedEventId, response.StartedEventId, response.History)
 	if err != nil {
 		p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
@@ -328,10 +326,9 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 	newTask, err := p.Engine.RespondDecisionTaskCompleted(
 		NewContext(),
 		&workflowservice.RespondDecisionTaskCompletedRequest{
-			TaskToken:        response.TaskToken,
-			Identity:         p.Identity,
-			ExecutionContext: executionCtx,
-			Decisions:        decisions,
+			TaskToken: response.TaskToken,
+			Identity:  p.Identity,
+			Decisions: decisions,
 			StickyAttributes: &decisionpb.StickyExecutionAttributes{
 				WorkerTaskList:                p.StickyTaskList,
 				ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,

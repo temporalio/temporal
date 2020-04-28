@@ -55,10 +55,10 @@ var (
 				RunId:      "some random target run ID",
 			},
 			ChildWorkflowOnly: true,
-			Control:           []byte("some random control"),
+			Control:           "some random control",
 		}},
 	}
-	encodedHistoryEvent = `{"eventId":"130","timestamp":"112345132134","eventType":"RequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"c29tZSByYW5kb20gY29udHJvbA==","childWorkflowOnly":true}}`
+	encodedHistoryEvent = `{"eventId":"130","timestamp":"112345132134","eventType":"RequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"some random control","childWorkflowOnly":true}}`
 )
 
 func TestJSONPBEncoderSuite(t *testing.T) {

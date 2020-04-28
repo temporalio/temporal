@@ -372,7 +372,7 @@ func (b *historyBuilder) AddUpsertWorkflowSearchAttributesEvent(
 }
 
 func (b *historyBuilder) AddSignalExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID int64,
-	namespace, workflowID, runID string, control []byte, cause eventpb.WorkflowExecutionFailedCause) *eventpb.HistoryEvent {
+	namespace, workflowID, runID, control string, cause eventpb.WorkflowExecutionFailedCause) *eventpb.HistoryEvent {
 	event := b.newSignalExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID,
 		namespace, workflowID, runID, control, cause)
 
@@ -380,7 +380,7 @@ func (b *historyBuilder) AddSignalExternalWorkflowExecutionFailedEvent(decisionT
 }
 
 func (b *historyBuilder) AddExternalWorkflowExecutionSignaled(initiatedEventID int64,
-	namespace, workflowID, runID string, control []byte) *eventpb.HistoryEvent {
+	namespace, workflowID, runID, control string) *eventpb.HistoryEvent {
 	event := b.newExternalWorkflowExecutionSignaledEvent(initiatedEventID,
 		namespace, workflowID, runID, control)
 
@@ -560,7 +560,6 @@ func (b *historyBuilder) newDecisionTaskCompletedEvent(scheduleEventID, startedE
 	request *workflowservice.RespondDecisionTaskCompletedRequest) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_DecisionTaskCompleted)
 	attributes := &eventpb.DecisionTaskCompletedEventAttributes{}
-	attributes.ExecutionContext = request.ExecutionContext
 	attributes.ScheduledEventId = scheduleEventID
 	attributes.StartedEventId = startedEventID
 	attributes.Identity = request.Identity
@@ -849,7 +848,7 @@ func (b *historyBuilder) newUpsertWorkflowSearchAttributesEvent(decisionTaskComp
 }
 
 func (b *historyBuilder) newSignalExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID int64,
-	namespace, workflowID, runID string, control []byte, cause eventpb.WorkflowExecutionFailedCause) *eventpb.HistoryEvent {
+	namespace, workflowID, runID, control string, cause eventpb.WorkflowExecutionFailedCause) *eventpb.HistoryEvent {
 	event := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_SignalExternalWorkflowExecutionFailed)
 	attributes := &eventpb.SignalExternalWorkflowExecutionFailedEventAttributes{}
 	attributes.DecisionTaskCompletedEventId = decisionTaskCompletedEventID
@@ -867,7 +866,7 @@ func (b *historyBuilder) newSignalExternalWorkflowExecutionFailedEvent(decisionT
 }
 
 func (b *historyBuilder) newExternalWorkflowExecutionSignaledEvent(initiatedEventID int64,
-	namespace, workflowID, runID string, control []byte) *eventpb.HistoryEvent {
+	namespace, workflowID, runID, control string) *eventpb.HistoryEvent {
 	event := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_ExternalWorkflowExecutionSignaled)
 	attributes := &eventpb.ExternalWorkflowExecutionSignaledEventAttributes{}
 	attributes.InitiatedEventId = initiatedEventID

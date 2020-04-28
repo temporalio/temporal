@@ -127,7 +127,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				WorkflowTypeName:            "wType",
 				WorkflowTimeout:             20,
 				DecisionStartToCloseTimeout: 13,
-				ExecutionContext:            nil,
 				State:                       p.WorkflowStateRunning,
 				Status:                      executionpb.WorkflowExecutionStatus_Running,
 				NextEventID:                 3,
@@ -231,7 +230,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				WorkflowTypeName:            "wType",
 				WorkflowTimeout:             20,
 				DecisionStartToCloseTimeout: 13,
-				ExecutionContext:            nil,
 				State:                       p.WorkflowStateRunning,
 				Status:                      executionpb.WorkflowExecutionStatus_Running,
 				NextEventID:                 common.EmptyEventID,
@@ -307,7 +305,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 		RunId:      "551c88d2-d9e6-404f-8131-9eec14f36643",
 	}
 
-	_, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
+	_, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "queue1", "wType", 20, 13, 3, 0, 2, nil)
 	s.NoError(err0)
 
 	state0, err1 := s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
@@ -354,7 +352,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 				WorkflowTypeName:            updatedInfo.WorkflowTypeName,
 				WorkflowTimeout:             updatedInfo.WorkflowTimeout,
 				DecisionStartToCloseTimeout: updatedInfo.DecisionStartToCloseTimeout,
-				ExecutionContext:            nil,
 				State:                       p.WorkflowStateRunning,
 				Status:                      executionpb.WorkflowExecutionStatus_Running,
 				NextEventID:                 info0.NextEventID,
@@ -1526,8 +1523,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 			VisibilityTimestamp: time.Unix(currentTime.Seconds, int64(currentTime.Nanos)).UTC(),
 		}}
 
-	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "taskList", "wType",
-		20, 13, nil, 3, 0, 2, txTasks)
+	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "taskList", "wType", 20, 13, 3, 0, 2, txTasks)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 

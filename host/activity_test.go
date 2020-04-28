@@ -85,13 +85,13 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	activityCounter := int32(0)
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
@@ -110,7 +110,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		s.Logger.Info("Completing Workflow")
 
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payload.EncodeString("Done"),
@@ -203,10 +203,10 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	activitiesScheduled := false
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
-			return nil, []*decisionpb.Decision{
+			return []*decisionpb.Decision{
 				{
 					DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 					Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
@@ -232,7 +232,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 
 		workflowComplete = true
 		s.Logger.Info("Completing Workflow")
-		return nil, []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payload.EncodeString("Done"),
@@ -381,11 +381,11 @@ func (s *integrationSuite) TestActivityRetry() {
 	var activityAScheduled, activityAFailed, activityBScheduled, activityBTimeout *eventpb.HistoryEvent
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 
-			return nil, []*decisionpb.Decision{
+			return []*decisionpb.Decision{
 				{
 					DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 					Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
@@ -446,7 +446,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		if activityAFailed != nil && activityBTimeout != nil {
 			s.Logger.Info("Completing Workflow")
 			workflowComplete = true
-			return nil, []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 					Result: payload.EncodeString("Done"),
@@ -454,7 +454,7 @@ func (s *integrationSuite) TestActivityRetry() {
 			}}, nil
 		}
 
-		return nil, []*decisionpb.Decision{}, nil
+		return []*decisionpb.Decision{}, nil
 	}
 
 	activityExecutedCount := 0
@@ -598,7 +598,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	activityCounter := int32(0)
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		s.Logger.Info("Calling DecisionTask Handler", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
 
@@ -607,7 +607,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
@@ -623,7 +623,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		}
 
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payload.EncodeString("Done"),
@@ -701,10 +701,10 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	failReason := ""
 	var activityATimedout, activityBTimedout, activityCTimedout, activityDTimedout bool
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
-			return nil, []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "A",
@@ -763,7 +763,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					timeoutEvent := event.GetActivityTaskTimedOutEventAttributes()
 					scheduledEvent, ok := activitiesMap[timeoutEvent.GetScheduledEventId()]
 					if !ok {
-						return nil, []*decisionpb.Decision{{
+						return []*decisionpb.Decision{{
 							DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 							Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
 								Reason: "ScheduledEvent not found",
@@ -808,7 +808,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		if failWorkflow {
 			s.Logger.Error("Failing workflow")
 			workflowComplete = true
-			return nil, []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
 					Reason: failReason,
@@ -819,7 +819,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		if activityATimedout && activityBTimedout && activityCTimedout && activityDTimedout {
 			s.Logger.Info("Completing Workflow")
 			workflowComplete = true
-			return nil, []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 					Result: payload.EncodeString("Done"),
@@ -827,7 +827,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 			}}, nil
 		}
 
-		return nil, []*decisionpb.Decision{}, nil
+		return []*decisionpb.Decision{}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
@@ -936,7 +936,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	activityCount := 10
 	activitiesTimedout := 0
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 			var decisions []*decisionpb.Decision
@@ -959,7 +959,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 				decisions = append(decisions, d)
 			}
 
-			return nil, decisions, nil
+			return decisions, nil
 		} else if previousStartedEventID > 0 {
 		ProcessLoop:
 			for _, event := range history.Events[previousStartedEventID:] {
@@ -1003,7 +1003,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		if failWorkflow {
 			s.Logger.Error("Failing workflow", tag.Value(failReason))
 			workflowComplete = true
-			return nil, []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
 					Reason: failReason,
@@ -1014,7 +1014,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		if activitiesTimedout == activityCount {
 			s.Logger.Info("Completing Workflow")
 			workflowComplete = true
-			return nil, []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 					Result: payload.EncodeString("Done"),
@@ -1022,7 +1022,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 			}}, nil
 		}
 
-		return nil, []*decisionpb.Decision{}, nil
+		return []*decisionpb.Decision{}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
@@ -1125,13 +1125,13 @@ func (s *integrationSuite) TestActivityCancellation() {
 	requestCancellation := false
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
@@ -1147,7 +1147,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 		}
 
 		if requestCancellation {
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 				Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
 					ActivityId: strconv.Itoa(int(activityCounter)),
@@ -1157,7 +1157,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 
 		s.Logger.Info("Completing Workflow")
 
-		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payload.EncodeString("Done"),
@@ -1250,13 +1250,13 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	requestCancellation := false
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 			s.Logger.Info("Scheduling activity")
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
@@ -1273,7 +1273,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 
 		if requestCancellation {
 			s.Logger.Info("Requesting cancellation")
-			return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 				Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
 					ActivityId: strconv.Itoa(int(activityCounter)),
@@ -1282,7 +1282,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 		}
 
 		s.Logger.Info("Completing Workflow")
-		return []byte(strconv.Itoa(int(activityCounter))), []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 				Result: payload.EncodeString("Done"),
