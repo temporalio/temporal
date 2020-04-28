@@ -118,7 +118,7 @@ func (adh *AdminHandler) Stop() {
 
 // AddSearchAttribute add search attribute to whitelist
 func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *adminservice.AddSearchAttributeRequest) (_ *adminservice.AddSearchAttributeResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminAddSearchAttributeScope)
 	defer sw.Stop()
@@ -182,7 +182,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
 func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request *adminservice.DescribeWorkflowExecutionRequest) (_ *adminservice.DescribeWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminDescribeWorkflowExecutionScope)
 	defer sw.Stop()
@@ -225,7 +225,7 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 
 // RemoveTask returns information about the internal states of a history host
 func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.RemoveTaskRequest) (_ *adminservice.RemoveTaskResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminRemoveTaskScope)
 	defer sw.Stop()
@@ -244,7 +244,7 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.R
 
 // CloseShard returns information about the internal states of a history host
 func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.CloseShardRequest) (_ *adminservice.CloseShardResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminCloseShardTaskScope)
 	defer sw.Stop()
@@ -258,7 +258,7 @@ func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.C
 
 // DescribeHistoryHost returns information about the internal states of a history host
 func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *adminservice.DescribeHistoryHostRequest) (_ *adminservice.DescribeHistoryHostResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminDescribeHistoryHostScope)
 	defer sw.Stop()
@@ -294,7 +294,7 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 
 // GetWorkflowExecutionRawHistory - retrieves the history of workflow execution
 func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryRequest) (_ *adminservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryScope)
 	defer sw.Stop()
@@ -449,7 +449,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 
 // GetWorkflowExecutionRawHistoryV2 - retrieves the history of workflow execution
 func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryV2Request) (_ *adminservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
 	defer sw.Stop()
@@ -581,7 +581,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 
 // DescribeCluster return information about temporal deployment
 func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.DescribeClusterRequest) (_ *adminservice.DescribeClusterResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
 	defer sw.Stop()
@@ -638,7 +638,7 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 
 // GetReplicationMessages returns new replication tasks since the read level provided in the token.
 func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *adminservice.GetReplicationMessagesRequest) (_ *adminservice.GetReplicationMessagesResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminGetReplicationMessagesScope)
 	defer sw.Stop()
@@ -662,7 +662,7 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
 func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, request *adminservice.GetNamespaceReplicationMessagesRequest) (_ *adminservice.GetNamespaceReplicationMessagesResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminGetNamespaceReplicationMessagesScope)
 	defer sw.Stop()
@@ -710,7 +710,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 
 // GetDLQReplicationMessages returns new replication tasks based on the dlq info.
 func (adh *AdminHandler) GetDLQReplicationMessages(ctx context.Context, request *adminservice.GetDLQReplicationMessagesRequest) (_ *adminservice.GetDLQReplicationMessagesResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminGetDLQReplicationMessagesScope)
 	defer sw.Stop()
@@ -731,7 +731,7 @@ func (adh *AdminHandler) GetDLQReplicationMessages(ctx context.Context, request 
 
 // ReapplyEvents applies stale events to the current workflow and the current run
 func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservice.ReapplyEventsRequest) (_ *adminservice.ReapplyEventsResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+	defer log.CapturePanic(adh.GetLogger(), &retError)
 	scope, sw := adh.startRequestProfile(metrics.AdminReapplyEventsScope)
 	defer sw.Stop()
 
@@ -771,7 +771,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 	request *adminservice.ReadDLQMessagesRequest,
 ) (resp *adminservice.ReadDLQMessagesResponse, retErr error) {
 
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retErr)
+	defer log.CapturePanic(adh.GetLogger(), &retErr)
 	scope, sw := adh.startRequestProfile(metrics.AdminReadDLQMessagesScope)
 	defer sw.Stop()
 
@@ -844,7 +844,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 	request *adminservice.PurgeDLQMessagesRequest,
 ) (_ *adminservice.PurgeDLQMessagesResponse, err error) {
 
-	defer log.CapturePanicGRPC(adh.GetLogger(), &err)
+	defer log.CapturePanic(adh.GetLogger(), &err)
 	scope, sw := adh.startRequestProfile(metrics.AdminPurgeDLQMessagesScope)
 	defer sw.Stop()
 
@@ -897,7 +897,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	request *adminservice.MergeDLQMessagesRequest,
 ) (resp *adminservice.MergeDLQMessagesResponse, err error) {
 
-	defer log.CapturePanicGRPC(adh.GetLogger(), &err)
+	defer log.CapturePanic(adh.GetLogger(), &err)
 	scope, sw := adh.startRequestProfile(metrics.AdminMergeDLQMessagesScope)
 	defer sw.Stop()
 
@@ -962,7 +962,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	ctx context.Context,
 	request *adminservice.RefreshWorkflowTasksRequest,
 ) (_ *adminservice.RefreshWorkflowTasksResponse, err error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &err)
+	defer log.CapturePanic(adh.GetLogger(), &err)
 	scope, sw := adh.startRequestProfile(metrics.AdminRefreshWorkflowTasksScope)
 	defer sw.Stop()
 

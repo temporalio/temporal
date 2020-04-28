@@ -1205,7 +1205,7 @@ func (handler *DCRedirectionHandlerImpl) afterCall(
 	retError *error,
 ) {
 
-	log.CapturePanicGRPC(handler.GetLogger(), retError)
+	log.CapturePanic(handler.GetLogger(), retError)
 
 	scope = scope.Tagged(metrics.TargetClusterTag(cluster))
 	scope.IncCounter(metrics.ClientRedirectionRequests)

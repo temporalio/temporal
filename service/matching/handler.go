@@ -133,7 +133,7 @@ func (h *Handler) AddActivityTask(
 	ctx context.Context,
 	request *matchingservice.AddActivityTaskRequest,
 ) (_ *matchingservice.AddActivityTaskResponse, retError error) {
-	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.GetLogger(), &retError)
 	startT := time.Now()
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -166,7 +166,7 @@ func (h *Handler) AddDecisionTask(
 	ctx context.Context,
 	request *matchingservice.AddDecisionTaskRequest,
 ) (_ *matchingservice.AddDecisionTaskResponse, retError error) {
-	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.GetLogger(), &retError)
 	startT := time.Now()
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -198,7 +198,7 @@ func (h *Handler) PollForActivityTask(
 	ctx context.Context,
 	request *matchingservice.PollForActivityTaskRequest,
 ) (_ *matchingservice.PollForActivityTaskResponse, retError error) {
-	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -234,7 +234,7 @@ func (h *Handler) PollForDecisionTask(
 	ctx context.Context,
 	request *matchingservice.PollForDecisionTaskRequest,
 ) (_ *matchingservice.PollForDecisionTaskResponse, retError error) {
-	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -270,7 +270,7 @@ func (h *Handler) QueryWorkflow(
 	ctx context.Context,
 	request *matchingservice.QueryWorkflowRequest,
 ) (_ *matchingservice.QueryWorkflowResponse, retError error) {
-	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -298,7 +298,7 @@ func (h *Handler) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *matchingservice.RespondQueryTaskCompletedRequest,
 ) (_ *matchingservice.RespondQueryTaskCompletedResponse, retError error) {
-	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -319,7 +319,7 @@ func (h *Handler) RespondQueryTaskCompleted(
 // CancelOutstandingPoll is used to cancel outstanding pollers
 func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	request *matchingservice.CancelOutstandingPollRequest) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
-	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -344,7 +344,7 @@ func (h *Handler) DescribeTaskList(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskListRequest,
 ) (_ *matchingservice.DescribeTaskListResponse, retError error) {
-	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -368,7 +368,7 @@ func (h *Handler) ListTaskListPartitions(
 	ctx context.Context,
 	request *matchingservice.ListTaskListPartitionsRequest,
 ) (_ *matchingservice.ListTaskListPartitionsResponse, retError error) {
-	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := newHandlerContext(
 		ctx,
 		request.GetNamespace(),
