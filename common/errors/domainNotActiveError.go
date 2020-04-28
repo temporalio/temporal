@@ -40,3 +40,16 @@ func NewDomainNotActiveError(domainName string, currentCluster string, activeClu
 		ActiveCluster:  activeCluster,
 	}
 }
+
+// NewDomainPendingActiveError return a domain not active error
+func NewDomainPendingActiveError(domainName string, currentCluster string) *workflow.DomainNotActiveError {
+	return &workflow.DomainNotActiveError{
+		Message: fmt.Sprintf(
+			"Domain: %s is pending active in cluster: %s.",
+			domainName,
+			currentCluster,
+		),
+		DomainName:     domainName,
+		CurrentCluster: currentCluster,
+	}
+}

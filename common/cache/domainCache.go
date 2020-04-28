@@ -131,6 +131,7 @@ type (
 		failoverVersion             int64
 		isGlobalDomain              bool
 		failoverNotificationVersion int64
+		failoverEndTime             *int64
 		notificationVersion         int64
 		initialized                 bool
 	}
@@ -547,6 +548,7 @@ func (c *domainCache) updateIDToDomainCache(
 	entry.failoverVersion = record.failoverVersion
 	entry.isGlobalDomain = record.isGlobalDomain
 	entry.failoverNotificationVersion = record.failoverNotificationVersion
+	entry.failoverEndTime = record.failoverEndTime
 	entry.notificationVersion = record.notificationVersion
 	entry.initialized = record.initialized
 
@@ -675,6 +677,7 @@ func (c *domainCache) buildEntryFromRecord(
 	newEntry.failoverVersion = record.FailoverVersion
 	newEntry.isGlobalDomain = record.IsGlobalDomain
 	newEntry.failoverNotificationVersion = record.FailoverNotificationVersion
+	newEntry.failoverEndTime = record.FailoverEndTime
 	newEntry.notificationVersion = record.NotificationVersion
 	newEntry.initialized = true
 	return newEntry
@@ -723,6 +726,7 @@ func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
 	result.failoverVersion = entry.failoverVersion
 	result.isGlobalDomain = entry.isGlobalDomain
 	result.failoverNotificationVersion = entry.failoverNotificationVersion
+	result.failoverEndTime = entry.failoverEndTime
 	result.notificationVersion = entry.notificationVersion
 	result.initialized = entry.initialized
 	return result
@@ -774,7 +778,15 @@ func (entry *DomainCacheEntry) IsDomainActive() bool {
 		// domain is not a global domain, meaning domain is always "active" within each cluster
 		return true
 	}
-	return entry.clusterMetadata.GetCurrentClusterName() == entry.replicationConfig.ActiveClusterName
+	return entry.clusterMetadata.GetCurrentClusterName() == entry.replicationConfig.ActiveClusterName && !entry.IsDomainPendingActive()
+}
+
+func (entry *DomainCacheEntry) IsDomainPendingActive() bool {
+	if !entry.isGlobalDomain {
+		// domain is not a global domain, meaning domain is always "active" within each cluster
+		return true
+	}
+	return entry.failoverEndTime != nil
 }
 
 // GetReplicationPolicy return the derived workflow replication policy
@@ -792,6 +804,12 @@ func (entry *DomainCacheEntry) GetDomainNotActiveErr() error {
 	if entry.IsDomainActive() {
 		// domain is consider active
 		return nil
+	}
+	if entry.IsDomainPendingActive() {
+		return errors.NewDomainPendingActiveError(
+			entry.info.Name,
+			entry.clusterMetadata.GetCurrentClusterName(),
+		)
 	}
 	return errors.NewDomainNotActiveError(
 		entry.info.Name,
