@@ -20,7 +20,7 @@
 			"program": "${workspaceFolder}/cmd/tools/cli",
 			"cwd": "${workspaceFolder}",
 			"args": [
-				"--ns",
+				"--namespace",
 				"default",
 				"namespace",
 				"describe"
@@ -34,8 +34,6 @@
 			"program": "${workspaceFolder}/cmd/tools/cli",
 			"cwd": "${workspaceFolder}",
 			"args": [
-				"--ns",
-				"default",
 				"admin",
 				"namespace",
 				"describe",
@@ -51,8 +49,6 @@
 			"program": "${workspaceFolder}/cmd/tools/cli",
 			"cwd": "${workspaceFolder}",
 			"args": [
-				"--ns",
-				"default",
 				"workflow",
 				"run",
 				"--tasklist",
