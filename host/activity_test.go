@@ -59,7 +59,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	header := &commonpb.Header{
-		Fields: map[string][]byte{"tracing": []byte("sample data")},
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{

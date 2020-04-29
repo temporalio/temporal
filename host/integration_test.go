@@ -1694,7 +1694,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	taskListChild.Name = tlChild
 
 	header := &commonpb.Header{
-		Fields: map[string][]byte{"tracing": []byte("sample payload")},
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{

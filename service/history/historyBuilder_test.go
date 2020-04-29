@@ -303,9 +303,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.validateActivityTaskStartedEvent(historyEvents[12], 13, 7, identity, 1, activity3Reason, activity3Details)
 
 	markerDetails := payload.EncodeString("dynamic-historybuilder-success-marker-details")
-	markerHeaderField1 := []byte("dynamic-historybuilder-success-marker-header1")
-	markerHeaderField2 := []byte("dynamic-historybuilder-success-marker-header2")
-	markerHeader := map[string][]byte{
+	markerHeaderField1 := payload.EncodeString("dynamic-historybuilder-success-marker-header1")
+	markerHeaderField2 := payload.EncodeString("dynamic-historybuilder-success-marker-header2")
+	markerHeader := map[string]*commonpb.Payload{
 		"name1": markerHeaderField1,
 		"name2": markerHeaderField2,
 	}
@@ -886,8 +886,8 @@ func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID i
 	return event
 }
 
-func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID int64, markerName string, details *commonpb.Payload, header *map[string][]byte) *eventpb.HistoryEvent {
-	fields := make(map[string][]byte)
+func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID int64, markerName string, details *commonpb.Payload, header *map[string]*commonpb.Payload) *eventpb.HistoryEvent {
+	fields := make(map[string]*commonpb.Payload)
 	if header != nil {
 		for name, value := range *header {
 			fields[name] = value
@@ -1056,6 +1056,7 @@ s.Equal(identity, attributes.Identity)
 }
 
 func (s *historyBuilderSuite) validateMarkerRecordedEvent(
+<<<<<<< HEAD
 event *eventpb.HistoryEvent, eventID, decisionTaskCompletedEventID int64,
 markerName string, details *commonpb.Payload, header *map[string][]byte) {
 s.NotNil(event)
@@ -1073,6 +1074,25 @@ s.Equal((*header)[name], value)
 } else {
 s.Nil(attributes.Header)
 }
+=======
+	event *eventpb.HistoryEvent, eventID, decisionTaskCompletedEventID int64,
+	markerName string, details *commonpb.Payload, header *map[string]*commonpb.Payload) {
+	s.NotNil(event)
+	s.Equal(eventpb.EventType_MarkerRecorded, event.EventType)
+	s.Equal(eventID, event.EventId)
+	attributes := event.GetMarkerRecordedEventAttributes()
+	s.NotNil(attributes)
+	s.Equal(decisionTaskCompletedEventID, attributes.DecisionTaskCompletedEventId)
+	s.Equal(markerName, attributes.GetMarkerName())
+	s.Equal(details, attributes.Details)
+	if header != nil {
+		for name, value := range attributes.Header.Fields {
+			s.Equal((*header)[name], value)
+		}
+	} else {
+		s.Nil(attributes.Header)
+	}
+>>>>>>> ad699f8d98cc7720c757fd8f6bcc109b2846dcf4
 }
 
 func (s *historyBuilderSuite) validateRequestCancelExternalWorkflowExecutionInitiatedEvent(
