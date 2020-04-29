@@ -303,9 +303,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.validateActivityTaskStartedEvent(historyEvents[12], 13, 7, identity, 1, activity3Reason, activity3Details)
 
 	markerDetails := payload.EncodeString("dynamic-historybuilder-success-marker-details")
-	markerHeaderField1 := []byte("dynamic-historybuilder-success-marker-header1")
-	markerHeaderField2 := []byte("dynamic-historybuilder-success-marker-header2")
-	markerHeader := map[string][]byte{
+	markerHeaderField1 := payload.EncodeString("dynamic-historybuilder-success-marker-header1")
+	markerHeaderField2 := payload.EncodeString("dynamic-historybuilder-success-marker-header2")
+	markerHeader := map[string]*commonpb.Payload{
 		"name1": markerHeaderField1,
 		"name2": markerHeaderField2,
 	}
@@ -879,8 +879,8 @@ func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID i
 	return event
 }
 
-func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID int64, markerName string, details *commonpb.Payload, header *map[string][]byte) *eventpb.HistoryEvent {
-	fields := make(map[string][]byte)
+func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID int64, markerName string, details *commonpb.Payload, header *map[string]*commonpb.Payload) *eventpb.HistoryEvent {
+	fields := make(map[string]*commonpb.Payload)
 	if header != nil {
 		for name, value := range *header {
 			fields[name] = value
@@ -1049,7 +1049,7 @@ func (s *historyBuilderSuite) validateActivityTaskFailedEvent(event *eventpb.His
 
 func (s *historyBuilderSuite) validateMarkerRecordedEvent(
 	event *eventpb.HistoryEvent, eventID, decisionTaskCompletedEventID int64,
-	markerName string, details *commonpb.Payload, header *map[string][]byte) {
+	markerName string, details *commonpb.Payload, header *map[string]*commonpb.Payload) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_MarkerRecorded, event.EventType)
 	s.Equal(eventID, event.EventId)
