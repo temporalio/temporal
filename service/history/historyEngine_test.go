@@ -48,6 +48,7 @@ import (
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -5008,7 +5009,7 @@ func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, decision
 			Namespace:                       namespace,
 			WorkflowId:                      workflowID,
 			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+			TaskList:                        &tasklistpb.TaskList{Name: taskList},
 			Input:                           input,
 			WorkflowExecutionTimeoutSeconds: executionTimeout,
 			WorkflowRunTimeoutSeconds:       runTimeout,

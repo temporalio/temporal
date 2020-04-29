@@ -137,7 +137,7 @@ update-proto-submodule:
 
 install-proto-submodule:
 	@printf $(COLOR) "Install proto submodule..."
-	git submodule update --init $(PROTO_ROOT)/temporal-proto
+#	git submodule update --init $(PROTO_ROOT)/temporal-proto
 
 protoc: $(PROTO_GEN)
 	@printf $(COLOR) "Build proto files..."
