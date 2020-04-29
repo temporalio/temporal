@@ -405,7 +405,7 @@ func CreateHistoryStartWorkflowRequest(
 	if startRequest.GetWorkflowExecutionTimeoutSeconds() > 0 {
 		expirationInSeconds := startRequest.GetWorkflowExecutionTimeoutSeconds()
 		deadline := now.Add(time.Second * time.Duration(expirationInSeconds))
-		histRequest.WorkflowExecutionTimeoutTimestamp = deadline.Round(time.Millisecond).UnixNano()
+		histRequest.WorkflowExecutionExpirationTimestamp = deadline.Round(time.Millisecond).UnixNano()
 	}
 	histRequest.FirstDecisionTaskBackoffSeconds = backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now)
 	return histRequest

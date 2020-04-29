@@ -506,7 +506,7 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	attributes.Identity = request.Identity
 	attributes.RetryPolicy = request.RetryPolicy
 	attributes.Attempt = startRequest.GetAttempt()
-	attributes.WorkflowExecutionTimeoutTimestamp = startRequest.WorkflowExecutionTimeoutTimestamp
+	attributes.WorkflowExecutionExpirationTimestamp = startRequest.WorkflowExecutionExpirationTimestamp
 	attributes.CronSchedule = request.CronSchedule
 	attributes.LastCompletionResult = startRequest.LastCompletionResult
 	attributes.ContinuedFailureReason = startRequest.ContinuedFailureReason

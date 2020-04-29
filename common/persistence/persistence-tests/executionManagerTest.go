@@ -1244,23 +1244,23 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				LastFirstEventID:    common.FirstEventID,
 				NextEventID:         rand.Int63(),
 				LastProcessedEvent:  int64(rand.Int31()),
-				SignalCount:         rand.Int31(),
-				DecisionVersion:     int64(rand.Int31()),
-				DecisionScheduleID:  int64(rand.Int31()),
-				DecisionStartedID:   int64(rand.Int31()),
-				DecisionTimeout:     rand.Int31(),
-				Attempt:             rand.Int31(),
-				HasRetryPolicy:      true,
-				InitialInterval:     rand.Int31(),
-				BackoffCoefficient:  7.78,
-				MaximumInterval:     rand.Int31(),
-				WorkflowTimeoutTime: time.Now(),
-				MaximumAttempts:     rand.Int31(),
-				NonRetriableErrors:  []string{"badRequestError", "accessDeniedError"},
-				CronSchedule:        "* * * * *",
-				AutoResetPoints:     &testResetPoints,
-				SearchAttributes:    testSearchAttr,
-				Memo:                testMemo,
+				SignalCount:            rand.Int31(),
+				DecisionVersion:        int64(rand.Int31()),
+				DecisionScheduleID:     int64(rand.Int31()),
+				DecisionStartedID:      int64(rand.Int31()),
+				DecisionTimeout:        rand.Int31(),
+				Attempt:                rand.Int31(),
+				HasRetryPolicy:         true,
+				InitialInterval:        rand.Int31(),
+				BackoffCoefficient:     7.78,
+				MaximumInterval:        rand.Int31(),
+				WorkflowExpirationTime: time.Now(),
+				MaximumAttempts:        rand.Int31(),
+				NonRetriableErrors:     []string{"badRequestError", "accessDeniedError"},
+				CronSchedule:           "* * * * *",
+				AutoResetPoints:        &testResetPoints,
+				SearchAttributes:       testSearchAttr,
+				Memo:                   testMemo,
 			},
 			ExecutionStats: &p.ExecutionStats{
 				HistorySize: int64(rand.Int31()),
@@ -1319,7 +1319,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.BackoffCoefficient, info.BackoffCoefficient)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.MaximumAttempts, info.MaximumAttempts)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.MaximumInterval, info.MaximumInterval)
-	s.EqualTimes(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTimeoutTime, info.WorkflowTimeoutTime)
+	s.EqualTimes(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime, info.WorkflowExpirationTime)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.CronSchedule, info.CronSchedule)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NonRetriableErrors, info.NonRetriableErrors)
 	s.Equal(testResetPoints.String(), info.AutoResetPoints.String())
@@ -1414,7 +1414,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.BackoffCoefficient = 4.45
 	updatedInfo.MaximumInterval = math.MaxInt32
 	updatedInfo.MaximumAttempts = math.MaxInt32
-	updatedInfo.WorkflowTimeoutTime = time.Now()
+	updatedInfo.WorkflowExpirationTime = time.Now()
 	updatedInfo.NonRetriableErrors = []string{"accessDenied", "badRequest"}
 	searchAttrKey := "env"
 	searchAttrVal := payload.EncodeBytes([]byte("test"))
@@ -1464,7 +1464,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.BackoffCoefficient, info1.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info1.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info1.MaximumAttempts)
-	s.EqualTimes(updatedInfo.WorkflowTimeoutTime, info1.WorkflowTimeoutTime)
+	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info1.WorkflowExpirationTime)
 	s.Equal(updatedInfo.NonRetriableErrors, info1.NonRetriableErrors)
 	searchAttrVal1, ok := info1.SearchAttributes[searchAttrKey]
 	s.True(ok)
@@ -1513,7 +1513,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.BackoffCoefficient, info2.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info2.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info2.MaximumAttempts)
-	s.EqualTimes(updatedInfo.WorkflowTimeoutTime, info2.WorkflowTimeoutTime)
+	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info2.WorkflowExpirationTime)
 	s.Equal(updatedInfo.NonRetriableErrors, info2.NonRetriableErrors)
 	searchAttrVal2, ok := info2.SearchAttributes[searchAttrKey]
 	s.True(ok)
@@ -1559,7 +1559,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.BackoffCoefficient, info3.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info3.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info3.MaximumAttempts)
-	s.EqualTimes(updatedInfo.WorkflowTimeoutTime, info3.WorkflowTimeoutTime)
+	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info3.WorkflowExpirationTime)
 	s.Equal(updatedInfo.NonRetriableErrors, info3.NonRetriableErrors)
 	searchAttrVal3, ok := info3.SearchAttributes[searchAttrKey]
 	s.True(ok)
@@ -1605,7 +1605,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.BackoffCoefficient, info4.BackoffCoefficient)
 	s.Equal(updatedInfo.MaximumInterval, info4.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info4.MaximumAttempts)
-	s.EqualTimes(updatedInfo.WorkflowTimeoutTime, info4.WorkflowTimeoutTime)
+	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info4.WorkflowExpirationTime)
 	s.Equal(updatedInfo.NonRetriableErrors, info4.NonRetriableErrors)
 	searchAttrVal4, ok := info4.SearchAttributes[searchAttrKey]
 	s.True(ok)
@@ -4405,7 +4405,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.LastUpdatedTimestamp
-	state.ExecutionInfo.WorkflowTimeoutTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowTimeoutTime
+	state.ExecutionInfo.WorkflowExpirationTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime
 	s.Equal(resetReq.ResetWorkflowSnapshot.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.ResetWorkflowSnapshot.ReplicationState, state.ReplicationState)
 
@@ -4413,7 +4413,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.CurrentWorkflowMutation.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.CurrentWorkflowMutation.ExecutionInfo.LastUpdatedTimestamp
-	state.ExecutionInfo.WorkflowTimeoutTime = resetReq.CurrentWorkflowMutation.ExecutionInfo.WorkflowTimeoutTime
+	state.ExecutionInfo.WorkflowExpirationTime = resetReq.CurrentWorkflowMutation.ExecutionInfo.WorkflowExpirationTime
 	s.Equal(resetReq.CurrentWorkflowMutation.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.CurrentWorkflowMutation.ReplicationState, state.ReplicationState)
 }
@@ -4574,7 +4574,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.LastUpdatedTimestamp
-	state.ExecutionInfo.WorkflowTimeoutTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowTimeoutTime
+	state.ExecutionInfo.WorkflowExpirationTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime
 	s.Equal(resetReq.ResetWorkflowSnapshot.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.ResetWorkflowSnapshot.ReplicationState, state.ReplicationState)
 
@@ -4582,7 +4582,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.CurrentWorkflowMutation.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.CurrentWorkflowMutation.ExecutionInfo.LastUpdatedTimestamp
-	state.ExecutionInfo.WorkflowTimeoutTime = resetReq.CurrentWorkflowMutation.ExecutionInfo.WorkflowTimeoutTime
+	state.ExecutionInfo.WorkflowExpirationTime = resetReq.CurrentWorkflowMutation.ExecutionInfo.WorkflowExpirationTime
 	s.Equal(resetReq.CurrentWorkflowMutation.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.CurrentWorkflowMutation.ReplicationState, state.ReplicationState)
 
@@ -4593,7 +4593,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.NewWorkflowSnapshot.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.NewWorkflowSnapshot.ExecutionInfo.LastUpdatedTimestamp
-	state.ExecutionInfo.WorkflowTimeoutTime = resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTimeoutTime
+	state.ExecutionInfo.WorkflowExpirationTime = resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime
 	s.Equal(resetReq.NewWorkflowSnapshot.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.NewWorkflowSnapshot.ReplicationState, state.ReplicationState)
 }
@@ -4696,7 +4696,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.LastUpdatedTimestamp
-	state.ExecutionInfo.WorkflowTimeoutTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowTimeoutTime
+	state.ExecutionInfo.WorkflowExpirationTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime
 	s.Equal(resetReq.ResetWorkflowSnapshot.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.ResetWorkflowSnapshot.ReplicationState, state.ReplicationState)
 }
@@ -4821,7 +4821,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.LastUpdatedTimestamp
-	state.ExecutionInfo.WorkflowTimeoutTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowTimeoutTime
+	state.ExecutionInfo.WorkflowExpirationTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime
 	s.Equal(resetReq.ResetWorkflowSnapshot.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.ResetWorkflowSnapshot.ReplicationState, state.ReplicationState)
 
@@ -4832,7 +4832,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.NewWorkflowSnapshot.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.NewWorkflowSnapshot.ExecutionInfo.LastUpdatedTimestamp
-	state.ExecutionInfo.WorkflowTimeoutTime = resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTimeoutTime
+	state.ExecutionInfo.WorkflowExpirationTime = resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime
 	s.Equal(resetReq.NewWorkflowSnapshot.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.NewWorkflowSnapshot.ReplicationState, state.ReplicationState)
 }
@@ -4948,7 +4948,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.LastUpdatedTimestamp
-	state.ExecutionInfo.WorkflowTimeoutTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowTimeoutTime
+	state.ExecutionInfo.WorkflowExpirationTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime
 	s.Equal(resetReq.ResetWorkflowSnapshot.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.ResetWorkflowSnapshot.ReplicationState, state.ReplicationState)
 }
@@ -5086,7 +5086,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.LastUpdatedTimestamp
-	state.ExecutionInfo.WorkflowTimeoutTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowTimeoutTime
+	state.ExecutionInfo.WorkflowExpirationTime = resetReq.ResetWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime
 	s.Equal(resetReq.ResetWorkflowSnapshot.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.ResetWorkflowSnapshot.ReplicationState, state.ReplicationState)
 
@@ -5097,7 +5097,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.NewWorkflowSnapshot.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.NewWorkflowSnapshot.ExecutionInfo.LastUpdatedTimestamp
-	state.ExecutionInfo.WorkflowTimeoutTime = resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTimeoutTime
+	state.ExecutionInfo.WorkflowExpirationTime = resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime
 	s.Equal(resetReq.NewWorkflowSnapshot.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.NewWorkflowSnapshot.ReplicationState, state.ReplicationState)
 }

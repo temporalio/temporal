@@ -514,10 +514,10 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 	}
 	attributes.TaskList = taskList
 
-	// Reduce runTimeout if it is going to exceed WorkflowTimeoutTime
+	// Reduce runTimeout if it is going to exceed WorkflowExpirationTime
 	// Note that this calculation can produce negative result
 	// handleDecisionContinueAsNewWorkflow must handle negative runTimeout value
-	timeoutTime := executionInfo.WorkflowTimeoutTime
+	timeoutTime := executionInfo.WorkflowExpirationTime
 	if !timeoutTime.IsZero() {
 		runTimeout := convert.Int32Ceil(timeoutTime.Sub(time.Now()).Seconds())
 		if attributes.GetWorkflowRunTimeoutSeconds() > 0 {

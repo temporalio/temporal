@@ -1070,7 +1070,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 
 	return getBackoffInterval(
 		e.timeSource.Now(),
-		info.WorkflowTimeoutTime,
+		info.WorkflowExpirationTime,
 		info.Attempt,
 		info.MaximumAttempts,
 		info.InitialInterval,
@@ -1678,9 +1678,9 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	if attributes.GetInitiator() == commonpb.ContinueAsNewInitiator_Retry {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
 	}
-	workflowTimeoutTime := previousExecutionState.GetExecutionInfo().WorkflowTimeoutTime
+	workflowTimeoutTime := previousExecutionState.GetExecutionInfo().WorkflowExpirationTime
 	if !workflowTimeoutTime.IsZero() {
-		req.WorkflowExecutionTimeoutTimestamp = workflowTimeoutTime.UnixNano()
+		req.WorkflowExecutionExpirationTimestamp = workflowTimeoutTime.UnixNano()
 	}
 
 	// History event only has namespace so namespaceID has to be passed in explicitly to update the mutable state
@@ -1822,8 +1822,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	}
 
 	e.executionInfo.Attempt = event.GetAttempt()
-	if event.GetWorkflowExecutionTimeoutTimestamp() != 0 {
-		e.executionInfo.WorkflowTimeoutTime = time.Unix(0, event.GetWorkflowExecutionTimeoutTimestamp())
+	if event.GetWorkflowExecutionExpirationTimestamp() != 0 {
+		e.executionInfo.WorkflowExpirationTime = time.Unix(0, event.GetWorkflowExecutionExpirationTimestamp())
 	}
 	if event.RetryPolicy != nil {
 		e.executionInfo.HasRetryPolicy = true

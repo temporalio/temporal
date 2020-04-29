@@ -1277,7 +1277,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 	// need to override the workflow retry policy
 	executionInfo := mutableState.executionInfo
 	executionInfo.HasRetryPolicy = true
-	executionInfo.WorkflowTimeoutTime = s.now.Add(1000 * time.Second)
+	executionInfo.WorkflowExpirationTime = s.now.Add(1000 * time.Second)
 	executionInfo.MaximumAttempts = 10
 	executionInfo.InitialInterval = 1
 	executionInfo.MaximumInterval = 1
