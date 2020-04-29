@@ -31,9 +31,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/util"
 )
 
 type ClientSuite struct {
@@ -67,13 +67,13 @@ func (s *ClientSuite) TestNewFilestoreClient_DirectoryAlreadyExists() {
 func (s *ClientSuite) TestNewFilestoreClient_DirectoryNotAlreadyExists() {
 	name := s.createTempDir("TestNewFilestoreClient_DirectoryNotAlreadyExists")
 	os.RemoveAll(name)
-	exists, err := common.DirectoryExists(name)
+	exists, err := util.DirectoryExists(name)
 	s.NoError(err)
 	s.False(exists)
 	c, err := NewFilestoreClient(&config.FileBlobstore{OutputDirectory: name})
 	s.NoError(err)
 	s.Equal(name, c.(*client).outputDirectory)
-	exists, err = common.DirectoryExists(name)
+	exists, err = util.DirectoryExists(name)
 	s.NoError(err)
 	s.True(exists)
 	os.RemoveAll(name)

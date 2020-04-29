@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/util"
 )
 
 const (
@@ -120,7 +121,7 @@ func (s *UtilSuite) TestValidateDirPath() {
 		},
 		{
 			dirPath:     fpath,
-			expectedErr: common.ErrDirectoryExpected,
+			expectedErr: util.ErrDirectoryExpected,
 		},
 	}
 
@@ -314,7 +315,7 @@ func (s *UtilSuite) createFile(dir string, filename string) {
 }
 
 func (s *UtilSuite) assertDirectoryExists(path string) {
-	exists, err := common.DirectoryExists(path)
+	exists, err := util.DirectoryExists(path)
 	s.NoError(err)
 	s.True(exists)
 }

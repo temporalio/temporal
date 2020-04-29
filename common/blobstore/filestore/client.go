@@ -29,9 +29,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/util"
 )
 
 type (
@@ -49,12 +49,12 @@ func NewFilestoreClient(cfg *config.FileBlobstore) (blobstore.Client, error) {
 		return nil, errors.New("output directory not given for file blobstore")
 	}
 	outputDirectory := cfg.OutputDirectory
-	exists, err := common.DirectoryExists(outputDirectory)
+	exists, err := util.DirectoryExists(outputDirectory)
 	if err != nil {
 		return nil, err
 	}
 	if !exists {
-		if err := common.MkdirAll(outputDirectory, os.FileMode(0766)); err != nil {
+		if err := util.MkdirAll(outputDirectory, os.FileMode(0766)); err != nil {
 			return nil, err
 		}
 	}
@@ -69,7 +69,7 @@ func (c *client) Put(_ context.Context, request *blobstore.PutRequest) (*blobsto
 	if err != nil {
 		return nil, err
 	}
-	if err := common.WriteFile(c.filepath(request.Key), data, os.FileMode(0666)); err != nil {
+	if err := util.WriteFile(c.filepath(request.Key), data, os.FileMode(0666)); err != nil {
 		return nil, err
 	}
 	return &blobstore.PutResponse{}, nil
@@ -77,7 +77,7 @@ func (c *client) Put(_ context.Context, request *blobstore.PutRequest) (*blobsto
 
 // Get fetches a blob
 func (c *client) Get(_ context.Context, request *blobstore.GetRequest) (*blobstore.GetResponse, error) {
-	data, err := common.ReadFile(c.filepath(request.Key))
+	data, err := util.ReadFile(c.filepath(request.Key))
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (c *client) Get(_ context.Context, request *blobstore.GetRequest) (*blobsto
 
 // Exists determines if a blob exists
 func (c *client) Exists(_ context.Context, request *blobstore.ExistsRequest) (*blobstore.ExistsResponse, error) {
-	exists, err := common.FileExists(c.filepath(request.Key))
+	exists, err := util.FileExists(c.filepath(request.Key))
 	if err != nil {
 		return nil, err
 	}

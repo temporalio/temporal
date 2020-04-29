@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/util"
 )
 
 const (
@@ -110,7 +111,7 @@ func (v *visibilityArchiver) Archive(
 	}
 
 	dirPath := path.Join(URI.Path(), request.DomainID)
-	if err = common.MkdirAll(dirPath, v.dirMode); err != nil {
+	if err = util.MkdirAll(dirPath, v.dirMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errMakeDirectory), tag.Error(err))
 		return err
 	}
@@ -124,7 +125,7 @@ func (v *visibilityArchiver) Archive(
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
 	filename := constructVisibilityFilename(request.CloseTimestamp, request.RunID)
-	if err := common.WriteFile(path.Join(dirPath, filename), encodedVisibilityRecord, v.fileMode); err != nil {
+	if err := util.WriteFile(path.Join(dirPath, filename), encodedVisibilityRecord, v.fileMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return err
 	}
@@ -177,7 +178,7 @@ func (v *visibilityArchiver) query(
 	}
 
 	dirPath := path.Join(URI.Path(), request.domainID)
-	exists, err := common.DirectoryExists(dirPath)
+	exists, err := util.DirectoryExists(dirPath)
 	if err != nil {
 		return nil, &shared.InternalServiceError{Message: err.Error()}
 	}
@@ -185,7 +186,7 @@ func (v *visibilityArchiver) query(
 		return &archiver.QueryVisibilityResponse{}, nil
 	}
 
-	files, err := common.ListFiles(dirPath)
+	files, err := util.ListFiles(dirPath)
 	if err != nil {
 		return nil, &shared.InternalServiceError{Message: err.Error()}
 	}
@@ -200,7 +201,7 @@ func (v *visibilityArchiver) query(
 
 	response := &archiver.QueryVisibilityResponse{}
 	for idx, file := range files {
-		encodedRecord, err := common.ReadFile(path.Join(dirPath, file))
+		encodedRecord, err := util.ReadFile(path.Join(dirPath, file))
 		if err != nil {
 			return nil, &shared.InternalServiceError{Message: err.Error()}
 		}

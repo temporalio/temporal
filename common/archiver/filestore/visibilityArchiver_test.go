@@ -40,6 +40,7 @@ import (
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/util"
 )
 
 const (
@@ -189,7 +190,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	filepath := path.Join(dir, testDomainID, expectedFilename)
 	s.assertFileExists(filepath)
 
-	data, err := common.ReadFile(filepath)
+	data, err := util.ReadFile(filepath)
 	s.NoError(err)
 
 	archivedRecord := &archiver.ArchiveVisibilityRequest{}
@@ -573,12 +574,12 @@ func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(record *visi
 	s.Require().NoError(err)
 	filename := constructVisibilityFilename(record.CloseTimestamp, record.RunID)
 	s.Require().NoError(os.MkdirAll(path.Join(s.testQueryDirectory, record.DomainID), testDirMode))
-	err = common.WriteFile(path.Join(s.testQueryDirectory, record.DomainID, filename), data, testFileMode)
+	err = util.WriteFile(path.Join(s.testQueryDirectory, record.DomainID, filename), data, testFileMode)
 	s.Require().NoError(err)
 }
 
 func (s *visibilityArchiverSuite) assertFileExists(filepath string) {
-	exists, err := common.FileExists(filepath)
+	exists, err := util.FileExists(filepath)
 	s.NoError(err)
 	s.True(exists)
 }

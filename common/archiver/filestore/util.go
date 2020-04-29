@@ -32,8 +32,8 @@ import (
 	"github.com/dgryski/go-farm"
 
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/util"
 )
 
 var (
@@ -116,7 +116,7 @@ func validateDirPath(dirPath string) error {
 		return err
 	}
 	if !info.IsDir() {
-		return common.ErrDirectoryExpected
+		return util.ErrDirectoryExpected
 	}
 	return nil
 }
