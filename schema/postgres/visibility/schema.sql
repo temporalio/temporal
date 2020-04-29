@@ -1,11 +1,11 @@
 CREATE TABLE executions_visibility (
-  namespace_id            CHAR(64) NOT NULL,
+  namespace_id         CHAR(64) NOT NULL,
   run_id               CHAR(64) NOT NULL,
   start_time           TIMESTAMP NOT NULL,
   execution_time       TIMESTAMP NOT NULL,
   workflow_id          VARCHAR(255) NOT NULL,
   workflow_type_name   VARCHAR(255) NOT NULL,
-  status         INTEGER,  -- enum WorkflowExecutionStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
+  status               INTEGER,  -- enum WorkflowExecutionStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
   close_time           TIMESTAMP NULL,
   history_length       BIGINT,
   memo                 BYTEA,
