@@ -277,7 +277,6 @@ type (
 		WorkflowRunTimeout                 int32
 		WorkflowExecutionTimeout           int32
 		WorkflowTaskTimeout                int32
-		ExecutionContext                   []byte
 		State                              int
 		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64

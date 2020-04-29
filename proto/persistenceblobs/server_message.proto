@@ -206,7 +206,7 @@ message SignalInfo {
     string requestId = 3;
     string name = 4;
     common.Payload input = 5;
-    bytes control = 6;
+    string control = 6;
     int64 initiatedId = 7;
 }
 
@@ -239,7 +239,6 @@ message WorkflowExecutionInfo {
     int32 workflowExecutionTimeoutSeconds = 10;
     int32 workflowRunTimeoutSeconds = 11;
     int32 workflowTaskTimeoutSeconds = 12;
-    bytes executionContext = 13;
     int64 startVersion = 15;
     int64 currentVersion = 16;
     ReplicationData replicationData = 17;

@@ -409,7 +409,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 	tl := "testTaskList"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
-	addDecisionTaskCompletedEvent(msBuilder, int64(2), int64(3), nil, identity)
+	addDecisionTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
 
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
@@ -721,7 +721,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	activityInput := payload.EncodeString("input1")
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
-	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, int64(2), int64(3), nil, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
 	scheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 5)
 
@@ -886,7 +886,6 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
 			TaskToken:        serializedTaskToken,
 			Decisions:        decisions,
-			ExecutionContext: nil,
 			Identity:         identity,
 		},
 	})
@@ -1306,7 +1305,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 			WorkflowIdReusePolicy:           commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                      signalName,
 			SignalInput:                     nil,
-			Control:                         nil,
+			Control:                             "",
 			RetryPolicy:                     nil,
 			CronSchedule:                    "",
 			Memo:                            nil,
@@ -1358,7 +1357,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 			WorkflowIdReusePolicy:           commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                      signalName,
 			SignalInput:                     nil,
-			Control:                         nil,
+			Control:                             "",
 			RetryPolicy:                     nil,
 			CronSchedule:                    "",
 			Memo:                            nil,
@@ -1418,7 +1417,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 			WorkflowIdReusePolicy:           commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                      signalName,
 			SignalInput:                     nil,
-			Control:                         nil,
+			Control:                             "",
 			RetryPolicy:                     nil,
 			CronSchedule:                    "",
 			Memo:                            nil,

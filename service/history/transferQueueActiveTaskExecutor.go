@@ -963,7 +963,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 	targetNamespace string,
 	targetWorkflowID string,
 	targetRunID string,
-	control []byte,
+	control string,
 ) error {
 
 	err := t.updateWorkflowExecution(context, true,
@@ -1041,7 +1041,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 	targetNamespace string,
 	targetWorkflowID string,
 	targetRunID string,
-	control []byte,
+	control string,
 ) error {
 
 	err := t.updateWorkflowExecution(context, true,

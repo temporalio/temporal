@@ -2943,7 +2943,7 @@ func (e *mutableStateBuilder) AddExternalWorkflowExecutionSignaled(
 	namespace string,
 	workflowID string,
 	runID string,
-	control []byte,
+	control string,
 ) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowSignalRequested
@@ -2982,7 +2982,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionFailedEvent(
 	namespace string,
 	workflowID string,
 	runID string,
-	control []byte,
+	control string,
 	cause eventpb.WorkflowExecutionFailedCause,
 ) (*eventpb.HistoryEvent, error) {
 

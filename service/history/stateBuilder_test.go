@@ -1539,7 +1539,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 
 	now := time.Now()
 	cancellationRequestID := uuid.New()
-	control := []byte("some random control")
+	control := "some random control"
 	evenType := eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated
 	event := &eventpb.HistoryEvent{
 		Version:   version,
@@ -1676,7 +1676,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	signalRequestID := uuid.New()
 	signalName := "some random signal name"
 	signalInput := payload.EncodeString("some random signal input")
-	control := []byte("some random control")
+	control := "some random control"
 	evenType := eventpb.EventType_SignalExternalWorkflowExecutionInitiated
 	event := &eventpb.HistoryEvent{
 		Version:   version,
