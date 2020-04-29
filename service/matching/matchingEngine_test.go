@@ -872,7 +872,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	activityType := &commonpb.ActivityType{Name: activityTypeName}
 	activityInput := payload.EncodeString("Activity1 Input")
 	activityHeader := &commonpb.Header{
-		Fields: map[string][]byte{"tracing": []byte("tracing data")},
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("tracing data")},
 	}
 
 	identity := "nobody"

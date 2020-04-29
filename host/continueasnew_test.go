@@ -54,7 +54,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	header := &commonpb.Header{
-		Fields: map[string][]byte{"tracing": []byte("sample payload")},
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
 	}
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
