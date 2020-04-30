@@ -125,12 +125,6 @@ const (
 	WorkflowStateCorrupted
 )
 
-// Kinds of task lists
-const (
-	TaskListKindNormal int32 = iota
-	TaskListKindSticky
-)
-
 // Transfer task types
 const (
 	TransferTaskTypeDecisionTask = iota
@@ -920,7 +914,7 @@ type (
 		NamespaceID  primitives.UUID
 		TaskList     string
 		TaskType     tasklistpb.TaskListType
-		TaskListKind int32
+		TaskListKind tasklistpb.TaskListKind
 		RangeID      int64
 	}
 
