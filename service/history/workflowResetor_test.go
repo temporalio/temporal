@@ -961,7 +961,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskList: taskList,
+							TaskList:                        taskList,
 							Input:                           payload.EncodeString("testInput"),
 							WorkflowExecutionTimeoutSeconds: 100,
 							WorkflowTaskTimeoutSeconds:      200,
@@ -2254,7 +2254,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskList: taskList,
+							TaskList:                   taskList,
 							Input:                      payload.EncodeString("testInput"),
 							WorkflowRunTimeoutSeconds:  100,
 							WorkflowTaskTimeoutSeconds: 200,
@@ -2851,7 +2851,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskList: taskList,
+							TaskList:                   taskList,
 							Input:                      payload.EncodeString("testInput"),
 							WorkflowRunTimeoutSeconds:  100,
 							WorkflowTaskTimeoutSeconds: 200,
@@ -3525,7 +3525,7 @@ func (s *resetorSuite) TestApplyReset() {
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskList: taskList,
+							TaskList:                   taskList,
 							Input:                      payload.EncodeString("testInput"),
 							WorkflowRunTimeoutSeconds:  100,
 							WorkflowTaskTimeoutSeconds: 200,

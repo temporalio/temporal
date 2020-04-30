@@ -1748,7 +1748,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						WorkflowId:                 childID,
 						WorkflowType:               childWorkflowType,
 						TaskList:                   taskListChild,
-						Input:                               payload.EncodeString("child-workflow-input"),
+						Input:                      payload.EncodeString("child-workflow-input"),
 						Header:                     header,
 						WorkflowRunTimeoutSeconds:  200,
 						WorkflowTaskTimeoutSeconds: 2,

@@ -29,6 +29,9 @@
 package history
 
 import (
+	reflect "reflect"
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 	persistenceblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -40,8 +43,6 @@ import (
 	event "go.temporal.io/temporal-proto/event"
 	execution "go.temporal.io/temporal-proto/execution"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice"
-	reflect "reflect"
-	time "time"
 )
 
 // MockmutableState is a mock of mutableState interface.

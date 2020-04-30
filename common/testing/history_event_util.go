@@ -289,10 +289,10 @@ func InitializeHistoryEventGenerator(
 				Name: taskList,
 				Kind: tasklistpb.TaskListKind_Normal,
 			},
-			WorkflowRunTimeoutSeconds:       timeout,
-			WorkflowTaskTimeoutSeconds:      timeout,
-			DecisionTaskCompletedEventId:    eventID - 1,
-			Initiator:                       commonpb.ContinueAsNewInitiator_Decider,
+			WorkflowRunTimeoutSeconds:    timeout,
+			WorkflowTaskTimeoutSeconds:   timeout,
+			DecisionTaskCompletedEventId: eventID - 1,
+			Initiator:                    commonpb.ContinueAsNewInitiator_Decider,
 		}}
 		return historyEvent
 	})

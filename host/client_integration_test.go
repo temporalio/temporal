@@ -126,8 +126,8 @@ func (tdc *testDataConverter) ToData(value ...interface{}) (*commonpb.Payload, e
 
 	tdc.NumOfCallToData++
 	for i, obj := range value {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
+		var buf bytes.Buffer
+		enc := gob.NewEncoder(&buf)
 		if err := enc.Encode(obj); err != nil {
 			return nil, fmt.Errorf(
 				"unable to encode argument: %d, %v, with gob error: %v", i, reflect.TypeOf(obj), err)
@@ -138,7 +138,7 @@ func (tdc *testDataConverter) ToData(value ...interface{}) (*commonpb.Payload, e
 				"name":     []byte(fmt.Sprintf("args[%d]", i)),
 			},
 			Data: buf.Bytes(),
-	}
+		}
 		payload.Items = append(payload.Items, payloadItem)
 	}
 	return payload, nil
@@ -156,7 +156,7 @@ func (tdc *testDataConverter) FromData(payload *commonpb.Payload, valuePtr ...in
 		if e == "gob" {
 			dec := gob.NewDecoder(bytes.NewBuffer(payloadItem.GetData()))
 			if err := dec.Decode(valuePtr[i]); err != nil {
-			return fmt.Errorf(
+				return fmt.Errorf(
 					"unable to decode argument: %d, %v, with gob error: %v", i, reflect.TypeOf(valuePtr[i]), err)
 			}
 		} else {

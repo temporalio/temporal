@@ -762,7 +762,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	parentClosePolicy3 := commonpb.ParentClosePolicy_RequestCancel
 
 	event, _ = mutableState.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondDecisionTaskCompletedRequest{
-		Identity:         "some random identity",
+		Identity: "some random identity",
 		Decisions: []*decisionpb.Decision{
 			{
 				DecisionType: dt,
@@ -908,8 +908,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}
 
 	event, _ = mutableState.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondDecisionTaskCompletedRequest{
-		Identity:         "some random identity",
-		Decisions:        decisions,
+		Identity:  "some random identity",
+		Decisions: decisions,
 	}, defaultHistoryMaxAutoResetPoints)
 
 	for i := 0; i < 10; i++ {
@@ -998,8 +998,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}
 
 	event, _ = mutableState.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflowservice.RespondDecisionTaskCompletedRequest{
-		Identity:         "some random identity",
-		Decisions:        decisions,
+		Identity:  "some random identity",
+		Decisions: decisions,
 	}, defaultHistoryMaxAutoResetPoints)
 
 	for i := 0; i < 10; i++ {

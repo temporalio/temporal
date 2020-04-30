@@ -9,6 +9,8 @@ services:
       - "3306:3306"
     environment:
       - "MYSQL_ROOT_PASSWORD=root"
+      - "MYSQL_USER=temporal"
+      - "MYSQL_PASSWORD=temporal"
   cassandra:
     image: cassandra:3.11
     ports:

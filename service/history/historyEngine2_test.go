@@ -884,9 +884,9 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	_, err := s.historyEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
 		NamespaceId: namespaceID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
-			TaskToken:        serializedTaskToken,
-			Decisions:        decisions,
-			Identity:         identity,
+			TaskToken: serializedTaskToken,
+			Decisions: decisions,
+			Identity:  identity,
 		},
 	})
 	s.Nil(err)
@@ -1305,7 +1305,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 			WorkflowIdReusePolicy:           commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                      signalName,
 			SignalInput:                     nil,
-			Control:                             "",
+			Control:                         "",
 			RetryPolicy:                     nil,
 			CronSchedule:                    "",
 			Memo:                            nil,
@@ -1357,7 +1357,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 			WorkflowIdReusePolicy:           commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                      signalName,
 			SignalInput:                     nil,
-			Control:                             "",
+			Control:                         "",
 			RetryPolicy:                     nil,
 			CronSchedule:                    "",
 			Memo:                            nil,
@@ -1417,7 +1417,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 			WorkflowIdReusePolicy:           commonpb.WorkflowIdReusePolicy_AllowDuplicate,
 			SignalName:                      signalName,
 			SignalInput:                     nil,
-			Control:                             "",
+			Control:                         "",
 			RetryPolicy:                     nil,
 			CronSchedule:                    "",
 			Memo:                            nil,

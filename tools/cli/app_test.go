@@ -708,7 +708,7 @@ func (s *cliAppSuite) TestAnyToString() {
 			WorkflowRunTimeoutSeconds:  60,
 			WorkflowTaskTimeoutSeconds: 10,
 			Identity:                   "tester",
-			Input:                               payload.EncodeString(arg),
+			Input:                      payload.EncodeString(arg),
 		}},
 	}
 	res := anyToString(event, false, defaultMaxFieldLength)

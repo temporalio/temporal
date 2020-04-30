@@ -64,7 +64,7 @@ func CreateCassandraKeyspace(s *gocql.Session, keyspace string, replicas int, ov
 
 // DropCassandraKeyspace drops the given keyspace, if it exists
 func DropCassandraKeyspace(s *gocql.Session, keyspace string) (err error) {
-	err = nil //TODO: s.Query(fmt.Sprintf("DROP KEYSPACE IF EXISTS %s", keyspace)).Exec()
+	err = s.Query(fmt.Sprintf("DROP KEYSPACE IF EXISTS %s", keyspace)).Exec()
 	if err != nil {
 		log.Error(`drop keyspace error`, err)
 		return
