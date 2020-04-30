@@ -54,6 +54,7 @@ import (
 	"github.com/uber-go/tally"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type (
@@ -1239,7 +1240,7 @@ func (s *TestBase) CreateDecisionTask(namespaceID primitives.UUID, workflowExecu
 	leaseResponse, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
 		NamespaceID: namespaceID,
 		TaskList:    taskList,
-		TaskType:    p.TaskListTypeDecision,
+		TaskType:    tasklistpb.TaskListType_Decision,
 	})
 	if err != nil {
 		return 0, err
@@ -1280,7 +1281,7 @@ func (s *TestBase) CreateActivityTasks(namespaceID primitives.UUID, workflowExec
 		_, ok := taskLists[tl]
 		if !ok {
 			resp, err := s.TaskMgr.LeaseTaskList(
-				&p.LeaseTaskListRequest{NamespaceID: namespaceID, TaskList: tl, TaskType: p.TaskListTypeActivity})
+				&p.LeaseTaskListRequest{NamespaceID: namespaceID, TaskList: tl, TaskType: tasklistpb.TaskListType_Activity})
 			if err != nil {
 				return []int64{}, err
 			}
@@ -1318,7 +1319,7 @@ func (s *TestBase) CreateActivityTasks(namespaceID primitives.UUID, workflowExec
 }
 
 // GetTasks is a utility method to get tasks from persistence
-func (s *TestBase) GetTasks(namespaceID primitives.UUID, taskList string, taskType int32, batchSize int) (*p.GetTasksResponse, error) {
+func (s *TestBase) GetTasks(namespaceID primitives.UUID, taskList string, taskType tasklistpb.TaskListType, batchSize int) (*p.GetTasksResponse, error) {
 	response, err := s.TaskMgr.GetTasks(&p.GetTasksRequest{
 		NamespaceID:  namespaceID,
 		TaskList:     taskList,
@@ -1335,7 +1336,7 @@ func (s *TestBase) GetTasks(namespaceID primitives.UUID, taskList string, taskTy
 }
 
 // CompleteTask is a utility method to complete a task
-func (s *TestBase) CompleteTask(namespaceID primitives.UUID, taskList string, taskType int32, taskID int64) error {
+func (s *TestBase) CompleteTask(namespaceID primitives.UUID, taskList string, taskType tasklistpb.TaskListType, taskID int64) error {
 	return s.TaskMgr.CompleteTask(&p.CompleteTaskRequest{
 		TaskList: &p.TaskListKey{
 			NamespaceID: namespaceID,

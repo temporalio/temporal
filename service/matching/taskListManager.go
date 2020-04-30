@@ -381,7 +381,7 @@ func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *matc
 
 func (c *taskListManagerImpl) String() string {
 	buf := new(bytes.Buffer)
-	if c.taskListID.taskType == persistence.TaskListTypeActivity {
+	if c.taskListID.taskType == tasklistpb.TaskListType_Activity {
 		buf.WriteString("Activity")
 	} else {
 		buf.WriteString("Decision")

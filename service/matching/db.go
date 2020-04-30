@@ -33,6 +33,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type (
@@ -41,7 +42,7 @@ type (
 		namespaceID  primitives.UUID
 		taskListName string
 		taskListKind int32
-		taskType     int32
+		taskType     tasklistpb.TaskListType
 		rangeID      int64
 		ackLevel     int64
 		store        persistence.TaskManager
@@ -63,7 +64,7 @@ type (
 // - To provide the guarantee that there is only writer who updates taskList in persistence at any given point in time
 //   This guarantee makes some of the other code simpler and there is no impact to perf because updates to tasklist are
 //   spread out and happen in background routines
-func newTaskListDB(store persistence.TaskManager, namespaceID primitives.UUID, name string, taskType int32, kind int32, logger log.Logger) *taskListDB {
+func newTaskListDB(store persistence.TaskManager, namespaceID primitives.UUID, name string, taskType tasklistpb.TaskListType, kind int32, logger log.Logger) *taskListDB {
 	return &taskListDB{
 		namespaceID:  namespaceID,
 		taskListName: name,
@@ -168,7 +169,7 @@ func (db *taskListDB) CompleteTask(taskID int64) error {
 			tag.StoreOperationCompleteTask,
 			tag.Error(err),
 			tag.TaskID(taskID),
-			tag.TaskType(db.taskType),
+			tag.WorkflowTaskListType(db.taskType),
 			tag.WorkflowTaskListName(db.taskListName))
 	}
 	return err
@@ -190,7 +191,7 @@ func (db *taskListDB) CompleteTasksLessThan(taskID int64, limit int) (int, error
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
 			tag.TaskID(taskID),
-			tag.TaskType(db.taskType),
+			tag.WorkflowTaskListType(db.taskType),
 			tag.WorkflowTaskListName(db.taskListName))
 	}
 	return n, err

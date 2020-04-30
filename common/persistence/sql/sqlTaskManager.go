@@ -40,6 +40,7 @@ import (
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/primitives"
 	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type sqlTaskManager struct {
@@ -423,7 +424,7 @@ func (m *sqlTaskManager) shardID(namespaceID primitives.UUID, name string) int {
 	return int(id)
 }
 
-func lockTaskList(tx sqlplugin.Tx, shardID int, namespaceID primitives.UUID, name string, taskListType int32, oldRangeID int64) error {
+func lockTaskList(tx sqlplugin.Tx, shardID int, namespaceID primitives.UUID, name string, taskListType tasklistpb.TaskListType, oldRangeID int64) error {
 	rangeID, err := tx.LockTaskLists(&sqlplugin.TaskListsFilter{
 		ShardID: shardID, NamespaceID: &namespaceID, Name: &name, TaskType: convert.Int64Ptr(int64(taskListType))})
 	if err != nil {

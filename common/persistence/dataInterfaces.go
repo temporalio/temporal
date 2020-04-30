@@ -35,6 +35,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -122,12 +123,6 @@ const (
 	WorkflowStateZombie
 	WorkflowStateVoid
 	WorkflowStateCorrupted
-)
-
-// Types of task lists
-const (
-	TaskListTypeDecision int32 = iota
-	TaskListTypeActivity
 )
 
 // Kinds of task lists
@@ -355,7 +350,7 @@ type (
 	TaskListKey struct {
 		NamespaceID primitives.UUID
 		Name        string
-		TaskType    int32
+		TaskType    tasklistpb.TaskListType
 	}
 
 	// ActivityTask identifies a transfer task for activity
@@ -924,7 +919,7 @@ type (
 	LeaseTaskListRequest struct {
 		NamespaceID  primitives.UUID
 		TaskList     string
-		TaskType     int32
+		TaskType     tasklistpb.TaskListType
 		TaskListKind int32
 		RangeID      int64
 	}
@@ -981,7 +976,7 @@ type (
 	GetTasksRequest struct {
 		NamespaceID  primitives.UUID
 		TaskList     string
-		TaskType     int32
+		TaskType     tasklistpb.TaskListType
 		ReadLevel    int64  // range exclusive
 		MaxReadLevel *int64 // optional: range inclusive when specified
 		BatchSize    int
@@ -1002,7 +997,7 @@ type (
 	CompleteTasksLessThanRequest struct {
 		NamespaceID  primitives.UUID
 		TaskListName string
-		TaskType     int32
+		TaskType     tasklistpb.TaskListType
 		TaskID       int64 // Tasks less than or equal to this ID will be completed
 		Limit        int   // Limit on the max number of tasks that can be completed. Required param
 	}

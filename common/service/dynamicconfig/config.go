@@ -32,6 +32,8 @@ import (
 
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 const (
@@ -88,7 +90,7 @@ type IntPropertyFn func(opts ...FilterOption) int
 type IntPropertyFnWithNamespaceFilter func(namespace string) int
 
 // IntPropertyFnWithTaskListInfoFilters is a wrapper to get int property from dynamic config with three filters: namespace, taskList, taskType
-type IntPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType int32) int
+type IntPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType tasklistpb.TaskListType) int
 
 // FloatPropertyFn is a wrapper to get float property from dynamic config
 type FloatPropertyFn func(opts ...FilterOption) float64
@@ -103,7 +105,7 @@ type DurationPropertyFnWithNamespaceFilter func(namespace string) time.Duration
 type DurationPropertyFnWithNamespaceIDFilter func(namespaceID string) time.Duration
 
 // DurationPropertyFnWithTaskListInfoFilters is a wrapper to get duration property from dynamic config  with three filters: namespace, taskList, taskType
-type DurationPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType int32) time.Duration
+type DurationPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType tasklistpb.TaskListType) time.Duration
 
 // BoolPropertyFn is a wrapper to get bool property from dynamic config
 type BoolPropertyFn func(opts ...FilterOption) bool
@@ -121,7 +123,7 @@ type StringPropertyFnWithNamespaceFilter func(namespace string) string
 type BoolPropertyFnWithNamespaceFilter func(namespace string) bool
 
 // BoolPropertyFnWithTaskListInfoFilters is a wrapper to get bool property from dynamic config with three filters: namespace, taskList, taskType
-type BoolPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType int32) bool
+type BoolPropertyFnWithTaskListInfoFilters func(namespace string, taskList string, taskType tasklistpb.TaskListType) bool
 
 // GetProperty gets a interface property and returns defaultValue if property is not found
 func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
@@ -170,7 +172,7 @@ func (c *Collection) GetIntPropertyFilteredByNamespace(key Key, defaultValue int
 
 // GetIntPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's an integer
 func (c *Collection) GetIntPropertyFilteredByTaskListInfo(key Key, defaultValue int) IntPropertyFnWithTaskListInfoFilters {
-	return func(namespace string, taskList string, taskType int32) int {
+	return func(namespace string, taskList string, taskType tasklistpb.TaskListType) int {
 		val, err := c.client.GetIntValue(
 			key,
 			getFilterMap(NamespaceFilter(namespace), TaskListFilter(taskList), TaskTypeFilter(taskType)),
@@ -234,7 +236,7 @@ func (c *Collection) GetDurationPropertyFilteredByNamespaceID(key Key, defaultVa
 
 // GetDurationPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's a duration
 func (c *Collection) GetDurationPropertyFilteredByTaskListInfo(key Key, defaultValue time.Duration) DurationPropertyFnWithTaskListInfoFilters {
-	return func(namespace string, taskList string, taskType int32) time.Duration {
+	return func(namespace string, taskList string, taskType tasklistpb.TaskListType) time.Duration {
 		val, err := c.client.GetDurationValue(
 			key,
 			getFilterMap(NamespaceFilter(namespace), TaskListFilter(taskList), TaskTypeFilter(taskType)),
@@ -310,7 +312,7 @@ func (c *Collection) GetBoolPropertyFnWithNamespaceFilter(key Key, defaultValue 
 
 // GetBoolPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's an bool
 func (c *Collection) GetBoolPropertyFilteredByTaskListInfo(key Key, defaultValue bool) BoolPropertyFnWithTaskListInfoFilters {
-	return func(namespace string, taskList string, taskType int32) bool {
+	return func(namespace string, taskList string, taskType tasklistpb.TaskListType) bool {
 		val, err := c.client.GetBoolValue(
 			key,
 			getFilterMap(NamespaceFilter(namespace), TaskListFilter(taskList), TaskTypeFilter(taskType)),

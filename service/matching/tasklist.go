@@ -30,7 +30,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/temporalio/temporal/common/persistence"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type (
@@ -38,7 +38,7 @@ type (
 	taskListID struct {
 		qualifiedTaskListName
 		namespaceID string
-		taskType    int32
+		taskType    tasklistpb.TaskListType
 	}
 	// qualifiedTaskListName refers to the fully qualified task list name
 	qualifiedTaskListName struct {
@@ -131,7 +131,7 @@ func (tn *qualifiedTaskListName) init() error {
 }
 
 // newTaskListID returns taskListID which uniquely identfies as task list
-func newTaskListID(namespaceID string, taskListName string, taskType int32) (*taskListID, error) {
+func newTaskListID(namespaceID string, taskListName string, taskType tasklistpb.TaskListType) (*taskListID, error) {
 	name, err := newTaskListName(taskListName)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func (tid *taskListID) String() string {
 	b.WriteString("name=")
 	b.WriteString(tid.name)
 	b.WriteString("type=")
-	if tid.taskType == persistence.TaskListTypeActivity {
+	if tid.taskType == tasklistpb.TaskListType_Activity {
 		b.WriteString("activity")
 	} else {
 		b.WriteString("decision")
