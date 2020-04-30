@@ -199,10 +199,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
 		&historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
-				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
-				WorkflowTaskTimeoutSeconds:      1,
+				WorkflowType:               &commonpb.WorkflowType{Name: workflowType},
+				TaskList:                   &tasklistpb.TaskList{Name: taskListName},
+				WorkflowRunTimeoutSeconds:  2,
+				WorkflowTaskTimeoutSeconds: 1,
 			},
 		},
 	)
@@ -493,7 +493,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
 				TaskList:                        &tasklistpb.TaskList{Name: taskListName},
-				WorkflowExecutionTimeoutSeconds: 2,
+				WorkflowRunTimeoutSeconds:       2,
+				WorkflowExecutionTimeoutSeconds: 999,
 				WorkflowTaskTimeoutSeconds:      1,
 			},
 		},
