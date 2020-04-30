@@ -282,16 +282,18 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	workflowComplete := false
 	continueAsNewCounter := int32(0)
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]byte, []*decisionpb.Decision, error) {
+		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		continueAsNewCounter++
 		buf := new(bytes.Buffer)
 		s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
-		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*decisionpb.Decision{{
+		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 			Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-				WorkflowType: workflowType,
-				TaskList:     &tasklistpb.TaskList{Name: tl},
-				Input:        buf.Bytes(),
+				WorkflowType:               workflowType,
+				TaskList:                   taskList,
+				Input:                      nil,
+				WorkflowRunTimeoutSeconds:  100,
+				WorkflowTaskTimeoutSeconds: 1,
 			}},
 		}}, nil
 	}

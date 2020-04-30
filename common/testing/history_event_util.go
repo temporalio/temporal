@@ -289,7 +289,6 @@ func InitializeHistoryEventGenerator(
 				Name: taskList,
 				Kind: tasklistpb.TaskListKind_Normal,
 			},
-			WorkflowExecutionTimeoutSeconds: timeout,
 			WorkflowRunTimeoutSeconds:       timeout,
 			WorkflowTaskTimeoutSeconds:      timeout,
 			DecisionTaskCompletedEventId:    eventID - 1,
