@@ -513,7 +513,7 @@ func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger
 
 // DeserializeSearchAttributeValue takes json encoded search attribute value and it's type as input, then
 // unmarshal the value into a concrete type and return the value
-func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb.IndexedValueType) (interface{}, error) {
+func DeserializeSearchAttributeValue(value *commonpb.Payloads, valueType commonpb.IndexedValueType) (interface{}, error) {
 	switch valueType {
 	case commonpb.IndexedValueType_String, commonpb.IndexedValueType_Keyword:
 		var val string

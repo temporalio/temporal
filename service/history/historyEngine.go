@@ -2571,7 +2571,7 @@ func (e *historyEngineImpl) failDecision(
 	scheduleID int64,
 	startedID int64,
 	cause eventpb.DecisionTaskFailedCause,
-	details *commonpb.Payload,
+	details *commonpb.Payloads,
 	request *workflowservice.RespondDecisionTaskCompletedRequest,
 ) (mutableState, error) {
 

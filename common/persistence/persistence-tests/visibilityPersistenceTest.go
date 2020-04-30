@@ -693,7 +693,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 				WorkflowTimeout:    0,
 				TaskID:             0,
 				Memo:               nil,
-				SearchAttributes: map[string]*commonpb.Payload{
+				SearchAttributes: map[string]*commonpb.Payloads{
 					definition.TemporalChangeVersion: payload.EncodeBytes([]byte("dummy")),
 				},
 			},

@@ -254,7 +254,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 	taskID := int64(59)
 	activityID := "activity-1"
 	activityType := "some random activity type"
-	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, &commonpb.Payload{}, 1, 1, 1, 1)
+	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, &commonpb.Payloads{}, 1, 1, 1, 1)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
@@ -312,7 +312,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 	taskID := int64(59)
 	activityID := "activity-1"
 	activityType := "some random activity type"
-	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, &commonpb.Payload{}, 1, 1, 1, 1)
+	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskListName, &commonpb.Payloads{}, 1, 1, 1, 1)
 
 	transferTask := &persistenceblobs.TransferTaskInfo{
 		Version:           s.version,
@@ -1848,18 +1848,18 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAt
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestCopySearchAttributes() {
-	var input map[string]*commonpb.Payload
+	var input map[string]*commonpb.Payloads
 	s.Nil(copySearchAttributes(input))
 
 	key := "key"
 	val := payload.EncodeBytes([]byte{'1', '2', '3'})
-	input = map[string]*commonpb.Payload{
+	input = map[string]*commonpb.Payloads{
 		key: val,
 	}
 	result := copySearchAttributes(input)
 	s.Equal(input, result)
-	result[key].Items[0].GetData()[0] = '0'
-	s.Equal(byte('1'), val.Items[0].GetData()[0])
+	result[key].GetPayloads()[0].GetData()[0] = '0'
+	s.Equal(byte('1'), val.GetPayloads()[0].GetData()[0])
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(

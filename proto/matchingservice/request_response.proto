@@ -72,7 +72,7 @@ message PollForActivityTaskResponse {
     execution.WorkflowExecution workflowExecution = 2;
     string activityId = 3;
     common.ActivityType activityType = 4;
-    common.Payload input = 5;
+    common.Payloads input = 5;
     int64 scheduledTimestamp = 6;
     int32 scheduleToCloseTimeoutSeconds = 7;
     int64 startedTimestamp = 8;
@@ -80,7 +80,7 @@ message PollForActivityTaskResponse {
     int32 heartbeatTimeoutSeconds = 10;
     int32 attempt = 11;
     int64 scheduledTimestampOfThisAttempt = 12;
-    common.Payload heartbeatDetails = 13;
+    common.Payloads heartbeatDetails = 13;
     common.WorkflowType workflowType = 14;
     string workflowNamespace = 15;
     common.Header header = 16;
@@ -121,7 +121,7 @@ message QueryWorkflowRequest {
 }
 
 message QueryWorkflowResponse {
-    common.Payload queryResult = 1;
+    common.Payloads queryResult = 1;
     query.QueryRejected queryRejected = 2;
 }
 

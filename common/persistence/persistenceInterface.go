@@ -258,8 +258,8 @@ type (
 		NonRetriableErrors []string
 		BranchToken        []byte
 		CronSchedule       string
-		Memo               map[string]*commonpb.Payload
-		SearchAttributes   map[string]*commonpb.Payload
+		Memo               map[string]*commonpb.Payloads
+		SearchAttributes   map[string]*commonpb.Payloads
 
 		// attributes which are not related to mutable state at all
 		HistorySize int64
@@ -294,7 +294,7 @@ type (
 		StartedTime              time.Time
 		ActivityID               string
 		RequestID                string
-		Details                  *commonpb.Payload
+		Details                  *commonpb.Payloads
 		ScheduleToStartTimeout   int32
 		ScheduleToCloseTimeout   int32
 		StartToCloseTimeout      int32
@@ -317,7 +317,7 @@ type (
 		NonRetriableErrors []string
 		LastFailureReason  string
 		LastWorkerIdentity string
-		LastFailureDetails *commonpb.Payload
+		LastFailureDetails *commonpb.Payloads
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
@@ -597,7 +597,7 @@ type (
 		TaskID             int64
 		Memo               *serialization.DataBlob
 		TaskList           string
-		SearchAttributes   map[string]*commonpb.Payload
+		SearchAttributes   map[string]*commonpb.Payloads
 	}
 
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
@@ -611,7 +611,7 @@ type (
 		TaskID             int64
 		Memo               *serialization.DataBlob
 		TaskList           string
-		SearchAttributes   map[string]*commonpb.Payload
+		SearchAttributes   map[string]*commonpb.Payloads
 		CloseTimestamp     int64
 		Status             executionpb.WorkflowExecutionStatus
 		HistoryLength      int64
@@ -630,7 +630,7 @@ type (
 		TaskID             int64
 		Memo               *serialization.DataBlob
 		TaskList           string
-		SearchAttributes   map[string]*commonpb.Payload
+		SearchAttributes   map[string]*commonpb.Payloads
 	}
 
 	// InternalCreateNamespaceRequest is used to create the namespace

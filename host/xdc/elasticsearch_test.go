@@ -187,7 +187,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
+		IndexedFields: map[string]*commonpb.Payloads{
 			s.testSearchAttributeKey: attrValBytes,
 		},
 	}
@@ -390,7 +390,7 @@ func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 	attrValBytes1, _ := payload.Encode("another string")
 	attrValBytes2, _ := payload.Encode(123)
 	upsertSearchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
+		IndexedFields: map[string]*commonpb.Payloads{
 			definition.CustomStringField: attrValBytes1,
 			definition.CustomIntField:    attrValBytes2,
 		},

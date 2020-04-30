@@ -48,9 +48,9 @@ type (
 	decisionTaskHandler func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error)
 	activityTaskHandler func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, takeToken []byte) (*commonpb.Payload, bool, error)
+		activityID string, input *commonpb.Payloads, takeToken []byte) (*commonpb.Payloads, bool, error)
 
-	queryHandler func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error)
+	queryHandler func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payloads, error)
 
 	// TaskPoller is used in integration tests to poll decision or activity tasks
 	TaskPoller struct {
