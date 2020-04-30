@@ -375,19 +375,19 @@ func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 		return nil
 	}
 	if policy.GetInitialIntervalInSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("InitialIntervalInSeconds cannot be less than 0 on retry policy.")
+		return serviceerror.NewInvalidArgument("InitialIntervalInSeconds cannot be negative on retry policy.")
 	}
 	if policy.GetBackoffCoefficient() < 1 {
 		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
 	}
 	if policy.GetMaximumIntervalInSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be less than 0 on retry policy.")
+		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be negative on retry policy.")
 	}
 	if policy.GetMaximumIntervalInSeconds() > 0 && policy.GetMaximumIntervalInSeconds() < policy.GetInitialIntervalInSeconds() {
 		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be less than InitialIntervalInSeconds on retry policy.")
 	}
 	if policy.GetMaximumAttempts() < 0 {
-		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be less than 0 on retry policy.")
+		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
 	}
 	return nil
 }
