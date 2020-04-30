@@ -27,6 +27,7 @@ import "common/server_enum.proto";
 import "common/message.proto";
 import "execution/message.proto";
 import "event/server_message.proto";
+import "tasklist/enum.proto";
 import "tasklist/message.proto";
 import "query/message.proto";
 
@@ -137,7 +138,7 @@ message RespondQueryTaskCompletedResponse {
 
 message CancelOutstandingPollRequest {
     string namespaceId = 1;
-    int32 taskListType = 2;
+    tasklist.TaskListType taskListType = 2;
     tasklist.TaskList taskList = 3;
     string pollerId = 4;
 }

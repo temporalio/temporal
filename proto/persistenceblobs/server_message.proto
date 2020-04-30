@@ -32,6 +32,7 @@ import "replication/server_message.proto";
 import "execution/enum.proto";
 import "namespace/enum.proto";
 import "namespace/message.proto";
+import "tasklist/enum.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -192,7 +193,7 @@ message AllocatedTaskInfo {
 message TaskListInfo {
     bytes namespaceId = 1;
     string name = 2;
-    int32 taskType = 3;
+    tasklist.TaskListType taskType = 3;
     // {Normal, Sticky}
     int32 kind = 5;
     int64 ackLevel = 6;

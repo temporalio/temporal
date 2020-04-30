@@ -24,7 +24,11 @@
 
 package dynamicconfig
 
-import "time"
+import (
+	"time"
+
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+)
 
 // These mock functions are for tests to use config properties that are dynamic
 
@@ -39,8 +43,8 @@ func GetIntPropertyFilteredByNamespace(value int) func(namespace string) int {
 }
 
 // GetIntPropertyFilteredByTaskListInfo returns value as IntPropertyFnWithTaskListInfoFilters
-func GetIntPropertyFilteredByTaskListInfo(value int) func(namespace string, taskList string, taskType int32) int {
-	return func(namespace string, taskList string, taskType int32) int { return value }
+func GetIntPropertyFilteredByTaskListInfo(value int) func(namespace string, taskList string, taskType tasklistpb.TaskListType) int {
+	return func(namespace string, taskList string, taskType tasklistpb.TaskListType) int { return value }
 }
 
 // GetFloatPropertyFn returns value as FloatPropertyFn
@@ -69,8 +73,8 @@ func GetDurationPropertyFn(value time.Duration) func(opts ...FilterOption) time.
 }
 
 // GetDurationPropertyFnFilteredByTaskListInfo returns value as DurationPropertyFnWithTaskListInfoFilters
-func GetDurationPropertyFnFilteredByTaskListInfo(value time.Duration) func(namespace string, taskList string, taskType int32) time.Duration {
-	return func(namespace string, taskList string, taskType int32) time.Duration { return value }
+func GetDurationPropertyFnFilteredByTaskListInfo(value time.Duration) func(namespace string, taskList string, taskType tasklistpb.TaskListType) time.Duration {
+	return func(namespace string, taskList string, taskType tasklistpb.TaskListType) time.Duration { return value }
 }
 
 // GetStringPropertyFn returns value as StringPropertyFn
