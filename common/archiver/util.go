@@ -32,7 +32,7 @@ import (
 	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 var (
@@ -154,7 +154,7 @@ func ValidateQueryRequest(request *QueryVisibilityRequest) error {
 func ConvertSearchAttrToPayload(searchAttrStr map[string]string) map[string]*commonpb.Payloads {
 	searchAttr := make(map[string]*commonpb.Payloads)
 	for k, v := range searchAttrStr {
-		searchAttr[k] = payload.EncodeBytes([]byte(v))
+		searchAttr[k] = payloads.EncodeBytes([]byte(v))
 	}
 	return searchAttr
 }

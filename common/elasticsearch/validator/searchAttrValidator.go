@@ -34,7 +34,7 @@ import (
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -92,7 +92,7 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 		// verify: value has the correct type
 		if !sv.isValidSearchAttributesValue(validAttr, key, val) {
 			var invalidValue interface{}
-			if err := payload.Decode(val, &invalidValue); err != nil {
+			if err := payloads.Decode(val, &invalidValue); err != nil {
 				invalidValue = fmt.Sprintf("value from %q", val.String())
 			}
 
@@ -142,7 +142,7 @@ func (sv *SearchAttributesValidator) isValidSearchAttributesKey(
 func (sv *SearchAttributesValidator) isValidSearchAttributesValue(
 	validAttr map[string]interface{},
 	key string,
-	value *commonpb.Payloads,
+	value *commonpb.Payload,
 ) bool {
 	valueType := common.ConvertIndexedValueTypeToProtoType(validAttr[key], sv.logger)
 	_, err := common.DeserializeSearchAttributeValue(value, valueType)

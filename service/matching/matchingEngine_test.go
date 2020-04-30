@@ -62,7 +62,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
@@ -539,7 +539,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	activityTypeName := "activity1"
 	activityID := "activityId1"
 	activityType := &commonpb.ActivityType{Name: activityTypeName}
-	activityInput := payload.EncodeString("Activity1 Input")
+	activityInput := payloads.EncodeString("Activity1 Input")
 
 	identity := "nobody"
 
@@ -651,7 +651,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	activityTypeName := "activity1"
 	activityID := "activityId1"
 	activityType := &commonpb.ActivityType{Name: activityTypeName}
-	activityInput := payload.EncodeString("Activity1 Input")
+	activityInput := payloads.EncodeString("Activity1 Input")
 
 	identity := "nobody"
 
@@ -870,9 +870,9 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	activityTypeName := "activity1"
 	activityID := "activityId1"
 	activityType := &commonpb.ActivityType{Name: activityTypeName}
-	activityInput := payload.EncodeString("Activity1 Input")
+	activityInput := payloads.EncodeString("Activity1 Input")
 	activityHeader := &commonpb.Header{
-		Fields: map[string]*commonpb.Payloads{"tracing": payload.EncodeString("tracing data")},
+		Fields: map[string]*commonpb.Payloads{"tracing": payloads.EncodeString("tracing data")},
 	}
 
 	identity := "nobody"
@@ -1167,7 +1167,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	activityTypeName := "activity1"
 	activityID := "activityId1"
 	activityType := &commonpb.ActivityType{Name: activityTypeName}
-	activityInput := payload.EncodeString("Activity1 Input")
+	activityInput := payloads.EncodeString("Activity1 Input")
 
 	identity := "nobody"
 
@@ -1649,7 +1649,7 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 	activityTypeName := "activity1"
 	activityID := "activityId1"
 	activityType := &commonpb.ActivityType{Name: activityTypeName}
-	activityInput := payload.EncodeString("Activity1 Input")
+	activityInput := payloads.EncodeString("Activity1 Input")
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(

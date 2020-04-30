@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package payload
+package payloads
 
 import (
 	commonpb "go.temporal.io/temporal-proto/common"

@@ -41,7 +41,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 type (
@@ -85,7 +85,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 		EventType: eventType,
 		Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{
 			ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
-				Result:           payload.EncodeString("result-1-event-1"),
+				Result:           payloads.EncodeString("result-1-event-1"),
 				ScheduledEventId: 4,
 				StartedEventId:   5,
 				Identity:         "event-1",
@@ -96,7 +96,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	history0 := &eventpb.History{Events: []*eventpb.HistoryEvent{event0, event0}}
 
 	memoFields := map[string]*commonpb.Payloads{
-		"TestField": payload.EncodeString("Test binary"),
+		"TestField": payloads.EncodeString("Test binary"),
 	}
 	memo0 := &commonpb.Memo{Fields: memoFields}
 

@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
@@ -86,7 +86,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -98,14 +98,14 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CancelWorkflowExecution,
 			Attributes: &decisionpb.Decision_CancelWorkflowExecutionDecisionAttributes{CancelWorkflowExecutionDecisionAttributes: &decisionpb.CancelWorkflowExecutionDecisionAttributes{
-				Details: payload.EncodeString("Cancelled"),
+				Details: payloads.EncodeString("Cancelled"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -172,7 +172,7 @@ GetHistoryLoop:
 
 		cancelledEventAttributes := lastEvent.GetWorkflowExecutionCanceledEventAttributes()
 		var details string
-		err = payload.Decode(cancelledEventAttributes.GetDetails(), &details)
+		err = payloads.Decode(cancelledEventAttributes.GetDetails(), &details)
 		s.NoError(err)
 		s.Equal("Cancelled", details)
 		executionCancelled = true
@@ -237,7 +237,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -258,7 +258,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -287,7 +287,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 					ActivityId:                    strconv.Itoa(int(foreignActivityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -299,7 +299,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CancelWorkflowExecution,
 			Attributes: &decisionpb.Decision_CancelWorkflowExecutionDecisionAttributes{CancelWorkflowExecutionDecisionAttributes: &decisionpb.CancelWorkflowExecutionDecisionAttributes{
-				Details: payload.EncodeString("Cancelled"),
+				Details: payloads.EncodeString("Cancelled"),
 			}},
 		}}, nil
 	}
@@ -392,7 +392,7 @@ GetHistoryLoop:
 
 		cancelledEventAttributes := lastEvent.GetWorkflowExecutionCanceledEventAttributes()
 		var details string
-		err = payload.Decode(cancelledEventAttributes.GetDetails(), &details)
+		err = payloads.Decode(cancelledEventAttributes.GetDetails(), &details)
 		s.NoError(err)
 		s.Equal("Cancelled", details)
 		executionCancelled = true
@@ -457,7 +457,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -478,7 +478,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{

@@ -47,7 +47,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 const (
@@ -513,45 +513,45 @@ func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger
 
 // DeserializeSearchAttributeValue takes json encoded search attribute value and it's type as input, then
 // unmarshal the value into a concrete type and return the value
-func DeserializeSearchAttributeValue(value *commonpb.Payloads, valueType commonpb.IndexedValueType) (interface{}, error) {
+func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb.IndexedValueType) (interface{}, error) {
 	switch valueType {
 	case commonpb.IndexedValueType_String, commonpb.IndexedValueType_Keyword:
 		var val string
-		if err := payload.Decode(value, &val); err != nil {
+		if err := payloads.Decode(value, &val); err != nil {
 			var listVal []string
-			err = payload.Decode(value, &listVal)
+			err = payloads.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Int:
 		var val int64
-		if err := payload.Decode(value, &val); err != nil {
+		if err := payloads.Decode(value, &val); err != nil {
 			var listVal []int64
-			err = payload.Decode(value, &listVal)
+			err = payloads.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Double:
 		var val float64
-		if err := payload.Decode(value, &val); err != nil {
+		if err := payloads.Decode(value, &val); err != nil {
 			var listVal []float64
-			err = payload.Decode(value, &listVal)
+			err = payloads.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Bool:
 		var val bool
-		if err := payload.Decode(value, &val); err != nil {
+		if err := payloads.Decode(value, &val); err != nil {
 			var listVal []bool
-			err = payload.Decode(value, &listVal)
+			err = payloads.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Datetime:
 		var val time.Time
-		if err := payload.Decode(value, &val); err != nil {
+		if err := payloads.Decode(value, &val); err != nil {
 			var listVal []time.Time
-			err = payload.Decode(value, &listVal)
+			err = payloads.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil

@@ -58,7 +58,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/service/history"
 )
 
@@ -206,7 +206,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		TaskList: &tasklistpb.TaskList{
 			Name: taskList,
 		},
-		Input:                           payload.EncodeString(input),
+		Input:                           payloads.EncodeString(input),
 		WorkflowExecutionTimeoutSeconds: int32(et),
 		WorkflowTaskTimeoutSeconds:      int32(dt),
 		Identity:                        getCliIdentity(),
@@ -296,7 +296,7 @@ func processSearchAttr(c *cli.Context) map[string]*commonpb.Payloads {
 
 	fields := map[string]*commonpb.Payloads{}
 	for i, key := range searchAttrKeys {
-		val, err := payload.Encode(searchAttrVals[i])
+		val, err := payloads.Encode(searchAttrVals[i])
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Encode value %v error", val), err)
 		}
@@ -330,7 +330,7 @@ func processMemo(c *cli.Context) map[string]*commonpb.Payloads {
 
 	fields := map[string]*commonpb.Payloads{}
 	for i, key := range memoKeys {
-		fields[key] = payload.EncodeString(memoValues[i])
+		fields[key] = payloads.EncodeString(memoValues[i])
 	}
 	return fields
 }
@@ -339,7 +339,7 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 	buf := new(bytes.Buffer)
 	for k, v := range memo.Fields {
 		var memo string
-		err := payload.Decode(v, &memo)
+		err := payloads.Decode(v, &memo)
 		if err != nil {
 			ErrorAndExit("Memo has incoorect formtat.", err)
 		}
@@ -353,7 +353,7 @@ func getPrintableSearchAttr(searchAttr *commonpb.SearchAttributes) string {
 	buf := new(bytes.Buffer)
 	for k, v := range searchAttr.IndexedFields {
 		var decodedVal interface{}
-		_ = payload.Decode(v, &decodedVal)
+		_ = payloads.Decode(v, &decodedVal)
 		_, _ = fmt.Fprintf(buf, "%s=%v\n", k, decodedVal)
 	}
 	return buf.String()
@@ -474,7 +474,7 @@ func SignalWorkflow(c *cli.Context) {
 			RunId:      rid,
 		},
 		SignalName: name,
-		Input:      payload.EncodeString(input),
+		Input:      payloads.EncodeString(input),
 		Identity:   getCliIdentity(),
 	})
 
@@ -520,7 +520,7 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 		},
 	}
 	if input != "" {
-		queryRequest.Query.QueryArgs = payload.EncodeString(input)
+		queryRequest.Query.QueryArgs = payloads.EncodeString(input)
 	}
 	if c.IsSet(FlagQueryRejectCondition) {
 		var rejectCondition querypb.QueryRejectCondition
@@ -556,7 +556,7 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 		fmt.Printf("Query was rejected, workflow has status: %v\n", queryResponse.QueryRejected.GetStatus())
 	} else {
 		var queryResult string
-		err = payload.Decode(queryResponse.QueryResult, &queryResult)
+		err = payloads.Decode(queryResponse.QueryResult, &queryResult)
 		if err != nil {
 			ErrorAndExit("Unable to decode query result.", err)
 		}
@@ -917,13 +917,13 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
 		}
 		if pa.HeartbeatDetails != nil {
-			err := payload.Decode(pa.HeartbeatDetails, &tmpAct.HeartbeatDetails)
+			err := payloads.Decode(pa.HeartbeatDetails, &tmpAct.HeartbeatDetails)
 			if err != nil {
 				ErrorAndExit("Unable to decode heartbeat details.", err)
 			}
 		}
 		if pa.LastFailureDetails != nil {
-			err := payload.Decode(pa.LastFailureDetails, &tmpAct.LastFailureDetails)
+			err := payloads.Decode(pa.LastFailureDetails, &tmpAct.LastFailureDetails)
 			if err != nil {
 				ErrorAndExit("Unable to decode last failure details.", err)
 			}
@@ -1092,7 +1092,7 @@ func printRunStatus(event *eventpb.HistoryEvent) {
 	case eventpb.EventType_WorkflowExecutionCompleted:
 		fmt.Printf("  Status: %s\n", colorGreen("COMPLETED"))
 		var result string
-		err := payload.Decode(event.GetWorkflowExecutionCompletedEventAttributes().GetResult(), &result)
+		err := payloads.Decode(event.GetWorkflowExecutionCompletedEventAttributes().GetResult(), &result)
 		if err != nil {
 			ErrorAndExit("Unable ot decode WorkflowExecutionCompletedEventAttributes.Result.", err)
 		}
@@ -1101,7 +1101,7 @@ func printRunStatus(event *eventpb.HistoryEvent) {
 		fmt.Printf("  Status: %s\n", colorRed("FAILED"))
 		fmt.Printf("  Reason: %s\n", event.GetWorkflowExecutionFailedEventAttributes().GetReason())
 		var details string
-		err := payload.Decode(event.GetWorkflowExecutionFailedEventAttributes().GetDetails(), &details)
+		err := payloads.Decode(event.GetWorkflowExecutionFailedEventAttributes().GetDetails(), &details)
 		if err != nil {
 			ErrorAndExit("Unable ot decode WorkflowExecutionFailedEventAttributes.Details.", err)
 		}
@@ -1112,7 +1112,7 @@ func printRunStatus(event *eventpb.HistoryEvent) {
 	case eventpb.EventType_WorkflowExecutionCanceled:
 		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
 		var details string
-		err := payload.Decode(event.GetWorkflowExecutionCanceledEventAttributes().GetDetails(), &details)
+		err := payloads.Decode(event.GetWorkflowExecutionCanceledEventAttributes().GetDetails(), &details)
 		if err != nil {
 			ErrorAndExit("Unable ot decode WorkflowExecutionCanceledEventAttributes.Details.", err)
 		}
@@ -1727,7 +1727,7 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 		attr := decisionFailed.GetDecisionTaskFailedEventAttributes()
 
 		var details string
-		err := payload.Decode(attr.GetDetails(), &details)
+		err := payloads.Decode(attr.GetDetails(), &details)
 		if err != nil {
 			ErrorAndExit("Unable to decode details.", err)
 		}
@@ -1941,7 +1941,7 @@ func CompleteActivity(c *cli.Context) {
 		WorkflowId: wid,
 		RunId:      rid,
 		ActivityId: activityID,
-		Result:     payload.EncodeString(result),
+		Result:     payloads.EncodeString(result),
 		Identity:   identity,
 	})
 	if err != nil {
@@ -1973,7 +1973,7 @@ func FailActivity(c *cli.Context) {
 		RunId:      rid,
 		ActivityId: activityID,
 		Reason:     reason,
-		Details:    payload.EncodeString(detail),
+		Details:    payloads.EncodeString(detail),
 		Identity:   identity,
 	})
 	if err != nil {

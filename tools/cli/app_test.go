@@ -50,7 +50,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 type cliAppSuite struct {
@@ -372,7 +372,7 @@ func (s *cliAppSuite) TestSignalWorkflow_Failed() {
 
 func (s *cliAppSuite) TestQueryWorkflow() {
 	resp := &workflowservice.QueryWorkflowResponse{
-		QueryResult: payload.EncodeString("query-result"),
+		QueryResult: payloads.EncodeString("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil)
 	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
@@ -381,7 +381,7 @@ func (s *cliAppSuite) TestQueryWorkflow() {
 
 func (s *cliAppSuite) TestQueryWorkflowUsingStackTrace() {
 	resp := &workflowservice.QueryWorkflowResponse{
-		QueryResult: payload.EncodeString("query-result"),
+		QueryResult: payloads.EncodeString("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil)
 	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "stack", "-w", "wid"})
@@ -390,7 +390,7 @@ func (s *cliAppSuite) TestQueryWorkflowUsingStackTrace() {
 
 func (s *cliAppSuite) TestQueryWorkflow_Failed() {
 	resp := &workflowservice.QueryWorkflowResponse{
-		QueryResult: payload.EncodeString("query-result"),
+		QueryResult: payloads.EncodeString("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--ns", cliTestNamespace, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
@@ -708,7 +708,7 @@ func (s *cliAppSuite) TestAnyToString() {
 			WorkflowRunTimeoutSeconds:  60,
 			WorkflowTaskTimeoutSeconds: 10,
 			Identity:                   "tester",
-			Input:                      payload.EncodeString(arg),
+			Input:                      payloads.EncodeString(arg),
 		}},
 	}
 	res := anyToString(event, false, defaultMaxFieldLength)
@@ -719,7 +719,7 @@ func (s *cliAppSuite) TestAnyToString() {
 
 func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 	fields := map[string]*commonpb.Payloads{
-		"TestKey": payload.EncodeString("testValue"),
+		"TestKey": payloads.EncodeString("testValue"),
 	}
 	execution := &executionpb.WorkflowExecutionInfo{
 		Status: executionpb.WorkflowExecutionStatus_Running,
@@ -727,7 +727,7 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 	}
 	s.Equal("{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
 
-	fields["TestKey2"] = payload.EncodeString(`anotherTestValue`)
+	fields["TestKey2"] = payloads.EncodeString(`anotherTestValue`)
 	execution.Memo = &commonpb.Memo{Fields: fields}
 	got := anyToString(execution, true, 0)
 	expected := got == "{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||

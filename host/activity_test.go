@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/service/matching"
 )
 
@@ -59,7 +59,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	header := &commonpb.Header{
-		Fields: map[string]*commonpb.Payloads{"tracing": payload.EncodeString("sample data")},
+		Fields: map[string]*commonpb.Payloads{"tracing": payloads.EncodeString("sample data")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -97,7 +97,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					Header:                        header,
 					ScheduleToCloseTimeoutSeconds: 15,
 					ScheduleToStartTimeoutSeconds: 1,
@@ -113,7 +113,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -126,12 +126,12 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		for i := 0; i < 10; i++ {
 			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 			_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
-				TaskToken: taskToken, Details: payload.EncodeString("details")})
+				TaskToken: taskToken, Details: payloads.EncodeString("details")})
 			s.NoError(err)
 			time.Sleep(10 * time.Millisecond)
 		}
 		activityExecutedCount++
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -234,13 +234,13 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	activityExecutedCount := 0
-	heartbeatDetails := payload.EncodeString("details")
+	heartbeatDetails := payloads.EncodeString("details")
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
@@ -318,7 +318,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 				expectedErrString := "retryable-error"
 				s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
 				var d string
-				err = payload.Decode(pendingActivity.GetLastFailureDetails(), &d)
+				err = payloads.Decode(pendingActivity.GetLastFailureDetails(), &d)
 				s.NoError(err)
 				s.Equal(expectedErrString, d)
 			}
@@ -391,7 +391,7 @@ func (s *integrationSuite) TestActivityRetry() {
 						ActivityId:                    "A",
 						ActivityType:                  &commonpb.ActivityType{Name: activityName},
 						TaskList:                      &tasklistpb.TaskList{Name: tl},
-						Input:                         payload.EncodeString("1"),
+						Input:                         payloads.EncodeString("1"),
 						ScheduleToCloseTimeoutSeconds: 4,
 						ScheduleToStartTimeoutSeconds: 4,
 						StartToCloseTimeoutSeconds:    4,
@@ -410,7 +410,7 @@ func (s *integrationSuite) TestActivityRetry() {
 						ActivityId:                    "B",
 						ActivityType:                  &commonpb.ActivityType{Name: timeoutActivityName},
 						TaskList:                      &tasklistpb.TaskList{Name: "no_worker_tasklist"},
-						Input:                         payload.EncodeString("2"),
+						Input:                         payloads.EncodeString("2"),
 						ScheduleToCloseTimeoutSeconds: 5,
 						ScheduleToStartTimeoutSeconds: 5,
 						StartToCloseTimeoutSeconds:    5,
@@ -447,7 +447,7 @@ func (s *integrationSuite) TestActivityRetry() {
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: payload.EncodeString("Done"),
+					Result: payloads.EncodeString("Done"),
 				}},
 			}}, nil
 		}
@@ -515,7 +515,7 @@ func (s *integrationSuite) TestActivityRetry() {
 			expectedErrString := "bad-luck-please-retry"
 			s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
 			var d string
-			err = payload.Decode(pendingActivity.GetLastFailureDetails(), &d)
+			err = payloads.Decode(pendingActivity.GetLastFailureDetails(), &d)
 			s.NoError(err)
 			s.Equal(expectedErrString, d)
 			s.Equal(identity, pendingActivity.GetLastWorkerIdentity())
@@ -533,7 +533,7 @@ func (s *integrationSuite) TestActivityRetry() {
 			s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
 
 			var d string
-			err = payload.Decode(pendingActivity.GetLastFailureDetails(), &d)
+			err = payloads.Decode(pendingActivity.GetLastFailureDetails(), &d)
 			s.NoError(err)
 			s.Equal(expectedErrString, d)
 			s.Equal(identity2, pendingActivity.GetLastWorkerIdentity())
@@ -611,7 +611,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 15,
 					ScheduleToStartTimeoutSeconds: 1,
 					StartToCloseTimeoutSeconds:    15,
@@ -624,7 +624,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -637,7 +637,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		// Timing out more than HB time.
 		time.Sleep(2 * time.Second)
 		activityExecutedCount++
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -708,7 +708,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					ActivityId:                    "A",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: "NoWorker"},
-					Input:                         payload.EncodeString("ScheduleToStart"),
+					Input:                         payloads.EncodeString("ScheduleToStart"),
 					ScheduleToCloseTimeoutSeconds: 35,
 					ScheduleToStartTimeoutSeconds: 3, // ActivityID A is expected to timeout using ScheduleToStart
 					StartToCloseTimeoutSeconds:    30,
@@ -720,7 +720,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					ActivityId:                    "B",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeString("ScheduleClose"),
+					Input:                         payloads.EncodeString("ScheduleClose"),
 					ScheduleToCloseTimeoutSeconds: 7, // ActivityID B is expected to timeout using ScheduleClose
 					ScheduleToStartTimeoutSeconds: 5,
 					StartToCloseTimeoutSeconds:    10,
@@ -732,7 +732,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					ActivityId:                    "C",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeString("StartToClose"),
+					Input:                         payloads.EncodeString("StartToClose"),
 					ScheduleToCloseTimeoutSeconds: 15,
 					ScheduleToStartTimeoutSeconds: 1,
 					StartToCloseTimeoutSeconds:    5, // ActivityID C is expected to timeout using StartToClose
@@ -744,7 +744,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					ActivityId:                    "D",
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeString("Heartbeat"),
+					Input:                         payloads.EncodeString("Heartbeat"),
 					ScheduleToCloseTimeoutSeconds: 35,
 					ScheduleToStartTimeoutSeconds: 20,
 					StartToCloseTimeoutSeconds:    15,
@@ -820,7 +820,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: payload.EncodeString("Done"),
+					Result: payloads.EncodeString("Done"),
 				}},
 			}}, nil
 		}
@@ -833,7 +833,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
 		var timeoutType string
-		err := payload.Decode(input, &timeoutType)
+		err := payloads.Decode(input, &timeoutType)
 		s.NoError(err)
 		switch timeoutType {
 		case "ScheduleToStart":
@@ -850,7 +850,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 				for i := 0; i < 6; i++ {
 					s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 					_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
-						TaskToken: taskToken, Details: payload.EncodeString(string(i))})
+						TaskToken: taskToken, Details: payloads.EncodeString(string(i))})
 					s.NoError(err)
 					time.Sleep(1 * time.Second)
 				}
@@ -860,7 +860,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 			time.Sleep(10 * time.Second)
 		}
 
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -946,7 +946,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 						ActivityId:                    aID,
 						ActivityType:                  &commonpb.ActivityType{Name: activityName},
 						TaskList:                      &tasklistpb.TaskList{Name: tl},
-						Input:                         payload.EncodeString("Heartbeat"),
+						Input:                         payloads.EncodeString("Heartbeat"),
 						ScheduleToCloseTimeoutSeconds: 60,
 						ScheduleToStartTimeoutSeconds: 5,
 						StartToCloseTimeoutSeconds:    60,
@@ -985,7 +985,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 						activitiesTimedout++
 						scheduleID := timeoutEvent.GetScheduledEventId()
 						var details string
-						err := payload.Decode(timeoutEvent.GetDetails(), &details)
+						err := payloads.Decode(timeoutEvent.GetDetails(), &details)
 						s.NoError(err)
 						lastHeartbeat, _ := strconv.Atoi(details)
 						lastHeartbeatMap[scheduleID] = lastHeartbeat
@@ -1015,7 +1015,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: payload.EncodeString("Done"),
+					Result: payloads.EncodeString("Done"),
 				}},
 			}}, nil
 		}
@@ -1030,7 +1030,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 			if !workflowComplete {
 				s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 				_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
-					TaskToken: taskToken, Details: payload.EncodeString(strconv.Itoa(i))})
+					TaskToken: taskToken, Details: payloads.EncodeString(strconv.Itoa(i))})
 				if err != nil {
 					s.Logger.Error("Activity heartbeat failed", tag.WorkflowActivityID(activityID), tag.Counter(i), tag.Error(err))
 				}
@@ -1045,7 +1045,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		s.Logger.Info("Sleeping activity before completion", tag.WorkflowActivityID(activityID))
 		time.Sleep(7 * time.Second)
 
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1135,7 +1135,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 15,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    15,
@@ -1158,7 +1158,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1172,15 +1172,15 @@ func (s *integrationSuite) TestActivityCancellation() {
 			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 			response, err := s.engine.RecordActivityTaskHeartbeat(NewContext(),
 				&workflowservice.RecordActivityTaskHeartbeatRequest{
-					TaskToken: taskToken, Details: payload.EncodeString("details")})
+					TaskToken: taskToken, Details: payloads.EncodeString("details")})
 			if response != nil && response.CancelRequested {
-				return payload.EncodeString("Activity Cancelled"), true, nil
+				return payloads.EncodeString("Activity Cancelled"), true, nil
 			}
 			s.NoError(err)
 			time.Sleep(10 * time.Millisecond)
 		}
 		activityExecutedCount++
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1260,7 +1260,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 15,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    15,
@@ -1283,7 +1283,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1311,7 +1311,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 
 	// Send signal so that worker can send an activity cancel
 	signalName := "my signal"
-	signalInput := payload.EncodeString("my signal input")
+	signalInput := payloads.EncodeString("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{

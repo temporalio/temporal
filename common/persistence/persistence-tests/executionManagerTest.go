@@ -50,7 +50,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -1210,13 +1210,13 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 		},
 	}
 	testSearchAttrKey := "env"
-	testSearchAttrVal := payload.EncodeString("test")
+	testSearchAttrVal := payloads.EncodeString("test")
 	testSearchAttr := map[string]*commonpb.Payloads{
 		testSearchAttrKey: testSearchAttrVal,
 	}
 
 	testMemoKey := "memoKey"
-	testMemoVal := payload.EncodeString("memoVal")
+	testMemoVal := payloads.EncodeString("memoVal")
 	testMemo := map[string]*commonpb.Payloads{
 		testMemoKey: testMemoVal,
 	}
@@ -1417,11 +1417,11 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.WorkflowExpirationTime = time.Now()
 	updatedInfo.NonRetriableErrors = []string{"accessDenied", "badRequest"}
 	searchAttrKey := "env"
-	searchAttrVal := payload.EncodeBytes([]byte("test"))
+	searchAttrVal := payloads.EncodeBytes([]byte("test"))
 	updatedInfo.SearchAttributes = map[string]*commonpb.Payloads{searchAttrKey: searchAttrVal}
 
 	memoKey := "memoKey"
-	memoVal := payload.EncodeBytes([]byte("memoVal"))
+	memoVal := payloads.EncodeBytes([]byte("memoVal"))
 	updatedInfo.Memo = map[string]*commonpb.Payloads{memoKey: memoVal}
 	updatedStats.HistorySize = math.MaxInt64
 
@@ -2593,7 +2593,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 		ScheduledTime:            currentTime,
 		ActivityID:               uuid.New(),
 		RequestID:                uuid.New(),
-		Details:                  payload.EncodeString(uuid.New()),
+		Details:                  payloads.EncodeString(uuid.New()),
 		StartedID:                2,
 		StartedEvent:             &eventpb.HistoryEvent{EventId: 2},
 		StartedTime:              currentTime,
@@ -2618,7 +2618,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 		NonRetriableErrors:       []string{"accessDenied", "badRequest"},
 		LastFailureReason:        "some random error",
 		LastWorkerIdentity:       uuid.New(),
-		LastFailureDetails:       payload.EncodeString(uuid.New()),
+		LastFailureDetails:       payloads.EncodeString(uuid.New()),
 	}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), nil, activityInfos, nil, nil, nil)
 	s.NoError(err2)
@@ -2871,7 +2871,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 		InitiatedEventBatchId: 1,
 		RequestId:             uuid.New(),
 		Name:                  "my signal",
-		Input:                 payload.EncodeString("test signal input"),
+		Input:                 payloads.EncodeString("test signal input"),
 		Control:               uuid.New(),
 	}
 	err2 := s.UpsertSignalInfoState(updatedInfo, updatedStats, nil, int64(3), []*persistenceblobs.SignalInfo{signalInfo})
@@ -3706,7 +3706,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 				InitiatedEventBatchId: 38,
 				RequestId:             "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 				Name:                  "signalA",
-				Input:                 payload.EncodeString("signal_input_A"),
+				Input:                 payloads.EncodeString("signal_input_A"),
 				Control:               "signal_control_A",
 			},
 		},
@@ -3915,7 +3915,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			InitiatedId: 39,
 			RequestId:   "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 			Name:        "signalB",
-			Input:       payload.EncodeString("signal_input_b"),
+			Input:       payloads.EncodeString("signal_input_b"),
 			Control:     "signal_control_b",
 		},
 		{
@@ -3923,7 +3923,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			InitiatedId: 42,
 			RequestId:   "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 			Name:        "signalC",
-			Input:       payload.EncodeString("signal_input_c"),
+			Input:       payloads.EncodeString("signal_input_c"),
 			Control:     "signal_control_c",
 		}}
 
@@ -4011,7 +4011,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(39), si.GetInitiatedId())
 	s.Equal("signalB", si.Name)
 	var signal string
-	err := payload.Decode(si.GetInput(), &signal)
+	err := payloads.Decode(si.GetInput(), &signal)
 	s.NoError(err)
 	s.Equal("signal_input_b", signal)
 	s.Equal("signal_control_b", si.Control)
@@ -4022,7 +4022,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(3336), si.Version)
 	s.Equal(int64(42), si.GetInitiatedId())
 	s.Equal("signalC", si.Name)
-	err = payload.Decode(si.GetInput(), &signal)
+	err = payloads.Decode(si.GetInput(), &signal)
 	s.NoError(err)
 	s.Equal("signal_input_c", signal)
 	s.Equal("signal_control_c", si.Control)

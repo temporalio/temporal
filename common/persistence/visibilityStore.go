@@ -29,7 +29,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/common"
@@ -238,7 +238,7 @@ func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{})
 	var err error
 	var valBytes *commonpb.Payloads
 	for k, val := range attr {
-		valBytes, err = payload.Encode(val)
+		valBytes, err = payloads.Encode(val)
 		if err != nil {
 			v.logger.Error("error when encode search attributes", tag.Value(val))
 			continue
