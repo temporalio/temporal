@@ -74,7 +74,6 @@ var (
 		InitialInterval:    10 * time.Second,
 		BackoffCoefficient: 1.7,
 		MaximumInterval:    5 * time.Minute,
-		ExpirationInterval: infiniteDuration,
 	}
 	activityOptions = workflow.ActivityOptions{
 		ScheduleToStartTimeout: 5 * time.Minute,
@@ -83,25 +82,23 @@ var (
 		RetryPolicy:            &activityRetryPolicy,
 	}
 	tlScannerWFStartOptions = cclient.StartWorkflowOptions{
-		ID:                           tlScannerWFID,
-		TaskList:                     tlScannerTaskListName,
-		ExecutionStartToCloseTimeout: 5 * 24 * time.Hour,
-		WorkflowIDReusePolicy:        cclient.WorkflowIDReusePolicyAllowDuplicate,
-		CronSchedule:                 "0 */12 * * *",
+		ID:                    tlScannerWFID,
+		TaskList:              tlScannerTaskListName,
+		WorkflowRunTimeout:    5 * 24 * time.Hour,
+		WorkflowIDReusePolicy: cclient.WorkflowIDReusePolicyAllowDuplicate,
+		CronSchedule:          "0 */12 * * *",
 	}
 	historyScannerWFStartOptions = cclient.StartWorkflowOptions{
-		ID:                           historyScannerWFID,
-		TaskList:                     historyScannerTaskListName,
-		ExecutionStartToCloseTimeout: infiniteDuration,
-		WorkflowIDReusePolicy:        cclient.WorkflowIDReusePolicyAllowDuplicate,
-		CronSchedule:                 "0 */12 * * *",
+		ID:                    historyScannerWFID,
+		TaskList:              historyScannerTaskListName,
+		WorkflowIDReusePolicy: cclient.WorkflowIDReusePolicyAllowDuplicate,
+		CronSchedule:          "0 */12 * * *",
 	}
 	executionsScannerWFStartOptions = cclient.StartWorkflowOptions{
-		ID:                           executionsScannerWFID,
-		TaskList:                     executionsScannerTaskListName,
-		ExecutionStartToCloseTimeout: infiniteDuration,
-		WorkflowIDReusePolicy:        cclient.WorkflowIDReusePolicyAllowDuplicate,
-		CronSchedule:                 "0 */12 * * *",
+		ID:                    executionsScannerWFID,
+		TaskList:              executionsScannerTaskListName,
+		WorkflowIDReusePolicy: cclient.WorkflowIDReusePolicyAllowDuplicate,
+		CronSchedule:          "0 */12 * * *",
 	}
 )
 

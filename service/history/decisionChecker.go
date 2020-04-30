@@ -27,8 +27,10 @@ package history
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/temporalio/temporal/common/convert"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -196,7 +198,7 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 	namespaceID string,
 	targetNamespaceID string,
 	attributes *decisionpb.ScheduleActivityTaskDecisionAttributes,
-	wfTimeout int32,
+	runTimeout int32,
 ) error {
 
 	if err := v.validateCrossNamespaceCall(
@@ -250,56 +252,45 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 	validStartToClose := attributes.GetStartToCloseTimeoutSeconds() > 0
 
 	if validScheduleToClose {
-		if !validScheduleToStart {
+		if validScheduleToStart {
+			attributes.ScheduleToStartTimeoutSeconds = common.MinInt32(attributes.GetScheduleToStartTimeoutSeconds(),
+				attributes.GetScheduleToCloseTimeoutSeconds())
+		} else {
 			attributes.ScheduleToStartTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
 		}
-		if !validStartToClose {
+		if validStartToClose {
+			attributes.StartToCloseTimeoutSeconds = common.MinInt32(attributes.GetStartToCloseTimeoutSeconds(),
+				attributes.GetScheduleToCloseTimeoutSeconds())
+		} else {
 			attributes.StartToCloseTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
 		}
 	} else if validStartToClose {
 		// We are in !validScheduleToClose due to the first if above
-		if validScheduleToStart {
-			attributes.ScheduleToCloseTimeoutSeconds = attributes.GetScheduleToStartTimeoutSeconds() + attributes.GetStartToCloseTimeoutSeconds()
-		} else {
-			attributes.ScheduleToStartTimeoutSeconds = wfTimeout
-			attributes.ScheduleToCloseTimeoutSeconds = wfTimeout
+		attributes.ScheduleToCloseTimeoutSeconds = runTimeout
+		if !validScheduleToStart {
+			attributes.ScheduleToStartTimeoutSeconds = runTimeout
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
 		return serviceerror.NewInvalidArgument("A valid StartToClose or ScheduleToCloseTimeout is not set on decision.")
 	}
 	// ensure activity timeout never larger than workflow timeout
-	if wfTimeout > 0 {
-		if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
-			attributes.ScheduleToCloseTimeoutSeconds = wfTimeout
+	if runTimeout > 0 {
+		if attributes.GetScheduleToCloseTimeoutSeconds() > runTimeout {
+			attributes.ScheduleToCloseTimeoutSeconds = runTimeout
 		}
-		if attributes.GetScheduleToStartTimeoutSeconds() > wfTimeout {
-			attributes.ScheduleToStartTimeoutSeconds = wfTimeout
+		if attributes.GetScheduleToStartTimeoutSeconds() > runTimeout {
+			attributes.ScheduleToStartTimeoutSeconds = runTimeout
 		}
-		if attributes.GetStartToCloseTimeoutSeconds() > wfTimeout {
-			attributes.StartToCloseTimeoutSeconds = wfTimeout
+		if attributes.GetStartToCloseTimeoutSeconds() > runTimeout {
+			attributes.StartToCloseTimeoutSeconds = runTimeout
 		}
-		if attributes.GetHeartbeatTimeoutSeconds() > wfTimeout {
-			attributes.HeartbeatTimeoutSeconds = wfTimeout
+		if attributes.GetHeartbeatTimeoutSeconds() > runTimeout {
+			attributes.HeartbeatTimeoutSeconds = runTimeout
 		}
 	}
 	if attributes.GetHeartbeatTimeoutSeconds() > attributes.GetScheduleToCloseTimeoutSeconds() {
 		attributes.HeartbeatTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
-	}
-
-	// ensure activity's SCHEDULE_TO_START and SCHEDULE_TO_CLOSE is as long as expiration on retry policy
-	p := attributes.RetryPolicy
-	if p != nil {
-		expiration := p.GetExpirationIntervalInSeconds()
-		if expiration == 0 {
-			expiration = wfTimeout
-		}
-		if attributes.GetScheduleToStartTimeoutSeconds() < expiration {
-			attributes.ScheduleToStartTimeoutSeconds = expiration
-		}
-		if attributes.GetScheduleToCloseTimeoutSeconds() < expiration {
-			attributes.ScheduleToCloseTimeoutSeconds = expiration
-		}
 	}
 	return nil
 }
@@ -523,14 +514,25 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 	}
 	attributes.TaskList = taskList
 
-	// Inherit workflow timeout from previous execution if not provided on decision
-	if attributes.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
-		attributes.ExecutionStartToCloseTimeoutSeconds = executionInfo.WorkflowTimeout
+	// Reduce runTimeout if it is going to exceed WorkflowExpirationTime
+	// Note that this calculation can produce negative result
+	// handleDecisionContinueAsNewWorkflow must handle negative runTimeout value
+	timeoutTime := executionInfo.WorkflowExpirationTime
+	if !timeoutTime.IsZero() {
+		runTimeout := convert.Int32Ceil(timeoutTime.Sub(time.Now()).Seconds())
+		if attributes.GetWorkflowRunTimeoutSeconds() > 0 {
+			runTimeout = common.MinInt32(runTimeout, attributes.GetWorkflowRunTimeoutSeconds())
+		} else {
+			runTimeout = common.MinInt32(runTimeout, executionInfo.WorkflowRunTimeout)
+		}
+		attributes.WorkflowRunTimeoutSeconds = runTimeout
+	} else if attributes.GetWorkflowRunTimeoutSeconds() == 0 {
+		attributes.WorkflowRunTimeoutSeconds = executionInfo.WorkflowRunTimeout
 	}
 
 	// Inherit decision task timeout from previous execution if not provided on decision
-	if attributes.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		attributes.TaskStartToCloseTimeoutSeconds = executionInfo.DecisionStartToCloseTimeout
+	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
+		attributes.WorkflowTaskTimeoutSeconds = executionInfo.WorkflowTaskTimeout
 	}
 
 	// Check next run decision task delay
@@ -599,13 +601,18 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	attributes.TaskList = taskList
 
 	// Inherit workflow timeout from parent workflow execution if not provided on decision
-	if attributes.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
-		attributes.ExecutionStartToCloseTimeoutSeconds = parentInfo.WorkflowTimeout
+	if attributes.GetWorkflowExecutionTimeoutSeconds() <= 0 {
+		attributes.WorkflowExecutionTimeoutSeconds = parentInfo.WorkflowExecutionTimeout
+	}
+
+	// Inherit workflow timeout from parent workflow execution if not provided on decision
+	if attributes.GetWorkflowRunTimeoutSeconds() <= 0 {
+		attributes.WorkflowRunTimeoutSeconds = parentInfo.WorkflowRunTimeout
 	}
 
 	// Inherit decision task timeout from parent workflow execution if not provided on decision
-	if attributes.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		attributes.TaskStartToCloseTimeoutSeconds = parentInfo.DecisionStartToCloseTimeout
+	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
+		attributes.WorkflowTaskTimeoutSeconds = parentInfo.WorkflowTaskTimeout
 	}
 
 	return nil

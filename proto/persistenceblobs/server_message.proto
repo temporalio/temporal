@@ -236,8 +236,9 @@ message WorkflowExecutionInfo {
     string completionEventEncoding = 7;
     string taskList = 8;
     string workflowTypeName = 9;
-    int32 workflowTimeoutSeconds = 10;
-    int32 decisionTaskTimeoutSeconds = 11;
+    int32 workflowExecutionTimeoutSeconds = 10;
+    int32 workflowRunTimeoutSeconds = 11;
+    int32 workflowTaskTimeoutSeconds = 12;
     int64 startVersion = 15;
     int64 currentVersion = 16;
     ReplicationData replicationData = 17;
@@ -263,25 +264,24 @@ message WorkflowExecutionInfo {
     int32 retryInitialIntervalSeconds = 39;
     int32 retryMaximumIntervalSeconds = 40;
     int32 retryMaximumAttempts = 41;
-    int32 retryExpirationSeconds = 42;
-    double retryBackoffCoefficient = 43;
-    int64 retryExpirationTimeNanos = 44;
-    repeated string retryNonRetryableErrors = 45;
-    bool hasRetryPolicy = 46;
-    string cronSchedule = 47;
-    int32 eventStoreVersion = 48;
-    bytes eventBranchToken = 49;
-    int64 signalCount = 50;
-    int64 historySize = 51;
-    string clientLibraryVersion = 52;
-    string clientFeatureVersion = 53;
-    string clientImpl = 54;
-    bytes autoResetPoints = 55;
-    string autoResetPointsEncoding = 56;
-    map<string, common.Payload> searchAttributes = 57;
-    map<string, common.Payload> memo = 58;
-    bytes versionHistories = 59;
-    string versionHistoriesEncoding = 60;
+    double retryBackoffCoefficient = 42;
+    int64 retryExpirationTimeNanos = 43;
+    repeated string retryNonRetryableErrors = 44;
+    bool hasRetryPolicy = 45;
+    string cronSchedule = 46;
+    int32 eventStoreVersion = 47;
+    bytes eventBranchToken = 48;
+    int64 signalCount = 49;
+    int64 historySize = 50;
+    string clientLibraryVersion = 51;
+    string clientFeatureVersion = 52;
+    string clientImpl = 53;
+    bytes autoResetPoints = 54;
+    string autoResetPointsEncoding = 55;
+    map<string, common.Payload> searchAttributes = 56;
+    map<string, common.Payload> memo = 57;
+    bytes versionHistories = 58;
+    string versionHistoriesEncoding = 59;
 }
 
 message Checksum {

@@ -99,7 +99,7 @@ func (d *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
 		return nil, err
 	}
 	if cfg.MaxConns > 0 {
- 		db.SetMaxOpenConns(cfg.MaxConns)
+		db.SetMaxOpenConns(cfg.MaxConns)
 	}
 	if cfg.MaxIdleConns > 0 {
 		db.SetMaxIdleConns(cfg.MaxIdleConns)
