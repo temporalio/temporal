@@ -194,7 +194,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payload.EncodeString("Activity Result"), false, nil
 	}
@@ -349,7 +349,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 
 	expectedActivity := int32(1)
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.EqualValues(id, execution.WorkflowId)
 		s.Equal(activityName, activityType.Name)
 		id, _ := strconv.Atoi(activityID)
@@ -536,7 +536,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.EqualValues(id, execution.WorkflowId)
 		s.Equal(activityName, activityType.Name)
 		s.Logger.Info("Activity ID", tag.WorkflowActivityID(activityID))
@@ -843,10 +843,10 @@ func (s *integrationSuite) TestCronWorkflow() {
 	backoffDurationTolerance := time.Millisecond * 500
 
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
+		Fields: map[string]*commonpb.Payloads{"memoKey": payload.EncodeString("memoVal")},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
+		IndexedFields: map[string]*commonpb.Payloads{
 			"CustomKeywordField": payload.EncodeString("1"),
 		},
 	}
@@ -1047,12 +1047,12 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	cronSchedule := "@every 3s"
 
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{
+		Fields: map[string]*commonpb.Payloads{
 			"memoKey": payload.EncodeString("memoVal"),
 		},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
+		IndexedFields: map[string]*commonpb.Payloads{
 			"CustomKeywordField": payload.EncodeString("1"),
 		},
 	}
@@ -1498,7 +1498,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payload.EncodeString("Activity Result"), false, nil
 	}
 
@@ -1697,7 +1697,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	taskListChild.Name = tlChild
 
 	header := &commonpb.Header{
-		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
+		Fields: map[string]*commonpb.Payloads{"tracing": payload.EncodeString("sample payload")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -1724,13 +1724,13 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	var completedEvent *eventpb.HistoryEvent
 
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{
+		Fields: map[string]*commonpb.Payloads{
 			"Info": payload.EncodeString("memo"),
 		},
 	}
 	attrValPayload := payload.EncodeString("attrVal")
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
+		IndexedFields: map[string]*commonpb.Payloads{
 			"CustomKeywordField": attrValPayload,
 		},
 	}
@@ -2243,7 +2243,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payload.EncodeString("Activity Result"), false, nil
 	}
@@ -2402,7 +2402,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payload.EncodeString("Activity Result"), false, nil
 	}
 
@@ -3260,7 +3260,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	}
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payload.EncodeString("Activity Result"), false, nil
 	}
 
@@ -3344,7 +3344,7 @@ func (s *integrationSuite) TestStartWithMemo() {
 	identity := "worker1"
 
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{
+		Fields: map[string]*commonpb.Payloads{
 			"Info": payload.EncodeString(id),
 		},
 	}
@@ -3375,7 +3375,7 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 	identity := "worker1"
 
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{
+		Fields: map[string]*commonpb.Payloads{
 			"Info": payload.EncodeString(id),
 		},
 	}
@@ -3777,7 +3777,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 }
 
 func (s *integrationSuite) sendSignal(namespace string, execution *executionpb.WorkflowExecution, signalName string,
-	input *commonpb.Payload, identity string) error {
+	input *commonpb.Payloads, identity string) error {
 	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         namespace,
 		WorkflowExecution: execution,

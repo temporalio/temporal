@@ -117,12 +117,12 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payload.EncodeString("Activity Result"), false, nil
 	}
 
-	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
+	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payloads, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
@@ -277,12 +277,12 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payload.EncodeString("Activity Result"), false, nil
 	}
 
-	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
+	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payloads, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
@@ -421,11 +421,11 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payload.EncodeString("Activity Result"), false, nil
 	}
 
-	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
+	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payloads, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
@@ -637,11 +637,11 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payload.EncodeString("Activity Result"), false, nil
 	}
 
-	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
+	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payloads, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
@@ -821,11 +821,11 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payload.EncodeString("Activity Result"), false, nil
 	}
 
-	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
+	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payloads, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
@@ -983,11 +983,11 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payload.EncodeString("Activity Result"), false, nil
 	}
 
-	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
+	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payloads, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
@@ -1171,11 +1171,11 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		return payload.EncodeString("Activity Result"), false, nil
 	}
 
-	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
+	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payloads, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {

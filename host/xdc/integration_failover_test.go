@@ -309,13 +309,13 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payload.EncodeString("Activity Result"), false, nil
 	}
 
 	queryType := "test-query"
-	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payload, error) {
+	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) (*commonpb.Payloads, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
 		if task.Query.QueryType == queryType {
@@ -916,7 +916,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payload.EncodeString("Activity Result"), false, nil
 	}
@@ -1608,7 +1608,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	activity1Called := false
 	heartbeatDetails := payload.EncodeString("details")
 	atHandler1 := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		activity1Called = true
 		_, err = client1.RecordActivityTaskHeartbeat(host.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: taskToken, Details: heartbeatDetails})
@@ -1620,7 +1620,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	// activity handler
 	activity2Called := false
 	atHandler2 := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		activity2Called = true
 		return payload.EncodeString("Activity Result"), false, nil
 	}

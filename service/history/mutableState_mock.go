@@ -29,6 +29,9 @@
 package history
 
 import (
+	reflect "reflect"
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 	persistenceblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -40,8 +43,6 @@ import (
 	event "go.temporal.io/temporal-proto/event"
 	execution "go.temporal.io/temporal-proto/execution"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice"
-	reflect "reflect"
-	time "time"
 )
 
 // MockmutableState is a mock of mutableState interface.
@@ -84,7 +85,7 @@ func (mr *MockmutableStateMockRecorder) AddActivityTaskCancelRequestedEvent(arg0
 }
 
 // AddActivityTaskCanceledEvent mocks base method.
-func (m *MockmutableState) AddActivityTaskCanceledEvent(arg0, arg1, arg2 int64, arg3 *common.Payload, arg4 string) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddActivityTaskCanceledEvent(arg0, arg1, arg2 int64, arg3 *common.Payloads, arg4 string) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTaskCanceledEvent", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -160,7 +161,7 @@ func (mr *MockmutableStateMockRecorder) AddActivityTaskStartedEvent(arg0, arg1, 
 }
 
 // AddActivityTaskTimedOutEvent mocks base method.
-func (m *MockmutableState) AddActivityTaskTimedOutEvent(arg0, arg1 int64, arg2 event.TimeoutType, arg3 *common.Payload) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddActivityTaskTimedOutEvent(arg0, arg1 int64, arg2 event.TimeoutType, arg3 *common.Payloads) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTaskTimedOutEvent", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -326,7 +327,7 @@ func (mr *MockmutableStateMockRecorder) AddDecisionTaskCompletedEvent(arg0, arg1
 }
 
 // AddDecisionTaskFailedEvent mocks base method.
-func (m *MockmutableState) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID int64, cause event.DecisionTaskFailedCause, details *common.Payload, identity, reason, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID int64, cause event.DecisionTaskFailedCause, details *common.Payloads, identity, reason, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskFailedEvent", scheduleEventID, startedEventID, cause, details, identity, reason, binChecksum, baseRunID, newRunID, forkEventVersion)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -717,7 +718,7 @@ func (mr *MockmutableStateMockRecorder) AddWorkflowExecutionCanceledEvent(arg0, 
 }
 
 // AddWorkflowExecutionSignaled mocks base method.
-func (m *MockmutableState) AddWorkflowExecutionSignaled(signalName string, input *common.Payload, identity string) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddWorkflowExecutionSignaled(signalName string, input *common.Payloads, identity string) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkflowExecutionSignaled", signalName, input, identity)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -747,7 +748,7 @@ func (mr *MockmutableStateMockRecorder) AddWorkflowExecutionStartedEvent(arg0, a
 }
 
 // AddWorkflowExecutionTerminatedEvent mocks base method.
-func (m *MockmutableState) AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *common.Payload, identity string) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *common.Payloads, identity string) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkflowExecutionTerminatedEvent", firstEventID, reason, details, identity)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -802,7 +803,7 @@ func (mr *MockmutableStateMockRecorder) CopyToPersistence() *gomock.Call {
 }
 
 // RetryActivity mocks base method.
-func (m *MockmutableState) RetryActivity(ai *persistence.ActivityInfo, failureReason string, failureDetails *common.Payload) (bool, error) {
+func (m *MockmutableState) RetryActivity(ai *persistence.ActivityInfo, failureReason string, failureDetails *common.Payloads) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RetryActivity", ai, failureReason, failureDetails)
 	ret0, _ := ret[0].(bool)

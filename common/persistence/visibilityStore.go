@@ -234,9 +234,9 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 }
 
 func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{}) (*commonpb.SearchAttributes, error) {
-	indexedFields := make(map[string]*commonpb.Payload)
+	indexedFields := make(map[string]*commonpb.Payloads)
 	var err error
-	var valBytes *commonpb.Payload
+	var valBytes *commonpb.Payloads
 	for k, val := range attr {
 		valBytes, err = payload.Encode(val)
 		if err != nil {

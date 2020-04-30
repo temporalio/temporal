@@ -718,7 +718,7 @@ func (s *cliAppSuite) TestAnyToString() {
 }
 
 func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
-	fields := map[string]*commonpb.Payload{
+	fields := map[string]*commonpb.Payloads{
 		"TestKey": payload.EncodeString("testValue"),
 	}
 	execution := &executionpb.WorkflowExecutionInfo{

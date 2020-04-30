@@ -1990,7 +1990,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 		return err
 	}
 	if exeInfo.SearchAttributes == nil {
-		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload)
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payloads)
 	}
 	exeInfo.SearchAttributes[definition.BinaryChecksums] = bytes
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
@@ -2063,7 +2063,7 @@ func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	cause eventpb.DecisionTaskFailedCause,
-	details *commonpb.Payload,
+	details *commonpb.Payloads,
 	identity string,
 	reason string,
 	binChecksum string,
@@ -2357,7 +2357,7 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	timeoutType eventpb.TimeoutType,
-	lastHeartBeatDetails *commonpb.Payload,
+	lastHeartBeatDetails *commonpb.Payloads,
 ) (*eventpb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskTimedOut
@@ -2476,7 +2476,7 @@ func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	latestCancelRequestedEventID int64,
-	details *commonpb.Payload,
+	details *commonpb.Payloads,
 	identity string,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -2930,12 +2930,12 @@ func (e *mutableStateBuilder) ReplicateUpsertWorkflowSearchAttributesEvent(
 }
 
 func mergeMapOfPayload(
-	current map[string]*commonpb.Payload,
-	upsert map[string]*commonpb.Payload,
-) map[string]*commonpb.Payload {
+	current map[string]*commonpb.Payloads,
+	upsert map[string]*commonpb.Payloads,
+) map[string]*commonpb.Payloads {
 
 	if current == nil {
-		current = make(map[string]*commonpb.Payload)
+		current = make(map[string]*commonpb.Payloads)
 	}
 	for k, v := range upsert {
 		current[k] = v
@@ -3201,7 +3201,7 @@ func (e *mutableStateBuilder) AddRecordMarkerEvent(
 func (e *mutableStateBuilder) AddWorkflowExecutionTerminatedEvent(
 	firstEventID int64,
 	reason string,
-	details *commonpb.Payload,
+	details *commonpb.Payloads,
 	identity string,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -3242,7 +3242,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTerminatedEvent(
 
 func (e *mutableStateBuilder) AddWorkflowExecutionSignaled(
 	signalName string,
-	input *commonpb.Payload,
+	input *commonpb.Payloads,
 	identity string,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -3759,7 +3759,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTimedOutEvent(
 func (e *mutableStateBuilder) RetryActivity(
 	ai *persistence.ActivityInfo,
 	failureReason string,
-	failureDetails *commonpb.Payload,
+	failureDetails *commonpb.Payloads,
 ) (bool, error) {
 
 	opTag := tag.WorkflowActionActivityTaskRetry

@@ -70,10 +70,10 @@ message ActivityInfo {
     repeated string retryNonRetryableErrors = 28;
     string retryLastFailureReason = 29;
     string retryLastWorkerIdentity = 30;
-    common.Payload retryLastFailureDetails = 31;
+    common.Payloads retryLastFailureDetails = 31;
     bytes namespaceId = 32;
     int64 scheduleId = 33;
-    common.Payload lastHeartbeatDetails = 34;
+    common.Payloads lastHeartbeatDetails = 34;
     google.protobuf.Timestamp lastHeartbeatUpdatedTime = 35;
 }
 
@@ -205,7 +205,7 @@ message SignalInfo {
     int64 initiatedEventBatchId = 2;
     string requestId = 3;
     string name = 4;
-    common.Payload input = 5;
+    common.Payloads input = 5;
     string control = 6;
     int64 initiatedId = 7;
 }
@@ -278,8 +278,8 @@ message WorkflowExecutionInfo {
     string clientImpl = 54;
     bytes autoResetPoints = 55;
     string autoResetPointsEncoding = 56;
-    map<string, common.Payload> searchAttributes = 57;
-    map<string, common.Payload> memo = 58;
+    map<string, common.Payloads> searchAttributes = 57;
+    map<string, common.Payloads> memo = 58;
     bytes versionHistories = 59;
     string versionHistoriesEncoding = 60;
 }

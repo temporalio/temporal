@@ -108,7 +108,7 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 		}
 		// verify: size of single value <= limit
 		dataSize := 0
-		for _, payloadItem := range val.Items {
+		for _, payloadItem := range val.GetPayloads() {
 			dataSize += len(payloadItem.GetData())
 		}
 		if dataSize > sv.searchAttributesSizeOfValueLimit(namespace) {
@@ -142,7 +142,7 @@ func (sv *SearchAttributesValidator) isValidSearchAttributesKey(
 func (sv *SearchAttributesValidator) isValidSearchAttributesValue(
 	validAttr map[string]interface{},
 	key string,
-	value *commonpb.Payload,
+	value *commonpb.Payloads,
 ) bool {
 	valueType := common.ConvertIndexedValueTypeToProtoType(validAttr[key], sv.logger)
 	_, err := common.DeserializeSearchAttributeValue(value, valueType)

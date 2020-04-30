@@ -4799,7 +4799,7 @@ func (s *engineSuite) printHistory(builder mutableState) string {
 }
 
 func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowExecution executionpb.WorkflowExecution,
-	workflowType, taskList string, input *commonpb.Payload, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
+	workflowType, taskList string, input *commonpb.Payloads, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
 	parentInfo *executiongenpb.ParentExecutionInfo, identity string) *eventpb.HistoryEvent {
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -4825,7 +4825,7 @@ func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowEx
 }
 
 func addWorkflowExecutionStartedEvent(builder mutableState, workflowExecution executionpb.WorkflowExecution,
-	workflowType, taskList string, input *commonpb.Payload, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
+	workflowType, taskList string, input *commonpb.Payloads, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
 	identity string) *eventpb.HistoryEvent {
 	return addWorkflowExecutionStartedEventWithParent(builder, workflowExecution, workflowType, taskList, input,
 		executionStartToCloseTimeout, taskStartToCloseTimeout, nil, identity)
@@ -4866,7 +4866,7 @@ func addActivityTaskScheduledEvent(
 	decisionCompletedID int64,
 	activityID, activityType,
 	taskList string,
-	input *commonpb.Payload,
+	input *commonpb.Payloads,
 	scheduleToCloseTimeout int32,
 	scheduleToStartTimeout int32,
 	startToCloseTimeout int32,
@@ -4893,7 +4893,7 @@ func addActivityTaskScheduledEventWithRetry(
 	decisionCompletedID int64,
 	activityID, activityType,
 	taskList string,
-	input *commonpb.Payload,
+	input *commonpb.Payloads,
 	scheduleToCloseTimeout int32,
 	scheduleToStartTimeout int32,
 	startToCloseTimeout int32,
@@ -4922,7 +4922,7 @@ func addActivityTaskStartedEvent(builder mutableState, scheduleID int64, identit
 	return event
 }
 
-func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID int64, result *commonpb.Payload,
+func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID int64, result *commonpb.Payloads,
 	identity string) *eventpb.HistoryEvent {
 	event, _ := builder.AddActivityTaskCompletedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskCompletedRequest{
 		Result:   result,
@@ -4932,7 +4932,7 @@ func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID i
 	return event
 }
 
-func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, reason string, details *commonpb.Payload,
+func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, reason string, details *commonpb.Payloads,
 	identity string) *eventpb.HistoryEvent {
 	event, _ := builder.AddActivityTaskFailedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskFailedRequest{
 		Reason:   reason,
@@ -4976,7 +4976,7 @@ func addCancelRequestedEvent(builder mutableState, initiatedID int64, namespace,
 }
 
 func addRequestSignalInitiatedEvent(builder mutableState, decisionCompletedEventID int64,
-	signalRequestID, namespace, workflowID, runID, signalName string, input *commonpb.Payload, control string) (*eventpb.HistoryEvent, *persistenceblobs.SignalInfo) {
+	signalRequestID, namespace, workflowID, runID, signalName string, input *commonpb.Payloads, control string) (*eventpb.HistoryEvent, *persistenceblobs.SignalInfo) {
 	event, si, _ := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, signalRequestID,
 		&decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
 			Namespace: namespace,
@@ -4998,7 +4998,7 @@ func addSignaledEvent(builder mutableState, initiatedID int64, namespace, workfl
 }
 
 func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, decisionCompletedID int64,
-	createRequestID, namespace, workflowID, workflowType, tasklist string, input *commonpb.Payload,
+	createRequestID, namespace, workflowID, workflowType, tasklist string, input *commonpb.Payloads,
 	executionStartToCloseTimeout, taskStartToCloseTimeout int32) (*eventpb.HistoryEvent,
 	*persistence.ChildExecutionInfo) {
 
@@ -5038,7 +5038,7 @@ func addChildWorkflowExecutionCompletedEvent(builder mutableState, initiatedID i
 }
 
 func addCompleteWorkflowEvent(builder mutableState, decisionCompletedEventID int64,
-	result *commonpb.Payload) *eventpb.HistoryEvent {
+	result *commonpb.Payloads) *eventpb.HistoryEvent {
 	event, _ := builder.AddCompletedWorkflowEvent(decisionCompletedEventID, &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 		Result: result,
 	})
@@ -5049,7 +5049,7 @@ func addFailWorkflowEvent(
 	builder mutableState,
 	decisionCompletedEventID int64,
 	reason string,
-	details *commonpb.Payload,
+	details *commonpb.Payloads,
 ) *eventpb.HistoryEvent {
 	event, _ := builder.AddFailWorkflowEvent(decisionCompletedEventID, &decisionpb.FailWorkflowExecutionDecisionAttributes{
 		Reason:  reason,
@@ -5218,7 +5218,7 @@ func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.Activit
 		StartedEvent:             copyHistoryEvent(sourceInfo.StartedEvent),
 		ActivityID:               sourceInfo.ActivityID,
 		RequestID:                sourceInfo.RequestID,
-		Details:                  proto.Clone(sourceInfo.Details).(*commonpb.Payload),
+		Details:                  proto.Clone(sourceInfo.Details).(*commonpb.Payloads),
 		ScheduledTime:            sourceInfo.ScheduledTime,
 		StartedTime:              sourceInfo.StartedTime,
 		ScheduleToStartTimeout:   sourceInfo.ScheduleToStartTimeout,
@@ -5273,7 +5273,7 @@ func copySignalInfo(sourceInfo *persistenceblobs.SignalInfo) *persistenceblobs.S
 		RequestId:   sourceInfo.GetRequestId(),
 		Name:        sourceInfo.GetName(),
 	}
-	result.Input = proto.Clone(sourceInfo.Input).(*commonpb.Payload)
+	result.Input = proto.Clone(sourceInfo.Input).(*commonpb.Payloads)
 	result.Control = sourceInfo.Control
 	return result
 }

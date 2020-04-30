@@ -98,7 +98,7 @@ type (
 	// SignalParams is the parameters for signaling workflow
 	SignalParams struct {
 		SignalName string
-		Input      *commonpb.Payload
+		Input      *commonpb.Payloads
 	}
 
 	// BatchParams is the parameters for batch operation workflow

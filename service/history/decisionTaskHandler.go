@@ -863,12 +863,12 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 	return err
 }
 
-func searchAttributesSize(fields map[string]*commonpb.Payload) int {
+func searchAttributesSize(fields map[string]*commonpb.Payloads) int {
 	result := 0
 
 	for k, v := range fields {
 		result += len(k)
-		for _, payloadItem := range v.Items {
+		for _, payloadItem := range v.GetPayloads() {
 			result += len(payloadItem.GetData())
 		}
 	}
@@ -880,8 +880,8 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 	backoffInterval int32,
 	continueAsNewIter commonpb.ContinueAsNewInitiator,
 	failureReason string,
-	failureDetails *commonpb.Payload,
-	lastCompletionResult *commonpb.Payload,
+	failureDetails *commonpb.Payloads,
+	lastCompletionResult *commonpb.Payloads,
 ) error {
 
 	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{

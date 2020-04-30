@@ -59,7 +59,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	header := &commonpb.Header{
-		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
+		Fields: map[string]*commonpb.Payloads{"tracing": payload.EncodeString("sample data")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -120,7 +120,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 
 	activityExecutedCount := 0
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
 		for i := 0; i < 10; i++ {
@@ -243,7 +243,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	activityExecutedCount := 0
 	heartbeatDetails := payload.EncodeString("details")
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
 
@@ -459,7 +459,7 @@ func (s *integrationSuite) TestActivityRetry() {
 
 	activityExecutedCount := 0
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
 		var err error
@@ -633,7 +633,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 
 	activityExecutedCount := 0
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
 		// Timing out more than HB time.
@@ -831,7 +831,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
 		var timeoutType string
@@ -1026,7 +1026,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Logger.Info("Starting heartbeat activity", tag.WorkflowActivityID(activityID))
 		for i := 0; i < 10; i++ {
 			if !workflowComplete {
@@ -1167,7 +1167,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 
 	activityExecutedCount := 0
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
 		for i := 0; i < 10; i++ {
@@ -1292,7 +1292,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 
 	// dummy activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Fail("activity should not run")
 		return nil, false, nil
 	}

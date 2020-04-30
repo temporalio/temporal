@@ -80,7 +80,7 @@ type (
 		Status             executionpb.WorkflowExecutionStatus
 		HistoryLength      int64
 		Memo               *commonpb.Memo
-		SearchAttributes   map[string]*commonpb.Payload
+		SearchAttributes   map[string]*commonpb.Payloads
 		VisibilityURI      string
 
 		// archival targets: history and/or visibility
