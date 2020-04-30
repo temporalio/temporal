@@ -41,6 +41,8 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log/tag"
+	cadencehistory "github.com/uber/cadence/service/history"
+	"github.com/uber/cadence/service/history/execution"
 	"github.com/uber/cadence/service/matching"
 )
 
@@ -118,6 +120,166 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	s.IsType(&workflow.WorkflowExecutionAlreadyStartedError{}, err2)
 	log.Infof("Unable to start workflow execution: %v", err2.Error())
 	s.Nil(we2)
+}
+
+func (s *integrationSuite) TestStartWorkflowExecution_IDReusePolicy() {
+	id := "integration-start-workflow-id-reuse-test"
+	wt := "integration-start-workflow-id-reuse-type"
+	tl := "integration-start-workflow-id-reuse-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	createStartRequest := func(policy workflow.WorkflowIdReusePolicy) *workflow.StartWorkflowExecutionRequest {
+		return &workflow.StartWorkflowExecutionRequest{
+			RequestId:                           common.StringPtr(uuid.New()),
+			Domain:                              common.StringPtr(s.domainName),
+			WorkflowId:                          common.StringPtr(id),
+			WorkflowType:                        workflowType,
+			TaskList:                            taskList,
+			Input:                               nil,
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+			Identity:                            common.StringPtr(identity),
+			WorkflowIdReusePolicy:               &policy,
+		}
+	}
+
+	request := createStartRequest(workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly)
+	we, err := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err)
+
+	// Test policies when workflow is running
+	policies := []workflow.WorkflowIdReusePolicy{
+		workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly,
+		workflow.WorkflowIdReusePolicyAllowDuplicate,
+		workflow.WorkflowIdReusePolicyRejectDuplicate,
+	}
+	for _, policy := range policies {
+		newRequest := createStartRequest(policy)
+		we1, err1 := s.engine.StartWorkflowExecution(createContext(), newRequest)
+		s.Error(err1)
+		s.IsType(&workflow.WorkflowExecutionAlreadyStartedError{}, err1)
+		s.Nil(we1)
+	}
+
+	// Test TerminateIfRunning policy when workflow is running
+	policy := workflow.WorkflowIdReusePolicyTerminateIfRunning
+	newRequest := createStartRequest(policy)
+	we1, err1 := s.engine.StartWorkflowExecution(createContext(), newRequest)
+	s.NoError(err1)
+	s.NotEqual(we.GetRunId(), we1.GetRunId())
+	// verify terminate status
+	executionTerminated := false
+GetHistoryLoop:
+	for i := 0; i < 10; i++ {
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      we.RunId,
+			},
+		})
+		s.Nil(err)
+		history := historyResponse.History
+
+		lastEvent := history.Events[len(history.Events)-1]
+		if lastEvent.GetEventType() != workflow.EventTypeWorkflowExecutionTerminated {
+			s.Logger.Warn("Execution not terminated yet.")
+			time.Sleep(100 * time.Millisecond)
+			continue GetHistoryLoop
+		}
+
+		terminateEventAttributes := lastEvent.WorkflowExecutionTerminatedEventAttributes
+		s.Equal(cadencehistory.TerminateIfRunningReason, terminateEventAttributes.GetReason())
+		s.Equal(fmt.Sprintf(cadencehistory.TerminateIfRunningDetailsTemplate, we1.GetRunId()), string(terminateEventAttributes.Details))
+		s.Equal(execution.IdentityHistoryService, terminateEventAttributes.GetIdentity())
+		executionTerminated = true
+		break GetHistoryLoop
+	}
+	s.True(executionTerminated)
+
+	// Terminate current workflow execution
+	err = s.engine.TerminateWorkflowExecution(createContext(), &workflow.TerminateWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+			RunId:      we1.RunId,
+		},
+		Reason:   common.StringPtr("kill workflow"),
+		Identity: common.StringPtr(identity),
+	})
+	s.Nil(err)
+
+	// test policy AllowDuplicateFailedOnly
+	policy = workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	newRequest = createStartRequest(policy)
+	we2, err2 := s.engine.StartWorkflowExecution(createContext(), newRequest)
+	s.NoError(err2)
+	s.NotEqual(we1.GetRunId(), we2.GetRunId())
+	// complete workflow instead of terminate
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		return []byte(strconv.Itoa(0)), []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.Logger,
+		T:               s.T(),
+	}
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	s.Nil(err)
+	// duplicate requests
+	we3, err3 := s.engine.StartWorkflowExecution(createContext(), newRequest)
+	s.NoError(err3)
+	s.Equal(we2.GetRunId(), we3.GetRunId())
+	// new request, same policy
+	newRequest = createStartRequest(policy)
+	we3, err3 = s.engine.StartWorkflowExecution(createContext(), newRequest)
+	s.Error(err3)
+	s.IsType(&workflow.WorkflowExecutionAlreadyStartedError{}, err3)
+	s.Nil(we3)
+
+	// test policy RejectDuplicate
+	policy = workflow.WorkflowIdReusePolicyRejectDuplicate
+	newRequest = createStartRequest(policy)
+	we3, err3 = s.engine.StartWorkflowExecution(createContext(), newRequest)
+	s.Error(err3)
+	s.IsType(&workflow.WorkflowExecutionAlreadyStartedError{}, err3)
+	s.Nil(we3)
+
+	// test policy AllowDuplicate
+	policy = workflow.WorkflowIdReusePolicyAllowDuplicate
+	newRequest = createStartRequest(policy)
+	we4, err4 := s.engine.StartWorkflowExecution(createContext(), newRequest)
+	s.NoError(err4)
+	s.NotEqual(we3.GetRunId(), we4.GetRunId())
+
+	// complete workflow
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
+	s.Nil(err)
+
+	// test policy TerminateIfRunning
+	policy = workflow.WorkflowIdReusePolicyTerminateIfRunning
+	newRequest = createStartRequest(policy)
+	we5, err5 := s.engine.StartWorkflowExecution(createContext(), newRequest)
+	s.NoError(err5)
+	s.NotEqual(we4.GetRunId(), we5.GetRunId())
 }
 
 func (s *integrationSuite) TestTerminateWorkflow() {
