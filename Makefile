@@ -133,11 +133,11 @@ clean-proto:
 
 update-proto-submodule:
 	@printf $(COLOR) "Update proto submodule from remote..."
-#	git submodule update --remote $(PROTO_ROOT)/temporal-proto
+	git submodule update --remote $(PROTO_ROOT)/temporal-proto
 
 install-proto-submodule:
 	@printf $(COLOR) "Install proto submodule..."
-#	git submodule update --init $(PROTO_ROOT)/temporal-proto
+	git submodule update --init $(PROTO_ROOT)/temporal-proto
 
 protoc: $(PROTO_GEN)
 	@printf $(COLOR) "Build proto files..."
