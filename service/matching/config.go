@@ -30,7 +30,6 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	// tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type (
