@@ -52,7 +52,7 @@ type (
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *commonpb.Memo
 		TaskList           string
-		SearchAttributes   map[string]*commonpb.Payload
+		SearchAttributes   map[string]*commonpb.Payloads
 	}
 
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a newly
@@ -71,7 +71,7 @@ type (
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *commonpb.Memo
 		TaskList           string
-		SearchAttributes   map[string]*commonpb.Payload
+		SearchAttributes   map[string]*commonpb.Payloads
 	}
 
 	// UpsertWorkflowExecutionRequest is used to upsert workflow execution
@@ -86,7 +86,7 @@ type (
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *commonpb.Memo
 		TaskList           string
-		SearchAttributes   map[string]*commonpb.Payload
+		SearchAttributes   map[string]*commonpb.Payloads
 	}
 
 	// ListWorkflowExecutionsRequest is used to list executions in a namespace

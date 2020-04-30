@@ -147,7 +147,7 @@ func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string 
 			switch typedV := val.Interface().(type) {
 			case []byte:
 				str += string(typedV)
-			case *commonpb.Payload:
+			case *commonpb.Payloads:
 				var data string
 				err := payload.Decode(typedV, &data)
 				if err == nil {

@@ -1211,13 +1211,13 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	}
 	testSearchAttrKey := "env"
 	testSearchAttrVal := payload.EncodeString("test")
-	testSearchAttr := map[string]*commonpb.Payload{
+	testSearchAttr := map[string]*commonpb.Payloads{
 		testSearchAttrKey: testSearchAttrVal,
 	}
 
 	testMemoKey := "memoKey"
 	testMemoVal := payload.EncodeString("memoVal")
-	testMemo := map[string]*commonpb.Payload{
+	testMemo := map[string]*commonpb.Payloads{
 		testMemoKey: testMemoVal,
 	}
 
@@ -1418,11 +1418,11 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.NonRetriableErrors = []string{"accessDenied", "badRequest"}
 	searchAttrKey := "env"
 	searchAttrVal := payload.EncodeBytes([]byte("test"))
-	updatedInfo.SearchAttributes = map[string]*commonpb.Payload{searchAttrKey: searchAttrVal}
+	updatedInfo.SearchAttributes = map[string]*commonpb.Payloads{searchAttrKey: searchAttrVal}
 
 	memoKey := "memoKey"
 	memoVal := payload.EncodeBytes([]byte("memoVal"))
-	updatedInfo.Memo = map[string]*commonpb.Payload{memoKey: memoVal}
+	updatedInfo.Memo = map[string]*commonpb.Payloads{memoKey: memoVal}
 	updatedStats.HistorySize = math.MaxInt64
 
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil)

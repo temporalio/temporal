@@ -273,7 +273,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 }
 
-func processSearchAttr(c *cli.Context) map[string]*commonpb.Payload {
+func processSearchAttr(c *cli.Context) map[string]*commonpb.Payloads {
 	rawSearchAttrKey := c.String(FlagSearchAttributesKey)
 	var searchAttrKeys []string
 	if strings.TrimSpace(rawSearchAttrKey) != "" {
@@ -294,7 +294,7 @@ func processSearchAttr(c *cli.Context) map[string]*commonpb.Payload {
 		ErrorAndExit("Number of search attributes keys and values are not equal.", nil)
 	}
 
-	fields := map[string]*commonpb.Payload{}
+	fields := map[string]*commonpb.Payloads{}
 	for i, key := range searchAttrKeys {
 		val, err := payload.Encode(searchAttrVals[i])
 		if err != nil {
@@ -306,7 +306,7 @@ func processSearchAttr(c *cli.Context) map[string]*commonpb.Payload {
 	return fields
 }
 
-func processMemo(c *cli.Context) map[string]*commonpb.Payload {
+func processMemo(c *cli.Context) map[string]*commonpb.Payloads {
 	rawMemoKey := c.String(FlagMemoKey)
 	var memoKeys []string
 	if strings.TrimSpace(rawMemoKey) != "" {
@@ -328,7 +328,7 @@ func processMemo(c *cli.Context) map[string]*commonpb.Payload {
 		ErrorAndExit("Number of memo keys and values are not equal.", nil)
 	}
 
-	fields := map[string]*commonpb.Payload{}
+	fields := map[string]*commonpb.Payloads{}
 	for i, key := range memoKeys {
 		fields[key] = payload.EncodeString(memoValues[i])
 	}

@@ -113,7 +113,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payload.EncodeString("Activity Result"), false, nil
 	}
@@ -279,7 +279,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payload.EncodeString("Activity Result"), false, nil
 	}
@@ -441,7 +441,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payload.EncodeString("Activity Result."), false, nil
 	}
@@ -644,7 +644,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payload.EncodeString("Activity Result"), false, nil
 	}
@@ -861,7 +861,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payload.EncodeString("Activity Result"), false, nil
 	}

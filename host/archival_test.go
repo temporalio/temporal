@@ -306,9 +306,9 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		execution *executionpb.WorkflowExecution,
 		activityType *commonpb.ActivityType,
 		activityID string,
-		input *commonpb.Payload,
+		input *commonpb.Payloads,
 		taskToken []byte,
-	) (*commonpb.Payload, bool, error) {
+	) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.Name)
 		id, _ := strconv.Atoi(activityID)

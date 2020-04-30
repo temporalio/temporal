@@ -199,7 +199,7 @@ func terminateWorkflow(
 	mutableState mutableState,
 	eventBatchFirstEventID int64,
 	terminateReason string,
-	terminateDetails *commonpb.Payload,
+	terminateDetails *commonpb.Payloads,
 	terminateIdentity string,
 ) error {
 
