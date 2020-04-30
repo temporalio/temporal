@@ -114,8 +114,8 @@ func archivalWorkflowHelper(
 		pumpResult.UnhandledCarryover = append(pumpResult.UnhandledCarryover, request)
 	}
 	logger.Info("archival system workflow continue as new")
-	ctx = workflow.WithExecutionStartToCloseTimeout(ctx, workflowStartToCloseTimeout)
-	ctx = workflow.WithWorkflowTaskStartToCloseTimeout(ctx, workflowTaskStartToCloseTimeout)
+	ctx = workflow.WithWorkflowRunTimeout(ctx, workflowRunTimeout)
+	ctx = workflow.WithWorkflowTaskTimeout(ctx, workflowTaskTimeout)
 	sw.Stop()
 	return workflow.NewContinueAsNewError(ctx, archivalWorkflowFnName, pumpResult.UnhandledCarryover)
 }

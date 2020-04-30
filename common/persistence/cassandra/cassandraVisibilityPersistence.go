@@ -176,7 +176,7 @@ func (v *cassandraVisibilityPersistence) Close() {
 
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 	request *p.InternalRecordWorkflowExecutionStartedRequest) error {
-	ttl := request.WorkflowTimeout + openExecutionTTLBuffer
+	ttl := request.RunTimeout + openExecutionTTLBuffer
 	var query *gocql.Query
 
 	if ttl > maxCassandraTTL {

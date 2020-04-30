@@ -22,10 +22,11 @@ require (
 	github.com/fortytw2/leaktest v1.3.0 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31
+	github.com/gogo/googleapis v1.4.0 // indirect
 	github.com/gogo/protobuf v1.3.1
 	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.4.3
-	github.com/golang/protobuf v1.3.5
+	github.com/golang/protobuf v1.4.0
 	github.com/google/uuid v1.1.1
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/hashicorp/go-version v1.2.0
@@ -62,17 +63,18 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/temporal v0.22.4
-	go.temporal.io/temporal-proto v0.20.28
+	go.temporal.io/temporal v0.22.5
+	go.temporal.io/temporal-proto v0.20.29
 	go.uber.org/atomic v1.6.0
 	go.uber.org/multierr v1.5.0
-	go.uber.org/zap v1.14.1
+	go.uber.org/zap v1.15.0
+	golang.org/x/net v0.0.0-20200425230154-ff2c4b7c35a0 // indirect
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
-	golang.org/x/sys v0.0.0-20200331124033-c3d80250170d // indirect
-	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
+	golang.org/x/sys v0.0.0-20200428200454-593003d681fa // indirect
+	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 	google.golang.org/api v0.4.0
-	google.golang.org/genproto v0.0.0-20200403120447-c50568487044 // indirect
-	google.golang.org/grpc v1.28.0
+	google.golang.org/genproto v0.0.0-20200429120912-1f37eeb960b2 // indirect
+	google.golang.org/grpc v1.29.1
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	gopkg.in/validator.v2 v2.0.0-20180514200540-135c24b11c19

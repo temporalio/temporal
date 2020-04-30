@@ -155,7 +155,7 @@ const (
 	TaskTypeDecisionTimeout = iota
 	TaskTypeActivityTimeout
 	TaskTypeUserTimer
-	TaskTypeWorkflowTimeout
+	TaskTypeWorkflowRunTimeout
 	TaskTypeDeleteHistoryEvent
 	TaskTypeActivityRetryTimer
 	TaskTypeWorkflowBackoffTimer
@@ -269,8 +269,9 @@ type (
 		CompletionEvent                    *eventpb.HistoryEvent
 		TaskList                           string
 		WorkflowTypeName                   string
-		WorkflowTimeout                    int32
-		DecisionStartToCloseTimeout        int32
+		WorkflowRunTimeout                 int32
+		WorkflowExecutionTimeout           int32
+		WorkflowTaskTimeout                int32
 		State                              int
 		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
@@ -301,18 +302,17 @@ type (
 		Memo                               map[string]*commonpb.Payload
 		SearchAttributes                   map[string]*commonpb.Payload
 		// for retry
-		Attempt            int32
-		HasRetryPolicy     bool
-		InitialInterval    int32
-		BackoffCoefficient float64
-		MaximumInterval    int32
-		ExpirationTime     time.Time
-		MaximumAttempts    int32
-		NonRetriableErrors []string
-		BranchToken        []byte
+		Attempt                int32
+		HasRetryPolicy         bool
+		InitialInterval        int32
+		BackoffCoefficient     float64
+		MaximumInterval        int32
+		WorkflowExpirationTime time.Time
+		MaximumAttempts        int32
+		NonRetriableErrors     []string
+		BranchToken            []byte
 		// Cron
-		CronSchedule      string
-		ExpirationSeconds int32
+		CronSchedule string
 	}
 
 	// ExecutionStats is the statistics about workflow execution
@@ -1914,7 +1914,7 @@ func (r *WorkflowBackoffTimerTask) SetVisibilityTimestamp(t time.Time) {
 
 // GetType returns the type of the timeout task.
 func (u *WorkflowTimeoutTask) GetType() int {
-	return TaskTypeWorkflowTimeout
+	return TaskTypeWorkflowRunTimeout
 }
 
 // GetVersion returns the version of the timeout task

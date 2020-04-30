@@ -77,12 +77,12 @@ type (
 )
 
 const (
-	workflowIDPrefix                = "temporal-archival"
-	decisionTaskList                = "temporal-archival-tl"
-	signalName                      = "temporal-archival-signal"
-	archivalWorkflowFnName          = "archivalWorkflow"
-	workflowStartToCloseTimeout     = time.Hour * 24 * 30
-	workflowTaskStartToCloseTimeout = time.Minute
+	workflowIDPrefix       = "temporal-archival"
+	decisionTaskList       = "temporal-archival-tl"
+	signalName             = "temporal-archival-signal"
+	archivalWorkflowFnName = "archivalWorkflow"
+	workflowRunTimeout     = time.Hour * 24 * 30
+	workflowTaskTimeout    = time.Minute
 
 	bootstrapContainerKey contextKey = iota
 )

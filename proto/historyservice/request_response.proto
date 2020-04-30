@@ -45,7 +45,7 @@ message StartWorkflowExecutionRequest {
     workflowservice.StartWorkflowExecutionRequest startRequest = 2;
     execution.ParentExecutionInfo parentExecutionInfo = 3;
     int32 attempt = 4;
-    int64 expirationTimestamp = 5;
+    int64 workflowExecutionExpirationTimestamp = 5;
     common.ContinueAsNewInitiator continueAsNewInitiator = 6;
     string continuedFailureReason = 7;
     common.Payload continuedFailureDetails = 8;

@@ -192,16 +192,16 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		},
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
-		SearchAttributes:                    searchAttr,
+		RequestId:                  uuid.New(),
+		Namespace:                  namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
+		SearchAttributes:           searchAttr,
 	}
 	startTime := time.Now().UnixNano()
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
