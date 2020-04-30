@@ -1858,8 +1858,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestCopySearchAttributes() {
 	}
 	result := copySearchAttributes(input)
 	s.Equal(input, result)
-	result[key].Items[0].GetData()[0] = '0'
-	s.Equal(byte('1'), val.Items[0].GetData()[0])
+	result[key].GetPayloads()[0].GetData()[0] = '0'
+	s.Equal(byte('1'), val.GetPayloads()[0].GetData()[0])
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
