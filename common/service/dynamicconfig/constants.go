@@ -68,7 +68,7 @@ var keys = map[Key]string{
 	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
 	TransactionSizeLimit:                   "system.transactionSizeLimit",
 	MinRetentionDays:                       "system.minRetentionDays",
-	MaxDecisionTaskStartToCloseTimeout:     "system.maxDecisionTaskStartToCloseTimeout",
+	MaxWorkflowTaskTimeout:                 "system.maxWorkflowTaskTimeout",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
@@ -224,10 +224,12 @@ var keys = map[Key]string{
 	EmitShardDiffLog:                                       "history.emitShardDiffLog",
 	HistoryThrottledLogRPS:                                 "history.throttledLogRPS",
 	StickyTTL:                                              "history.stickyTTL",
-	DefaultExecutionStartToCloseTimeout:                    "history.defaultWorkflowExecutionTimeout",
-	MaxExecutionStartToCloseTimeout:                        "history.maximumWorkflowExecutionTimeout",
+	DefaultWorkflowExecutionTimeout:                        "history.defaultWorkflowExecutionTimeout",
+	DefaultWorkflowRunTimeout:                              "history.defaultWorkflowRunTimeout",
+	MaxWorkflowExecutionTimeout:                            "history.maximumWorkflowExecutionTimeout",
+	MaxWorkflowRunTimeout:                                  "history.maximumWorkflowRunTimeout",
 	DecisionHeartbeatTimeout:                               "history.decisionHeartbeatTimeout",
-	DefaultDecisionTaskStartToCloseTimeout:                 "history.defaultDecisionTaskStartToCloseTimeout",
+	DefaultWorkflowTaskTimeout:                             "history.defaultWorkflowTaskTimeout",
 	ParentClosePolicyThreshold:                             "history.parentClosePolicyThreshold",
 	NumParentClosePolicySystemWorkflows:                    "history.numParentClosePolicySystemWorkflows",
 	ReplicationTaskFetcherParallelism:                      "history.ReplicationTaskFetcherParallelism",
@@ -328,8 +330,8 @@ const (
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for namespace
 	MinRetentionDays
-	// MaxDecisionTaskStartToCloseTimeout  is the maximum allowed decision start to close timeout
-	MaxDecisionTaskStartToCloseTimeout
+	// MaxWorkflowTaskTimeout  is the maximum allowed decision start to close timeout
+	MaxWorkflowTaskTimeout
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
 	// EnablePriorityTaskProcessor is the key for enabling priority task processor
@@ -639,12 +641,16 @@ const (
 	StickyTTL
 	// DecisionHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
-	// DefaultExecutionStartToCloseTimeout for a workflow execution
-	DefaultExecutionStartToCloseTimeout
-	// Maximum allowed workflow execution timeout
-	MaxExecutionStartToCloseTimeout
-	// DefaultDecisionTaskStartToCloseTimeout for a decision task
-	DefaultDecisionTaskStartToCloseTimeout
+	// DefaultWorkflowExecutionTimeout for a workflow execution
+	DefaultWorkflowExecutionTimeout
+	// DefaultWorkflowRunTimeout for a workflow run
+	DefaultWorkflowRunTimeout
+	// MaxWorkflowExecutionTimeout maximum allowed workflow execution timeout
+	MaxWorkflowExecutionTimeout
+	// MaxWorkflowRunTimeout maximum allowed workflow run timeout
+	MaxWorkflowRunTimeout
+	// DefaultWorkflowTaskTimeout for a decision task
+	DefaultWorkflowTaskTimeout
 
 	// key for worker
 

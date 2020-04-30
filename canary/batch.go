@@ -74,8 +74,8 @@ func batchWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace str
 	}
 
 	cwo := workflow.ChildWorkflowOptions{
-		ExecutionStartToCloseTimeout: childWorkflowTimeout,
-		TaskStartToCloseTimeout:      decisionTaskTimeout,
+		WorkflowExecutionTimeout: childWorkflowTimeout,
+		WorkflowTaskTimeout:      decisionTaskTimeout,
 	}
 
 	ctx = workflow.WithChildOptions(ctx, cwo)
@@ -101,7 +101,6 @@ func batchWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace str
 		InitialInterval:    time.Second,
 		BackoffCoefficient: 2,
 		MaximumInterval:    time.Second * 12,
-		ExpirationInterval: time.Second * 3,
 		MaximumAttempts:    4,
 	}
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -134,8 +133,8 @@ func batchWorkflowParent(ctx workflow.Context, scheduledTimeNanos int64) error {
 	}
 
 	cwo := workflow.ChildWorkflowOptions{
-		ExecutionStartToCloseTimeout: childWorkflowTimeout,
-		TaskStartToCloseTimeout:      decisionTaskTimeout,
+		WorkflowExecutionTimeout: childWorkflowTimeout,
+		WorkflowTaskTimeout:      decisionTaskTimeout,
 	}
 
 	ctx = workflow.WithChildOptions(ctx, cwo)
@@ -178,9 +177,9 @@ func startBatchWorkflow(ctx context.Context, namespace, startTime string) error 
 	}
 
 	options := client.StartWorkflowOptions{
-		ExecutionStartToCloseTimeout:    childWorkflowTimeout,
-		DecisionTaskStartToCloseTimeout: decisionTaskTimeout,
-		TaskList:                        systemBatcherTaskListName,
+		WorkflowExecutionTimeout: childWorkflowTimeout,
+		WorkflowTaskTimeout:      decisionTaskTimeout,
+		TaskList:                 systemBatcherTaskListName,
 		SearchAttributes: map[string]interface{}{
 			"CustomNamespace": namespace,
 			"Operator":        "admin",

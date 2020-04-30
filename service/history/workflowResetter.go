@@ -29,6 +29,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -190,7 +191,12 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
+	// Reset expiration time
 	resetMutableState := resetWorkflow.getMutableState()
+	executionInfo := resetMutableState.GetExecutionInfo()
+	if executionInfo.WorkflowExecutionTimeout > 0 {
+		executionInfo.WorkflowExpirationTime = time.Now().Add(time.Duration(executionInfo.WorkflowExecutionTimeout) * time.Second)
+	}
 
 	baseLastEventVersion := resetMutableState.GetCurrentVersion()
 	if baseLastEventVersion > resetWorkflowVersion {

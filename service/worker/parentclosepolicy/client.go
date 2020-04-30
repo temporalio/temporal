@@ -77,11 +77,10 @@ func (c *clientImpl) SendParentClosePolicyRequest(request Request) error {
 	randomID := rand.Intn(c.numWorkflows)
 	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, randomID)
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                              workflowID,
-		TaskList:                        processorTaskListName,
-		ExecutionStartToCloseTimeout:    infiniteDuration,
-		DecisionTaskStartToCloseTimeout: time.Minute,
-		WorkflowIDReusePolicy:           sdkclient.WorkflowIDReusePolicyAllowDuplicate,
+		ID:                    workflowID,
+		TaskList:              processorTaskListName,
+		WorkflowTaskTimeout:   time.Minute,
+		WorkflowIDReusePolicy: sdkclient.WorkflowIDReusePolicyAllowDuplicate,
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()

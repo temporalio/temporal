@@ -230,11 +230,11 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 
 	id := "client-integration-data-converter-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                           id,
-		TaskList:                     s.taskList,
-		ExecutionStartToCloseTimeout: 60 * time.Second,
+		ID:                 id,
+		TaskList:           s.taskList,
+		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
 	defer cancel()
 	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
@@ -264,11 +264,11 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 
 	id := "client-integration-data-converter-failed-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                           id,
-		TaskList:                     s.taskList,
-		ExecutionStartToCloseTimeout: 60 * time.Second,
+		ID:                 id,
+		TaskList:           s.taskList,
+		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
 	defer cancel()
 	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
@@ -310,8 +310,8 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 	execution := workflow.GetInfo(ctx).WorkflowExecution
 	childID := fmt.Sprintf("child_workflow:%v", execution.RunID)
 	cwo := workflow.ChildWorkflowOptions{
-		WorkflowID:                   childID,
-		ExecutionStartToCloseTimeout: time.Minute,
+		WorkflowID:         childID,
+		WorkflowRunTimeout: time.Minute,
 	}
 	ctx = workflow.WithChildOptions(ctx, cwo)
 	var result string
@@ -323,9 +323,9 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 
 	childID1 := fmt.Sprintf("child_workflow1:%v", execution.RunID)
 	cwo1 := workflow.ChildWorkflowOptions{
-		WorkflowID:                   childID1,
-		ExecutionStartToCloseTimeout: time.Minute,
-		TaskList:                     childTaskList,
+		WorkflowID:         childID1,
+		WorkflowRunTimeout: time.Minute,
+		TaskList:           childTaskList,
 	}
 	ctx1 := workflow.WithChildOptions(ctx, cwo1)
 	ctx1 = workflow.WithDataConverter(ctx1, newTestDataConverter())
@@ -372,11 +372,11 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 
 	id := "client-integration-data-converter-with-child-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                           id,
-		TaskList:                     s.taskList,
-		ExecutionStartToCloseTimeout: 60 * time.Second,
+		ID:                 id,
+		TaskList:           s.taskList,
+		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
 	defer cancel()
 	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	if err != nil {

@@ -88,7 +88,7 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 	}
 
 	if !shouldProcessTask &&
-		timerTask.TaskType != persistence.TaskTypeWorkflowTimeout &&
+		timerTask.TaskType != persistence.TaskTypeWorkflowRunTimeout &&
 		timerTask.TaskType != persistence.TaskTypeDeleteHistoryEvent {
 		// guarantee the processing of workflow execution history deletion
 		return nil
@@ -101,7 +101,7 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 		return t.executeActivityTimeoutTask(timerTask)
 	case persistence.TaskTypeDecisionTimeout:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case persistence.TaskTypeWorkflowTimeout:
+	case persistence.TaskTypeWorkflowRunTimeout:
 		return t.executeWorkflowTimeoutTask(timerTask)
 	case persistence.TaskTypeActivityRetryTimer:
 		// retry backoff timer should not get created on passive cluster

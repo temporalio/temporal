@@ -374,26 +374,20 @@ func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 		// nil policy is valid which means no retry
 		return nil
 	}
-	if policy.GetInitialIntervalInSeconds() <= 0 {
-		return serviceerror.NewInvalidArgument("InitialIntervalInSeconds must be greater than 0 on retry policy.")
+	if policy.GetInitialIntervalInSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("InitialIntervalInSeconds cannot be negative on retry policy.")
 	}
 	if policy.GetBackoffCoefficient() < 1 {
 		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
 	}
 	if policy.GetMaximumIntervalInSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be less than 0 on retry policy.")
+		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be negative on retry policy.")
 	}
 	if policy.GetMaximumIntervalInSeconds() > 0 && policy.GetMaximumIntervalInSeconds() < policy.GetInitialIntervalInSeconds() {
 		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be less than InitialIntervalInSeconds on retry policy.")
 	}
 	if policy.GetMaximumAttempts() < 0 {
-		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be less than 0 on retry policy.")
-	}
-	if policy.GetExpirationIntervalInSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("ExpirationIntervalInSeconds cannot be less than 0 on retry policy.")
-	}
-	if policy.GetMaximumAttempts() == 0 && policy.GetExpirationIntervalInSeconds() == 0 {
-		return serviceerror.NewInvalidArgument("MaximumAttempts and ExpirationIntervalInSeconds are both 0. At least one of them must be specified.")
+		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
 	}
 	return nil
 }
@@ -408,10 +402,10 @@ func CreateHistoryStartWorkflowRequest(
 		NamespaceId:  namespaceID,
 		StartRequest: startRequest,
 	}
-	if startRequest.RetryPolicy != nil && startRequest.RetryPolicy.GetExpirationIntervalInSeconds() > 0 {
-		expirationInSeconds := startRequest.RetryPolicy.GetExpirationIntervalInSeconds()
+	if startRequest.GetWorkflowExecutionTimeoutSeconds() > 0 {
+		expirationInSeconds := startRequest.GetWorkflowExecutionTimeoutSeconds()
 		deadline := now.Add(time.Second * time.Duration(expirationInSeconds))
-		histRequest.ExpirationTimestamp = deadline.Round(time.Millisecond).UnixNano()
+		histRequest.WorkflowExecutionExpirationTimestamp = deadline.Round(time.Millisecond).UnixNano()
 	}
 	histRequest.FirstDecisionTaskBackoffSeconds = backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now)
 	return histRequest

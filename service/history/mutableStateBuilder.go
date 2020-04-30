@@ -1070,7 +1070,7 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 
 	return getBackoffInterval(
 		e.timeSource.Now(),
-		info.ExpirationTime,
+		info.WorkflowExpirationTime,
 		info.Attempt,
 		info.MaximumAttempts,
 		info.InitialInterval,
@@ -1637,25 +1637,32 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	wType := &commonpb.WorkflowType{}
 	wType.Name = workflowType
 
-	decisionTimeout := previousExecutionInfo.DecisionStartToCloseTimeout
-	if attributes.TaskStartToCloseTimeoutSeconds != 0 {
-		decisionTimeout = attributes.GetTaskStartToCloseTimeoutSeconds()
+	var taskTimeout int32
+	if attributes.GetWorkflowTaskTimeoutSeconds() == 0 {
+		taskTimeout = previousExecutionInfo.WorkflowTaskTimeout
+	} else {
+		taskTimeout = attributes.GetWorkflowTaskTimeoutSeconds()
 	}
 
+	// Workflow runTimeout is already set to the correct value in
+	// validateContinueAsNewWorkflowExecutionAttributes
+	runTimeout := attributes.GetWorkflowRunTimeoutSeconds()
+
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           e.namespaceEntry.GetInfo().Name,
-		WorkflowId:                          execution.WorkflowId,
-		TaskList:                            tl,
-		WorkflowType:                        wType,
-		TaskStartToCloseTimeoutSeconds:      decisionTimeout,
-		ExecutionStartToCloseTimeoutSeconds: attributes.ExecutionStartToCloseTimeoutSeconds,
-		Input:                               attributes.Input,
-		Header:                              attributes.Header,
-		RetryPolicy:                         attributes.RetryPolicy,
-		CronSchedule:                        attributes.CronSchedule,
-		Memo:                                attributes.Memo,
-		SearchAttributes:                    attributes.SearchAttributes,
+		RequestId:                       uuid.New(),
+		Namespace:                       e.namespaceEntry.GetInfo().Name,
+		WorkflowId:                      execution.WorkflowId,
+		TaskList:                        tl,
+		WorkflowType:                    wType,
+		WorkflowExecutionTimeoutSeconds: previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout,
+		WorkflowRunTimeoutSeconds:       runTimeout,
+		WorkflowTaskTimeoutSeconds:      taskTimeout,
+		Input:                           attributes.Input,
+		Header:                          attributes.Header,
+		RetryPolicy:                     attributes.RetryPolicy,
+		CronSchedule:                    attributes.CronSchedule,
+		Memo:                            attributes.Memo,
+		SearchAttributes:                attributes.SearchAttributes,
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -1670,19 +1677,10 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 	if attributes.GetInitiator() == commonpb.ContinueAsNewInitiator_Retry {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
-		expirationTime := previousExecutionState.GetExecutionInfo().ExpirationTime
-		if !expirationTime.IsZero() {
-			req.ExpirationTimestamp = expirationTime.UnixNano()
-		}
-	} else {
-		// ContinueAsNew by decider or cron
-		req.Attempt = 0
-		if attributes.RetryPolicy != nil && attributes.RetryPolicy.GetExpirationIntervalInSeconds() > 0 {
-			// has retry policy and expiration time.
-			expirationSeconds := attributes.RetryPolicy.GetExpirationIntervalInSeconds() + req.GetFirstDecisionTaskBackoffSeconds()
-			expirationTime := e.timeSource.Now().Add(time.Second * time.Duration(expirationSeconds))
-			req.ExpirationTimestamp = expirationTime.UnixNano()
-		}
+	}
+	workflowTimeoutTime := previousExecutionState.GetExecutionInfo().WorkflowExpirationTime
+	if !workflowTimeoutTime.IsZero() {
+		req.WorkflowExecutionExpirationTimestamp = workflowTimeoutTime.UnixNano()
 	}
 
 	// History event only has namespace so namespaceID has to be passed in explicitly to update the mutable state
@@ -1790,8 +1788,9 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.RunID = execution.GetRunId()
 	e.executionInfo.TaskList = event.TaskList.GetName()
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
-	e.executionInfo.WorkflowTimeout = event.GetExecutionStartToCloseTimeoutSeconds()
-	e.executionInfo.DecisionStartToCloseTimeout = event.GetTaskStartToCloseTimeoutSeconds()
+	e.executionInfo.WorkflowRunTimeout = event.GetWorkflowRunTimeoutSeconds()
+	e.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeoutSeconds()
+	e.executionInfo.WorkflowTaskTimeout = event.GetWorkflowTaskTimeoutSeconds()
 
 	if err := e.UpdateWorkflowStateStatus(
 		persistence.WorkflowStateCreated,
@@ -1823,13 +1822,12 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	}
 
 	e.executionInfo.Attempt = event.GetAttempt()
-	if event.GetExpirationTimestamp() != 0 {
-		e.executionInfo.ExpirationTime = time.Unix(0, event.GetExpirationTimestamp())
+	if event.GetWorkflowExecutionExpirationTimestamp() != 0 {
+		e.executionInfo.WorkflowExpirationTime = time.Unix(0, event.GetWorkflowExecutionExpirationTimestamp())
 	}
 	if event.RetryPolicy != nil {
 		e.executionInfo.HasRetryPolicy = true
 		e.executionInfo.BackoffCoefficient = event.RetryPolicy.GetBackoffCoefficient()
-		e.executionInfo.ExpirationSeconds = event.RetryPolicy.GetExpirationIntervalInSeconds()
 		e.executionInfo.InitialInterval = event.RetryPolicy.GetInitialIntervalInSeconds()
 		e.executionInfo.MaximumAttempts = event.RetryPolicy.GetMaximumAttempts()
 		e.executionInfo.MaximumInterval = event.RetryPolicy.GetMaximumIntervalInSeconds()
@@ -2178,9 +2176,6 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		ai.MaximumInterval = attributes.RetryPolicy.GetMaximumIntervalInSeconds()
 		ai.MaximumAttempts = attributes.RetryPolicy.GetMaximumAttempts()
 		ai.NonRetriableErrors = attributes.RetryPolicy.NonRetriableErrorReasons
-		if attributes.RetryPolicy.GetExpirationIntervalInSeconds() > scheduleToCloseTimeout {
-			ai.ExpirationTime = ai.ScheduledTime.Add(time.Duration(attributes.RetryPolicy.GetExpirationIntervalInSeconds()) * time.Second)
-		}
 	}
 
 	e.pendingActivityInfoIDs[scheduleEventID] = ai

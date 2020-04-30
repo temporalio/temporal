@@ -245,7 +245,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	baseRunID := baseMutableState.GetExecutionInfo().RunID
 
 	// replay history to reset point(exclusive) to rebuild mutableState
-	forkEventVersion, wfTimeoutSecs, receivedSignals, continueRunID, newStateBuilder, historySize, retError := w.replayHistoryEvents(
+	forkEventVersion, runTimeoutSecs, receivedSignals, continueRunID, newStateBuilder, historySize, retError := w.replayHistoryEvents(
 		namespaceEntry, resetDecisionCompletedEventID, requestedID, baseMutableState, newRunID,
 	)
 	if retError != nil {
@@ -306,7 +306,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	// 1. WF timeout,
 	// 2. user timers for timers started but not fired by reset
 	// 3. activity timeout for scheduled but not started activities
-	newTimerTasks, retError = w.generateTimerTasksForReset(newMutableState, wfTimeoutSecs, needActivityTimer)
+	newTimerTasks, retError = w.generateTimerTasksForReset(newMutableState, runTimeoutSecs, needActivityTimer)
 	if retError != nil {
 		return
 	}
@@ -552,17 +552,17 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 
 func (w *workflowResetorImpl) generateTimerTasksForReset(
 	msBuilder mutableState,
-	wfTimeoutSecs int64,
+	runTimeoutSecs int64,
 	needActivityTimer bool,
 ) ([]persistence.Task, error) {
 	timerTasks := []persistence.Task{}
 
 	// WF timeout task
-	duration := time.Duration(wfTimeoutSecs) * time.Second
-	wfTimeoutTask := &persistence.WorkflowTimeoutTask{
+	duration := time.Duration(runTimeoutSecs) * time.Second
+	runTimeoutTask := &persistence.WorkflowTimeoutTask{
 		VisibilityTimestamp: w.eng.shard.GetTimeSource().Now().Add(duration),
 	}
-	timerTasks = append(timerTasks, wfTimeoutTask)
+	timerTasks = append(timerTasks, runTimeoutTask)
 
 	timerSequence := newTimerSequence(clock.NewRealTimeSource(), msBuilder)
 	// user timer task
@@ -617,7 +617,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 	requestID string,
 	prevMutableState mutableState,
 	newRunID string,
-) (forkEventVersion, wfTimeoutSecs int64, receivedSignalsAfterReset []*eventpb.HistoryEvent, continueRunID string, sBuilder stateBuilder, newHistorySize int64, retError error) {
+) (forkEventVersion, runTimeoutSecs int64, receivedSignalsAfterReset []*eventpb.HistoryEvent, continueRunID string, sBuilder stateBuilder, newHistorySize int64, retError error) {
 
 	prevExecution := executionpb.WorkflowExecution{
 		WorkflowId: prevMutableState.GetExecutionInfo().WorkflowID,
@@ -674,7 +674,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 					retError = serviceerror.NewInternal(fmt.Sprintf("first event type is not WorkflowExecutionStarted: %v", firstEvent.GetEventType()))
 					return
 				}
-				wfTimeoutSecs = int64(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetExecutionStartToCloseTimeoutSeconds())
+				runTimeoutSecs = int64(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeoutSeconds())
 				if prevMutableState.GetReplicationState() != nil {
 					resetMutableState = newMutableStateBuilderWithReplicationState(
 						w.eng.shard,
@@ -892,7 +892,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 
 	requestID := uuid.New()
 	var sBuilder stateBuilder
-	var wfTimeoutSecs int64
+	var runTimeoutSecs int64
 
 	namespaceEntry, retError := w.eng.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if retError != nil {
@@ -926,7 +926,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 			firstEvent := events[0]
 			lastEvent = events[len(events)-1]
 			if firstEvent.GetEventId() == common.FirstEventID {
-				wfTimeoutSecs = int64(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetExecutionStartToCloseTimeoutSeconds())
+				runTimeoutSecs = int64(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeoutSeconds())
 				newMsBuilder = newMutableStateBuilderWithReplicationState(
 					w.eng.shard,
 					w.eng.shard.GetEventsCache(),
@@ -1010,7 +1010,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 		return
 	}
 	transferTasks = append(transferTasks, actTasks...)
-	timerTasks, retError = w.generateTimerTasksForReset(newMsBuilder, wfTimeoutSecs, len(actTasks) > 0)
+	timerTasks, retError = w.generateTimerTasksForReset(newMsBuilder, runTimeoutSecs, len(actTasks) > 0)
 	if retError != nil {
 		return
 	}
