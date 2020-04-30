@@ -522,9 +522,14 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 		runTimeout := convert.Int32Ceil(timeoutTime.Sub(time.Now()).Seconds())
 		if attributes.GetWorkflowRunTimeoutSeconds() > 0 {
 			runTimeout = common.MinInt32(runTimeout, attributes.GetWorkflowRunTimeoutSeconds())
+		} else {
+			runTimeout = common.MinInt32(runTimeout, executionInfo.WorkflowRunTimeout)
 		}
 		attributes.WorkflowRunTimeoutSeconds = runTimeout
+	} else if attributes.GetWorkflowRunTimeoutSeconds() == 0 {
+		attributes.WorkflowRunTimeoutSeconds = executionInfo.WorkflowRunTimeout
 	}
+
 	// Inherit decision task timeout from previous execution if not provided on decision
 	if attributes.GetWorkflowTaskTimeoutSeconds() <= 0 {
 		attributes.WorkflowTaskTimeoutSeconds = executionInfo.WorkflowTaskTimeout
