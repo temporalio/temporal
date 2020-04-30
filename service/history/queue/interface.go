@@ -40,11 +40,10 @@ type (
 
 	// ProcessingQueueState indicates the scope of a task processing queue and its current progress
 	ProcessingQueueState interface {
-		CollectionID() int
-		MinLevel() task.Key
-		MaxLevel() task.Key
+		Level() int
 		AckLevel() task.Key
 		ReadLevel() task.Key
+		MaxLevel() task.Key
 		DomainFilter() DomainFilter
 	}
 

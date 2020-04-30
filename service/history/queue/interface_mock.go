@@ -59,46 +59,18 @@ func (m *MockProcessingQueueState) EXPECT() *MockProcessingQueueStateMockRecorde
 	return m.recorder
 }
 
-// CollectionID mocks base method
-func (m *MockProcessingQueueState) CollectionID() int {
+// Level mocks base method
+func (m *MockProcessingQueueState) Level() int {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CollectionID")
+	ret := m.ctrl.Call(m, "Level")
 	ret0, _ := ret[0].(int)
 	return ret0
 }
 
-// CollectionID indicates an expected call of CollectionID
-func (mr *MockProcessingQueueStateMockRecorder) CollectionID() *gomock.Call {
+// Level indicates an expected call of Level
+func (mr *MockProcessingQueueStateMockRecorder) Level() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CollectionID", reflect.TypeOf((*MockProcessingQueueState)(nil).CollectionID))
-}
-
-// MinLevel mocks base method
-func (m *MockProcessingQueueState) MinLevel() task.Key {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MinLevel")
-	ret0, _ := ret[0].(task.Key)
-	return ret0
-}
-
-// MinLevel indicates an expected call of MinLevel
-func (mr *MockProcessingQueueStateMockRecorder) MinLevel() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MinLevel", reflect.TypeOf((*MockProcessingQueueState)(nil).MinLevel))
-}
-
-// MaxLevel mocks base method
-func (m *MockProcessingQueueState) MaxLevel() task.Key {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MaxLevel")
-	ret0, _ := ret[0].(task.Key)
-	return ret0
-}
-
-// MaxLevel indicates an expected call of MaxLevel
-func (mr *MockProcessingQueueStateMockRecorder) MaxLevel() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaxLevel", reflect.TypeOf((*MockProcessingQueueState)(nil).MaxLevel))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Level", reflect.TypeOf((*MockProcessingQueueState)(nil).Level))
 }
 
 // AckLevel mocks base method
@@ -127,6 +99,20 @@ func (m *MockProcessingQueueState) ReadLevel() task.Key {
 func (mr *MockProcessingQueueStateMockRecorder) ReadLevel() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadLevel", reflect.TypeOf((*MockProcessingQueueState)(nil).ReadLevel))
+}
+
+// MaxLevel mocks base method
+func (m *MockProcessingQueueState) MaxLevel() task.Key {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MaxLevel")
+	ret0, _ := ret[0].(task.Key)
+	return ret0
+}
+
+// MaxLevel indicates an expected call of MaxLevel
+func (mr *MockProcessingQueueStateMockRecorder) MaxLevel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaxLevel", reflect.TypeOf((*MockProcessingQueueState)(nil).MaxLevel))
 }
 
 // DomainFilter mocks base method
