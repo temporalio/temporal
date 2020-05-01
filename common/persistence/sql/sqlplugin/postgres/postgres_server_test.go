@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	testUser      = "temporal"
+	testUser      = "postgres"
 	testPassword  = "temporal"
 	testSchemaDir = "schema/postgres"
 )
