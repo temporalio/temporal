@@ -2695,7 +2695,7 @@ func (e *historyEngineImpl) NotifyNewReplicationTasks(
 	tasks []persistence.Task,
 ) {
 
-	if len(tasks) > 0 {
+	if len(tasks) > 0 && e.replicatorProcessor != nil {
 		e.replicatorProcessor.notifyNewTask()
 	}
 }
