@@ -41,7 +41,6 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -165,7 +164,7 @@ func createTestTaskListManagerWithConfig(controller *gomock.Controller, cfg *Con
 	)
 	tl := "tl"
 	dID := "deadbeef-0000-4567-890a-bcdef0123456"
-	tlID := newTestTaskListID(dID, tl, persistence.TaskListTypeActivity)
+	tlID := newTestTaskListID(dID, tl, tasklistpb.TaskListType_Activity)
 	tlKind := tasklistpb.TaskListKind_Normal
 	tlMgr, err := newTaskListManager(me, tlID, tlKind, cfg)
 	if err != nil {

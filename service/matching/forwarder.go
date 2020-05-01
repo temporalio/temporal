@@ -34,7 +34,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -149,7 +148,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	}*/
 
 	switch fwdr.taskListID.taskType {
-	case persistence.TaskListTypeDecision:
+	case tasklistpb.TaskListType_Decision:
 		_, err = fwdr.client.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
 			NamespaceId: primitives.UUIDString(task.event.Data.GetNamespaceId()),
 			Execution:   task.workflowExecution(),
@@ -162,7 +161,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
 			ForwardedFrom:                 fwdr.taskListID.name,
 		})
-	case persistence.TaskListTypeActivity:
+	case tasklistpb.TaskListType_Activity:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 			NamespaceId:       fwdr.taskListID.namespaceID,
 			SourceNamespaceId: primitives.UUIDString(task.event.Data.GetNamespaceId()),
@@ -226,7 +225,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 	identity, _ := ctx.Value(identityKey).(string)
 
 	switch fwdr.taskListID.taskType {
-	case persistence.TaskListTypeDecision:
+	case tasklistpb.TaskListType_Decision:
 		resp, err := fwdr.client.PollForDecisionTask(ctx, &matchingservice.PollForDecisionTaskRequest{
 			NamespaceId: fwdr.taskListID.namespaceID,
 			PollerId:    pollerID,
@@ -243,7 +242,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 			return nil, fwdr.handleErr(err)
 		}
 		return newInternalStartedTask(&startedTaskInfo{decisionTaskInfo: resp}), nil
-	case persistence.TaskListTypeActivity:
+	case tasklistpb.TaskListType_Activity:
 		resp, err := fwdr.client.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
 			NamespaceId: fwdr.taskListID.namespaceID,
 			PollerId:    pollerID,

@@ -44,7 +44,6 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -68,7 +67,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
 	cfg := NewConfig(dynamicconfig.NewNopCollection())
-	t.taskList = newTestTaskListID(uuid.New(), taskListPartitionPrefix+"tl0/1", persistence.TaskListTypeDecision)
+	t.taskList = newTestTaskListID(uuid.New(), taskListPartitionPrefix+"tl0/1", tasklistpb.TaskListType_Decision)
 	tlCfg, err := newTaskListConfig(t.taskList, cfg, t.newNamespaceCache())
 	t.NoError(err)
 	tlCfg.forwarderConfig = forwarderConfig{
@@ -81,7 +80,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskList, tasklistpb.TaskListKind_Normal, t.client)
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
 
-	rootTaskList := newTestTaskListID(t.taskList.namespaceID, t.taskList.Parent(20), persistence.TaskListTypeDecision)
+	rootTaskList := newTestTaskListID(t.taskList.namespaceID, t.taskList.Parent(20), tasklistpb.TaskListType_Decision)
 	rootTasklistCfg, err := newTaskListConfig(rootTaskList, cfg, t.newNamespaceCache())
 	t.NoError(err)
 	t.rootMatcher = newTaskMatcher(rootTasklistCfg, nil, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })

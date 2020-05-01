@@ -40,7 +40,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
@@ -68,7 +67,7 @@ func (t *ForwarderTestSuite) SetupTest() {
 		ForwarderMaxChildrenPerNode:  func() int { return 20 },
 		ForwarderMaxOutstandingTasks: func() int { return 1 },
 	}
-	t.taskList = newTestTaskListID("fwdr", "tl0", persistence.TaskListTypeDecision)
+	t.taskList = newTestTaskListID("fwdr", "tl0", tasklistpb.TaskListType_Decision)
 	t.fwdr = newForwarder(t.cfg, t.taskList, tasklistpb.TaskListKind_Normal, t.client)
 }
 
@@ -80,13 +79,13 @@ func (t *ForwarderTestSuite) TestForwardTaskError() {
 	task := newInternalTask(&persistenceblobs.AllocatedTaskInfo{}, nil, commongenpb.TaskSource_History, "", false)
 	t.Equal(errNoParent, t.fwdr.ForwardTask(context.Background(), task))
 
-	t.usingTasklistPartition(persistence.TaskListTypeActivity)
+	t.usingTasklistPartition(tasklistpb.TaskListType_Activity)
 	t.fwdr.taskListKind = tasklistpb.TaskListKind_Sticky
 	t.Equal(errTaskListKind, t.fwdr.ForwardTask(context.Background(), task))
 }
 
 func (t *ForwarderTestSuite) TestForwardDecisionTask() {
-	t.usingTasklistPartition(persistence.TaskListTypeDecision)
+	t.usingTasklistPartition(tasklistpb.TaskListType_Decision)
 
 	var request *matchingservice.AddDecisionTaskRequest
 	t.client.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Do(
@@ -113,7 +112,7 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 }
 
 func (t *ForwarderTestSuite) TestForwardActivityTask() {
-	t.usingTasklistPartition(persistence.TaskListTypeActivity)
+	t.usingTasklistPartition(tasklistpb.TaskListType_Activity)
 
 	var request *matchingservice.AddActivityTaskRequest
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Do(
@@ -139,7 +138,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
-	t.usingTasklistPartition(persistence.TaskListTypeActivity)
+	t.usingTasklistPartition(tasklistpb.TaskListType_Activity)
 
 	rps := 2
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(rps)
@@ -156,14 +155,14 @@ func (t *ForwarderTestSuite) TestForwardQueryTaskError() {
 	_, err := t.fwdr.ForwardQueryTask(context.Background(), task)
 	t.Equal(errNoParent, err)
 
-	t.usingTasklistPartition(persistence.TaskListTypeDecision)
+	t.usingTasklistPartition(tasklistpb.TaskListType_Decision)
 	t.fwdr.taskListKind = tasklistpb.TaskListKind_Sticky
 	_, err = t.fwdr.ForwardQueryTask(context.Background(), task)
 	t.Equal(errTaskListKind, err)
 }
 
 func (t *ForwarderTestSuite) TestForwardQueryTask() {
-	t.usingTasklistPartition(persistence.TaskListTypeDecision)
+	t.usingTasklistPartition(tasklistpb.TaskListType_Decision)
 	task := newInternalQueryTask("id1", &matchingservice.QueryWorkflowRequest{})
 	resp := &matchingservice.QueryWorkflowResponse{}
 	var request *matchingservice.QueryWorkflowRequest
@@ -182,7 +181,7 @@ func (t *ForwarderTestSuite) TestForwardQueryTask() {
 }
 
 func (t *ForwarderTestSuite) TestForwardQueryTaskRateNotEnforced() {
-	t.usingTasklistPartition(persistence.TaskListTypeActivity)
+	t.usingTasklistPartition(tasklistpb.TaskListType_Activity)
 	task := newInternalQueryTask("id1", &matchingservice.QueryWorkflowRequest{})
 	resp := &matchingservice.QueryWorkflowResponse{}
 	rps := 2
@@ -199,7 +198,7 @@ func (t *ForwarderTestSuite) TestForwardPollError() {
 	_, err := t.fwdr.ForwardPoll(context.Background())
 	t.Equal(errNoParent, err)
 
-	t.usingTasklistPartition(persistence.TaskListTypeActivity)
+	t.usingTasklistPartition(tasklistpb.TaskListType_Activity)
 	t.fwdr.taskListKind = tasklistpb.TaskListKind_Sticky
 	_, err = t.fwdr.ForwardPoll(context.Background())
 	t.Equal(errTaskListKind, err)
@@ -207,7 +206,7 @@ func (t *ForwarderTestSuite) TestForwardPollError() {
 }
 
 func (t *ForwarderTestSuite) TestForwardPollForDecision() {
-	t.usingTasklistPartition(persistence.TaskListTypeDecision)
+	t.usingTasklistPartition(tasklistpb.TaskListType_Decision)
 
 	pollerID := uuid.New()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
@@ -235,7 +234,7 @@ func (t *ForwarderTestSuite) TestForwardPollForDecision() {
 }
 
 func (t *ForwarderTestSuite) TestForwardPollForActivity() {
-	t.usingTasklistPartition(persistence.TaskListTypeActivity)
+	t.usingTasklistPartition(tasklistpb.TaskListType_Activity)
 
 	pollerID := uuid.New()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
@@ -342,7 +341,7 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConfigUpdate() {
 	t.Equal(10, cap(t.fwdr.pollReqToken.Load().(*ForwarderReqToken).ch))
 }
 
-func (t *ForwarderTestSuite) usingTasklistPartition(taskType int32) {
+func (t *ForwarderTestSuite) usingTasklistPartition(taskType tasklistpb.TaskListType) {
 	t.taskList = newTestTaskListID("fwdr", taskListPartitionPrefix+"tl0/1", taskType)
 	t.fwdr.taskListID = t.taskList
 }

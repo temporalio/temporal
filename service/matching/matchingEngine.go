@@ -236,7 +236,7 @@ func (e *matchingEngineImpl) AddDecisionTask(
 			addRequest.Execution.GetRunId(),
 			addRequest.GetScheduleToStartTimeoutSeconds()))
 
-	taskList, err := newTaskListID(namespaceID, taskListName, persistence.TaskListTypeDecision)
+	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Decision)
 	if err != nil {
 		return false, err
 	}
@@ -284,7 +284,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 			addRequest.Execution.WorkflowId,
 			addRequest.Execution.RunId))
 
-	taskList, err := newTaskListID(namespaceID, taskListName, persistence.TaskListTypeActivity)
+	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Activity)
 	if err != nil {
 		return false, err
 	}
@@ -334,7 +334,7 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		taskList, err := newTaskListID(namespaceID, taskListName, persistence.TaskListTypeDecision)
+		taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Decision)
 		if err != nil {
 			return nil, err
 		}
@@ -423,7 +423,7 @@ pollLoop:
 			return nil, err
 		}
 
-		taskList, err := newTaskListID(namespaceID, taskListName, persistence.TaskListTypeActivity)
+		taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Activity)
 		if err != nil {
 			return nil, err
 		}
@@ -484,7 +484,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	namespaceID := queryRequest.GetNamespaceId()
 	taskListName := queryRequest.TaskList.GetName()
 	taskListKind := queryRequest.TaskList.GetKind()
-	taskList, err := newTaskListID(namespaceID, taskListName, persistence.TaskListTypeDecision)
+	taskList, err := newTaskListID(namespaceID, taskListName, tasklistpb.TaskListType_Decision)
 	if err != nil {
 		return nil, err
 	}
@@ -576,9 +576,9 @@ func (e *matchingEngineImpl) DescribeTaskList(
 	request *matchingservice.DescribeTaskListRequest,
 ) (*matchingservice.DescribeTaskListResponse, error) {
 	namespaceID := request.GetNamespaceId()
-	taskListType := persistence.TaskListTypeDecision
+	taskListType := tasklistpb.TaskListType_Decision
 	if request.DescRequest.GetTaskListType() == tasklistpb.TaskListType_Activity {
-		taskListType = persistence.TaskListTypeActivity
+		taskListType = tasklistpb.TaskListType_Activity
 	}
 	taskListName := request.DescRequest.TaskList.GetName()
 	taskList, err := newTaskListID(namespaceID, taskListName, taskListType)
@@ -598,11 +598,11 @@ func (e *matchingEngineImpl) ListTaskListPartitions(
 	hCtx *handlerContext,
 	request *matchingservice.ListTaskListPartitionsRequest,
 ) (*matchingservice.ListTaskListPartitionsResponse, error) {
-	activityTaskListInfo, err := e.listTaskListPartitions(request, persistence.TaskListTypeActivity)
+	activityTaskListInfo, err := e.listTaskListPartitions(request, tasklistpb.TaskListType_Activity)
 	if err != nil {
 		return nil, err
 	}
-	decisionTaskListInfo, err := e.listTaskListPartitions(request, persistence.TaskListTypeDecision)
+	decisionTaskListInfo, err := e.listTaskListPartitions(request, tasklistpb.TaskListType_Decision)
 	if err != nil {
 		return nil, err
 	}
@@ -613,7 +613,7 @@ func (e *matchingEngineImpl) ListTaskListPartitions(
 	return &resp, nil
 }
 
-func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.ListTaskListPartitionsRequest, taskListType int32) ([]*tasklistpb.TaskListPartitionMetadata, error) {
+func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.ListTaskListPartitionsRequest, taskListType tasklistpb.TaskListType) ([]*tasklistpb.TaskListPartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
 		request.GetNamespace(),
 		*request.TaskList,
@@ -650,14 +650,14 @@ func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 func (e *matchingEngineImpl) getAllPartitions(
 	namespace string,
 	taskList tasklistpb.TaskList,
-	taskListType int32,
+	taskListType tasklistpb.TaskListType,
 ) ([]string, error) {
 	var partitionKeys []string
 	namespaceID, err := e.namespaceCache.GetNamespaceID(namespace)
 	if err != nil {
 		return partitionKeys, err
 	}
-	taskListID, err := newTaskListID(namespaceID, taskList.GetName(), persistence.TaskListTypeDecision)
+	taskListID, err := newTaskListID(namespaceID, taskList.GetName(), tasklistpb.TaskListType_Decision)
 	rootPartition := taskListID.GetRoot()
 
 	partitionKeys = append(partitionKeys, rootPartition)

@@ -42,6 +42,8 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 //	"go.temporal.io/temporal-proto/serviceerror"
@@ -2254,7 +2256,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) (*p.UpdateTaskListResponse, error) {
 	tli := *request.TaskListInfo
 	tli.LastUpdated = types.TimestampNow()
-	if tli.Kind == p.TaskListKindSticky { // if task_list is sticky, then update with TTL
+	if tli.Kind == tasklistpb.TaskListKind_Sticky { // if task_list is sticky, then update with TTL
 		expiry := types.TimestampNow()
 		expiry.Seconds += int64(stickyTaskListTTL)
 
