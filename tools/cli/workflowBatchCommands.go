@@ -121,7 +121,7 @@ func ListBatchJobs(c *cli.Context) {
 		}
 
 		job := map[string]string{
-			"jobID":     wf.Execution.GetWorkflowId(),
+			"jobId":     wf.Execution.GetWorkflowId(),
 			"startTime": convertTime(wf.GetStartTime().GetValue(), false),
 			"reason":    reason,
 			"operator":  operator,
@@ -219,7 +219,7 @@ func StartBatchJob(c *cli.Context) {
 	}
 	output := map[string]interface{}{
 		"msg":   "batch job is started",
-		"jobID": wf.GetID(),
+		"jobId": wf.GetID(),
 	}
 	prettyPrintJSONObject(output)
 }
