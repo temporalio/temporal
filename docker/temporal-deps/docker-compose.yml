@@ -57,6 +57,11 @@ services:
       - kafka
     networks:
       - dependencies-network
+  temporal-web:
+    image: temporalio/web:latest
+    environment:
+      - "TEMPORAL_GRPC_ENDPOINT=localhost:7233"
+    network_mode: host
 
 networks:
   dependencies-network:
