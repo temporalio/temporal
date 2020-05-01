@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/service/matching"
 
 	"github.com/pborman/uuid"
@@ -57,13 +58,13 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	header := &commonpb.Header{
-		Fields: map[string]*commonpb.Payloads{"tracing": payloads.EncodeString("sample payload")},
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
 	}
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payloads{"memoKey": payloads.EncodeString("memoVal")},
+		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payloads{"CustomKeywordField": payloads.EncodeString("1")},
+		IndexedFields: map[string]*commonpb.Payload{"CustomKeywordField": payload.EncodeString("1")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{

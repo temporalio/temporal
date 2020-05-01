@@ -62,6 +62,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
@@ -872,7 +873,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	activityType := &commonpb.ActivityType{Name: activityTypeName}
 	activityInput := payloads.EncodeString("Activity1 Input")
 	activityHeader := &commonpb.Header{
-		Fields: map[string]*commonpb.Payloads{"tracing": payloads.EncodeString("tracing data")},
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("tracing data")},
 	}
 
 	identity := "nobody"

@@ -47,6 +47,7 @@ import (
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -527,16 +528,16 @@ func (s *mutableStateSuite) TestTrimEvents() {
 }
 
 func (s *mutableStateSuite) TestMergeMapOfPayload() {
-	var currentMap map[string]*commonpb.Payloads
-	var newMap map[string]*commonpb.Payloads
+	var currentMap map[string]*commonpb.Payload
+	var newMap map[string]*commonpb.Payload
 	resultMap := mergeMapOfPayload(currentMap, newMap)
-	s.Equal(make(map[string]*commonpb.Payloads), resultMap)
+	s.Equal(make(map[string]*commonpb.Payload), resultMap)
 
-	newMap = map[string]*commonpb.Payloads{"key": payloads.EncodeString("val")}
+	newMap = map[string]*commonpb.Payload{"key": payload.EncodeString("val")}
 	resultMap = mergeMapOfPayload(currentMap, newMap)
 	s.Equal(newMap, resultMap)
 
-	currentMap = map[string]*commonpb.Payloads{"number": payloads.EncodeString("1")}
+	currentMap = map[string]*commonpb.Payload{"number": payload.EncodeString("1")}
 	resultMap = mergeMapOfPayload(currentMap, newMap)
 	s.Equal(2, len(resultMap))
 }

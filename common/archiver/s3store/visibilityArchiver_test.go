@@ -46,7 +46,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/payloads"
+	"github.com/temporalio/temporal/common/payload"
 
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/temporal-proto/common"
@@ -208,8 +208,8 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		Status:             executionpb.WorkflowExecutionStatus_Failed,
 		HistoryLength:      int64(101),
 		Memo: &commonpb.Memo{
-			Fields: map[string]*commonpb.Payloads{
-				"testFields": payloads.EncodeBytes([]byte{1, 2, 3}),
+			Fields: map[string]*commonpb.Payload{
+				"testFields": payload.EncodeBytes([]byte{1, 2, 3}),
 			},
 		},
 		SearchAttributes: map[string]string{

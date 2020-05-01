@@ -51,6 +51,7 @@ import (
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/service/matching"
 )
@@ -840,11 +841,11 @@ func (s *integrationSuite) TestCronWorkflow() {
 	backoffDurationTolerance := time.Millisecond * 500
 
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payloads{"memoKey": payloads.EncodeString("memoVal")},
+		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payloads{
-			"CustomKeywordField": payloads.EncodeString("1"),
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": payload.EncodeString("1"),
 		},
 	}
 
@@ -1044,13 +1045,13 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	cronSchedule := "@every 3s"
 
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payloads{
-			"memoKey": payloads.EncodeString("memoVal"),
+		Fields: map[string]*commonpb.Payload{
+			"memoKey": payload.EncodeString("memoVal"),
 		},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payloads{
-			"CustomKeywordField": payloads.EncodeString("1"),
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": payload.EncodeString("1"),
 		},
 	}
 
@@ -1694,7 +1695,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	taskListChild.Name = tlChild
 
 	header := &commonpb.Header{
-		Fields: map[string]*commonpb.Payloads{"tracing": payloads.EncodeString("sample payload")},
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -1721,13 +1722,13 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	var completedEvent *eventpb.HistoryEvent
 
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payloads{
-			"Info": payloads.EncodeString("memo"),
+		Fields: map[string]*commonpb.Payload{
+			"Info": payload.EncodeString("memo"),
 		},
 	}
-	attrValPayload := payloads.EncodeString("attrVal")
+	attrValPayload := payload.EncodeString("attrVal")
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payloads{
+		IndexedFields: map[string]*commonpb.Payload{
 			"CustomKeywordField": attrValPayload,
 		},
 	}
@@ -3343,8 +3344,8 @@ func (s *integrationSuite) TestStartWithMemo() {
 	identity := "worker1"
 
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payloads{
-			"Info": payloads.EncodeString(id),
+		Fields: map[string]*commonpb.Payload{
+			"Info": payload.EncodeString(id),
 		},
 	}
 
@@ -3374,8 +3375,8 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 	identity := "worker1"
 
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payloads{
-			"Info": payloads.EncodeString(id),
+		Fields: map[string]*commonpb.Payload{
+			"Info": payload.EncodeString(id),
 		},
 	}
 

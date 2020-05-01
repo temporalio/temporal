@@ -29,12 +29,11 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
-	"github.com/temporalio/temporal/common/payloads"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 )
 
 type (
@@ -234,11 +233,11 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 }
 
 func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{}) (*commonpb.SearchAttributes, error) {
-	indexedFields := make(map[string]*commonpb.Payloads)
+	indexedFields := make(map[string]*commonpb.Payload)
 	var err error
-	var valBytes *commonpb.Payloads
+	var valBytes *commonpb.Payload
 	for k, val := range attr {
-		valBytes, err = payloads.Encode(val)
+		valBytes, err = payload.Encode(val)
 		if err != nil {
 			v.logger.Error("error when encode search attributes", tag.Value(val))
 			continue

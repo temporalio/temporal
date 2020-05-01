@@ -58,6 +58,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/environment"
 	"github.com/temporalio/temporal/host"
@@ -185,9 +186,9 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskList := &tasklistpb.TaskList{Name: tl}
-	attrValBytes, _ := payloads.Encode(s.testSearchAttributeVal)
+	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payloads{
+		IndexedFields: map[string]*commonpb.Payload{
 			s.testSearchAttributeKey: attrValBytes,
 		},
 	}
@@ -236,7 +237,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string
-		payloads.Decode(searchValBytes, &searchVal)
+		payload.Decode(searchValBytes, &searchVal)
 		s.Equal(s.testSearchAttributeVal, searchVal)
 	}
 
@@ -295,12 +296,12 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 					fields := retrievedSearchAttr.GetIndexedFields()
 					searchValBytes := fields[s.testSearchAttributeKey]
 					var searchVal string
-					payloads.Decode(searchValBytes, &searchVal)
+					payload.Decode(searchValBytes, &searchVal)
 					s.Equal("another string", searchVal)
 
 					searchValBytes2 := fields[definition.CustomIntField]
 					var searchVal2 int
-					payloads.Decode(searchValBytes2, &searchVal2)
+					payload.Decode(searchValBytes2, &searchVal2)
 					s.Equal(123, searchVal2)
 
 					verified = true
@@ -387,10 +388,10 @@ GetHistoryLoop2:
 }
 
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
-	attrValBytes1, _ := payloads.Encode("another string")
-	attrValBytes2, _ := payloads.Encode(123)
+	attrValBytes1, _ := payload.Encode("another string")
+	attrValBytes2, _ := payload.Encode(123)
 	upsertSearchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payloads{
+		IndexedFields: map[string]*commonpb.Payload{
 			definition.CustomStringField: attrValBytes1,
 			definition.CustomIntField:    attrValBytes2,
 		},

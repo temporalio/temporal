@@ -41,6 +41,7 @@ import (
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -156,7 +157,7 @@ func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes(
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "IndexedFields is empty on decision.")
 
-	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payloads{"CustomKeywordField": payloads.EncodeString("bytes")}
+	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{"CustomKeywordField": payload.EncodeString("bytes")}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.Nil(err)
 }

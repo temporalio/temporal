@@ -45,7 +45,7 @@ import (
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
-	"github.com/temporalio/temporal/common/payloads"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/service/config"
 )
 
@@ -179,8 +179,8 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		Status:             executionpb.WorkflowExecutionStatus_Failed,
 		HistoryLength:      int64(101),
 		Memo: &commonpb.Memo{
-			Fields: map[string]*commonpb.Payloads{
-				"testFields": payloads.EncodeBytes([]byte{1, 2, 3}),
+			Fields: map[string]*commonpb.Payload{
+				"testFields": payload.EncodeBytes([]byte{1, 2, 3}),
 			},
 		},
 		SearchAttributes: map[string]string{

@@ -58,6 +58,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -1848,18 +1849,18 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAt
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestCopySearchAttributes() {
-	var input map[string]*commonpb.Payloads
+	var input map[string]*commonpb.Payload
 	s.Nil(copySearchAttributes(input))
 
 	key := "key"
-	val := payloads.EncodeBytes([]byte{'1', '2', '3'})
-	input = map[string]*commonpb.Payloads{
+	val := payload.EncodeBytes([]byte{'1', '2', '3'})
+	input = map[string]*commonpb.Payload{
 		key: val,
 	}
 	result := copySearchAttributes(input)
 	s.Equal(input, result)
-	result[key].GetPayloads()[0].GetData()[0] = '0'
-	s.Equal(byte('1'), val.GetPayloads()[0].GetData()[0])
+	result[key].GetData()[0] = '0'
+	s.Equal(byte('1'), val.GetData()[0])
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(

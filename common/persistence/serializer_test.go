@@ -41,6 +41,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 )
 
@@ -95,8 +96,8 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 	history0 := &eventpb.History{Events: []*eventpb.HistoryEvent{event0, event0}}
 
-	memoFields := map[string]*commonpb.Payloads{
-		"TestField": payloads.EncodeString("Test binary"),
+	memoFields := map[string]*commonpb.Payload{
+		"TestField": payload.EncodeString("Test binary"),
 	}
 	memo0 := &commonpb.Memo{Fields: memoFields}
 

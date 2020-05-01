@@ -43,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
@@ -303,9 +304,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.validateActivityTaskStartedEvent(historyEvents[12], 13, 7, identity, 1, activity3Reason, activity3Details)
 
 	markerDetails := payloads.EncodeString("dynamic-historybuilder-success-marker-details")
-	markerHeaderField1 := payloads.EncodeString("dynamic-historybuilder-success-marker-header1")
-	markerHeaderField2 := payloads.EncodeString("dynamic-historybuilder-success-marker-header2")
-	markerHeader := map[string]*commonpb.Payloads{
+	markerHeaderField1 := payload.EncodeString("dynamic-historybuilder-success-marker-header1")
+	markerHeaderField2 := payload.EncodeString("dynamic-historybuilder-success-marker-header2")
+	markerHeader := map[string]*commonpb.Payload{
 		"name1": markerHeaderField1,
 		"name2": markerHeaderField2,
 	}
@@ -886,8 +887,8 @@ func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID i
 	return event
 }
 
-func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID int64, markerName string, details *commonpb.Payloads, header *map[string]*commonpb.Payloads) *eventpb.HistoryEvent {
-	fields := make(map[string]*commonpb.Payloads)
+func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID int64, markerName string, details *commonpb.Payloads, header *map[string]*commonpb.Payload) *eventpb.HistoryEvent {
+	fields := make(map[string]*commonpb.Payload)
 	if header != nil {
 		for name, value := range *header {
 			fields[name] = value
@@ -1057,7 +1058,7 @@ func (s *historyBuilderSuite) validateActivityTaskFailedEvent(event *eventpb.His
 
 func (s *historyBuilderSuite) validateMarkerRecordedEvent(
 	event *eventpb.HistoryEvent, eventID, decisionTaskCompletedEventID int64,
-	markerName string, details *commonpb.Payloads, header *map[string]*commonpb.Payloads) {
+	markerName string, details *commonpb.Payloads, header *map[string]*commonpb.Payload) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_MarkerRecorded, event.EventType)
 	s.Equal(eventID, event.EventId)

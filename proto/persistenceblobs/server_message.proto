@@ -278,8 +278,8 @@ message WorkflowExecutionInfo {
     string clientImpl = 53;
     bytes autoResetPoints = 54;
     string autoResetPointsEncoding = 55;
-    map<string, common.Payloads> searchAttributes = 56;
-    map<string, common.Payloads> memo = 57;
+    map<string, common.Payload> searchAttributes = 56;
+    map<string, common.Payload> memo = 57;
     bytes versionHistories = 58;
     string versionHistoriesEncoding = 59;
 }

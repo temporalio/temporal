@@ -873,14 +873,12 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 	return err
 }
 
-func searchAttributesSize(fields map[string]*commonpb.Payloads) int {
+func searchAttributesSize(fields map[string]*commonpb.Payload) int {
 	result := 0
 
 	for k, v := range fields {
 		result += len(k)
-		for _, payloadItem := range v.GetPayloads() {
-			result += len(payloadItem.GetData())
-		}
+		result += len(v.GetData())
 	}
 	return result
 }

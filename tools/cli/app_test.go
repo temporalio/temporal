@@ -50,6 +50,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 )
 
@@ -713,13 +714,13 @@ func (s *cliAppSuite) TestAnyToString() {
 	}
 	res := anyToString(event, false, defaultMaxFieldLength)
 	ss, l := tablewriter.WrapString(res, 10)
-	s.Equal(7, len(ss))
+	s.Equal(8, len(ss))
 	s.Equal(120, l)
 }
 
 func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
-	fields := map[string]*commonpb.Payloads{
-		"TestKey": payloads.EncodeString("testValue"),
+	fields := map[string]*commonpb.Payload{
+		"TestKey": payload.EncodeString("testValue"),
 	}
 	execution := &executionpb.WorkflowExecutionInfo{
 		Status: executionpb.WorkflowExecutionStatus_Running,
@@ -727,7 +728,7 @@ func (s *cliAppSuite) TestAnyToString_DecodeMapValues() {
 	}
 	s.Equal("{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey:testValue}}}", anyToString(execution, true, 0))
 
-	fields["TestKey2"] = payloads.EncodeString(`anotherTestValue`)
+	fields["TestKey2"] = payload.EncodeString(`anotherTestValue`)
 	execution.Memo = &commonpb.Memo{Fields: fields}
 	got := anyToString(execution, true, 0)
 	expected := got == "{Status:Running, HistoryLength:0, ExecutionTime:0, Memo:{Fields:map{TestKey2:anotherTestValue, TestKey:testValue}}}" ||

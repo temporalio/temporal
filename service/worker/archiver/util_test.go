@@ -29,11 +29,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
-	"github.com/temporalio/temporal/common/payloads"
+	"github.com/temporalio/temporal/common/payload"
 )
 
 type UtilSuite struct {
@@ -74,14 +73,14 @@ func (s *UtilSuite) TestHashDeterminism() {
 				NextEventID: int64(123),
 				Status:      executionpb.WorkflowExecutionStatus_ContinuedAsNew,
 				Memo: &commonpb.Memo{
-					Fields: map[string]*commonpb.Payloads{
-						"memoKey1": payloads.EncodeBytes([]byte{1, 2, 3}),
-						"memoKey2": payloads.EncodeBytes([]byte{4, 5, 6}),
+					Fields: map[string]*commonpb.Payload{
+						"memoKey1": payload.EncodeBytes([]byte{1, 2, 3}),
+						"memoKey2": payload.EncodeBytes([]byte{4, 5, 6}),
 					},
 				},
-				SearchAttributes: map[string]*commonpb.Payloads{
-					"customKey1": payloads.EncodeBytes([]byte{1, 2, 3}),
-					"customKey2": payloads.EncodeBytes([]byte{4, 5, 6}),
+				SearchAttributes: map[string]*commonpb.Payload{
+					"customKey1": payload.EncodeBytes([]byte{1, 2, 3}),
+					"customKey2": payload.EncodeBytes([]byte{4, 5, 6}),
 				},
 				Targets: []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 			},

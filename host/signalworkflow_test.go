@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/rpc"
 )
@@ -1147,7 +1148,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	header := &commonpb.Header{
-		Fields: map[string]*commonpb.Payloads{"tracing": payloads.EncodeString("sample data")},
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
 	}
 
 	// Start a workflow

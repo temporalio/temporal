@@ -50,6 +50,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
@@ -1210,14 +1211,14 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 		},
 	}
 	testSearchAttrKey := "env"
-	testSearchAttrVal := payloads.EncodeString("test")
-	testSearchAttr := map[string]*commonpb.Payloads{
+	testSearchAttrVal := payload.EncodeString("test")
+	testSearchAttr := map[string]*commonpb.Payload{
 		testSearchAttrKey: testSearchAttrVal,
 	}
 
 	testMemoKey := "memoKey"
-	testMemoVal := payloads.EncodeString("memoVal")
-	testMemo := map[string]*commonpb.Payloads{
+	testMemoVal := payload.EncodeString("memoVal")
+	testMemo := map[string]*commonpb.Payload{
 		testMemoKey: testMemoVal,
 	}
 
@@ -1417,12 +1418,12 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.WorkflowExpirationTime = time.Now()
 	updatedInfo.NonRetriableErrors = []string{"accessDenied", "badRequest"}
 	searchAttrKey := "env"
-	searchAttrVal := payloads.EncodeBytes([]byte("test"))
-	updatedInfo.SearchAttributes = map[string]*commonpb.Payloads{searchAttrKey: searchAttrVal}
+	searchAttrVal := payload.EncodeBytes([]byte("test"))
+	updatedInfo.SearchAttributes = map[string]*commonpb.Payload{searchAttrKey: searchAttrVal}
 
 	memoKey := "memoKey"
-	memoVal := payloads.EncodeBytes([]byte("memoVal"))
-	updatedInfo.Memo = map[string]*commonpb.Payloads{memoKey: memoVal}
+	memoVal := payload.EncodeBytes([]byte("memoVal"))
+	updatedInfo.Memo = map[string]*commonpb.Payload{memoKey: memoVal}
 	updatedStats.HistorySize = math.MaxInt64
 
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil)

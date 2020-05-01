@@ -32,7 +32,7 @@ import (
 	archivergenpb "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payloads"
+	"github.com/temporalio/temporal/common/payload"
 )
 
 var (
@@ -151,10 +151,10 @@ func ValidateQueryRequest(request *QueryVisibilityRequest) error {
 }
 
 // ConvertSearchAttrToPayload converts search attribute value from string back to byte array
-func ConvertSearchAttrToPayload(searchAttrStr map[string]string) map[string]*commonpb.Payloads {
-	searchAttr := make(map[string]*commonpb.Payloads)
+func ConvertSearchAttrToPayload(searchAttrStr map[string]string) map[string]*commonpb.Payload {
+	searchAttr := make(map[string]*commonpb.Payload)
 	for k, v := range searchAttrStr {
-		searchAttr[k] = payloads.EncodeBytes([]byte(v))
+		searchAttr[k] = payload.EncodeBytes([]byte(v))
 	}
 	return searchAttr
 }

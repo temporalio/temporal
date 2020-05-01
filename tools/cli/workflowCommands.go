@@ -58,6 +58,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/service/history"
 )
@@ -273,7 +274,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 }
 
-func processSearchAttr(c *cli.Context) map[string]*commonpb.Payloads {
+func processSearchAttr(c *cli.Context) map[string]*commonpb.Payload {
 	rawSearchAttrKey := c.String(FlagSearchAttributesKey)
 	var searchAttrKeys []string
 	if strings.TrimSpace(rawSearchAttrKey) != "" {
@@ -294,9 +295,9 @@ func processSearchAttr(c *cli.Context) map[string]*commonpb.Payloads {
 		ErrorAndExit("Number of search attributes keys and values are not equal.", nil)
 	}
 
-	fields := map[string]*commonpb.Payloads{}
+	fields := map[string]*commonpb.Payload{}
 	for i, key := range searchAttrKeys {
-		val, err := payloads.Encode(searchAttrVals[i])
+		val, err := payload.Encode(searchAttrVals[i])
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Encode value %v error", val), err)
 		}
@@ -306,7 +307,7 @@ func processSearchAttr(c *cli.Context) map[string]*commonpb.Payloads {
 	return fields
 }
 
-func processMemo(c *cli.Context) map[string]*commonpb.Payloads {
+func processMemo(c *cli.Context) map[string]*commonpb.Payload {
 	rawMemoKey := c.String(FlagMemoKey)
 	var memoKeys []string
 	if strings.TrimSpace(rawMemoKey) != "" {
@@ -328,9 +329,9 @@ func processMemo(c *cli.Context) map[string]*commonpb.Payloads {
 		ErrorAndExit("Number of memo keys and values are not equal.", nil)
 	}
 
-	fields := map[string]*commonpb.Payloads{}
+	fields := map[string]*commonpb.Payload{}
 	for i, key := range memoKeys {
-		fields[key] = payloads.EncodeString(memoValues[i])
+		fields[key] = payload.EncodeString(memoValues[i])
 	}
 	return fields
 }
@@ -339,7 +340,7 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 	buf := new(bytes.Buffer)
 	for k, v := range memo.Fields {
 		var memo string
-		err := payloads.Decode(v, &memo)
+		err := payload.Decode(v, &memo)
 		if err != nil {
 			ErrorAndExit("Memo has incoorect formtat.", err)
 		}
@@ -353,7 +354,7 @@ func getPrintableSearchAttr(searchAttr *commonpb.SearchAttributes) string {
 	buf := new(bytes.Buffer)
 	for k, v := range searchAttr.IndexedFields {
 		var decodedVal interface{}
-		_ = payloads.Decode(v, &decodedVal)
+		_ = payload.Decode(v, &decodedVal)
 		_, _ = fmt.Fprintf(buf, "%s=%v\n", k, decodedVal)
 	}
 	return buf.String()

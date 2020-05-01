@@ -304,8 +304,8 @@ type (
 		ClientFeatureVersion               string
 		ClientImpl                         string
 		AutoResetPoints                    *executionpb.ResetPoints
-		Memo                               map[string]*commonpb.Payloads
-		SearchAttributes                   map[string]*commonpb.Payloads
+		Memo                               map[string]*commonpb.Payload
+		SearchAttributes                   map[string]*commonpb.Payload
 		// for retry
 		Attempt                int32
 		HasRetryPolicy         bool

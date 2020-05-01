@@ -34,7 +34,7 @@ import (
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payloads"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -92,7 +92,7 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 		// verify: value has the correct type
 		if !sv.isValidSearchAttributesValue(validAttr, key, val) {
 			var invalidValue interface{}
-			if err := payloads.Decode(val, &invalidValue); err != nil {
+			if err := payload.Decode(val, &invalidValue); err != nil {
 				invalidValue = fmt.Sprintf("value from %q", val.String())
 			}
 
@@ -107,10 +107,7 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is read-only Temporal reservered attribute", key))
 		}
 		// verify: size of single value <= limit
-		dataSize := 0
-		for _, payloadItem := range val.GetPayloads() {
-			dataSize += len(payloadItem.GetData())
-		}
+		dataSize := len(val.GetData())
 		if dataSize > sv.searchAttributesSizeOfValueLimit(namespace) {
 			sv.logger.WithTags(tag.ESKey(key), tag.Number(int64(dataSize)), tag.WorkflowNamespace(namespace)).
 				Error("value size of search attribute exceed limit")

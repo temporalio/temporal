@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/service/matching"
 )
@@ -59,7 +60,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	header := &commonpb.Header{
-		Fields: map[string]*commonpb.Payloads{"tracing": payloads.EncodeString("sample data")},
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{

@@ -47,7 +47,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/payloads"
+	"github.com/temporalio/temporal/common/payload"
 )
 
 const (
@@ -517,41 +517,41 @@ func DeserializeSearchAttributeValue(value *commonpb.Payload, valueType commonpb
 	switch valueType {
 	case commonpb.IndexedValueType_String, commonpb.IndexedValueType_Keyword:
 		var val string
-		if err := payloads.Decode(value, &val); err != nil {
+		if err := payload.Decode(value, &val); err != nil {
 			var listVal []string
-			err = payloads.Decode(value, &listVal)
+			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Int:
 		var val int64
-		if err := payloads.Decode(value, &val); err != nil {
+		if err := payload.Decode(value, &val); err != nil {
 			var listVal []int64
-			err = payloads.Decode(value, &listVal)
+			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Double:
 		var val float64
-		if err := payloads.Decode(value, &val); err != nil {
+		if err := payload.Decode(value, &val); err != nil {
 			var listVal []float64
-			err = payloads.Decode(value, &listVal)
+			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Bool:
 		var val bool
-		if err := payloads.Decode(value, &val); err != nil {
+		if err := payload.Decode(value, &val); err != nil {
 			var listVal []bool
-			err = payloads.Decode(value, &listVal)
+			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
 	case commonpb.IndexedValueType_Datetime:
 		var val time.Time
-		if err := payloads.Decode(value, &val); err != nil {
+		if err := payload.Decode(value, &val); err != nil {
 			var listVal []time.Time
-			err = payloads.Decode(value, &listVal)
+			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
 		return val, nil
