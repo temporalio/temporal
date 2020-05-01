@@ -346,7 +346,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 		Name:        taskList,
 		TaskType:    tasklistpb.TaskListType_Activity,
 		AckLevel:    0,
-		Kind:        p.TaskListKindNormal,
+		Kind:        tasklistpb.TaskListKind_Normal,
 	}
 
 	_, err = s.TaskMgr.UpdateTaskList(&p.UpdateTaskListRequest{
@@ -370,20 +370,20 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskListSticky() {
 		NamespaceID:  namespaceID,
 		TaskList:     taskList,
 		TaskType:     tasklistpb.TaskListType_Decision,
-		TaskListKind: p.TaskListKindSticky,
+		TaskListKind: tasklistpb.TaskListKind_Sticky,
 	})
 	s.NoError(err)
 	tli := response.TaskListInfo
 	s.EqualValues(1, tli.RangeID)
 	s.EqualValues(0, tli.Data.AckLevel)
-	s.EqualValues(p.TaskListKindSticky, tli.Data.Kind)
+	s.EqualValues(tasklistpb.TaskListKind_Sticky, tli.Data.Kind)
 
 	taskListInfo := &persistenceblobs.TaskListInfo{
 		NamespaceId: namespaceID,
 		Name:        taskList,
 		TaskType:    tasklistpb.TaskListType_Decision,
 		AckLevel:    0,
-		Kind:        p.TaskListKindSticky,
+		Kind:        tasklistpb.TaskListKind_Sticky,
 	}
 	_, err = s.TaskMgr.UpdateTaskList(&p.UpdateTaskListRequest{
 		TaskListInfo: taskListInfo,
@@ -437,7 +437,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 			NamespaceID:  namespaceID,
 			TaskList:     "list-task-list-test-tl0",
 			TaskType:     tasklistpb.TaskListType_Activity,
-			TaskListKind: p.TaskListKindSticky,
+			TaskListKind: tasklistpb.TaskListKind_Sticky,
 		})
 		s.NoError(err)
 
@@ -448,7 +448,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 		s.EqualValues(namespaceID, resp.Items[0].Data.GetNamespaceId())
 		s.Equal("list-task-list-test-tl0", resp.Items[0].Data.Name)
 		s.Equal(tasklistpb.TaskListType_Activity, resp.Items[0].Data.TaskType)
-		s.EqualValues(p.TaskListKindSticky, resp.Items[0].Data.Kind)
+		s.EqualValues(tasklistpb.TaskListKind_Sticky, resp.Items[0].Data.Kind)
 		s.Equal(rangeID, resp.Items[0].RangeID)
 		s.Equal(ackLevel, resp.Items[0].Data.AckLevel)
 		lu0, err := types.TimestampFromProto(resp.Items[0].Data.LastUpdated)
@@ -490,7 +490,7 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskList() {
 			NamespaceID:  primitives.MustParseUUID(namespaceID),
 			TaskList:     name,
 			TaskType:     tasklistpb.TaskListType_Activity,
-			TaskListKind: p.TaskListKindNormal,
+			TaskListKind: tasklistpb.TaskListKind_Normal,
 		})
 		s.NoError(err)
 		tlNames[name] = struct{}{}
@@ -503,7 +503,7 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskList() {
 				it := i.Data
 				s.EqualValues(primitives.MustParseUUID(namespaceID), it.GetNamespaceId())
 				s.Equal(tasklistpb.TaskListType_Activity, it.TaskType)
-				s.Equal(p.TaskListKindNormal, it.Kind)
+				s.Equal(tasklistpb.TaskListKind_Normal, it.Kind)
 				_, ok := listedNames[it.Name]
 				s.False(ok, "list API returns duplicate entries - have: %+v got:%v", listedNames, it.Name)
 				listedNames[it.Name] = struct{}{}

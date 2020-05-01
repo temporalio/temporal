@@ -145,7 +145,7 @@ func newTaskListManager(
 		return nil, err
 	}
 
-	db := newTaskListDB(e.taskManager, primitives.MustParseUUID(taskList.namespaceID), taskList.name, taskList.taskType, int32(taskListKind), e.logger)
+	db := newTaskListDB(e.taskManager, primitives.MustParseUUID(taskList.namespaceID), taskList.name, taskList.taskType, taskListKind, e.logger)
 
 	tlMgr := &taskListManagerImpl{
 		namespaceCache: e.namespaceCache,
