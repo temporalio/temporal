@@ -60,10 +60,18 @@ import (
 	"github.com/uber/cadence/service/history"
 )
 
-type filterFn func(*replicator.ReplicationTask) bool
-type filterFnForVisibility func(*indexer.Message) bool
+type (
+	filterFn              func(*replicator.ReplicationTask) bool
+	filterFnForVisibility func(*indexer.Message) bool
 
-type kafkaMessageType int
+	kafkaMessageType int
+
+	historyV2Task struct {
+		Task         *replicator.ReplicationTask
+		Events       []*shared.HistoryEvent
+		NewRunEvents []*shared.HistoryEvent
+	}
+)
 
 const (
 	kafkaMessageTypeReplicationTask kafkaMessageType = iota
@@ -121,13 +129,14 @@ func AdminKafkaParse(c *cli.Context) {
 	readerCh := make(chan []byte, chanBufferSize)
 	writerCh := newWriterChannel(kafkaMessageType(c.Int(FlagMessageType)))
 	doneCh := make(chan struct{})
+	serializer := persistence.NewPayloadSerializer()
 
 	var skippedCount int32
 	skipErrMode := c.Bool(FlagSkipErrorMode)
 
 	go startReader(inputFile, readerCh)
 	go startParser(readerCh, writerCh, skipErrMode, &skippedCount)
-	go startWriter(outputFile, writerCh, doneCh, &skippedCount, c)
+	go startWriter(outputFile, writerCh, doneCh, &skippedCount, serializer, c)
 
 	<-doneCh
 
@@ -242,6 +251,7 @@ func startWriter(
 	writerCh *writerChannel,
 	doneCh chan struct{},
 	skippedCount *int32,
+	serializer persistence.PayloadSerializer,
 	c *cli.Context,
 ) {
 
@@ -252,7 +262,7 @@ func startWriter(
 
 	switch writerCh.Type {
 	case kafkaMessageTypeReplicationTask:
-		writeReplicationTask(outputFile, writerCh, skippedCount, skipErrMode, headerMode, c)
+		writeReplicationTask(outputFile, writerCh, skippedCount, skipErrMode, headerMode, serializer, c)
 	case kafkaMessageTypeVisibilityMsg:
 		writeVisibilityMessage(outputFile, writerCh, skippedCount, skipErrMode, headerMode, c)
 	}
@@ -264,6 +274,7 @@ func writeReplicationTask(
 	skippedCount *int32,
 	skipErrMode bool,
 	headerMode bool,
+	serializer persistence.PayloadSerializer,
 	c *cli.Context,
 ) {
 	filter := buildFilterFn(c.String(FlagWorkflowID), c.String(FlagRunID))
@@ -275,7 +286,7 @@ Loop:
 				break Loop
 			}
 			if filter(task) {
-				jsonStr, err := json.Marshal(task)
+				jsonStr, err := decodeReplicationTask(task, serializer)
 				if err != nil {
 					if !skipErrMode {
 						ErrorAndExit(malformedMessage, fmt.Errorf("failed to encode into json, err: %v", err))
@@ -898,4 +909,40 @@ func loadBrokerConfig(hostFile string, cluster string) ([]string, *tls.Config, e
 		}
 	}
 	return nil, nil, fmt.Errorf("failed to load broker for cluster %v", cluster)
+}
+
+func decodeReplicationTask(
+	task *replicator.ReplicationTask,
+	serializer persistence.PayloadSerializer,
+) ([]byte, error) {
+
+	switch task.GetTaskType() {
+	case replicator.ReplicationTaskTypeHistoryV2:
+		historyV2 := task.GetHistoryTaskV2Attributes()
+		events, err := serializer.DeserializeBatchEvents(
+			persistence.NewDataBlobFromThrift(historyV2.Events),
+		)
+		if err != nil {
+			return nil, err
+		}
+		var newRunEvents []*shared.HistoryEvent
+		if historyV2.IsSetNewRunEvents() {
+			newRunEvents, err = serializer.DeserializeBatchEvents(
+				persistence.NewDataBlobFromThrift(historyV2.NewRunEvents),
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+		historyV2.Events = nil
+		historyV2.NewRunEvents = nil
+		historyV2Attributes := &historyV2Task{
+			Task:         task,
+			Events:       events,
+			NewRunEvents: newRunEvents,
+		}
+		return json.Marshal(historyV2Attributes)
+	default:
+		return json.Marshal(task)
+	}
 }

@@ -781,6 +781,7 @@ func (entry *DomainCacheEntry) IsDomainActive() bool {
 	return entry.clusterMetadata.GetCurrentClusterName() == entry.replicationConfig.ActiveClusterName && !entry.IsDomainPendingActive()
 }
 
+// IsDomainPendingActive returns whether the domain is in pending active state
 func (entry *DomainCacheEntry) IsDomainPendingActive() bool {
 	if !entry.isGlobalDomain {
 		// domain is not a global domain, meaning domain is always "active" within each cluster
