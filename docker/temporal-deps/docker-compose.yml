@@ -8,13 +8,17 @@ services:
     ports:
       - "3306:3306"
     environment:
-      - "MYSQL_ROOT_PASSWORD=root"
-      - "MYSQL_USER=temporal"
-      - "MYSQL_PASSWORD=temporal"
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    networks:
+      - dependencies-network
   cassandra:
     image: cassandra:3.11
     ports:
       - "9042:9042"
+    networks:
+      - dependencies-network
   postgres:
     image: postgres:12
     environment:
@@ -22,10 +26,14 @@ services:
       POSTGRES_PASSWORD: temporal
     ports:
       - "5432:5432"
+    networks:
+      - dependencies-network
   zookeeper:
     image: wurstmeister/zookeeper:3.4.6
     ports:
       - "2181:2181"
+    networks:
+      - dependencies-network
   kafka:
     image: wurstmeister/kafka:2.12-2.1.1
     depends_on:
@@ -36,6 +44,8 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    networks:
+      - dependencies-network
   elasticsearch:
     image: elasticsearch:6.8.8
     ports:
@@ -45,4 +55,9 @@ services:
       - ES_JAVA_OPTS=-Xms100m -Xmx100m
     depends_on:
       - kafka
+    networks:
+      - dependencies-network
 
+networks:
+  dependencies-network:
+    driver: bridge
