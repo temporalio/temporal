@@ -45,9 +45,11 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"gopkg.in/yaml.v2"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	indexerspb "go.temporal.io/server/api/indexer/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -59,10 +61,12 @@ import (
 	"go.temporal.io/server/common/persistence/cassandra"
 )
 
-type filterFn func(*replicationspb.ReplicationTask) bool
-type filterFnForVisibility func(*indexerspb.Message) bool
+type (
+	filterFn              func(*replicationspb.ReplicationTask) bool
+	filterFnForVisibility func(*indexerspb.Message) bool
 
-type kafkaMessageType int
+	kafkaMessageType int
+)
 
 const (
 	kafkaMessageTypeReplicationTask kafkaMessageType = iota
@@ -121,13 +125,14 @@ func AdminKafkaParse(c *cli.Context) {
 	readerCh := make(chan []byte, chanBufferSize)
 	writerCh := newWriterChannel(kafkaMessageType(c.Int(FlagMessageType)))
 	doneCh := make(chan struct{})
+	serializer := persistence.NewPayloadSerializer()
 
 	var skippedCount int32
 	skipErrMode := c.Bool(FlagSkipErrorMode)
 
 	go startReader(inputFile, readerCh)
 	go startParser(readerCh, writerCh, skipErrMode, &skippedCount)
-	go startWriter(outputFile, writerCh, doneCh, &skippedCount, c)
+	go startWriter(outputFile, writerCh, doneCh, &skippedCount, serializer, c)
 
 	<-doneCh
 
@@ -242,6 +247,7 @@ func startWriter(
 	writerCh *writerChannel,
 	doneCh chan struct{},
 	skippedCount *int32,
+	serializer persistence.PayloadSerializer,
 	c *cli.Context,
 ) {
 
@@ -252,7 +258,7 @@ func startWriter(
 
 	switch writerCh.Type {
 	case kafkaMessageTypeReplicationTask:
-		writeReplicationTask(outputFile, writerCh, skippedCount, skipErrMode, headerMode, c)
+		writeReplicationTask(outputFile, writerCh, skippedCount, skipErrMode, headerMode, serializer, c)
 	case kafkaMessageTypeVisibilityMsg:
 		writeVisibilityMessage(outputFile, writerCh, skippedCount, skipErrMode, headerMode, c)
 	}
@@ -264,10 +270,10 @@ func writeReplicationTask(
 	skippedCount *int32,
 	skipErrMode bool,
 	headerMode bool,
+	serializer persistence.PayloadSerializer,
 	c *cli.Context,
 ) {
 	filter := buildFilterFn(c.String(FlagWorkflowID), c.String(FlagRunID))
-	encoder := codec.NewJSONPBEncoder()
 Loop:
 	for {
 		select {
@@ -276,7 +282,7 @@ Loop:
 				break Loop
 			}
 			if filter(task) {
-				jsonStr, err := encoder.Encode(task)
+				jsonStr, err := decodeReplicationTask(task, serializer)
 				if err != nil {
 					if !skipErrMode {
 						ErrorAndExit(malformedMessage, fmt.Errorf("failed to encode into json, err: %v", err))
@@ -911,4 +917,74 @@ func loadBrokerConfig(hostFile string, cluster string) ([]string, *tls.Config, e
 		}
 	}
 	return nil, nil, fmt.Errorf("failed to load broker for cluster %v", cluster)
+}
+
+func decodeReplicationTask(
+	task *replicationspb.ReplicationTask,
+	serializer persistence.PayloadSerializer,
+) ([]byte, error) {
+	encoder := codec.NewJSONPBIndentEncoder(" ")
+	switch task.GetTaskType() {
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
+		historyV2 := task.GetHistoryTaskV2Attributes()
+		events, err := serializer.DeserializeBatchEvents(
+			persistence.NewDataBlobFromProto(historyV2.Events),
+		)
+		if err != nil {
+			return nil, err
+		}
+		var newRunEvents []*historypb.HistoryEvent
+		if historyV2.GetNewRunEvents() != nil {
+			newRunEvents, err = serializer.DeserializeBatchEvents(
+				persistence.NewDataBlobFromProto(historyV2.NewRunEvents),
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+		historyV2.Events = nil
+		historyV2.NewRunEvents = nil
+
+		var buf bytes.Buffer
+		buf.WriteString("{")
+
+		buf.WriteString(`"Task":`)
+		encodedTask, err := encoder.Encode(task)
+		if err != nil {
+			buf.WriteString(fmt.Sprintf(`"%v"`, err))
+		}
+		buf.Write(encodedTask)
+		buf.WriteString(",")
+
+		buf.WriteString(`"Events":`)
+		buf.WriteString("[")
+		for _, event := range events {
+			encodedEvent, err := encoder.Encode(event)
+			if err != nil {
+				buf.WriteString(fmt.Sprintf(`"%v"`, err))
+			}
+			buf.Write(encodedEvent)
+			buf.WriteString(",")
+		}
+		buf.WriteString("]")
+		buf.WriteString(",")
+
+		buf.WriteString(`"NewRunEvents":`)
+		buf.WriteString("[")
+		for _, event := range newRunEvents {
+			encodedEvent, err := encoder.Encode(event)
+			if err != nil {
+				buf.WriteString(fmt.Sprintf(`"%v"`, err))
+			}
+			buf.Write(encodedEvent)
+			buf.WriteString(",")
+		}
+		buf.WriteString("]")
+
+		buf.WriteString("}")
+
+		return buf.Bytes(), nil
+	default:
+		return encoder.Encode(task)
+	}
 }
