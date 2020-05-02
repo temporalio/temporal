@@ -1,6 +1,6 @@
 # Developing Temporal
 
-This doc is intended for contributors to Temporal server (hopefully that's you!)
+This doc is for contributors to Temporal server (hopefully that's you!)
 
 **Note:** All contributors also need to fill out the [Temporal Contributor License Agreement](https://gist.github.com/samarabbas/7dcd41eb1d847e12263cc961ccfdb197) before we can merge in any of your changes.
 
@@ -64,6 +64,7 @@ Or run all the tests at once:
 ```bash
 $ make test
 ```
+
 Or run single test:
 ```bash
 $ go test -v <path> -run <TestSuite> -testify.m <TestSpecificTaskName>
@@ -77,11 +78,10 @@ When you are done, don't forget to stop `docker-compose` (Ctrl+C) and clean up a
 ```bash
 $ docker-compose down
 ```
-when you are done.
 
 ## Runing server locally
 
-First run runtime dependencies using `docker-compose`. Open new terminal window and run:
+First start runtime dependencies using `docker-compose`. Open new terminal window and run:
 ```bash
 $ cd docker/dependencies
 $ docker-compose up
@@ -94,6 +94,7 @@ and then run the server:
 ```bash
 $ make start
 ```
+
 When you are done, press Ctrl+C to stop ther server. Also, don't forget to stop `docker-compose` (Ctrl+C) and clean up all dependencies:
 ```bash
 $ docker-compose down
