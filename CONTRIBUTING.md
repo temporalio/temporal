@@ -27,24 +27,23 @@ $ git clone https://github.com/temporalio/temporal.git
 
 ## Building
 
-For the very first time compile `temporal-server` and helper tools wtih `make` command: 
+For the very first time build `temporal-server` and helper tools with simple `make` command: 
 ```bash
 $ make
 ```
 
-it will install all other build dependencies and build the binaries.
+It will install all other build dependencies and build the binaries.
 
 Futher you can build binaries without running test with:
 ```bash
 $ make bins
 ```
 
-Please check thr top of our [Makefile](Makefile) for other useful build targets.
+Please check the top of our [Makefile](Makefile) for other useful build targets.
 
 ## Testing
 
-Tests require runtime dependencies.
-The easiest way to run them is `docker-compose`. Open new terminal window and run:
+Tests require runtime dependencies. You can run them with `docker-compose`. Open new terminal window and run:
 ```bash
 $ cd docker/dependencies
 $ docker-compose up
@@ -65,7 +64,7 @@ Or run all the tests at once:
 $ make test
 ```
 
-Or run single test:
+You can also run a single test:
 ```bash
 $ go test -v <path> -run <TestSuite> -testify.m <TestSpecificTaskName>
 ```
@@ -74,7 +73,7 @@ for example:
 $ go test -v github.com/temporalio/temporal/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
 ```
 
-When you are done, don't forget to stop `docker-compose` (Ctrl+C) and clean up all dependencies:
+When you are done, don't forget to stop `docker-compose` (with `Ctrl+C`) and clean up all dependencies:
 ```bash
 $ docker-compose down
 ```
@@ -95,7 +94,7 @@ and then run the server:
 $ make start
 ```
 
-When you are done, press Ctrl+C to stop ther server. Also, don't forget to stop `docker-compose` (Ctrl+C) and clean up all dependencies:
+When you are done, press `Ctrl+C` to stop ther server. Also, don't forget to stop `docker-compose` (with `Ctrl+C`) and clean up all dependencies:
 ```bash
 $ docker-compose down
 ```
