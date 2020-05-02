@@ -60,7 +60,7 @@
             "user": { "type": "keyword"},
             "CustomNamespace": { "type": "keyword"},
             "Operator": { "type": "keyword"},
-            "RolloutID": { "type": "keyword"},
+            "RolloutId": { "type": "keyword"},
             "BinaryChecksums": { "type": "keyword"}
           }
         }

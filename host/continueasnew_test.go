@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/service/matching"
 
 	"github.com/pborman/uuid"
@@ -43,7 +44,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 func (s *integrationSuite) TestContinueAsNewWorkflow() {
@@ -57,13 +58,13 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	header := &commonpb.Header{
-		Fields: map[string]*commonpb.Payloads{"tracing": payload.EncodeString("sample payload")},
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
 	}
 	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payloads{"memoKey": payload.EncodeString("memoVal")},
+		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
 	}
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payloads{"CustomKeywordField": payload.EncodeString("1")},
+		IndexedFields: map[string]*commonpb.Payload{"CustomKeywordField": payload.EncodeString("1")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -104,7 +105,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:               workflowType,
 					TaskList:                   &tasklistpb.TaskList{Name: tl},
-					Input:                      payload.EncodeBytes(buf.Bytes()),
+					Input:                      payloads.EncodeBytes(buf.Bytes()),
 					Header:                     header,
 					Memo:                       memo,
 					SearchAttributes:           searchAttr,
@@ -119,7 +120,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -192,7 +193,7 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:               workflowType,
 					TaskList:                   &tasklistpb.TaskList{Name: tl},
-					Input:                      payload.EncodeBytes(buf.Bytes()),
+					Input:                      payloads.EncodeBytes(buf.Bytes()),
 					WorkflowRunTimeoutSeconds:  1, // set timeout to 1
 					WorkflowTaskTimeoutSeconds: 1,
 				}},
@@ -203,7 +204,7 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -405,7 +406,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("succeed"),
+				Result: payloads.EncodeString("succeed"),
 			}},
 		}}, nil
 
@@ -495,7 +496,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 				return []*decisionpb.Decision{{
 					DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 					Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-						Input: payload.EncodeBytes(buf.Bytes()),
+						Input: payloads.EncodeBytes(buf.Bytes()),
 					}},
 				}}, nil
 			}
@@ -504,7 +505,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: payload.EncodeString("Child Done"),
+					Result: payloads.EncodeString("Child Done"),
 				}},
 			}}, nil
 		}
@@ -523,7 +524,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 						Namespace:    s.namespace,
 						WorkflowId:   childID,
 						WorkflowType: childWorkflowType,
-						Input:        payload.EncodeBytes(buf.Bytes()),
+						Input:        payloads.EncodeBytes(buf.Bytes()),
 					}},
 				}}, nil
 			} else if previousStartedEventID > 0 {
@@ -538,7 +539,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 						return []*decisionpb.Decision{{
 							DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 							Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-								Result: payload.EncodeString("Done"),
+								Result: payloads.EncodeString("Done"),
 							}},
 						}}, nil
 					}
@@ -594,7 +595,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		completedAttributes.WorkflowExecution.RunId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
 	var result string
-	err = payload.Decode(completedAttributes.GetResult(), &result)
+	err = payloads.Decode(completedAttributes.GetResult(), &result)
 	s.NoError(err)
 	s.Equal("Child Done", result)
 

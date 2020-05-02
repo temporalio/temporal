@@ -151,8 +151,8 @@ func ValidateQueryRequest(request *QueryVisibilityRequest) error {
 }
 
 // ConvertSearchAttrToPayload converts search attribute value from string back to byte array
-func ConvertSearchAttrToPayload(searchAttrStr map[string]string) map[string]*commonpb.Payloads {
-	searchAttr := make(map[string]*commonpb.Payloads)
+func ConvertSearchAttrToPayload(searchAttrStr map[string]string) map[string]*commonpb.Payload {
+	searchAttr := make(map[string]*commonpb.Payload)
 	for k, v := range searchAttrStr {
 		searchAttr[k] = payload.EncodeBytes([]byte(v))
 	}

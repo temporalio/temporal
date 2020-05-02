@@ -895,7 +895,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 
 func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskList string,
 	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType,
-	searchAttributes map[string]*commonpb.Payloads) *indexergenpb.Message {
+	searchAttributes map[string]*commonpb.Payload) *indexergenpb.Message {
 
 	msgType := indexergenpb.MessageType_Index
 	fields := map[string]*indexergenpb.Field{
@@ -909,12 +909,10 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
 	}
 	for k, v := range searchAttributes {
-		// TODO: current implementation assumes that there is always one single PayloadItem in payload and it's content is JSON.
-		// This neds to be saved in generic way (as commonpb.Payloads) and then deserialized on consumer side.
-		if len(v.GetPayloads()) > 0 { // There must be always one single item
-			data := v.GetPayloads()[0].GetData() // content must always be JSON
-			fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
-		}
+		// TODO: current implementation assumes that payload is JSON.
+		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
+		data := v.GetData() // content must always be JSON
+		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
 	}
 
 	msg := &indexergenpb.Message{
@@ -931,7 +929,7 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, workflowTypeName string,
 	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status executionpb.WorkflowExecutionStatus,
 	historyLength int64, taskID int64, memo []byte, taskList string, encoding common.EncodingType,
-	searchAttributes map[string]*commonpb.Payloads) *indexergenpb.Message {
+	searchAttributes map[string]*commonpb.Payload) *indexergenpb.Message {
 
 	msgType := indexergenpb.MessageType_Index
 	fields := map[string]*indexergenpb.Field{
@@ -948,12 +946,10 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
 	}
 	for k, v := range searchAttributes {
-		// TODO: current implementation assumes that there is always one single PayloadItem in payload and it's content is JSON.
-		// This neds to be saved in generic way (as commonpb.Payloads) and then deserialized on consumer side.
-		if len(v.GetPayloads()) > 0 { // There must be always one single item
-			data := v.GetPayloads()[0].GetData() // content must always be JSON
-			fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
-		}
+		// TODO: current implementation assumes that payload is JSON.
+		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
+		data := v.GetData() // content must always be JSON
+		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
 	}
 
 	msg := &indexergenpb.Message{

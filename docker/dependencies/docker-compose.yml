@@ -1,33 +1,46 @@
 # Runs all Temporal service dependencies.
 # Useful for integration testing.
 
-version: '3'
+version: "3.5"
 services:
   mysql:
     image: mysql:5.7
+    container_name: temporal-mysql
     ports:
       - "3306:3306"
     environment:
-      - "MYSQL_ROOT_PASSWORD=root"
-      - "MYSQL_USER=temporal"
-      - "MYSQL_PASSWORD=temporal"
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    networks:
+      - temporal-dependencies-network
   cassandra:
     image: cassandra:3.11
+    container_name: temporal-cassandra
     ports:
       - "9042:9042"
+    networks:
+      - temporal-dependencies-network
   postgres:
     image: postgres:12
+    container_name: temporal-postgres
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
     ports:
       - "5432:5432"
+    networks:
+      - temporal-dependencies-network
   zookeeper:
     image: wurstmeister/zookeeper:3.4.6
+    container_name: temporal-zookeeper
     ports:
       - "2181:2181"
+    networks:
+      - temporal-dependencies-network
   kafka:
     image: wurstmeister/kafka:2.12-2.1.1
+    container_name: temporal-kafka
     depends_on:
       - zookeeper
     ports:
@@ -36,8 +49,11 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    networks:
+      - temporal-dependencies-network
   elasticsearch:
     image: elasticsearch:6.8.8
+    container_name: temporal-elasticsearch
     ports:
       - "9200:9200"
     environment:
@@ -45,4 +61,17 @@ services:
       - ES_JAVA_OPTS=-Xms100m -Xmx100m
     depends_on:
       - kafka
+    networks:
+      - temporal-dependencies-network
+  temporal-web:
+    image: temporalio/web:latest
+    container_name: temporal-web
+    environment:
+      - "TEMPORAL_GRPC_ENDPOINT=localhost:7233"
+    network_mode: host
+
+networks:
+  temporal-dependencies-network:
+    driver: bridge
+    name: temporal-dependencies-network
 

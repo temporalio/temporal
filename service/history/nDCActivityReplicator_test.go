@@ -48,7 +48,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -861,7 +861,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
 	attempt := int32(0)
-	details := payload.EncodeString("some random activity heartbeat progress")
+	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
@@ -933,7 +933,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
 	attempt := int32(100)
-	details := payload.EncodeString("some random activity heartbeat progress")
+	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
@@ -1005,7 +1005,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
 	attempt := int32(100)
-	details := payload.EncodeString("some random activity heartbeat progress")
+	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
@@ -1077,7 +1077,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
 	attempt := int32(100)
-	details := payload.EncodeString("some random activity heartbeat progress")
+	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
@@ -1161,7 +1161,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	startedTime := scheduledTime.Add(time.Minute)
 	heartBeatUpdatedTime := startedTime.Add(time.Minute)
 	attempt := int32(100)
-	details := payload.EncodeString("some random activity heartbeat progress")
+	details := payloads.EncodeString("some random activity heartbeat progress")
 	nextEventID := scheduleID + 10
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)

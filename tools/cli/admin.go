@@ -134,15 +134,15 @@ func newAdminShardManagementCommands() []cli.Command {
 		{
 			Name:    "removeTask",
 			Aliases: []string{"rmtk"},
-			Usage:   "remove a task based on shardID, task type, taskID, and task visibility timestamp",
+			Usage:   "remove a task based on shardId, task type, taskId, and task visibility timestamp",
 			Flags: []cli.Flag{
 				cli.IntFlag{
 					Name:  FlagShardID,
-					Usage: "shardID",
+					Usage: "shardId",
 				},
 				cli.Int64Flag{
 					Name:  FlagTaskID,
-					Usage: "taskID",
+					Usage: "taskId",
 				},
 				cli.IntFlag{
 					Name:  FlagTaskType,
