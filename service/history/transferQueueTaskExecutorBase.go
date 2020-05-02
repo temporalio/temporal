@@ -159,7 +159,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	taskID int64,
 	taskList string,
 	visibilityMemo *commonpb.Memo,
-	searchAttributes map[string]*commonpb.Payloads,
+	searchAttributes map[string]*commonpb.Payload,
 ) error {
 
 	namespace := defaultNamespace
@@ -208,7 +208,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	taskID int64,
 	taskList string,
 	visibilityMemo *commonpb.Memo,
-	searchAttributes map[string]*commonpb.Payloads,
+	searchAttributes map[string]*commonpb.Payload,
 ) error {
 
 	namespace := defaultNamespace
@@ -254,7 +254,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	taskID int64,
 	visibilityMemo *commonpb.Memo,
 	taskList string,
-	searchAttributes map[string]*commonpb.Payloads,
+	searchAttributes map[string]*commonpb.Payload,
 ) error {
 
 	// Record closing in visibility store
@@ -357,7 +357,7 @@ func getWorkflowExecutionTimestamp(
 }
 
 func getWorkflowMemo(
-	memo map[string]*commonpb.Payloads,
+	memo map[string]*commonpb.Payload,
 ) *commonpb.Memo {
 
 	if memo == nil {
@@ -367,16 +367,16 @@ func getWorkflowMemo(
 }
 
 func copySearchAttributes(
-	input map[string]*commonpb.Payloads,
-) map[string]*commonpb.Payloads {
+	input map[string]*commonpb.Payload,
+) map[string]*commonpb.Payload {
 
 	if input == nil {
 		return nil
 	}
 
-	result := make(map[string]*commonpb.Payloads)
+	result := make(map[string]*commonpb.Payload)
 	for k, v := range input {
-		result[k] = proto.Clone(v).(*commonpb.Payloads)
+		result[k] = proto.Clone(v).(*commonpb.Payload)
 	}
 	return result
 }

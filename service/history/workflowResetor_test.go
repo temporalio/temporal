@@ -45,7 +45,7 @@ import (
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	commonpb "go.temporal.io/temporal-proto/common"
@@ -283,7 +283,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 								Name: wfType,
 							},
 							TaskList:                        taskList,
-							Input:                           payload.EncodeString("testInput"),
+							Input:                           payloads.EncodeString("testInput"),
 							WorkflowExecutionTimeoutSeconds: 100,
 							WorkflowRunTimeoutSeconds:       50,
 							WorkflowTaskTimeoutSeconds:      200,
@@ -329,7 +329,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -962,7 +962,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 								Name: wfType,
 							},
 							TaskList:                        taskList,
-							Input:                           payload.EncodeString("testInput"),
+							Input:                           payloads.EncodeString("testInput"),
 							WorkflowExecutionTimeoutSeconds: 100,
 							WorkflowTaskTimeoutSeconds:      200,
 						}},
@@ -1007,7 +1007,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -1555,7 +1555,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 								Name: wfType,
 							},
 							TaskList:                        taskList,
-							Input:                           payload.EncodeString("testInput"),
+							Input:                           payloads.EncodeString("testInput"),
 							WorkflowExecutionTimeoutSeconds: 100,
 							WorkflowTaskTimeoutSeconds:      200,
 						}},
@@ -1600,7 +1600,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -2255,7 +2255,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 								Name: wfType,
 							},
 							TaskList:                   taskList,
-							Input:                      payload.EncodeString("testInput"),
+							Input:                      payloads.EncodeString("testInput"),
 							WorkflowRunTimeoutSeconds:  100,
 							WorkflowTaskTimeoutSeconds: 200,
 						}},
@@ -2300,7 +2300,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -2852,7 +2852,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 								Name: wfType,
 							},
 							TaskList:                   taskList,
-							Input:                      payload.EncodeString("testInput"),
+							Input:                      payloads.EncodeString("testInput"),
 							WorkflowRunTimeoutSeconds:  100,
 							WorkflowTaskTimeoutSeconds: 200,
 						}},
@@ -2897,7 +2897,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -3526,7 +3526,7 @@ func (s *resetorSuite) TestApplyReset() {
 								Name: wfType,
 							},
 							TaskList:                   taskList,
-							Input:                      payload.EncodeString("testInput"),
+							Input:                      payloads.EncodeString("testInput"),
 							WorkflowRunTimeoutSeconds:  100,
 							WorkflowTaskTimeoutSeconds: 200,
 						}},
@@ -3571,7 +3571,7 @@ func (s *resetorSuite) TestApplyReset() {
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},

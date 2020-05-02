@@ -64,7 +64,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 
 	intPayload, err := payload.Encode(1)
 	s.NoError(err)
-	fields := map[string]*commonpb.Payloads{
+	fields := map[string]*commonpb.Payload{
 		"CustomIntField": intPayload,
 	}
 	attr = &commonpb.SearchAttributes{
@@ -73,7 +73,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Nil(err)
 
-	fields = map[string]*commonpb.Payloads{
+	fields = map[string]*commonpb.Payload{
 		"CustomIntField":     intPayload,
 		"CustomKeywordField": payload.EncodeString("keyword"),
 		"CustomBoolField":    payload.EncodeString("true"),
@@ -82,14 +82,14 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("number of keys 3 exceed limit", err.Error())
 
-	fields = map[string]*commonpb.Payloads{
+	fields = map[string]*commonpb.Payload{
 		"InvalidKey": payload.EncodeString("1"),
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("InvalidKey is not valid search attribute key", err.Error())
 
-	fields = map[string]*commonpb.Payloads{
+	fields = map[string]*commonpb.Payload{
 		"CustomStringField": payload.EncodeString("1"),
 		"CustomBoolField":   payload.EncodeString("123"),
 	}
@@ -99,28 +99,28 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 
 	intArrayPayload, err := payload.Encode([]int{1, 2})
 	s.NoError(err)
-	fields = map[string]*commonpb.Payloads{
+	fields = map[string]*commonpb.Payload{
 		"CustomIntField": intArrayPayload,
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.NoError(err)
 
-	fields = map[string]*commonpb.Payloads{
+	fields = map[string]*commonpb.Payload{
 		"StartTime": intPayload,
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("StartTime is read-only Temporal reservered attribute", err.Error())
 
-	fields = map[string]*commonpb.Payloads{
+	fields = map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123456"),
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, namespace)
 	s.Equal("size limit exceed for key CustomKeywordField", err.Error())
 
-	fields = map[string]*commonpb.Payloads{
+	fields = map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123"),
 		"CustomStringField":  payload.EncodeString("12"),
 	}

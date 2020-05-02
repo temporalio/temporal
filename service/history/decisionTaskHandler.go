@@ -39,7 +39,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/primitives"
 )
 
@@ -269,7 +269,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 				ai.ScheduleID,
 				ai.StartedID,
 				actCancelReqEvent.GetEventId(),
-				payload.EncodeString(activityCancellationMsgActivityNotStarted),
+				payloads.EncodeString(activityCancellationMsgActivityNotStarted),
 				handler.identity,
 			)
 			if err != nil {
@@ -873,14 +873,12 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 	return err
 }
 
-func searchAttributesSize(fields map[string]*commonpb.Payloads) int {
+func searchAttributesSize(fields map[string]*commonpb.Payload) int {
 	result := 0
 
 	for k, v := range fields {
 		result += len(k)
-		for _, payloadItem := range v.GetPayloads() {
-			result += len(payloadItem.GetData())
-		}
+		result += len(v.GetData())
 	}
 	return result
 }
