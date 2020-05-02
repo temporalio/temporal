@@ -43,7 +43,7 @@ import (
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -297,10 +297,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	activityStartedTime := time.Time{}
 	activityHeartbeatTime := time.Time{}
 	activityAttempt := int32(16384)
-	activityDetails := payload.EncodeString("some random activity progress")
+	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailureReason := "some random reason"
 	activityLastWorkerIdentity := "some random worker identity"
-	activityLastFailureDetails := payload.EncodeString("some random failure details")
+	activityLastFailureDetails := payloads.EncodeString("some random failure details")
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{
@@ -410,10 +410,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	activityStartedTime := activityScheduledTime.Add(time.Minute)
 	activityHeartbeatTime := activityStartedTime.Add(time.Minute)
 	activityAttempt := int32(16384)
-	activityDetails := payload.EncodeString("some random activity progress")
+	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailureReason := "some random reason"
 	activityLastWorkerIdentity := "some random worker identity"
-	activityLastFailureDetails := payload.EncodeString("some random failure details")
+	activityLastFailureDetails := payloads.EncodeString("some random failure details")
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{

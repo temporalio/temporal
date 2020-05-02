@@ -39,7 +39,7 @@ import (
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -87,7 +87,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
-			Input:      payload.EncodeBytes([]byte{}),
+			Input:      payloads.EncodeBytes([]byte{}),
 		}},
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
@@ -121,7 +121,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
-			Input:      payload.EncodeBytes([]byte{}),
+			Input:      payloads.EncodeBytes([]byte{}),
 		}},
 	}
 
@@ -148,7 +148,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
-			Input:      payload.EncodeBytes([]byte{}),
+			Input:      payloads.EncodeBytes([]byte{}),
 		}},
 	}
 	event2 := &eventpb.HistoryEvent{
@@ -157,7 +157,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
-			Input:      payload.EncodeBytes([]byte{}),
+			Input:      payloads.EncodeBytes([]byte{}),
 		}},
 	}
 	attr1 := event1.GetWorkflowExecutionSignaledEventAttributes()
@@ -197,7 +197,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 			Identity:   "test",
 			SignalName: "signal",
-			Input:      payload.EncodeBytes([]byte{}),
+			Input:      payloads.EncodeBytes([]byte{}),
 		}},
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()

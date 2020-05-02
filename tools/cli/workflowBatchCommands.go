@@ -37,6 +37,7 @@ import (
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/service/worker/batcher"
 )
 
@@ -81,7 +82,7 @@ func DescribeBatchJob(c *cli.Context) {
 		if len(wf.PendingActivities) > 0 {
 			hbdPayload := wf.PendingActivities[0].HeartbeatDetails
 			var hbd batcher.HeartBeatDetails
-			err := payload.Decode(hbdPayload, &hbd)
+			err := payloads.Decode(hbdPayload, &hbd)
 			if err != nil {
 				ErrorAndExit("Failed to describe batch job", err)
 			}
@@ -197,7 +198,7 @@ func StartBatchJob(c *cli.Context) {
 		},
 	}
 
-	sigInput, err := payload.Encode(sigVal)
+	sigInput, err := payloads.Encode(sigVal)
 	if err != nil {
 		ErrorAndExit("Failed to serialize signal value", err)
 	}

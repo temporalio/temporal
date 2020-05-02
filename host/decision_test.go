@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
@@ -131,7 +131,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 			{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: payload.EncodeString("efg"),
+					Result: payloads.EncodeString("efg"),
 				},
 				},
 			}},
@@ -217,7 +217,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "localActivity1",
-					Details:    payload.EncodeString("abc"),
+					Details:    payloads.EncodeString("abc"),
 				},
 				},
 			}},
@@ -237,7 +237,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "localActivity2",
-					Details:    payload.EncodeString("abc"),
+					Details:    payloads.EncodeString("abc"),
 				},
 				},
 			}},
@@ -256,7 +256,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 			{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: payload.EncodeString("efg"),
+					Result: payloads.EncodeString("efg"),
 				},
 				},
 			}},
@@ -327,7 +327,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -411,7 +411,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -486,7 +486,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -585,7 +585,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -699,7 +699,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -799,7 +799,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
