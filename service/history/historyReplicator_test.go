@@ -52,7 +52,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -260,7 +260,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentNextEventID := int64(2333)
 
 	signalName := "some random signal name"
-	signalInput := payload.EncodeString("some random signal input")
+	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	req := &historyservice.ReplicateEventsRequest{
@@ -340,7 +340,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	now := time.Now().UnixNano()
 
 	signalName := "some random signal name"
-	signalInput := payload.EncodeString("some random signal input")
+	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	currentRunID := uuid.New()
@@ -973,7 +973,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	currentLastWriteVersion := lastWriteVersion
 
 	signalName := "some random signal name"
-	signalInput := payload.EncodeString("some random signal input")
+	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
@@ -1057,7 +1057,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	currentLastWriteVersion := lastWriteVersion
 
 	signalName := "some random signal name"
-	signalInput := payload.EncodeString("some random signal input")
+	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	decisionStickyTasklist := "some random decision sticky tasklist"
@@ -1174,7 +1174,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	currentLastWriteVersion := int64(123)
 
 	signalName := "some random signal name"
-	signalInput := payload.EncodeString("some random signal input")
+	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
@@ -1223,7 +1223,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	currentLastWriteVersion := int64(123)
 
 	signalName := "some random signal name"
-	signalInput := payload.EncodeString("some random signal input")
+	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	decisionStickyTasklist := "some random decision sticky tasklist"
@@ -2800,7 +2800,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	parentRunID := uuid.New()
 
 	signalName := "some random signal name"
-	signalInput := payload.EncodeString("some random signal input")
+	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	weContext := newWorkflowExecutionContext(namespaceID, executionpb.WorkflowExecution{
@@ -2977,7 +2977,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	parentRunID := uuid.New()
 
 	signalName := "some random signal name"
-	signalInput := payload.EncodeString("some random signal input")
+	signalInput := payloads.EncodeString("some random signal input")
 	signalIdentity := "some random signal identity"
 
 	weContext := newWorkflowExecutionContext(namespaceID, executionpb.WorkflowExecution{

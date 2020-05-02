@@ -59,6 +59,7 @@ import (
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/environment"
 	"github.com/temporalio/temporal/host"
 )
@@ -187,7 +188,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payloads{
+		IndexedFields: map[string]*commonpb.Payload{
 			s.testSearchAttributeKey: attrValBytes,
 		},
 	}
@@ -317,7 +318,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
-	terminateDetails := payload.EncodeString("terminate details")
+	terminateDetails := payloads.EncodeString("terminate details")
 	_, err = client1.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -390,7 +391,7 @@ func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 	attrValBytes1, _ := payload.Encode("another string")
 	attrValBytes2, _ := payload.Encode(123)
 	upsertSearchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payloads{
+		IndexedFields: map[string]*commonpb.Payload{
 			definition.CustomStringField: attrValBytes1,
 			definition.CustomIntField:    attrValBytes2,
 		},

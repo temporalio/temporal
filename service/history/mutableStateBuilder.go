@@ -1988,7 +1988,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 		return err
 	}
 	if exeInfo.SearchAttributes == nil {
-		exeInfo.SearchAttributes = make(map[string]*commonpb.Payloads)
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload)
 	}
 	exeInfo.SearchAttributes[definition.BinaryChecksums] = bytes
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
@@ -2925,12 +2925,12 @@ func (e *mutableStateBuilder) ReplicateUpsertWorkflowSearchAttributesEvent(
 }
 
 func mergeMapOfPayload(
-	current map[string]*commonpb.Payloads,
-	upsert map[string]*commonpb.Payloads,
-) map[string]*commonpb.Payloads {
+	current map[string]*commonpb.Payload,
+	upsert map[string]*commonpb.Payload,
+) map[string]*commonpb.Payload {
 
 	if current == nil {
-		current = make(map[string]*commonpb.Payloads)
+		current = make(map[string]*commonpb.Payload)
 	}
 	for k, v := range upsert {
 		current[k] = v

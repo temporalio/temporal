@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package payload
+package payloads
 
 import (
 	commonpb "go.temporal.io/temporal-proto/common"
@@ -30,25 +30,25 @@ import (
 )
 
 var (
-	payloadConverter = encoded.GetDefaultPayloadConverter()
+	dataConverter = encoded.GetDefaultDataConverter()
 )
 
-func EncodeString(str string) *commonpb.Payload {
+func EncodeString(str string) *commonpb.Payloads {
 	// Error can be safely ignored here becase string always can be converted to JSON
-	payload, _ := payloadConverter.ToData(str)
+	payload, _ := dataConverter.ToData(str)
 	return payload
 }
 
-func EncodeBytes(bytes []byte) *commonpb.Payload {
+func EncodeBytes(bytes []byte) *commonpb.Payloads {
 	// Error can be safely ignored here becase []byte always can be raw encoded
-	payload, _ := payloadConverter.ToData(bytes)
+	payload, _ := dataConverter.ToData(bytes)
 	return payload
 }
 
-func Encode(valuePtr interface{}) (*commonpb.Payload, error) {
-	return payloadConverter.ToData(valuePtr)
+func Encode(valuePtr ...interface{}) (*commonpb.Payloads, error) {
+	return dataConverter.ToData(valuePtr...)
 }
 
-func Decode(payload *commonpb.Payload, valuePtr interface{}) error {
-	return payloadConverter.FromData(payload, valuePtr)
+func Decode(payload *commonpb.Payloads, valuePtr ...interface{}) error {
+	return dataConverter.FromData(payload, valuePtr...)
 }

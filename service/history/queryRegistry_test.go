@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	querypb "go.temporal.io/temporal-proto/query"
 
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 type QueryRegistrySuite struct {
@@ -65,7 +65,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 			queryTerminationType: queryTerminationTypeCompleted,
 			queryResult: &querypb.WorkflowQueryResult{
 				ResultType: querypb.QueryResultType_Answered,
-				Answer:     payload.EncodeBytes([]byte{1, 2, 3}),
+				Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
 			},
 		})
 		s.NoError(err)
