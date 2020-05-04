@@ -26,13 +26,13 @@ Using a pre-built image
 With every tagged release of the temporal server, there is also a corresponding
 docker image that's uploaded to docker hub. In addition, the release will also
 contain a **docker.tar.gz** file (docker-compose startup scripts). 
-[Download](https://github.com/temporalio/temporal/releases/latest) a latest **docker.tar.gz**.
+[Download](https://github.com/temporalio/temporal/releases/latest) the latest **docker.tar.gz**.
 
 Execute the following
 commands to start a pre-built image along with all dependencies (`cassandra`/`statsd`).
 
 ```bash
-$ tar -xzvf docker.tar.gz
+$ curl -L https://github.com/temporalio/temporal/releases/latest/download/docker.tar.gz | tar -xz
 $ cd docker
 $ docker-compose up
 ```
@@ -60,12 +60,12 @@ Run Temporal with MySQL instead of Cassandra, use following commads:
 $ docker-compose -f docker-compose-mysql.yml up
 ```
 
-Please note that SQL support is still in active developement and it is not production ready yet.
+Please note that PostreSQL support is still in active developement, and it is not production ready yet.
 
 Running Temporal service with ElasticSearch
 -----------------------------------------
 
-Run Temporal with ElasticSearch for visibility instead of Cassandra/MySQL:
+Run Temporal with ElasticSearch for enhanced visibility queries:
 
 ```bash
 $ docker-compose -f docker-compose-es.yml up
