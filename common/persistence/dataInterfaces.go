@@ -35,6 +35,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -124,18 +125,6 @@ const (
 	WorkflowStateCorrupted
 )
 
-// Types of task lists
-const (
-	TaskListTypeDecision int32 = iota
-	TaskListTypeActivity
-)
-
-// Kinds of task lists
-const (
-	TaskListKindNormal int32 = iota
-	TaskListKindSticky
-)
-
 // Transfer task types
 const (
 	TransferTaskTypeDecisionTask = iota
@@ -160,7 +149,7 @@ const (
 	TaskTypeDecisionTimeout = iota
 	TaskTypeActivityTimeout
 	TaskTypeUserTimer
-	TaskTypeWorkflowTimeout
+	TaskTypeWorkflowRunTimeout
 	TaskTypeDeleteHistoryEvent
 	TaskTypeActivityRetryTimer
 	TaskTypeWorkflowBackoffTimer
@@ -274,8 +263,9 @@ type (
 		CompletionEvent                    *eventpb.HistoryEvent
 		TaskList                           string
 		WorkflowTypeName                   string
-		WorkflowTimeout                    int32
-		DecisionStartToCloseTimeout        int32
+		WorkflowRunTimeout                 int32
+		WorkflowExecutionTimeout           int32
+		WorkflowTaskTimeout                int32
 		State                              int
 		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
@@ -306,18 +296,17 @@ type (
 		Memo                               map[string]*commonpb.Payload
 		SearchAttributes                   map[string]*commonpb.Payload
 		// for retry
-		Attempt            int32
-		HasRetryPolicy     bool
-		InitialInterval    int32
-		BackoffCoefficient float64
-		MaximumInterval    int32
-		ExpirationTime     time.Time
-		MaximumAttempts    int32
-		NonRetriableErrors []string
-		BranchToken        []byte
+		Attempt                int32
+		HasRetryPolicy         bool
+		InitialInterval        int32
+		BackoffCoefficient     float64
+		MaximumInterval        int32
+		WorkflowExpirationTime time.Time
+		MaximumAttempts        int32
+		NonRetriableErrors     []string
+		BranchToken            []byte
 		// Cron
-		CronSchedule      string
-		ExpirationSeconds int32
+		CronSchedule string
 	}
 
 	// ExecutionStats is the statistics about workflow execution
@@ -355,7 +344,7 @@ type (
 	TaskListKey struct {
 		NamespaceID primitives.UUID
 		Name        string
-		TaskType    int32
+		TaskType    tasklistpb.TaskListType
 	}
 
 	// ActivityTask identifies a transfer task for activity
@@ -573,7 +562,7 @@ type (
 		NamespaceID              string
 		ActivityID               string
 		RequestID                string
-		Details                  *commonpb.Payload
+		Details                  *commonpb.Payloads
 		ScheduleToStartTimeout   int32
 		ScheduleToCloseTimeout   int32
 		StartToCloseTimeout      int32
@@ -595,7 +584,7 @@ type (
 		NonRetriableErrors []string
 		LastFailureReason  string
 		LastWorkerIdentity string
-		LastFailureDetails *commonpb.Payload
+		LastFailureDetails *commonpb.Payloads
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
@@ -924,8 +913,8 @@ type (
 	LeaseTaskListRequest struct {
 		NamespaceID  primitives.UUID
 		TaskList     string
-		TaskType     int32
-		TaskListKind int32
+		TaskType     tasklistpb.TaskListType
+		TaskListKind tasklistpb.TaskListKind
 		RangeID      int64
 	}
 
@@ -981,7 +970,7 @@ type (
 	GetTasksRequest struct {
 		NamespaceID  primitives.UUID
 		TaskList     string
-		TaskType     int32
+		TaskType     tasklistpb.TaskListType
 		ReadLevel    int64  // range exclusive
 		MaxReadLevel *int64 // optional: range inclusive when specified
 		BatchSize    int
@@ -1002,7 +991,7 @@ type (
 	CompleteTasksLessThanRequest struct {
 		NamespaceID  primitives.UUID
 		TaskListName string
-		TaskType     int32
+		TaskType     tasklistpb.TaskListType
 		TaskID       int64 // Tasks less than or equal to this ID will be completed
 		Limit        int   // Limit on the max number of tasks that can be completed. Required param
 	}
@@ -1919,7 +1908,7 @@ func (r *WorkflowBackoffTimerTask) SetVisibilityTimestamp(t time.Time) {
 
 // GetType returns the type of the timeout task.
 func (u *WorkflowTimeoutTask) GetType() int {
-	return TaskTypeWorkflowTimeout
+	return TaskTypeWorkflowRunTimeout
 }
 
 // GetVersion returns the version of the timeout task

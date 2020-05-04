@@ -27,7 +27,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"math"
 	"testing"
 	"time"
 
@@ -37,14 +36,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	"go.temporal.io/temporal-proto/workflowservice"
-
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -54,9 +45,16 @@ import (
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 type (
@@ -284,10 +282,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskList:                            taskList,
-							Input:                               payload.EncodeString("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: 100,
-							TaskStartToCloseTimeoutSeconds:      200,
+							TaskList:                        taskList,
+							Input:                           payloads.EncodeString("testInput"),
+							WorkflowExecutionTimeoutSeconds: 100,
+							WorkflowRunTimeoutSeconds:       50,
+							WorkflowTaskTimeoutSeconds:      200,
 						}},
 					},
 					{
@@ -330,7 +329,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -482,11 +481,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 							HeartbeatTimeoutSeconds:       4000,
 							DecisionTaskCompletedEventId:  16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds:    1,
-								BackoffCoefficient:          0.2,
-								MaximumAttempts:             10,
-								MaximumIntervalInSeconds:    1000,
-								ExpirationIntervalInSeconds: math.MaxInt32,
+								InitialIntervalInSeconds: 1,
+								BackoffCoefficient:       0.2,
+								MaximumAttempts:          10,
+								MaximumIntervalInSeconds: 1000,
 							},
 						}},
 					},
@@ -793,7 +791,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
 	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
@@ -963,10 +961,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskList:                            taskList,
-							Input:                               payload.EncodeString("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: 100,
-							TaskStartToCloseTimeoutSeconds:      200,
+							TaskList:                        taskList,
+							Input:                           payloads.EncodeString("testInput"),
+							WorkflowExecutionTimeoutSeconds: 100,
+							WorkflowTaskTimeoutSeconds:      200,
 						}},
 					},
 					{
@@ -1009,7 +1007,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -1161,11 +1159,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 							HeartbeatTimeoutSeconds:       4000,
 							DecisionTaskCompletedEventId:  16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds:    1,
-								BackoffCoefficient:          0.2,
-								MaximumAttempts:             10,
-								MaximumIntervalInSeconds:    1000,
-								ExpirationIntervalInSeconds: math.MaxInt32,
+								InitialIntervalInSeconds: 1,
+								BackoffCoefficient:       0.2,
+								MaximumAttempts:          10,
+								MaximumIntervalInSeconds: 1000,
 							},
 						}},
 					},
@@ -1557,10 +1554,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskList:                            taskList,
-							Input:                               payload.EncodeString("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: 100,
-							TaskStartToCloseTimeoutSeconds:      200,
+							TaskList:                        taskList,
+							Input:                           payloads.EncodeString("testInput"),
+							WorkflowExecutionTimeoutSeconds: 100,
+							WorkflowTaskTimeoutSeconds:      200,
 						}},
 					},
 					{
@@ -1603,7 +1600,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -1755,11 +1752,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 							HeartbeatTimeoutSeconds:       4000,
 							DecisionTaskCompletedEventId:  16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds:    1,
-								BackoffCoefficient:          0.2,
-								MaximumAttempts:             10,
-								MaximumIntervalInSeconds:    1000,
-								ExpirationIntervalInSeconds: math.MaxInt32,
+								InitialIntervalInSeconds: 1,
+								BackoffCoefficient:       0.2,
+								MaximumAttempts:          10,
+								MaximumIntervalInSeconds: 1000,
 							},
 						}},
 					},
@@ -2074,7 +2070,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
 	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
@@ -2258,10 +2254,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskList:                            taskList,
-							Input:                               payload.EncodeString("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: 100,
-							TaskStartToCloseTimeoutSeconds:      200,
+							TaskList:                   taskList,
+							Input:                      payloads.EncodeString("testInput"),
+							WorkflowRunTimeoutSeconds:  100,
+							WorkflowTaskTimeoutSeconds: 200,
 						}},
 					},
 					{
@@ -2304,7 +2300,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -2456,11 +2452,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 							HeartbeatTimeoutSeconds:       4000,
 							DecisionTaskCompletedEventId:  16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds:    1,
-								BackoffCoefficient:          0.2,
-								MaximumAttempts:             10,
-								MaximumIntervalInSeconds:    1000,
-								ExpirationIntervalInSeconds: math.MaxInt32,
+								InitialIntervalInSeconds: 1,
+								BackoffCoefficient:       0.2,
+								MaximumAttempts:          10,
+								MaximumIntervalInSeconds: 1000,
 							},
 						}},
 					},
@@ -2856,10 +2851,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskList:                            taskList,
-							Input:                               payload.EncodeString("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: 100,
-							TaskStartToCloseTimeoutSeconds:      200,
+							TaskList:                   taskList,
+							Input:                      payloads.EncodeString("testInput"),
+							WorkflowRunTimeoutSeconds:  100,
+							WorkflowTaskTimeoutSeconds: 200,
 						}},
 					},
 					{
@@ -2902,7 +2897,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -3054,11 +3049,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 							HeartbeatTimeoutSeconds:       4000,
 							DecisionTaskCompletedEventId:  16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds:    1,
-								BackoffCoefficient:          0.2,
-								MaximumAttempts:             10,
-								MaximumIntervalInSeconds:    1000,
-								ExpirationIntervalInSeconds: math.MaxInt32,
+								InitialIntervalInSeconds: 1,
+								BackoffCoefficient:       0.2,
+								MaximumAttempts:          10,
+								MaximumIntervalInSeconds: 1000,
 							},
 						}},
 					},
@@ -3361,7 +3355,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
 	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
@@ -3531,10 +3525,10 @@ func (s *resetorSuite) TestApplyReset() {
 							WorkflowType: &commonpb.WorkflowType{
 								Name: wfType,
 							},
-							TaskList:                            taskList,
-							Input:                               payload.EncodeString("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: 100,
-							TaskStartToCloseTimeoutSeconds:      200,
+							TaskList:                   taskList,
+							Input:                      payloads.EncodeString("testInput"),
+							WorkflowRunTimeoutSeconds:  100,
+							WorkflowTaskTimeoutSeconds: 200,
 						}},
 					},
 					{
@@ -3577,7 +3571,7 @@ func (s *resetorSuite) TestApplyReset() {
 						EventType: eventpb.EventType_MarkerRecorded,
 						Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 							MarkerName:                   "Version",
-							Details:                      payload.EncodeString("details"),
+							Details:                      payloads.EncodeString("details"),
 							DecisionTaskCompletedEventId: 4,
 						}},
 					},
@@ -3729,11 +3723,10 @@ func (s *resetorSuite) TestApplyReset() {
 							HeartbeatTimeoutSeconds:       4000,
 							DecisionTaskCompletedEventId:  16,
 							RetryPolicy: &commonpb.RetryPolicy{
-								InitialIntervalInSeconds:    1,
-								BackoffCoefficient:          0.2,
-								MaximumAttempts:             10,
-								MaximumIntervalInSeconds:    1000,
-								ExpirationIntervalInSeconds: math.MaxInt32,
+								InitialIntervalInSeconds: 1,
+								BackoffCoefficient:       0.2,
+								MaximumAttempts:          10,
+								MaximumIntervalInSeconds: 1000,
 							},
 						}},
 					},
@@ -4048,7 +4041,7 @@ func (s *resetorSuite) TestApplyReset() {
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeWorkflowRunTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
 	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
 	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 

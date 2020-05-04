@@ -55,6 +55,7 @@ import (
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 const (
@@ -508,7 +509,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 		s.NoError(err)
 		openExecutions = resp.GetExecutions()
-		dec := json.NewDecoder(bytes.NewReader(openExecutions[0].GetSearchAttributes().GetIndexedFields()[searchAttrKey].GetItems()[0].GetData()))
+		dec := json.NewDecoder(bytes.NewReader(openExecutions[0].GetSearchAttributes().GetIndexedFields()[searchAttrKey].GetData()))
 		dec.UseNumber()
 		err = dec.Decode(&prevVal)
 		s.NoError(err)
@@ -519,7 +520,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 				s.Equal(pageSize-1, i)
 				break
 			}
-			dec := json.NewDecoder(bytes.NewReader(searchAttrBytes.GetItems()[0].GetData()))
+			dec := json.NewDecoder(bytes.NewReader(searchAttrBytes.GetData()))
 			dec.UseNumber()
 			err = dec.Decode(&currVal)
 			s.NoError(err)
@@ -712,15 +713,15 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -760,13 +761,13 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow_PageToken() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                           s.namespace,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		Namespace:                  s.namespace,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	numOfWorkflows := 4
@@ -820,15 +821,15 @@ func (s *elasticsearchIntegrationSuite) createStartWorkflowExecutionRequest(id, 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskList := &tasklistpb.TaskList{Name: tl}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 	return request
 }
@@ -844,15 +845,15 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -891,7 +892,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1044,15 +1045,15 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)

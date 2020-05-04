@@ -40,7 +40,7 @@ import (
 
 // MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow
 func MaxArchivalIterationTimeout() time.Duration {
-	return workflowStartToCloseTimeout / 2
+	return workflowRunTimeout / 2
 }
 
 func hash(i interface{}) uint64 {

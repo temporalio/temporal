@@ -51,6 +51,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 type cliAppSuite struct {
@@ -241,11 +242,11 @@ var (
 				{
 					EventType: eventType,
 					Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-						WorkflowType:                        &commonpb.WorkflowType{Name: "TestWorkflow"},
-						TaskList:                            &tasklistpb.TaskList{Name: "taskList"},
-						ExecutionStartToCloseTimeoutSeconds: 60,
-						TaskStartToCloseTimeoutSeconds:      10,
-						Identity:                            "tester",
+						WorkflowType:               &commonpb.WorkflowType{Name: "TestWorkflow"},
+						TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
+						WorkflowRunTimeoutSeconds:  60,
+						WorkflowTaskTimeoutSeconds: 10,
+						Identity:                   "tester",
 					}},
 				},
 			},
@@ -372,7 +373,7 @@ func (s *cliAppSuite) TestSignalWorkflow_Failed() {
 
 func (s *cliAppSuite) TestQueryWorkflow() {
 	resp := &workflowservice.QueryWorkflowResponse{
-		QueryResult: payload.EncodeString("query-result"),
+		QueryResult: payloads.EncodeString("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil)
 	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
@@ -381,7 +382,7 @@ func (s *cliAppSuite) TestQueryWorkflow() {
 
 func (s *cliAppSuite) TestQueryWorkflowUsingStackTrace() {
 	resp := &workflowservice.QueryWorkflowResponse{
-		QueryResult: payload.EncodeString("query-result"),
+		QueryResult: payloads.EncodeString("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil)
 	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "stack", "-w", "wid"})
@@ -390,7 +391,7 @@ func (s *cliAppSuite) TestQueryWorkflowUsingStackTrace() {
 
 func (s *cliAppSuite) TestQueryWorkflow_Failed() {
 	resp := &workflowservice.QueryWorkflowResponse{
-		QueryResult: payload.EncodeString("query-result"),
+		QueryResult: payloads.EncodeString("query-result"),
 	}
 	s.frontendClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
 	errorCode := s.RunErrorExitCode([]string{"", "--ns", cliTestNamespace, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
@@ -703,17 +704,17 @@ func (s *cliAppSuite) TestAnyToString() {
 		EventId:   1,
 		EventType: eventType,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonpb.WorkflowType{Name: "helloworldWorkflow"},
-			TaskList:                            &tasklistpb.TaskList{Name: "taskList"},
-			ExecutionStartToCloseTimeoutSeconds: 60,
-			TaskStartToCloseTimeoutSeconds:      10,
-			Identity:                            "tester",
-			Input:                               payload.EncodeString(arg),
+			WorkflowType:               &commonpb.WorkflowType{Name: "helloworldWorkflow"},
+			TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
+			WorkflowRunTimeoutSeconds:  60,
+			WorkflowTaskTimeoutSeconds: 10,
+			Identity:                   "tester",
+			Input:                      payloads.EncodeString(arg),
 		}},
 	}
 	res := anyToString(event, false, defaultMaxFieldLength)
 	ss, l := tablewriter.WrapString(res, 10)
-	s.Equal(7, len(ss))
+	s.Equal(8, len(ss))
 	s.Equal(120, l)
 }
 
@@ -907,11 +908,11 @@ func historyEventIterator() sdkclient.HistoryEventIterator {
 			event := &eventpb.HistoryEvent{
 				EventType: eventType,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-					WorkflowType:                        &commonpb.WorkflowType{Name: "TestWorkflow"},
-					TaskList:                            &tasklistpb.TaskList{Name: "taskList"},
-					ExecutionStartToCloseTimeoutSeconds: 60,
-					TaskStartToCloseTimeoutSeconds:      10,
-					Identity:                            "tester",
+					WorkflowType:               &commonpb.WorkflowType{Name: "TestWorkflow"},
+					TaskList:                   &tasklistpb.TaskList{Name: "taskList"},
+					WorkflowRunTimeoutSeconds:  60,
+					WorkflowTaskTimeoutSeconds: 10,
+					Identity:                   "tester",
 				}},
 			}
 			counter++

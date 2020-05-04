@@ -38,7 +38,7 @@ import (
 
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/golang/mock/gomock"
@@ -396,12 +396,12 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   21,
 				EventType: eventpb.EventType_WorkflowExecutionStarted,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-					WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-					TaskList:                            &tasklistpb.TaskList{Name: tasklist},
-					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: 1000,
-					TaskStartToCloseTimeoutSeconds:      1000,
-					FirstDecisionTaskBackoffSeconds:     100,
+					WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+					TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+					Input:                           nil,
+					WorkflowRunTimeoutSeconds:       1000,
+					WorkflowTaskTimeoutSeconds:      1000,
+					FirstDecisionTaskBackoffSeconds: 100,
 				}},
 			},
 			{
@@ -444,7 +444,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 					MarkerName:                   "some marker name",
-					Details:                      payload.EncodeString("some marker details"),
+					Details:                      payloads.EncodeString("some marker details"),
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
@@ -485,7 +485,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 1",
-					Input:      payload.EncodeString("some signal details 1"),
+					Input:      payloads.EncodeString("some signal details 1"),
 					Identity:   identity,
 				}},
 			},
@@ -529,7 +529,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 2",
-					Input:      payload.EncodeString("some signal details 2"),
+					Input:      payloads.EncodeString("some signal details 2"),
 					Identity:   identity,
 				}},
 			},
@@ -701,12 +701,12 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				Version:   21,
 				EventType: eventpb.EventType_WorkflowExecutionStarted,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-					WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-					TaskList:                            &tasklistpb.TaskList{Name: tasklist},
-					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: 1000,
-					TaskStartToCloseTimeoutSeconds:      1000,
-					FirstDecisionTaskBackoffSeconds:     100,
+					WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+					TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+					Input:                           nil,
+					WorkflowRunTimeoutSeconds:       1000,
+					WorkflowTaskTimeoutSeconds:      1000,
+					FirstDecisionTaskBackoffSeconds: 100,
 				}},
 			},
 			{
@@ -749,7 +749,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 					MarkerName:                   "some marker name",
-					Details:                      payload.EncodeString("some marker details"),
+					Details:                      payloads.EncodeString("some marker details"),
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
@@ -790,7 +790,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 1",
-					Input:      payload.EncodeString("some signal details 1"),
+					Input:      payloads.EncodeString("some signal details 1"),
 					Identity:   identity,
 				}},
 			},
@@ -834,7 +834,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 2",
-					Input:      payload.EncodeString("some signal details 2"),
+					Input:      payloads.EncodeString("some signal details 2"),
 					Identity:   identity,
 				}},
 			},
@@ -894,14 +894,14 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 				Version:   21,
 				EventType: eventpb.EventType_WorkflowExecutionContinuedAsNew,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &eventpb.WorkflowExecutionContinuedAsNewEventAttributes{
-					NewExecutionRunId:                   uuid.New(),
-					WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-					TaskList:                            &tasklistpb.TaskList{Name: tasklist},
-					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: 1000,
-					TaskStartToCloseTimeoutSeconds:      1000,
-					DecisionTaskCompletedEventId:        19,
-					Initiator:                           commonpb.ContinueAsNewInitiator_Decider,
+					NewExecutionRunId:            uuid.New(),
+					WorkflowType:                 &commonpb.WorkflowType{Name: workflowType},
+					TaskList:                     &tasklistpb.TaskList{Name: tasklist},
+					Input:                        nil,
+					WorkflowRunTimeoutSeconds:    1000,
+					WorkflowTaskTimeoutSeconds:   1000,
+					DecisionTaskCompletedEventId: 19,
+					Initiator:                    commonpb.ContinueAsNewInitiator_Decider,
 				}},
 			},
 		}},
@@ -1104,7 +1104,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 					TaskId:    taskID,
 					Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 						SignalName: "signal",
-						Input:      payload.EncodeBytes([]byte{}),
+						Input:      payloads.EncodeBytes([]byte{}),
 						Identity:   "ndc_integration_test",
 					}},
 				},
@@ -1168,12 +1168,12 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   21,
 				EventType: eventpb.EventType_WorkflowExecutionStarted,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-					WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-					TaskList:                            &tasklistpb.TaskList{Name: tasklist},
-					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: 1000,
-					TaskStartToCloseTimeoutSeconds:      1000,
-					FirstDecisionTaskBackoffSeconds:     100,
+					WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+					TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+					Input:                           nil,
+					WorkflowRunTimeoutSeconds:       1000,
+					WorkflowTaskTimeoutSeconds:      1000,
+					FirstDecisionTaskBackoffSeconds: 100,
 				}},
 			},
 			{
@@ -1216,7 +1216,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				EventType: eventpb.EventType_MarkerRecorded,
 				Attributes: &eventpb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &eventpb.MarkerRecordedEventAttributes{
 					MarkerName:                   "some marker name",
-					Details:                      payload.EncodeString("some marker details"),
+					Details:                      payloads.EncodeString("some marker details"),
 					DecisionTaskCompletedEventId: 4,
 				}},
 			},
@@ -1257,7 +1257,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 1",
-					Input:      payload.EncodeString("some signal details 1"),
+					Input:      payloads.EncodeString("some signal details 1"),
 					Identity:   identity,
 				}},
 			},
@@ -1301,7 +1301,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				EventType: eventpb.EventType_WorkflowExecutionSignaled,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 					SignalName: "some signal name 2",
-					Input:      payload.EncodeString("some signal details 2"),
+					Input:      payloads.EncodeString("some signal details 2"),
 					Identity:   identity,
 				}},
 			},
@@ -1650,15 +1650,15 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 				Name: taskList,
 				Kind: tasklistpb.TaskListKind_Normal,
 			},
-			ExecutionStartToCloseTimeoutSeconds: 10,
-			TaskStartToCloseTimeoutSeconds:      10,
-			ContinuedExecutionRunId:             runID,
-			Initiator:                           commonpb.ContinueAsNewInitiator_CronSchedule,
-			OriginalExecutionRunId:              runID,
-			Identity:                            "NDC-test",
-			FirstExecutionRunId:                 runID,
-			Attempt:                             0,
-			ExpirationTimestamp:                 time.Now().Add(time.Minute).UnixNano(),
+			WorkflowRunTimeoutSeconds:            10,
+			WorkflowTaskTimeoutSeconds:           10,
+			ContinuedExecutionRunId:              runID,
+			Initiator:                            commonpb.ContinueAsNewInitiator_CronSchedule,
+			OriginalExecutionRunId:               runID,
+			Identity:                             "NDC-test",
+			FirstExecutionRunId:                  runID,
+			Attempt:                              0,
+			WorkflowExecutionExpirationTimestamp: time.Now().Add(time.Minute).UnixNano(),
 		}},
 	}
 

@@ -66,12 +66,12 @@ type (
 
 	mutableState interface {
 		AddActivityTaskCancelRequestedEvent(int64, string, string) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error)
-		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payload, string) (*eventpb.HistoryEvent, error)
+		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*eventpb.HistoryEvent, error)
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*eventpb.HistoryEvent, error)
 		AddActivityTaskFailedEvent(int64, int64, *workflowservice.RespondActivityTaskFailedRequest) (*eventpb.HistoryEvent, error)
 		AddActivityTaskScheduledEvent(int64, *decisionpb.ScheduleActivityTaskDecisionAttributes) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error)
 		AddActivityTaskStartedEvent(*persistence.ActivityInfo, int64, string, string) (*eventpb.HistoryEvent, error)
-		AddActivityTaskTimedOutEvent(int64, int64, eventpb.TimeoutType, *commonpb.Payload) (*eventpb.HistoryEvent, error)
+		AddActivityTaskTimedOutEvent(int64, int64, eventpb.TimeoutType, *commonpb.Payloads) (*eventpb.HistoryEvent, error)
 		AddCancelTimerFailedEvent(int64, *decisionpb.CancelTimerDecisionAttributes, string) (*eventpb.HistoryEvent, error)
 		AddChildWorkflowExecutionCanceledEvent(int64, *executionpb.WorkflowExecution, *eventpb.WorkflowExecutionCanceledEventAttributes) (*eventpb.HistoryEvent, error)
 		AddChildWorkflowExecutionCompletedEvent(int64, *executionpb.WorkflowExecution, *eventpb.WorkflowExecutionCompletedEventAttributes) (*eventpb.HistoryEvent, error)
@@ -82,7 +82,7 @@ type (
 		AddCompletedWorkflowEvent(int64, *decisionpb.CompleteWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, error)
 		AddContinueAsNewEvent(int64, int64, string, *decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, mutableState, error)
 		AddDecisionTaskCompletedEvent(int64, int64, *workflowservice.RespondDecisionTaskCompletedRequest, int) (*eventpb.HistoryEvent, error)
-		AddDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause eventpb.DecisionTaskFailedCause, details *commonpb.Payload, identity, reason, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*eventpb.HistoryEvent, error)
+		AddDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause eventpb.DecisionTaskFailedCause, details *commonpb.Payloads, identity, reason, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*eventpb.HistoryEvent, error)
 		AddDecisionTaskScheduleToStartTimeoutEvent(int64) (*eventpb.HistoryEvent, error)
 		AddFirstDecisionTaskScheduled(*eventpb.HistoryEvent) error
 		AddDecisionTaskScheduledEvent(bypassTaskGeneration bool) (*decisionInfo, error)
@@ -108,13 +108,13 @@ type (
 		AddUpsertWorkflowSearchAttributesEvent(int64, *decisionpb.UpsertWorkflowSearchAttributesDecisionAttributes) (*eventpb.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(string, *historyservice.RequestCancelWorkflowExecutionRequest) (*eventpb.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *decisionpb.CancelWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, error)
-		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payload, identity string) (*eventpb.HistoryEvent, error)
+		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string) (*eventpb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(executionpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*eventpb.HistoryEvent, error)
-		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payload, identity string) (*eventpb.HistoryEvent, error)
+		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string) (*eventpb.HistoryEvent, error)
 		ClearStickyness()
 		CheckResettable() error
 		CopyToPersistence() *persistence.WorkflowMutableState
-		RetryActivity(ai *persistence.ActivityInfo, failureReason string, failureDetails *commonpb.Payload) (bool, error)
+		RetryActivity(ai *persistence.ActivityInfo, failureReason string, failureDetails *commonpb.Payloads) (bool, error)
 		CreateNewHistoryEvent(eventType eventpb.EventType) *eventpb.HistoryEvent
 		CreateNewHistoryEventWithTimestamp(eventType eventpb.EventType, timestamp int64) *eventpb.HistoryEvent
 		CreateTransientDecisionEvents(di *decisionInfo, identity string) (*eventpb.HistoryEvent, *eventpb.HistoryEvent)

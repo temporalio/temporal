@@ -48,7 +48,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/rpc"
 )
 
@@ -121,8 +121,8 @@ type testDataConverter struct {
 	NumOfCallFromData int
 }
 
-func (tdc *testDataConverter) ToData(value ...interface{}) (*commonpb.Payload, error) {
-	payload := &commonpb.Payload{}
+func (tdc *testDataConverter) ToData(value ...interface{}) (*commonpb.Payloads, error) {
+	result := &commonpb.Payloads{}
 
 	tdc.NumOfCallToData++
 	for i, obj := range value {
@@ -132,29 +132,29 @@ func (tdc *testDataConverter) ToData(value ...interface{}) (*commonpb.Payload, e
 			return nil, fmt.Errorf(
 				"unable to encode argument: %d, %v, with gob error: %v", i, reflect.TypeOf(obj), err)
 		}
-		payloadItem := &commonpb.PayloadItem{
+		payloadItem := &commonpb.Payload{
 			Metadata: map[string][]byte{
 				"encoding": []byte("gob"),
 				"name":     []byte(fmt.Sprintf("args[%d]", i)),
 			},
 			Data: buf.Bytes(),
 		}
-		payload.Items = append(payload.Items, payloadItem)
+		result.Payloads = append(result.Payloads, payloadItem)
 	}
-	return payload, nil
+	return result, nil
 }
 
-func (tdc *testDataConverter) FromData(payload *commonpb.Payload, valuePtr ...interface{}) error {
+func (tdc *testDataConverter) FromData(payloads *commonpb.Payloads, valuePtr ...interface{}) error {
 	tdc.NumOfCallFromData++
-	for i, payloadItem := range payload.GetItems() {
-		encoding, ok := payloadItem.GetMetadata()["encoding"]
+	for i, payload := range payloads.GetPayloads() {
+		encoding, ok := payload.GetMetadata()["encoding"]
 		if !ok {
 			return fmt.Errorf("args[%d]: %w", i, ErrEncodingIsNotSet)
 		}
 
 		e := string(encoding)
 		if e == "gob" {
-			dec := gob.NewDecoder(bytes.NewBuffer(payloadItem.GetData()))
+			dec := gob.NewDecoder(bytes.NewBuffer(payload.GetData()))
 			if err := dec.Decode(valuePtr[i]); err != nil {
 				return fmt.Errorf(
 					"unable to decode argument: %d, %v, with gob error: %v", i, reflect.TypeOf(valuePtr[i]), err)
@@ -230,11 +230,11 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 
 	id := "client-integration-data-converter-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                           id,
-		TaskList:                     s.taskList,
-		ExecutionStartToCloseTimeout: 60 * time.Second,
+		ID:                 id,
+		TaskList:           s.taskList,
+		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
 	defer cancel()
 	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
@@ -264,11 +264,11 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 
 	id := "client-integration-data-converter-failed-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                           id,
-		TaskList:                     s.taskList,
-		ExecutionStartToCloseTimeout: 60 * time.Second,
+		ID:                 id,
+		TaskList:           s.taskList,
+		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
 	defer cancel()
 	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
@@ -294,7 +294,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 		if event.GetEventType() == eventpb.EventType_ActivityTaskFailed {
 			failedAct++
 			var message string
-			err = payload.Decode(event.GetActivityTaskFailedEventAttributes().GetDetails(), &message)
+			err = payloads.Decode(event.GetActivityTaskFailedEventAttributes().GetDetails(), &message)
 			s.NoError(err)
 			s.True(strings.HasPrefix(message, "unable to decode the activity function input payload with error"))
 		}
@@ -310,8 +310,8 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 	execution := workflow.GetInfo(ctx).WorkflowExecution
 	childID := fmt.Sprintf("child_workflow:%v", execution.RunID)
 	cwo := workflow.ChildWorkflowOptions{
-		WorkflowID:                   childID,
-		ExecutionStartToCloseTimeout: time.Minute,
+		WorkflowID:         childID,
+		WorkflowRunTimeout: time.Minute,
 	}
 	ctx = workflow.WithChildOptions(ctx, cwo)
 	var result string
@@ -323,9 +323,9 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 
 	childID1 := fmt.Sprintf("child_workflow1:%v", execution.RunID)
 	cwo1 := workflow.ChildWorkflowOptions{
-		WorkflowID:                   childID1,
-		ExecutionStartToCloseTimeout: time.Minute,
-		TaskList:                     childTaskList,
+		WorkflowID:         childID1,
+		WorkflowRunTimeout: time.Minute,
+		TaskList:           childTaskList,
 	}
 	ctx1 := workflow.WithChildOptions(ctx, cwo1)
 	ctx1 = workflow.WithDataConverter(ctx1, newTestDataConverter())
@@ -372,11 +372,11 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 
 	id := "client-integration-data-converter-with-child-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                           id,
-		TaskList:                     s.taskList,
-		ExecutionStartToCloseTimeout: 60 * time.Second,
+		ID:                 id,
+		TaskList:           s.taskList,
+		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
 	defer cancel()
 	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	if err != nil {

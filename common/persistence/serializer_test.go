@@ -42,6 +42,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 type (
@@ -85,7 +86,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 		EventType: eventType,
 		Attributes: &eventpb.HistoryEvent_ActivityTaskCompletedEventAttributes{
 			ActivityTaskCompletedEventAttributes: &eventpb.ActivityTaskCompletedEventAttributes{
-				Result:           payload.EncodeString("result-1-event-1"),
+				Result:           payloads.EncodeString("result-1-event-1"),
 				ScheduledEventId: 4,
 				StartedEventId:   5,
 				Identity:         "event-1",

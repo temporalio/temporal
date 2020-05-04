@@ -107,10 +107,7 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonpb.Se
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is read-only Temporal reservered attribute", key))
 		}
 		// verify: size of single value <= limit
-		dataSize := 0
-		for _, payloadItem := range val.Items {
-			dataSize += len(payloadItem.GetData())
-		}
+		dataSize := len(val.GetData())
 		if dataSize > sv.searchAttributesSizeOfValueLimit(namespace) {
 			sv.logger.WithTags(tag.ESKey(key), tag.Number(int64(dataSize)), tag.WorkflowNamespace(namespace)).
 				Error("value size of search attribute exceed limit")

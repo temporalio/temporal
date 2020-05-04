@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common/codec"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 )
 
 func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
@@ -60,15 +60,15 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 20,
-		TaskStartToCloseTimeoutSeconds:      3,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  20,
+		WorkflowTaskTimeoutSeconds: 3,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -131,7 +131,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 			{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: payload.EncodeString("efg"),
+					Result: payloads.EncodeString("efg"),
 				},
 				},
 			}},
@@ -166,15 +166,15 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 20,
-		TaskStartToCloseTimeoutSeconds:      5,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  20,
+		WorkflowTaskTimeoutSeconds: 5,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -217,7 +217,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "localActivity1",
-					Details:    payload.EncodeString("abc"),
+					Details:    payloads.EncodeString("abc"),
 				},
 				},
 			}},
@@ -237,7 +237,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "localActivity2",
-					Details:    payload.EncodeString("abc"),
+					Details:    payloads.EncodeString("abc"),
 				},
 				},
 			}},
@@ -256,7 +256,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 			{
 				DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 				Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-					Result: payload.EncodeString("efg"),
+					Result: payloads.EncodeString("efg"),
 				},
 				},
 			}},
@@ -302,15 +302,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -327,7 +327,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -375,15 +375,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -411,7 +411,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -448,15 +448,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -486,7 +486,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -533,15 +533,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -585,7 +585,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -636,15 +636,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -699,7 +699,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
@@ -736,15 +736,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	taskList := &tasklistpb.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 3,
-		TaskStartToCloseTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  3,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -799,7 +799,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
-		Input:             payload.EncodeString(""),
+		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})

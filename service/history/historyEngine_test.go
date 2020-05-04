@@ -65,7 +65,7 @@ import (
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	cconfig "github.com/temporalio/temporal/common/service/config"
@@ -290,7 +290,7 @@ func (s *engineSuite) TestGetMutableStateSync() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	ms := createMutableState(msBuilder)
@@ -350,7 +350,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	ms := createMutableState(msBuilder)
@@ -424,7 +424,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 		s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite),
 		execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	ms := createMutableState(msBuilder)
@@ -485,7 +485,7 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	ms := createMutableState(msBuilder)
@@ -531,7 +531,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	identity := "testIdentity"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	di.StartedID = event.GetEventId()
@@ -565,12 +565,12 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	identity := "testIdentity"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	di.StartedID = event.GetEventId()
 	event = addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, "some random identity")
-	addFailWorkflowEvent(msBuilder, event.GetEventId(), "failure reason", payload.EncodeBytes([]byte{1, 2, 3}))
+	addFailWorkflowEvent(msBuilder, event.GetEventId(), "failure reason", payloads.EncodeBytes([]byte{1, 2, 3}))
 	ms := createMutableState(msBuilder)
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
@@ -613,7 +613,7 @@ func (s *engineSuite) TestQueryWorkflow_FirstDecisionNotCompleted() {
 	identity := "testIdentity"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	ms := createMutableState(msBuilder)
@@ -641,7 +641,7 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	identity := "testIdentity"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	startedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, startedEvent.EventId, identity)
@@ -651,7 +651,7 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	ms := createMutableState(msBuilder)
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
-	s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(&matchingservice.QueryWorkflowResponse{QueryResult: payload.EncodeBytes([]byte{1, 2, 3})}, nil)
+	s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(&matchingservice.QueryWorkflowResponse{QueryResult: payloads.EncodeBytes([]byte{1, 2, 3})}, nil)
 	s.mockHistoryEngine.matchingClient = s.mockMatchingClient
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: testNamespaceID,
@@ -669,7 +669,7 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	s.Nil(resp.GetResponse().QueryRejected)
 
 	var queryResult []byte
-	err = payload.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
+	err = payloads.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
 	s.NoError(err)
 	s.Equal([]byte{1, 2, 3}, queryResult)
 }
@@ -682,7 +682,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Timeout() {
 	tasklist := "testTaskList"
 	identity := "testIdentity"
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	startedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, startedEvent.EventId, identity)
@@ -737,7 +737,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	tasklist := "testTaskList"
 	identity := "testIdentity"
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	startedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, startedEvent.EventId, identity)
@@ -779,7 +779,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 	tasklist := "testTaskList"
 	identity := "testIdentity"
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	startedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, startedEvent.EventId, identity)
@@ -805,7 +805,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 				queryTerminationType: queryTerminationTypeCompleted,
 				queryResult: &querypb.WorkflowQueryResult{
 					ResultType: resultType,
-					Answer:     payload.EncodeBytes(answer),
+					Answer:     payloads.EncodeBytes(answer),
 				},
 			}
 			err := qr.setTerminationState(id, completedTerminationState)
@@ -831,7 +831,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 	s.NoError(err)
 
 	var queryResult []byte
-	err = payload.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
+	err = payloads.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
 	s.NoError(err)
 	s.Equal([]byte{1, 2, 3}, queryResult)
 
@@ -851,7 +851,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Unblocked() {
 	tasklist := "testTaskList"
 	identity := "testIdentity"
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	startedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, startedEvent.EventId, identity)
@@ -861,7 +861,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Unblocked() {
 	ms := createMutableState(msBuilder)
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
-	s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(&matchingservice.QueryWorkflowResponse{QueryResult: payload.EncodeBytes([]byte{1, 2, 3})}, nil)
+	s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(&matchingservice.QueryWorkflowResponse{QueryResult: payloads.EncodeBytes([]byte{1, 2, 3})}, nil)
 	s.mockHistoryEngine.matchingClient = s.mockMatchingClient
 	waitGroup := &sync.WaitGroup{}
 	waitGroup.Add(1)
@@ -895,7 +895,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Unblocked() {
 	s.NoError(err)
 
 	var queryResult []byte
-	err = payload.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
+	err = payloads.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
 	s.NoError(err)
 	s.Equal([]byte{1, 2, 3}, queryResult)
 
@@ -989,7 +989,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -1029,7 +1029,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	startedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, startedEvent.EventId, identity)
@@ -1067,7 +1067,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -1095,19 +1095,19 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	identity := "testIdentity"
 	activity1ID := "activity1"
 	activity1Type := "activity_type1"
-	activity1Input := payload.EncodeString("input1")
-	activity1Result := payload.EncodeString("activity1_result")
+	activity1Input := payloads.EncodeString("input1")
+	activity1Result := payloads.EncodeString("activity1_result")
 	activity2ID := "activity2"
 	activity2Type := "activity_type2"
-	activity2Input := payload.EncodeString("input2")
-	activity2Result := payload.EncodeString("activity2_result")
+	activity2Input := payloads.EncodeString("input2")
+	activity2Result := payloads.EncodeString("activity2_result")
 	activity3ID := "activity3"
 	activity3Type := "activity_type3"
-	activity3Input := payload.EncodeString("input3")
+	activity3Input := payloads.EncodeString("input3")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di1 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tl, identity)
 	decisionCompletedEvent1 := addDecisionTaskCompletedEvent(msBuilder, di1.ScheduleID, decisionStartedEvent1.EventId, identity)
@@ -1192,15 +1192,16 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 
 func (s *engineSuite) TestValidateSignalRequest() {
 	workflowType := "testType"
-	input := payload.EncodeString("input")
+	input := payloads.EncodeString("input")
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
-		WorkflowId:                          "ID",
-		WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-		TaskList:                            &tasklistpb.TaskList{Name: "taskptr"},
-		Input:                               input,
-		ExecutionStartToCloseTimeoutSeconds: 10,
-		TaskStartToCloseTimeoutSeconds:      10,
-		Identity:                            "identity",
+		WorkflowId:                      "ID",
+		WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+		TaskList:                        &tasklistpb.TaskList{Name: "taskptr"},
+		Input:                           input,
+		WorkflowExecutionTimeoutSeconds: 20,
+		WorkflowRunTimeoutSeconds:       10,
+		WorkflowTaskTimeoutSeconds:      10,
+		Identity:                        "identity",
 	}
 	err := validateStartWorkflowExecutionRequest(startRequest, 999)
 	s.Error(err, "startRequest doesn't have request id, it should error out")
@@ -1220,11 +1221,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	}
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
-	input := payload.EncodeString("input")
+	input := payloads.EncodeString("input")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -1274,17 +1275,17 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	identity := "testIdentity"
 	activity1ID := "activity1"
 	activity1Type := "activity_type1"
-	activity1Input := payload.EncodeString("input1")
-	activity1Result := payload.EncodeString("activity1_result")
+	activity1Input := payloads.EncodeString("input1")
+	activity1Result := payloads.EncodeString("activity1_result")
 	activity2ID := "activity2"
 	activity2Type := "activity_type2"
-	activity2Input := payload.EncodeString("input2")
-	activity2Result := payload.EncodeString("activity2_result")
-	workflowResult := payload.EncodeString("workflow result")
+	activity2Input := payloads.EncodeString("input2")
+	activity2Result := payloads.EncodeString("activity2_result")
+	workflowResult := payloads.EncodeString("workflow result")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 25, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 25, 20, 200, identity)
 	di1 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tl, identity)
 	decisionCompletedEvent1 := addDecisionTaskCompletedEvent(msBuilder, di1.ScheduleID, decisionStartedEvent1.EventId, identity)
@@ -1354,18 +1355,18 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	identity := "testIdentity"
 	activity1ID := "activity1"
 	activity1Type := "activity_type1"
-	activity1Input := payload.EncodeString("input1")
-	activity1Result := payload.EncodeString("activity1_result")
+	activity1Input := payloads.EncodeString("input1")
+	activity1Result := payloads.EncodeString("activity1_result")
 	activity2ID := "activity2"
 	activity2Type := "activity_type2"
-	activity2Input := payload.EncodeString("input2")
-	activity2Result := payload.EncodeString("activity2_result")
+	activity2Input := payloads.EncodeString("input2")
+	activity2Result := payloads.EncodeString("activity2_result")
 	reason := "workflow fail reason"
-	details := payload.EncodeString("workflow fail details")
+	details := payloads.EncodeString("workflow fail details")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 25, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 25, 20, 200, identity)
 	di1 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tl, identity)
 	decisionCompletedEvent1 := addDecisionTaskCompletedEvent(msBuilder, di1.ScheduleID, decisionStartedEvent1.EventId, identity)
@@ -1436,12 +1437,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 	identity := "testIdentity"
 	activity1ID := "activity1"
 	activity1Type := "activity_type1"
-	activity1Input := payload.EncodeString("input1")
-	activity1Result := payload.EncodeString("activity1_result")
+	activity1Input := payloads.EncodeString("input1")
+	activity1Result := payloads.EncodeString("activity1_result")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 25, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 25, 20, 200, identity)
 	di1 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tl, identity)
 	decisionCompletedEvent1 := addDecisionTaskCompletedEvent(msBuilder, di1.ScheduleID, decisionStartedEvent1.EventId, identity)
@@ -1492,7 +1493,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 // HistoryEngine's validateActivityScheduleAttribute will deduce the missing timeout and fill it in
 // instead of returning a BadRequest error and only when all three are missing should a BadRequest be returned.
 func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAttribute() {
-	workflowTimeout := int32(100)
+	runTimeout := int32(100)
 	testIterationVariables := []struct {
 		scheduleToClose         int32
 		scheduleToStart         int32
@@ -1503,16 +1504,16 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		expectedStartToClose    int32
 		expectDecisionFail      bool
 	}{
-		// No ScheduleToClose timeout, will use ScheduleToStart + StartToClose
+		// No ScheduleToClose timeout, will use runTimeout
 		{0, 3, 7, 0,
-			3 + 7, 3, 7, false},
+			runTimeout, 3, 7, false},
 		// Has ScheduleToClose timeout but not ScheduleToStart or StartToClose,
 		// will use ScheduleToClose for ScheduleToStart and StartToClose
 		{7, 0, 0, 0,
 			7, 7, 7, false},
 		// Only StartToClose timeout
 		{0, 0, 7, 0,
-			workflowTimeout, workflowTimeout, 7, false},
+			runTimeout, runTimeout, 7, false},
 		// No ScheduleToClose timeout, ScheduleToStart or StartToClose, expect error return
 		{0, 0, 0, 0,
 			0, 0, 0, true},
@@ -1529,20 +1530,20 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		{0, 0, 0, -1,
 			0, 0, 0, true},
 		// Use workflow timeout
-		{workflowTimeout, 0, 0, 0,
-			workflowTimeout, workflowTimeout, workflowTimeout, false},
+		{runTimeout, 0, 0, 0,
+			runTimeout, runTimeout, runTimeout, false},
 		// Timeout larger than workflow timeout
-		{workflowTimeout + 1, 0, 0, 0,
-			workflowTimeout, workflowTimeout, workflowTimeout, false},
-		{0, workflowTimeout + 1, 0, 0,
+		{runTimeout + 1, 0, 0, 0,
+			runTimeout, runTimeout, runTimeout, false},
+		{0, runTimeout + 1, 0, 0,
 			0, 0, 0, true},
-		{0, 0, workflowTimeout + 1, 0,
-			workflowTimeout, workflowTimeout, workflowTimeout, false},
-		{0, 0, 0, workflowTimeout + 1,
+		{0, 0, runTimeout + 1, 0,
+			runTimeout, runTimeout, runTimeout, false},
+		{0, 0, 0, runTimeout + 1,
 			0, 0, 0, true},
 		// No ScheduleToClose timeout, will use ScheduleToStart + StartToClose, but exceed limit
-		{0, workflowTimeout, 10, 0,
-			workflowTimeout, workflowTimeout, 10, false},
+		{0, runTimeout, 10, 0,
+			runTimeout, runTimeout, 10, false},
 	}
 
 	for _, iVar := range testIterationVariables {
@@ -1558,11 +1559,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		}
 		taskToken, _ := tt.Marshal()
 		identity := "testIdentity"
-		input := payload.EncodeString("input")
+		input := payloads.EncodeString("input")
 
 		msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 			loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-		addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), workflowTimeout, 200, identity)
+		addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), runTimeout*10, runTimeout, 200, identity)
 		di := addDecisionTaskScheduledEvent(msBuilder)
 		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -1608,14 +1609,14 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 			s.False(executionBuilder.HasPendingDecision())
 
 			activity1Attributes := s.getActivityScheduledEvent(executionBuilder, int64(5)).GetActivityTaskScheduledEventAttributes()
-			s.Equal(iVar.expectedScheduleToClose, activity1Attributes.GetScheduleToCloseTimeoutSeconds())
-			s.Equal(iVar.expectedScheduleToStart, activity1Attributes.GetScheduleToStartTimeoutSeconds())
-			s.Equal(iVar.expectedStartToClose, activity1Attributes.GetStartToCloseTimeoutSeconds())
+			s.Equal(iVar.expectedScheduleToClose, activity1Attributes.GetScheduleToCloseTimeoutSeconds(), iVar)
+			s.Equal(iVar.expectedScheduleToStart, activity1Attributes.GetScheduleToStartTimeoutSeconds(), iVar)
+			s.Equal(iVar.expectedStartToClose, activity1Attributes.GetStartToCloseTimeoutSeconds(), iVar)
 		} else {
-			s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
-			s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-			s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-			s.True(executionBuilder.HasPendingDecision())
+			s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID, iVar)
+			s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent, iVar)
+			s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State, iVar)
+			s.True(executionBuilder.HasPendingDecision(), iVar)
 		}
 		s.TearDownTest()
 		s.SetupTest()
@@ -1653,7 +1654,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	msBuilder.namespaceEntry = namespaceEntry
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -1699,11 +1700,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	}
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
-	input := payload.EncodeString("input")
+	input := payloads.EncodeString("input")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 90, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -1749,7 +1750,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	s.Equal(int64(4), activity1Attributes.DecisionTaskCompletedEventId)
 	s.Equal(tl, activity1Attributes.TaskList.Name)
 	s.Equal(input, activity1Attributes.Input)
-	s.Equal(int32(100), activity1Attributes.ScheduleToCloseTimeoutSeconds)
+	s.Equal(int32(90), activity1Attributes.ScheduleToCloseTimeoutSeconds) // runTimeout
 	s.Equal(int32(10), activity1Attributes.ScheduleToStartTimeoutSeconds)
 	s.Equal(int32(50), activity1Attributes.StartToCloseTimeoutSeconds)
 	s.Equal(int32(5), activity1Attributes.HeartbeatTimeoutSeconds)
@@ -1772,7 +1773,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatTimeout(
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = time.Now().Add(-time.Hour).UnixNano()
@@ -1815,7 +1816,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = time.Now().Add(-time.Minute).UnixNano()
@@ -1858,7 +1859,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	msBuilder.executionInfo.DecisionOriginalScheduledTimestamp = 0
@@ -1898,11 +1899,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	}
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
-	workflowResult := payload.EncodeString("success")
+	workflowResult := payloads.EncodeString("success")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -1950,12 +1951,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	}
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
-	details := payload.EncodeString("fail workflow details")
+	details := payloads.EncodeString("fail workflow details")
 	reason := "fail workflow reason"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -2007,7 +2008,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -2020,7 +2021,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 				RunId:      we.RunId,
 			},
 			SignalName: "signal",
-			Input:      payload.EncodeString("test input"),
+			Input:      payloads.EncodeString("test input"),
 		}},
 	}}
 
@@ -2062,7 +2063,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithAban
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -2125,7 +2126,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -2190,7 +2191,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), testRunID)
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, codec.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -2238,7 +2239,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -2251,7 +2252,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 				RunId:      we.RunId,
 			},
 			SignalName: "signal",
-			Input:      payload.EncodeString("test input"),
+			Input:      payloads.EncodeString("test input"),
 		}},
 	}}
 
@@ -2376,7 +2377,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), testRunID)
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -2412,7 +2413,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), testRunID)
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -2447,12 +2448,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
-	activityResult := payload.EncodeString("activity result")
+	activityInput := payloads.EncodeString("input1")
+	activityResult := payloads.EncodeString("activity result")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -2495,12 +2496,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
-	activityResult := payload.EncodeString("activity result")
+	activityInput := payloads.EncodeString("input1")
+	activityResult := payloads.EncodeString("activity result")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -2544,12 +2545,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
-	activityResult := payload.EncodeString("activity result")
+	activityInput := payloads.EncodeString("input1")
+	activityResult := payloads.EncodeString("activity result")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -2589,15 +2590,15 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	identity := "testIdentity"
 	activity1ID := "activity1"
 	activity1Type := "activity_type1"
-	activity1Input := payload.EncodeString("input1")
-	activity1Result := payload.EncodeString("activity1_result")
+	activity1Input := payloads.EncodeString("input1")
+	activity1Result := payloads.EncodeString("activity1_result")
 	activity2ID := "activity2"
 	activity2Type := "activity_type2"
-	activity2Input := payload.EncodeString("input2")
+	activity2Input := payloads.EncodeString("input2")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent1 := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent1.EventId, identity)
@@ -2660,12 +2661,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
-	activityResult := payload.EncodeString("activity result")
+	activityInput := payloads.EncodeString("input1")
+	activityResult := payloads.EncodeString("activity result")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -2709,12 +2710,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
-	activityResult := payload.EncodeString("activity result")
+	activityInput := payloads.EncodeString("input1")
+	activityResult := payloads.EncodeString("activity result")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -2762,8 +2763,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
-	activityResult := payload.EncodeString("activity result")
+	activityInput := payloads.EncodeString("input1")
+	activityResult := payloads.EncodeString("activity result")
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		ScheduleId: common.EmptyEventID,
@@ -2773,7 +2774,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, decisionScheduledEvent.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -2915,7 +2916,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), testRunID)
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -2951,7 +2952,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), testRunID)
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -2986,11 +2987,11 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3032,13 +3033,13 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 	failReason := "fail reason"
-	details := payload.EncodeString("fail details")
+	details := payloads.EncodeString("fail details")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3083,11 +3084,11 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3126,17 +3127,17 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	identity := "testIdentity"
 	activity1ID := "activity1"
 	activity1Type := "activity_type1"
-	activity1Input := payload.EncodeString("input1")
+	activity1Input := payloads.EncodeString("input1")
 	failReason := "fail reason"
-	details := payload.EncodeString("fail details.")
+	details := payloads.EncodeString("fail details.")
 	activity2ID := "activity2"
 	activity2Type := "activity_type2"
-	activity2Input := payload.EncodeString("input2")
-	activity2Result := payload.EncodeString("activity2_result")
+	activity2Input := payloads.EncodeString("input2")
+	activity2Result := payloads.EncodeString("activity2_result")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 25, 25, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 25, 25, 25, identity)
 	di1 := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, di1.ScheduleID, tl, identity)
 	decisionCompletedEvent1 := addDecisionTaskCompletedEvent(msBuilder, di1.ScheduleID, decisionStartedEvent1.EventId, identity)
@@ -3204,11 +3205,11 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3251,13 +3252,13 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 	failReason := "failed"
-	failDetails := payload.EncodeString("fail details.")
+	failDetails := payloads.EncodeString("fail details.")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3306,9 +3307,9 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 	failReason := "failed"
-	failDetails := payload.EncodeString("fail details.")
+	failDetails := payloads.EncodeString("fail details.")
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		ScheduleId: common.EmptyEventID,
@@ -3318,7 +3319,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, decisionScheduledEvent.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3374,11 +3375,11 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3392,7 +3393,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
-	detais := payload.EncodeString("details")
+	detais := payloads.EncodeString("details")
 
 	_, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
 		NamespaceId: testNamespaceID,
@@ -3421,11 +3422,11 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3440,7 +3441,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
-	detais := payload.EncodeString("details")
+	detais := payloads.EncodeString("details")
 
 	_, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
 		NamespaceId: testNamespaceID,
@@ -3468,7 +3469,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		RunId:      primitives.MustParseUUID(we.RunId),
@@ -3479,7 +3480,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3493,7 +3494,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
-	detais := payload.EncodeString("details")
+	detais := payloads.EncodeString("details")
 
 	_, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
 		NamespaceId: testNamespaceID,
@@ -3522,11 +3523,11 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3543,7 +3544,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
-			Details:   payload.EncodeString("details"),
+			Details:   payloads.EncodeString("details"),
 		},
 	})
 	s.NotNil(err)
@@ -3566,11 +3567,11 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3592,7 +3593,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
-			Details:   payload.EncodeString("details"),
+			Details:   payloads.EncodeString("details"),
 		},
 	})
 	s.Nil(err)
@@ -3619,7 +3620,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		ScheduleId: common.EmptyEventID,
@@ -3629,7 +3630,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, decisionScheduledEvent.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3653,7 +3654,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
-			Details:   payload.EncodeString("details"),
+			Details:   payloads.EncodeString("details"),
 		},
 	})
 	s.Nil(err)
@@ -3767,7 +3768,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -3817,11 +3818,11 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3881,11 +3882,11 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -3942,12 +3943,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
-	workflowResult := payload.EncodeString("workflow result")
+	activityInput := payloads.EncodeString("input1")
+	workflowResult := payloads.EncodeString("workflow result")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -4010,11 +4011,11 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -4069,7 +4070,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
-			Details:   payload.EncodeString("details"),
+			Details:   payloads.EncodeString("details"),
 		},
 	})
 	s.Nil(err)
@@ -4085,7 +4086,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
-			Details:   payload.EncodeString("details"),
+			Details:   payloads.EncodeString("details"),
 		},
 	})
 	s.Nil(err)
@@ -4113,11 +4114,11 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -4172,7 +4173,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
-			Details:   payload.EncodeString("details"),
+			Details:   payloads.EncodeString("details"),
 		},
 	})
 	s.Nil(err)
@@ -4188,7 +4189,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
-			Details:   payload.EncodeString("details"),
+			Details:   payloads.EncodeString("details"),
 		},
 	})
 	s.Nil(err)
@@ -4215,11 +4216,11 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
-	activityInput := payload.EncodeString("input1")
+	activityInput := payloads.EncodeString("input1")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -4257,7 +4258,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	release(nil)
 	result1 := &querypb.WorkflowQueryResult{
 		ResultType: querypb.QueryResultType_Answered,
-		Answer:     payload.EncodeBytes([]byte{1, 2, 3}),
+		Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
 	}
 	result2 := &querypb.WorkflowQueryResult{
 		ResultType:   querypb.QueryResultType_Failed,
@@ -4315,7 +4316,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
-			Details:   payload.EncodeString("details"),
+			Details:   payloads.EncodeString("details"),
 		},
 	})
 	s.Nil(err)
@@ -4331,7 +4332,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
 			TaskToken: activityTaskToken,
 			Identity:  identity,
-			Details:   payload.EncodeString("details"),
+			Details:   payloads.EncodeString("details"),
 		},
 	})
 	s.Nil(err)
@@ -4366,7 +4367,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -4462,7 +4463,7 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	// Verify cancel timer with a start event.
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -4520,7 +4521,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	// Verify cancel timer with a start event.
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
@@ -4574,7 +4575,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
 	// Verify cancel timer with a start event.
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 100, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 100, 100, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
@@ -4634,7 +4635,7 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 	tasklist := "testTaskList"
 	identity := "testIdentity"
 	signalName := "my signal name"
-	input := payload.EncodeString("test input")
+	input := payloads.EncodeString("test input")
 	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId: testNamespaceID,
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
@@ -4648,7 +4649,7 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.NamespaceID = testNamespaceID
@@ -4675,7 +4676,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	tasklist := "testTaskList"
 	identity := "testIdentity"
 	signalName := "my signal name 2"
-	input := payload.EncodeString("test input 2")
+	input := payloads.EncodeString("test input 2")
 	requestID := uuid.New()
 	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId: testNamespaceID,
@@ -4691,7 +4692,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	// assume duplicate request id
@@ -4719,7 +4720,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 	tasklist := "testTaskList"
 	identity := "testIdentity"
 	signalName := "my signal name"
-	input := payload.EncodeString("test input")
+	input := payloads.EncodeString("test input")
 	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId: testNamespaceID,
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
@@ -4733,7 +4734,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, *we, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, *we, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.State = persistence.WorkflowStateCompleted
@@ -4765,7 +4766,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), testRunID)
-	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
 	ms.ExecutionInfo.NamespaceID = testNamespaceID
@@ -4799,17 +4800,18 @@ func (s *engineSuite) printHistory(builder mutableState) string {
 }
 
 func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowExecution executionpb.WorkflowExecution,
-	workflowType, taskList string, input *commonpb.Payload, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
+	workflowType, taskList string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout int32,
 	parentInfo *executiongenpb.ParentExecutionInfo, identity string) *eventpb.HistoryEvent {
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
-		WorkflowId:                          workflowExecution.WorkflowId,
-		WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-		TaskList:                            &tasklistpb.TaskList{Name: taskList},
-		Input:                               input,
-		ExecutionStartToCloseTimeoutSeconds: executionStartToCloseTimeout,
-		TaskStartToCloseTimeoutSeconds:      taskStartToCloseTimeout,
-		Identity:                            identity,
+		WorkflowId:                      workflowExecution.WorkflowId,
+		WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+		TaskList:                        &tasklistpb.TaskList{Name: taskList},
+		Input:                           input,
+		WorkflowExecutionTimeoutSeconds: executionTimeout,
+		WorkflowRunTimeoutSeconds:       runTimeout,
+		WorkflowTaskTimeoutSeconds:      taskTimeout,
+		Identity:                        identity,
 	}
 
 	event, _ := builder.AddWorkflowExecutionStartedEvent(
@@ -4825,10 +4827,10 @@ func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowEx
 }
 
 func addWorkflowExecutionStartedEvent(builder mutableState, workflowExecution executionpb.WorkflowExecution,
-	workflowType, taskList string, input *commonpb.Payload, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
+	workflowType, taskList string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout int32,
 	identity string) *eventpb.HistoryEvent {
 	return addWorkflowExecutionStartedEventWithParent(builder, workflowExecution, workflowType, taskList, input,
-		executionStartToCloseTimeout, taskStartToCloseTimeout, nil, identity)
+		executionTimeout, runTimeout, taskTimeout, nil, identity)
 }
 
 func addDecisionTaskScheduledEvent(builder mutableState) *decisionInfo {
@@ -4866,7 +4868,7 @@ func addActivityTaskScheduledEvent(
 	decisionCompletedID int64,
 	activityID, activityType,
 	taskList string,
-	input *commonpb.Payload,
+	input *commonpb.Payloads,
 	scheduleToCloseTimeout int32,
 	scheduleToStartTimeout int32,
 	startToCloseTimeout int32,
@@ -4893,7 +4895,7 @@ func addActivityTaskScheduledEventWithRetry(
 	decisionCompletedID int64,
 	activityID, activityType,
 	taskList string,
-	input *commonpb.Payload,
+	input *commonpb.Payloads,
 	scheduleToCloseTimeout int32,
 	scheduleToStartTimeout int32,
 	startToCloseTimeout int32,
@@ -4922,7 +4924,7 @@ func addActivityTaskStartedEvent(builder mutableState, scheduleID int64, identit
 	return event
 }
 
-func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID int64, result *commonpb.Payload,
+func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID int64, result *commonpb.Payloads,
 	identity string) *eventpb.HistoryEvent {
 	event, _ := builder.AddActivityTaskCompletedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskCompletedRequest{
 		Result:   result,
@@ -4932,7 +4934,7 @@ func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID i
 	return event
 }
 
-func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, reason string, details *commonpb.Payload,
+func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, reason string, details *commonpb.Payloads,
 	identity string) *eventpb.HistoryEvent {
 	event, _ := builder.AddActivityTaskFailedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskFailedRequest{
 		Reason:   reason,
@@ -4976,7 +4978,7 @@ func addCancelRequestedEvent(builder mutableState, initiatedID int64, namespace,
 }
 
 func addRequestSignalInitiatedEvent(builder mutableState, decisionCompletedEventID int64,
-	signalRequestID, namespace, workflowID, runID, signalName string, input *commonpb.Payload, control string) (*eventpb.HistoryEvent, *persistenceblobs.SignalInfo) {
+	signalRequestID, namespace, workflowID, runID, signalName string, input *commonpb.Payloads, control string) (*eventpb.HistoryEvent, *persistenceblobs.SignalInfo) {
 	event, si, _ := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, signalRequestID,
 		&decisionpb.SignalExternalWorkflowExecutionDecisionAttributes{
 			Namespace: namespace,
@@ -4998,20 +5000,21 @@ func addSignaledEvent(builder mutableState, initiatedID int64, namespace, workfl
 }
 
 func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, decisionCompletedID int64,
-	createRequestID, namespace, workflowID, workflowType, tasklist string, input *commonpb.Payload,
-	executionStartToCloseTimeout, taskStartToCloseTimeout int32) (*eventpb.HistoryEvent,
+	createRequestID, namespace, workflowID, workflowType, taskList string, input *commonpb.Payloads,
+	executionTimeout, runTimeout, taskTimeout int32) (*eventpb.HistoryEvent,
 	*persistence.ChildExecutionInfo) {
 
 	event, cei, _ := builder.AddStartChildWorkflowExecutionInitiatedEvent(decisionCompletedID, createRequestID,
 		&decisionpb.StartChildWorkflowExecutionDecisionAttributes{
-			Namespace:                           namespace,
-			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                            &tasklistpb.TaskList{Name: tasklist},
-			Input:                               input,
-			ExecutionStartToCloseTimeoutSeconds: executionStartToCloseTimeout,
-			TaskStartToCloseTimeoutSeconds:      taskStartToCloseTimeout,
-			Control:                             "",
+			Namespace:                       namespace,
+			WorkflowId:                      workflowID,
+			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			Input:                           input,
+			WorkflowExecutionTimeoutSeconds: executionTimeout,
+			WorkflowRunTimeoutSeconds:       runTimeout,
+			WorkflowTaskTimeoutSeconds:      taskTimeout,
+			Control:                         "",
 		})
 	return event, cei
 }
@@ -5038,7 +5041,7 @@ func addChildWorkflowExecutionCompletedEvent(builder mutableState, initiatedID i
 }
 
 func addCompleteWorkflowEvent(builder mutableState, decisionCompletedEventID int64,
-	result *commonpb.Payload) *eventpb.HistoryEvent {
+	result *commonpb.Payloads) *eventpb.HistoryEvent {
 	event, _ := builder.AddCompletedWorkflowEvent(decisionCompletedEventID, &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
 		Result: result,
 	})
@@ -5049,7 +5052,7 @@ func addFailWorkflowEvent(
 	builder mutableState,
 	decisionCompletedEventID int64,
 	reason string,
-	details *commonpb.Payload,
+	details *commonpb.Payloads,
 ) *eventpb.HistoryEvent {
 	event, _ := builder.AddFailWorkflowEvent(decisionCompletedEventID, &decisionpb.FailWorkflowExecutionDecisionAttributes{
 		Reason:  reason,
@@ -5148,8 +5151,8 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		StickyTaskList:                     sourceInfo.StickyTaskList,
 		StickyScheduleToStartTimeout:       sourceInfo.StickyScheduleToStartTimeout,
 		WorkflowTypeName:                   sourceInfo.WorkflowTypeName,
-		WorkflowTimeout:                    sourceInfo.WorkflowTimeout,
-		DecisionStartToCloseTimeout:        sourceInfo.DecisionStartToCloseTimeout,
+		WorkflowRunTimeout:                 sourceInfo.WorkflowRunTimeout,
+		WorkflowTaskTimeout:                sourceInfo.WorkflowTaskTimeout,
 		State:                              sourceInfo.State,
 		Status:                             sourceInfo.Status,
 		LastFirstEventID:                   sourceInfo.LastFirstEventID,
@@ -5182,11 +5185,10 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		InitialInterval:                    sourceInfo.InitialInterval,
 		BackoffCoefficient:                 sourceInfo.BackoffCoefficient,
 		MaximumInterval:                    sourceInfo.MaximumInterval,
-		ExpirationTime:                     sourceInfo.ExpirationTime,
+		WorkflowExpirationTime:             sourceInfo.WorkflowExpirationTime,
 		MaximumAttempts:                    sourceInfo.MaximumAttempts,
 		NonRetriableErrors:                 sourceInfo.NonRetriableErrors,
 		BranchToken:                        sourceInfo.BranchToken,
-		ExpirationSeconds:                  sourceInfo.ExpirationSeconds,
 	}
 }
 
@@ -5218,7 +5220,7 @@ func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.Activit
 		StartedEvent:             copyHistoryEvent(sourceInfo.StartedEvent),
 		ActivityID:               sourceInfo.ActivityID,
 		RequestID:                sourceInfo.RequestID,
-		Details:                  proto.Clone(sourceInfo.Details).(*commonpb.Payload),
+		Details:                  proto.Clone(sourceInfo.Details).(*commonpb.Payloads),
 		ScheduledTime:            sourceInfo.ScheduledTime,
 		StartedTime:              sourceInfo.StartedTime,
 		ScheduleToStartTimeout:   sourceInfo.ScheduleToStartTimeout,
@@ -5273,7 +5275,7 @@ func copySignalInfo(sourceInfo *persistenceblobs.SignalInfo) *persistenceblobs.S
 		RequestId:   sourceInfo.GetRequestId(),
 		Name:        sourceInfo.GetName(),
 	}
-	result.Input = proto.Clone(sourceInfo.Input).(*commonpb.Payload)
+	result.Input = proto.Clone(sourceInfo.Input).(*commonpb.Payloads)
 	result.Control = sourceInfo.Control
 	return result
 }

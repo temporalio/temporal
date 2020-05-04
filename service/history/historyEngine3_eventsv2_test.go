@@ -52,7 +52,7 @@ import (
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	p "github.com/temporalio/temporal/common/persistence"
 )
 
@@ -177,7 +177,7 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	executionInfo.LastUpdatedTimestamp = time.Now()
 	executionInfo.StickyTaskList = stickyTl
 
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payload.EncodeString("input"), 100, 200, identity)
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100, 50, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -250,14 +250,14 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                           namespaceID,
-			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                            &tasklistpb.TaskList{Name: taskList},
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
-			Identity:                            identity,
-			RequestId:                           requestID,
+			Namespace:                       namespaceID,
+			WorkflowId:                      workflowID,
+			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			WorkflowExecutionTimeoutSeconds: 1,
+			WorkflowTaskTimeoutSeconds:      2,
+			Identity:                        identity,
+			RequestId:                       requestID,
 		},
 	})
 	s.Nil(err)
@@ -280,7 +280,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	runID := testRunID
 	identity := "testIdentity"
 	signalName := "my signal name"
-	input := payload.EncodeString("test input")
+	input := payloads.EncodeString("test input")
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -327,21 +327,21 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	taskList := "testTaskList"
 	identity := "testIdentity"
 	signalName := "my signal name"
-	input := payload.EncodeString("test input")
+	input := payloads.EncodeString("test input")
 	requestID := uuid.New()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                           namespaceID,
-			WorkflowId:                          workflowID,
-			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                            &tasklistpb.TaskList{Name: taskList},
-			ExecutionStartToCloseTimeoutSeconds: 1,
-			TaskStartToCloseTimeoutSeconds:      2,
-			Identity:                            identity,
-			SignalName:                          signalName,
-			Input:                               input,
-			RequestId:                           requestID,
+			Namespace:                       namespaceID,
+			WorkflowId:                      workflowID,
+			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                        &tasklistpb.TaskList{Name: taskList},
+			WorkflowExecutionTimeoutSeconds: 1,
+			WorkflowTaskTimeoutSeconds:      2,
+			Identity:                        identity,
+			SignalName:                      signalName,
+			Input:                           input,
+			RequestId:                       requestID,
 		},
 	}
 

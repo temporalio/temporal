@@ -11,8 +11,7 @@ services:
   mysql:
     image: mysql:5.7
     environment:
-      MYSQL_DATABASE: db
-      MYSQL_ROOT_PASSWORD: temporal
+      MYSQL_ROOT_PASSWORD: root
     volumes:
       - ./mysql-init:/docker-entrypoint-initdb.d
     networks:
@@ -23,6 +22,7 @@ services:
   postgres:
     image: postgres:12
     environment:
+      POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
     ports:
       - "5432:5432"

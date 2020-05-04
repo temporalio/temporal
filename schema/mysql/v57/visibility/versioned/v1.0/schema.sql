@@ -1,15 +1,16 @@
 CREATE TABLE executions_visibility (
   namespace_id            CHAR(64) NOT NULL,
   run_id               CHAR(64) NOT NULL,
-  start_time           TIMESTAMP NOT NULL,
-  execution_time       TIMESTAMP NOT NULL,
+  start_time           DATETIME(6) NOT NULL,
+  execution_time       DATETIME(6) NOT NULL,
   workflow_id          VARCHAR(255) NOT NULL,
   workflow_type_name   VARCHAR(255) NOT NULL,
-  status         INTEGER,  -- enum WorkflowExecutionStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
-  close_time           TIMESTAMP NULL,
+  status         INT,  -- enum WorkflowExecutionStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
+  close_time           DATETIME(6) NULL,
   history_length       BIGINT,
-  memo                 BYTEA,
+  memo                 BLOB,
   encoding             VARCHAR(64) NOT NULL,
+  task_list            VARCHAR(255) DEFAULT '' NOT NULL,
 
   PRIMARY KEY  (namespace_id, run_id)
 );

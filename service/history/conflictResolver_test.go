@@ -48,7 +48,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -164,12 +164,13 @@ func (s *conflictResolverSuite) TestReset() {
 		EventId: 1,
 		Version: version,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonpb.WorkflowType{Name: "some random workflow type"},
-			TaskList:                            &tasklistpb.TaskList{Name: "some random workflow type"},
-			Input:                               payload.EncodeString("some random input"),
-			ExecutionStartToCloseTimeoutSeconds: 123,
-			TaskStartToCloseTimeoutSeconds:      233,
-			Identity:                            "some random identity",
+			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
+			TaskList:                        &tasklistpb.TaskList{Name: "some random workflow type"},
+			Input:                           payloads.EncodeString("some random input"),
+			WorkflowExecutionTimeoutSeconds: 123,
+			WorkflowRunTimeoutSeconds:       231,
+			WorkflowTaskTimeoutSeconds:      233,
+			Identity:                        "some random identity",
 		}},
 	}
 	event2 := &eventpb.HistoryEvent{
@@ -196,33 +197,34 @@ func (s *conflictResolverSuite) TestReset() {
 	createRequestID := uuid.New()
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:                 namespaceID,
-		WorkflowID:                  execution.GetWorkflowId(),
-		RunID:                       execution.GetRunId(),
-		ParentNamespaceID:           "",
-		ParentWorkflowID:            "",
-		ParentRunID:                 "",
-		InitiatedID:                 common.EmptyEventID,
-		TaskList:                    event1.GetWorkflowExecutionStartedEventAttributes().TaskList.GetName(),
-		WorkflowTypeName:            event1.GetWorkflowExecutionStartedEventAttributes().WorkflowType.GetName(),
-		WorkflowTimeout:             event1.GetWorkflowExecutionStartedEventAttributes().ExecutionStartToCloseTimeoutSeconds,
-		DecisionStartToCloseTimeout: event1.GetWorkflowExecutionStartedEventAttributes().TaskStartToCloseTimeoutSeconds,
-		State:                       persistence.WorkflowStateCreated,
-		Status:                      executionpb.WorkflowExecutionStatus_Running,
-		LastFirstEventID:            event1.GetEventId(),
-		NextEventID:                 nextEventID,
-		LastProcessedEvent:          common.EmptyEventID,
-		StartTimestamp:              startTime,
-		LastUpdatedTimestamp:        startTime,
-		DecisionVersion:             common.EmptyVersion,
-		DecisionScheduleID:          common.EmptyEventID,
-		DecisionStartedID:           common.EmptyEventID,
-		DecisionRequestID:           emptyUUID,
-		DecisionTimeout:             0,
-		DecisionAttempt:             0,
-		DecisionStartedTimestamp:    0,
-		CreateRequestID:             createRequestID,
-		BranchToken:                 branchToken,
+		NamespaceID:              namespaceID,
+		WorkflowID:               execution.GetWorkflowId(),
+		RunID:                    execution.GetRunId(),
+		ParentNamespaceID:        "",
+		ParentWorkflowID:         "",
+		ParentRunID:              "",
+		InitiatedID:              common.EmptyEventID,
+		TaskList:                 event1.GetWorkflowExecutionStartedEventAttributes().TaskList.GetName(),
+		WorkflowTypeName:         event1.GetWorkflowExecutionStartedEventAttributes().WorkflowType.GetName(),
+		WorkflowExecutionTimeout: event1.GetWorkflowExecutionStartedEventAttributes().WorkflowExecutionTimeoutSeconds,
+		WorkflowRunTimeout:       event1.GetWorkflowExecutionStartedEventAttributes().WorkflowRunTimeoutSeconds,
+		WorkflowTaskTimeout:      event1.GetWorkflowExecutionStartedEventAttributes().WorkflowTaskTimeoutSeconds,
+		State:                    persistence.WorkflowStateCreated,
+		Status:                   executionpb.WorkflowExecutionStatus_Running,
+		LastFirstEventID:         event1.GetEventId(),
+		NextEventID:              nextEventID,
+		LastProcessedEvent:       common.EmptyEventID,
+		StartTimestamp:           startTime,
+		LastUpdatedTimestamp:     startTime,
+		DecisionVersion:          common.EmptyVersion,
+		DecisionScheduleID:       common.EmptyEventID,
+		DecisionStartedID:        common.EmptyEventID,
+		DecisionRequestID:        emptyUUID,
+		DecisionTimeout:          0,
+		DecisionAttempt:          0,
+		DecisionStartedTimestamp: 0,
+		CreateRequestID:          createRequestID,
+		BranchToken:              branchToken,
 	}
 	// this is only a shallow test, meaning
 	// the mutable state only has the minimal information

@@ -59,6 +59,7 @@ import (
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/environment"
 	"github.com/temporalio/temporal/host"
 )
@@ -192,16 +193,16 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		},
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
-		SearchAttributes:                    searchAttr,
+		RequestId:                  uuid.New(),
+		Namespace:                  namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
+		SearchAttributes:           searchAttr,
 	}
 	startTime := time.Now().UnixNano()
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
@@ -317,7 +318,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
-	terminateDetails := payload.EncodeString("terminate details")
+	terminateDetails := payloads.EncodeString("terminate details")
 	_, err = client1.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{

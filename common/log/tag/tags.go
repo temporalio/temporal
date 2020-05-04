@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 // All logging tags are defined in this file.
@@ -284,8 +285,8 @@ func WorkflowDecisionFailCause(decisionFailCause int64) Tag {
 }
 
 // WorkflowTaskListType returns tag for WorkflowTaskListType
-func WorkflowTaskListType(taskListType int32) Tag {
-	return newInt32("wf-task-list-type", taskListType)
+func WorkflowTaskListType(taskListType tasklistpb.TaskListType) Tag {
+	return newInt32("wf-task-list-type", int32(taskListType))
 }
 
 // WorkflowTaskListName returns tag for WorkflowTaskListName

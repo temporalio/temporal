@@ -77,7 +77,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetriableErrors,
 	))
 
-	// no retry if both MaximumAttempts and ExpirationTime are not set
+	// no retry if both MaximumAttempts and WorkflowExpirationTime are not set
 	ai.CancelRequested = false
 	a.Equal(backoff.NoBackoff, getBackoffInterval(
 		clock.NewRealTimeSource().Now(),

@@ -1,70 +1,102 @@
 # Developing Temporal
 
-This doc is intended for contributors to `temporal` server (hopefully that's you!)
+This doc is for contributors to Temporal server (hopefully that's you!)
 
 **Note:** All contributors also need to fill out the [Temporal Contributor License Agreement](https://gist.github.com/samarabbas/7dcd41eb1d847e12263cc961ccfdb197) before we can merge in any of your changes.
 
-## Development Environment
+## Installing prerequisites
 
-* Go. Install on OS X with `brew install go`.
-* Protobuf compiler. Install on OS X with `brew install protobuf`.
+### Build prerequisites 
+* [Go Lang](https://golang.org/):
+  - Install on OS X with `brew install go`.
+  - Install on Ubuntu with `sudo apt install golang`.
+* [Protocol bufffers compiler](https://github.com/protocolbuffers/protobuf/):
+  - Install on OS X with `brew install protobuf`.
+  - Install on Ubuntu with `sudo apt install protobuf-compiler`.
+
+### Runtime (server and tests) prerequisites
+* [docker](https://docs.docker.com/engine/install/)
+* [docker-compose](https://docs.docker.com/compose/install/)
 
 ## Checking out the code
 
 Clone the repo into the preffered location:
 ```bash
-git clone https://github.com/temporalio/temporal.git
+$ git clone https://github.com/temporalio/temporal.git
 ```
 
 ## Building
 
-For the very first time compile `temporal` server wtih `make` command: 
+For the very first time build `temporal-server` and helper tools with simple `make` command: 
 ```bash
-make
+$ make
 ```
 
-it will install all build dependencies and build the project.
+It will install all other build dependencies and build the binaries.
 
-Futher you can build the `temporal` service and helper tools without running test:
+Futher you can build binaries without running test with:
 ```bash
-make bins
+$ make bins
 ```
+
+Please check the top of our [Makefile](Makefile) for other useful build targets.
 
 ## Testing
 
-Before running the unit tests you must have `cassandra` running locally:
+Tests require runtime dependencies. You can run them with `docker-compose`. Open new terminal window and run:
 ```bash
-# for OS X
-brew install cassandra
-
-# start cassandra
-/usr/local/bin/cassandra
+$ cd docker/dependencies
+$ docker-compose up
 ```
 
 Run unit tests:
 ```bash
-make unit-test
+$ make unit-test
 ```
-
-To run integration tests you must have `kafka` running locally (in addition to `cassandra`).
-o run kafka, follow kafka quickstart guide [here](https://kafka.apache.org/quickstart).
 
 Run all integration tests:
 ```bash
-make integration-test
+$ make integration-test
 ```
 
 Or run all the tests at once:
 ```bash
-make test
+$ make test
 ```
-Or run single test:
+
+You can also run a single test:
 ```bash
-go test -v <path> -run <TestSuite> -testify.m <TestSpercificTaskName>
+$ go test -v <path> -run <TestSuite> -testify.m <TestSpecificTaskName>
 ```
 for example:
 ```bash
-go test -v github.com/temporalio/temporal/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
+$ go test -v github.com/temporalio/temporal/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
+```
+
+When you are done, don't forget to stop `docker-compose` (with `Ctrl+C`) and clean up all dependencies:
+```bash
+$ docker-compose down
+```
+
+## Runing server locally
+
+First start runtime dependencies using `docker-compose`. Open new terminal window and run:
+```bash
+$ cd docker/dependencies
+$ docker-compose up
+```
+then create database schema:
+```bash
+$ make install-schema
+```
+and then run the server:
+```bash
+$ make start
+```
+
+When you are done, press `Ctrl+C` to stop ther server. Also, don't forget to stop `docker-compose` (with `Ctrl+C`) and clean up all dependencies:
+```bash
+$ docker-compose down
 ```
 
 ## Licence headers
@@ -72,7 +104,7 @@ go test -v github.com/temporalio/temporal/common/persistence -run TestCassandraP
 This project is Open Source Software, and requires a header at the beginning of
 all source files. To verify that all files contain the header execute:
 ```bash
-make copyright
+$ make copyright
 ```
 
 ## Commit Messages And Titles of Pull Requests

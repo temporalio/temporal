@@ -909,12 +909,10 @@ func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName 
 		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
 	}
 	for k, v := range searchAttributes {
-		// TODO: current implementation assumes that there is always one single PayloadItem in payload and it's content is JSON.
-		// This neds to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
-		if len(v.GetItems()) > 0 { // There must be always one single item
-			data := v.GetItems()[0].GetData() // content must always be JSON
-			fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
-		}
+		// TODO: current implementation assumes that payload is JSON.
+		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
+		data := v.GetData() // content must always be JSON
+		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
 	}
 
 	msg := &indexergenpb.Message{
@@ -948,12 +946,10 @@ func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, 
 		fields[es.Encoding] = &indexergenpb.Field{Type: es.FieldTypeString, StringData: string(encoding)}
 	}
 	for k, v := range searchAttributes {
-		// TODO: current implementation assumes that there is always one single PayloadItem in payload and it's content is JSON.
-		// This neds to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
-		if len(v.GetItems()) > 0 { // There must be always one single item
-			data := v.GetItems()[0].GetData() // content must always be JSON
-			fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
-		}
+		// TODO: current implementation assumes that payload is JSON.
+		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
+		data := v.GetData() // content must always be JSON
+		fields[k] = &indexergenpb.Field{Type: es.FieldTypeBinary, BinaryData: data}
 	}
 
 	msg := &indexergenpb.Message{

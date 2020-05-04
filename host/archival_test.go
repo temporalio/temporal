@@ -43,7 +43,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/convert"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -229,15 +229,15 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		Name: tl,
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  namespace,
+		WorkflowId:                 id,
+		WorkflowType:               workflowType,
+		TaskList:                   taskList,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
@@ -268,7 +268,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -284,11 +284,11 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-					WorkflowType:                        workflowType,
-					TaskList:                            &tasklistpb.TaskList{Name: tl},
-					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: 100,
-					TaskStartToCloseTimeoutSeconds:      1,
+					WorkflowType:               workflowType,
+					TaskList:                   &tasklistpb.TaskList{Name: tl},
+					Input:                      nil,
+					WorkflowRunTimeoutSeconds:  100,
+					WorkflowTaskTimeoutSeconds: 1,
 				}},
 			}}, nil
 		}
@@ -297,7 +297,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -306,22 +306,22 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, namespace, namespa
 		execution *executionpb.WorkflowExecution,
 		activityType *commonpb.ActivityType,
 		activityID string,
-		input *commonpb.Payload,
+		input *commonpb.Payloads,
 		taskToken []byte,
-	) (*commonpb.Payload, bool, error) {
+	) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.Name)
 		id, _ := strconv.Atoi(activityID)
 		s.Equal(int(expectedActivityID), id)
 		var b []byte
-		err := payload.Decode(input, &b)
+		err := payloads.Decode(input, &b)
 		s.NoError(err)
 		buf := bytes.NewReader(b)
 		var in int32
 		binary.Read(buf, binary.LittleEndian, &in)
 		s.Equal(expectedActivityID, in)
 		expectedActivityID++
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{

@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	fetchTaskRequestTimeout = 60 * time.Second
+	fetchTaskRequestTimeout = time.Minute
 	requestChanBufferSize   = 1000
 )
 

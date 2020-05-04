@@ -55,19 +55,17 @@ func retryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, namespace str
 
 	info := workflow.GetInfo(ctx)
 	now := workflow.Now(ctx).UnixNano()
-	expiration := time.Duration(info.ExecutionStartToCloseTimeoutSeconds) * time.Second
+	expiration := time.Duration(info.WorkflowRunTimeoutSeconds) * time.Second
 	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second * 5,
 		BackoffCoefficient: 1,
 		MaximumInterval:    time.Second * 5,
-		ExpirationInterval: expiration,
 		MaximumAttempts:    5,
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		TaskList:               taskListName,
-		ScheduleToStartTimeout: expiration,
-		StartToCloseTimeout:    expiration,
+		ScheduleToCloseTimeout: expiration,
 		HeartbeatTimeout:       5 * time.Second,
 		RetryPolicy:            retryPolicy,
 	})

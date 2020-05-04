@@ -1252,9 +1252,10 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	executionInfo := mutableState.GetExecutionInfo()
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfiguration: &executionpb.WorkflowExecutionConfiguration{
-			TaskList:                            &tasklistpb.TaskList{Name: executionInfo.TaskList},
-			ExecutionStartToCloseTimeoutSeconds: executionInfo.WorkflowTimeout,
-			TaskStartToCloseTimeoutSeconds:      executionInfo.DecisionStartToCloseTimeout,
+			TaskList:                        &tasklistpb.TaskList{Name: executionInfo.TaskList},
+			WorkflowExecutionTimeoutSeconds: executionInfo.WorkflowExecutionTimeout,
+			WorkflowRunTimeoutSeconds:       executionInfo.WorkflowRunTimeout,
+			WorkflowTaskTimeoutSeconds:      executionInfo.WorkflowTaskTimeout,
 		},
 		WorkflowExecutionInfo: &executionpb.WorkflowExecutionInfo{
 			Execution: &executionpb.WorkflowExecution{
@@ -2570,7 +2571,7 @@ func (e *historyEngineImpl) failDecision(
 	scheduleID int64,
 	startedID int64,
 	cause eventpb.DecisionTaskFailedCause,
-	details *commonpb.Payload,
+	details *commonpb.Payloads,
 	request *workflowservice.RespondDecisionTaskCompletedRequest,
 ) (mutableState, error) {
 
@@ -2639,11 +2640,14 @@ func validateStartWorkflowExecutionRequest(
 	if len(request.GetRequestId()) == 0 {
 		return serviceerror.NewInvalidArgument("Missing request ID.")
 	}
-	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("Invalid ExecutionStartToCloseTimeoutSeconds.")
+	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowExecutionTimeoutSeconds.")
 	}
-	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
-		return serviceerror.NewInvalidArgument("Invalid TaskStartToCloseTimeoutSeconds.")
+	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeoutSeconds.")
+	}
+	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeoutSeconds.")
 	}
 	if request.TaskList == nil || request.TaskList.GetName() == "" {
 		return serviceerror.NewInvalidArgument("Missing Tasklist.")
@@ -2674,38 +2678,49 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 ) {
 	namespace := namespaceEntry.GetInfo().Name
 
-	executionStartToCloseTimeoutSeconds := request.GetExecutionStartToCloseTimeoutSeconds()
-	if executionStartToCloseTimeoutSeconds == 0 {
-		executionStartToCloseTimeoutSeconds = convert.Int32Ceil(e.config.DefaultExecutionStartToCloseTimeout(namespace).Seconds())
+	executionTimeoutSeconds := request.GetWorkflowExecutionTimeoutSeconds()
+	if executionTimeoutSeconds == 0 {
+		executionTimeoutSeconds = convert.Int32Ceil(e.config.DefaultWorkflowExecutionTimeout(namespace).Seconds())
 	}
-	maxWorkflowExecutionTimeout := convert.Int32Ceil(e.config.MaxExecutionStartToCloseTimeout(namespace).Seconds())
-
-	if executionStartToCloseTimeoutSeconds > maxWorkflowExecutionTimeout {
-		executionStartToCloseTimeoutSeconds = maxWorkflowExecutionTimeout
-	}
-	if executionStartToCloseTimeoutSeconds != request.GetExecutionStartToCloseTimeoutSeconds() {
-		request.ExecutionStartToCloseTimeoutSeconds = executionStartToCloseTimeoutSeconds
+	maxWorkflowExecutionTimeout := convert.Int32Ceil(e.config.MaxWorkflowExecutionTimeout(namespace).Seconds())
+	executionTimeoutSeconds = common.MinInt32(executionTimeoutSeconds, maxWorkflowExecutionTimeout)
+	if executionTimeoutSeconds != request.GetWorkflowExecutionTimeoutSeconds() {
+		request.WorkflowExecutionTimeoutSeconds = executionTimeoutSeconds
 		e.metricsClient.Scope(
 			metricsScope,
 			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.WorkflowExecutionStartToCloseTimeoutOverrideCount)
+		).IncCounter(metrics.WorkflowExecutionTimeoutOverrideCount)
 	}
 
-	maxDecisionStartToCloseTimeoutSeconds := convert.Int32Ceil(e.config.MaxDecisionTaskStartToCloseTimeout(namespace).Seconds())
-
-	taskStartToCloseTimeoutSecs := request.GetTaskStartToCloseTimeoutSeconds()
-	if taskStartToCloseTimeoutSecs == 0 {
-		taskStartToCloseTimeoutSecs = convert.Int32Ceil(e.config.DefaultDecisionTaskStartToCloseTimeout(namespace).Seconds())
+	runTimeoutSeconds := request.GetWorkflowRunTimeoutSeconds()
+	if runTimeoutSeconds == 0 {
+		runTimeoutSeconds = convert.Int32Ceil(e.config.DefaultWorkflowRunTimeout(namespace).Seconds())
 	}
-	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, maxDecisionStartToCloseTimeoutSeconds)
-	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, executionStartToCloseTimeoutSeconds)
-
-	if taskStartToCloseTimeoutSecs != request.GetTaskStartToCloseTimeoutSeconds() {
-		request.TaskStartToCloseTimeoutSeconds = taskStartToCloseTimeoutSecs
+	maxWorkflowRunTimeout := convert.Int32Ceil(e.config.MaxWorkflowRunTimeout(namespace).Seconds())
+	runTimeoutSeconds = common.MinInt32(runTimeoutSeconds, maxWorkflowRunTimeout)
+	runTimeoutSeconds = common.MinInt32(runTimeoutSeconds, executionTimeoutSeconds)
+	if runTimeoutSeconds != request.GetWorkflowRunTimeoutSeconds() {
+		request.WorkflowRunTimeoutSeconds = runTimeoutSeconds
 		e.metricsClient.Scope(
 			metricsScope,
 			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.DecisionStartToCloseTimeoutOverrideCount)
+		).IncCounter(metrics.WorkflowRunTimeoutOverrideCount)
+	}
+
+	taskTimeout := request.GetWorkflowTaskTimeoutSeconds()
+	if taskTimeout == 0 {
+		taskTimeout = convert.Int32Ceil(e.config.DefaultWorkflowTaskTimeout(namespace).Seconds())
+	}
+	maxTaskTimeout := convert.Int32Ceil(e.config.MaxWorkflowTaskTimeout(namespace).Seconds())
+	taskTimeout = common.MinInt32(taskTimeout, maxTaskTimeout)
+	taskTimeout = common.MinInt32(taskTimeout, runTimeoutSeconds)
+
+	if taskTimeout != request.GetWorkflowTaskTimeoutSeconds() {
+		request.WorkflowTaskTimeoutSeconds = taskTimeout
+		e.metricsClient.Scope(
+			metricsScope,
+			metrics.NamespaceTag(namespace),
+		).IncCounter(metrics.WorkflowTaskTimeoutOverrideCount)
 	}
 }
 
@@ -2769,21 +2784,22 @@ func getStartRequest(
 ) *historyservice.StartWorkflowExecutionRequest {
 
 	req := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                           request.GetNamespace(),
-		WorkflowId:                          request.GetWorkflowId(),
-		WorkflowType:                        request.GetWorkflowType(),
-		TaskList:                            request.GetTaskList(),
-		Input:                               request.GetInput(),
-		ExecutionStartToCloseTimeoutSeconds: request.GetExecutionStartToCloseTimeoutSeconds(),
-		TaskStartToCloseTimeoutSeconds:      request.GetTaskStartToCloseTimeoutSeconds(),
-		Identity:                            request.GetIdentity(),
-		RequestId:                           request.GetRequestId(),
-		WorkflowIdReusePolicy:               request.GetWorkflowIdReusePolicy(),
-		RetryPolicy:                         request.GetRetryPolicy(),
-		CronSchedule:                        request.GetCronSchedule(),
-		Memo:                                request.GetMemo(),
-		SearchAttributes:                    request.GetSearchAttributes(),
-		Header:                              request.GetHeader(),
+		Namespace:                       request.GetNamespace(),
+		WorkflowId:                      request.GetWorkflowId(),
+		WorkflowType:                    request.GetWorkflowType(),
+		TaskList:                        request.GetTaskList(),
+		Input:                           request.GetInput(),
+		WorkflowExecutionTimeoutSeconds: request.GetWorkflowExecutionTimeoutSeconds(),
+		WorkflowRunTimeoutSeconds:       request.GetWorkflowRunTimeoutSeconds(),
+		WorkflowTaskTimeoutSeconds:      request.GetWorkflowTaskTimeoutSeconds(),
+		Identity:                        request.GetIdentity(),
+		RequestId:                       request.GetRequestId(),
+		WorkflowIdReusePolicy:           request.GetWorkflowIdReusePolicy(),
+		RetryPolicy:                     request.GetRetryPolicy(),
+		CronSchedule:                    request.GetCronSchedule(),
+		Memo:                            request.GetMemo(),
+		SearchAttributes:                request.GetSearchAttributes(),
+		Header:                          request.GetHeader(),
 	}
 
 	return common.CreateHistoryStartWorkflowRequest(namespaceID, req)

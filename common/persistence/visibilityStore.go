@@ -29,12 +29,11 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
-	"github.com/temporalio/temporal/common/payload"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 )
 
 type (
@@ -75,7 +74,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWo
 		WorkflowTypeName:   request.WorkflowTypeName,
 		StartTimestamp:     request.StartTimestamp,
 		ExecutionTimestamp: request.ExecutionTimestamp,
-		WorkflowTimeout:    request.WorkflowTimeout,
+		RunTimeout:         request.RunTimeout,
 		TaskID:             request.TaskID,
 		TaskList:           request.TaskList,
 		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),

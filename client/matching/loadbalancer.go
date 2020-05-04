@@ -48,7 +48,7 @@ type (
 		PickWritePartition(
 			namespaceID string,
 			taskList tasklistpb.TaskList,
-			taskListType int32,
+			taskListType tasklistpb.TaskListType,
 			forwardedFrom string,
 		) string
 
@@ -58,7 +58,7 @@ type (
 		PickReadPartition(
 			namespaceID string,
 			taskList tasklistpb.TaskList,
-			taskListType int32,
+			taskListType tasklistpb.TaskListType,
 			forwardedFrom string,
 		) string
 	}
@@ -90,7 +90,7 @@ func NewLoadBalancer(
 func (lb *defaultLoadBalancer) PickWritePartition(
 	namespaceID string,
 	taskList tasklistpb.TaskList,
-	taskListType int32,
+	taskListType tasklistpb.TaskListType,
 	forwardedFrom string,
 ) string {
 	return lb.pickPartition(namespaceID, taskList, taskListType, forwardedFrom, lb.nWritePartitions)
@@ -99,7 +99,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 func (lb *defaultLoadBalancer) PickReadPartition(
 	namespaceID string,
 	taskList tasklistpb.TaskList,
-	taskListType int32,
+	taskListType tasklistpb.TaskListType,
 	forwardedFrom string,
 ) string {
 	return lb.pickPartition(namespaceID, taskList, taskListType, forwardedFrom, lb.nReadPartitions)
@@ -108,7 +108,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 func (lb *defaultLoadBalancer) pickPartition(
 	namespaceID string,
 	taskList tasklistpb.TaskList,
-	taskListType int32,
+	taskListType tasklistpb.TaskListType,
 	forwardedFrom string,
 	nPartitions dynamicconfig.IntPropertyFnWithTaskListInfoFilters,
 ) string {

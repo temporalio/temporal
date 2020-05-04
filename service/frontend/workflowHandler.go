@@ -434,12 +434,16 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
+	}
+
+	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
 	if request.GetRequestId() == "" {
@@ -820,7 +824,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, persistence.TaskListTypeDecision, request.TaskList, pollerID)
+		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, tasklistpb.TaskListType_Decision, request.TaskList, pollerID)
 		if err != nil {
 			// For all other errors log an error and return it back to client.
 			ctxTimeout := "not-set"
@@ -1079,7 +1083,7 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, persistence.TaskListTypeActivity, request.TaskList, pollerID)
+		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, tasklistpb.TaskListType_Activity, request.TaskList, pollerID)
 		if err != nil {
 			// For all other errors log an error and return it back to client.
 			ctxTimeout := "not-set"
@@ -2116,12 +2120,16 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(errRequestIDTooLong, scope)
 	}
 
-	if request.GetExecutionStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowExecutionTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowExecutionTimeoutSeconds, scope)
 	}
 
-	if request.GetTaskStartToCloseTimeoutSeconds() < 0 {
-		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
+	if request.GetWorkflowRunTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowRunTimeoutSeconds, scope)
+	}
+
+	if request.GetWorkflowTaskTimeoutSeconds() < 0 {
+		return nil, wh.error(errInvalidWorkflowTaskTimeoutSeconds, scope)
 	}
 
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
@@ -3653,7 +3661,7 @@ func (wh *WorkflowHandler) checkPermission(
 	return nil
 }
 
-func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, namespaceID string, taskListType int32,
+func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, namespaceID string, taskListType tasklistpb.TaskListType,
 	taskList *tasklistpb.TaskList, pollerID string) error {
 	// First check if this err is due to context cancellation.  This means client connection to frontend is closed.
 	if ctx.Err() == context.Canceled {

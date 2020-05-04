@@ -48,6 +48,7 @@ import (
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -179,7 +180,7 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 		newDecisionScheduleEvent.GetEventId(),
 		newDecisionStartedEvent.GetEventId(),
 		eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
-		payload.EncodeString("some random decision failure details"),
+		payloads.EncodeString("some random decision failure details"),
 		"some random decision failure identity",
 		"", "", "", "", 0,
 	))
@@ -271,25 +272,25 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	}
 	tl := "testTaskList"
 	activityID := "activity_id"
-	activityResult := payload.EncodeString("activity_result")
+	activityResult := payloads.EncodeString("activity_result")
 
 	info := &persistence.WorkflowExecutionInfo{
-		NamespaceID:                 namespaceID,
-		WorkflowID:                  we.GetWorkflowId(),
-		RunID:                       we.GetRunId(),
-		TaskList:                    tl,
-		WorkflowTypeName:            "wType",
-		WorkflowTimeout:             200,
-		DecisionStartToCloseTimeout: 100,
-		State:                       persistence.WorkflowStateRunning,
-		Status:                      executionpb.WorkflowExecutionStatus_Running,
-		NextEventID:                 int64(8),
-		LastProcessedEvent:          int64(3),
-		LastUpdatedTimestamp:        time.Now(),
-		DecisionVersion:             common.EmptyVersion,
-		DecisionScheduleID:          common.EmptyEventID,
-		DecisionStartedID:           common.EmptyEventID,
-		DecisionTimeout:             100,
+		NamespaceID:          namespaceID,
+		WorkflowID:           we.GetWorkflowId(),
+		RunID:                we.GetRunId(),
+		TaskList:             tl,
+		WorkflowTypeName:     "wType",
+		WorkflowRunTimeout:   200,
+		WorkflowTaskTimeout:  100,
+		State:                persistence.WorkflowStateRunning,
+		Status:               executionpb.WorkflowExecutionStatus_Running,
+		NextEventID:          int64(8),
+		LastProcessedEvent:   int64(3),
+		LastUpdatedTimestamp: time.Now(),
+		DecisionVersion:      common.EmptyVersion,
+		DecisionScheduleID:   common.EmptyEventID,
+		DecisionStartedID:    common.EmptyEventID,
+		DecisionTimeout:      100,
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{
@@ -564,6 +565,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	workflowType := "some random workflow type"
 	tasklist := "some random tasklist"
 	workflowTimeoutSecond := int32(222)
+	runTimeoutSecond := int32(111)
 	decisionTimeoutSecond := int32(11)
 	decisionAttempt := int64(0)
 
@@ -574,11 +576,12 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 		Timestamp: now.UnixNano(),
 		EventType: eventpb.EventType_WorkflowExecutionStarted,
 		Attributes: &eventpb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &eventpb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &commonpb.WorkflowType{Name: workflowType},
-			TaskList:                            &tasklistpb.TaskList{Name: tasklist},
-			Input:                               nil,
-			ExecutionStartToCloseTimeoutSeconds: workflowTimeoutSecond,
-			TaskStartToCloseTimeoutSeconds:      decisionTimeoutSecond,
+			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+			TaskList:                        &tasklistpb.TaskList{Name: tasklist},
+			Input:                           nil,
+			WorkflowExecutionTimeoutSeconds: workflowTimeoutSecond,
+			WorkflowRunTimeoutSeconds:       runTimeoutSecond,
+			WorkflowTaskTimeoutSeconds:      decisionTimeoutSecond,
 		}},
 	}
 	eventID++
@@ -730,22 +733,22 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	failoverVersion := int64(300)
 
 	info := &persistence.WorkflowExecutionInfo{
-		NamespaceID:                 namespaceID,
-		WorkflowID:                  we.GetWorkflowId(),
-		RunID:                       we.GetRunId(),
-		TaskList:                    tl,
-		WorkflowTypeName:            "wType",
-		WorkflowTimeout:             200,
-		DecisionStartToCloseTimeout: 100,
-		State:                       persistence.WorkflowStateRunning,
-		Status:                      executionpb.WorkflowExecutionStatus_Running,
-		NextEventID:                 int64(101),
-		LastProcessedEvent:          int64(99),
-		LastUpdatedTimestamp:        time.Now(),
-		DecisionVersion:             failoverVersion,
-		DecisionScheduleID:          common.EmptyEventID,
-		DecisionStartedID:           common.EmptyEventID,
-		DecisionTimeout:             100,
+		NamespaceID:          namespaceID,
+		WorkflowID:           we.GetWorkflowId(),
+		RunID:                we.GetRunId(),
+		TaskList:             tl,
+		WorkflowTypeName:     "wType",
+		WorkflowRunTimeout:   200,
+		WorkflowTaskTimeout:  100,
+		State:                persistence.WorkflowStateRunning,
+		Status:               executionpb.WorkflowExecutionStatus_Running,
+		NextEventID:          int64(101),
+		LastProcessedEvent:   int64(99),
+		LastUpdatedTimestamp: time.Now(),
+		DecisionVersion:      failoverVersion,
+		DecisionScheduleID:   common.EmptyEventID,
+		DecisionStartedID:    common.EmptyEventID,
+		DecisionTimeout:      100,
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{
@@ -794,7 +797,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 			InitiatedEventBatchId: 17,
 			RequestId:             uuid.New(),
 			Name:                  "test-signal-75",
-			Input:                 payload.EncodeString("signal-input-75"),
+			Input:                 payloads.EncodeString("signal-input-75"),
 		},
 	}
 
@@ -809,7 +812,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 			Version:   failoverVersion,
 			Attributes: &eventpb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &eventpb.WorkflowExecutionSignaledEventAttributes{
 				SignalName: "test-signal-buffered",
-				Input:      payload.EncodeString("test-signal-buffered-input"),
+				Input:      payloads.EncodeString("test-signal-buffered-input"),
 			}},
 		},
 	}

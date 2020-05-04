@@ -52,6 +52,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/service/matching"
 )
 
@@ -89,20 +90,20 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		Identity:                            identity,
+		RequestId:                 uuid.New(),
+		Namespace:                 s.namespace,
+		WorkflowId:                id,
+		WorkflowType:              &commonpb.WorkflowType{Name: wt},
+		TaskList:                  &tasklistpb.TaskList{Name: tl},
+		Input:                     nil,
+		WorkflowRunTimeoutSeconds: 100,
+		Identity:                  identity,
 	}
 
 	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
-	// Validate the default value for TaskStartToCloseTimeoutSeconds
+	// Validate the default value for WorkflowTaskTimeoutSeconds
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
 		Execution: &executionpb.WorkflowExecution{
@@ -113,22 +114,22 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	s.NoError(err)
 	history := historyResponse.History
 	startedEvent := history.Events[0].GetWorkflowExecutionStartedEventAttributes()
-	s.Equal(int32(10), startedEvent.GetTaskStartToCloseTimeoutSeconds())
+	s.Equal(int32(10), startedEvent.GetWorkflowTaskTimeoutSeconds())
 
 	we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err1)
 	s.Equal(we0.RunId, we1.RunId)
 
 	newRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 	we2, err2 := s.engine.StartWorkflowExecution(NewContext(), newRequest)
 	s.NotNil(err2)
@@ -145,15 +146,15 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	activityName := "activity_type1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -176,7 +177,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -188,15 +189,15 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -215,7 +216,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	s.NoError(err)
 
 	terminateReason := "terminate reason"
-	terminateDetails := payload.EncodeString("terminate details")
+	terminateDetails := payloads.EncodeString("terminate details")
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &executionpb.WorkflowExecution{
@@ -262,15 +263,15 @@ GetHistoryLoop:
 StartNewExecutionLoop:
 	for i := 0; i < 10; i++ {
 		request := &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:                           uuid.New(),
-			Namespace:                           s.namespace,
-			WorkflowId:                          id,
-			WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-			TaskList:                            &tasklistpb.TaskList{Name: tl},
-			Input:                               nil,
-			ExecutionStartToCloseTimeoutSeconds: 100,
-			TaskStartToCloseTimeoutSeconds:      1,
-			Identity:                            identity,
+			RequestId:                  uuid.New(),
+			Namespace:                  s.namespace,
+			WorkflowId:                 id,
+			WorkflowType:               &commonpb.WorkflowType{Name: wt},
+			TaskList:                   &tasklistpb.TaskList{Name: tl},
+			Input:                      nil,
+			WorkflowRunTimeoutSeconds:  100,
+			WorkflowTaskTimeoutSeconds: 1,
+			Identity:                   identity,
 		}
 
 		newExecution, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -297,15 +298,15 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	activityName := "activity_type1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -329,7 +330,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 10,
 					StartToCloseTimeoutSeconds:    50,
@@ -342,20 +343,20 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	expectedActivity := int32(1)
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.EqualValues(id, execution.WorkflowId)
 		s.Equal(activityName, activityType.Name)
 		id, _ := strconv.Atoi(activityID)
 		s.Equal(int(expectedActivity), id)
 		var b []byte
-		err := payload.Decode(input, &b)
+		err := payloads.Decode(input, &b)
 		s.NoError(err)
 		buf := bytes.NewReader(b)
 		var in int32
@@ -363,7 +364,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 		s.Equal(expectedActivity, in)
 		expectedActivity++
 
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -403,15 +404,15 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -436,7 +437,7 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -482,15 +483,15 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	activityName := "activity_timer"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -515,7 +516,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 1,
 					ScheduleToStartTimeoutSeconds: 1,
 					StartToCloseTimeoutSeconds:    1,
@@ -530,17 +531,17 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.EqualValues(id, execution.WorkflowId)
 		s.Equal(activityName, activityType.Name)
 		s.Logger.Info("Activity ID", tag.WorkflowActivityID(activityID))
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -601,22 +602,21 @@ func (s *integrationSuite) TestWorkflowRetry() {
 	backoffCoefficient := 1.5
 	maximumAttempts := 5
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    int32(initialIntervalInSeconds),
-			MaximumAttempts:             int32(maximumAttempts),
-			MaximumIntervalInSeconds:    1,
-			NonRetriableErrorReasons:    []string{"bad-bug"},
-			BackoffCoefficient:          backoffCoefficient,
-			ExpirationIntervalInSeconds: 100,
+			InitialIntervalInSeconds: int32(initialIntervalInSeconds),
+			MaximumAttempts:          int32(maximumAttempts),
+			MaximumIntervalInSeconds: 1,
+			NonRetriableErrorReasons: []string{"bad-bug"},
+			BackoffCoefficient:       backoffCoefficient,
 		},
 	}
 
@@ -638,7 +638,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 				{
 					DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 					Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-						Result: payload.EncodeString("succeed-after-retry"),
+						Result: payloads.EncodeString("succeed-after-retry"),
 					}},
 				}}, nil
 		}
@@ -713,7 +713,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 					{
 						DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 						Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-							Result: payload.EncodeString("succeed-after-retry"),
+							Result: payloads.EncodeString("succeed-after-retry"),
 						}},
 					}}, nil
 			}
@@ -733,22 +733,21 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 
 	// Fail using attempt
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			MaximumAttempts:             3,
-			MaximumIntervalInSeconds:    1,
-			NonRetriableErrorReasons:    []string{"bad-bug"},
-			BackoffCoefficient:          1,
-			ExpirationIntervalInSeconds: 100,
+			InitialIntervalInSeconds: 1,
+			MaximumAttempts:          3,
+			MaximumIntervalInSeconds: 1,
+			NonRetriableErrorReasons: []string{"bad-bug"},
+			BackoffCoefficient:       1,
 		},
 	}
 
@@ -789,22 +788,21 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 
 	// Fail error reason
 	request = &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialIntervalInSeconds:    1,
-			MaximumAttempts:             3,
-			MaximumIntervalInSeconds:    1,
-			NonRetriableErrorReasons:    []string{"bad-bug"},
-			BackoffCoefficient:          1,
-			ExpirationIntervalInSeconds: 100,
+			InitialIntervalInSeconds: 1,
+			MaximumAttempts:          3,
+			MaximumIntervalInSeconds: 1,
+			NonRetriableErrorReasons: []string{"bad-bug"},
+			BackoffCoefficient:       1,
 		},
 	}
 
@@ -852,18 +850,18 @@ func (s *integrationSuite) TestCronWorkflow() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
-		CronSchedule:                        cronSchedule, //minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
-		Memo:                                memo,
-		SearchAttributes:                    searchAttr,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
+		CronSchedule:               cronSchedule, //minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
+		Memo:                       memo,
+		SearchAttributes:           searchAttr,
 	}
 
 	startWorkflowTS := time.Now()
@@ -885,7 +883,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 				{
 					DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 					Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-						Result: payload.EncodeString("cron-test-result"),
+						Result: payloads.EncodeString("cron-test-result"),
 					}},
 				}}, nil
 		}
@@ -971,7 +969,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal("", attributes.GetFailureReason())
 
 	var r string
-	err = payload.Decode(attributes.GetLastCompletionResult(), &r)
+	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
 	s.NoError(err)
 	s.Equal("cron-test-result", r)
 	s.Equal(memo, attributes.Memo)
@@ -984,7 +982,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(commonpb.ContinueAsNewInitiator_CronSchedule, attributes.GetInitiator())
 	s.Equal("cron-test-error", attributes.GetFailureReason())
 
-	err = payload.Decode(attributes.GetLastCompletionResult(), &r)
+	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
 	s.NoError(err)
 	s.Equal("cron-test-result", r)
 	s.Equal(memo, attributes.Memo)
@@ -1058,18 +1056,18 @@ func (s *integrationSuite) TestCronWorkflowTimeout() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 1, // set workflow timeout to 1s
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
-		CronSchedule:                        cronSchedule, //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
-		Memo:                                memo,
-		SearchAttributes:                    searchAttr,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  1, // set workflow timeout to 1s
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
+		CronSchedule:               cronSchedule, //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
+		Memo:                       memo,
+		SearchAttributes:           searchAttr,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1146,15 +1144,15 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1184,7 +1182,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1220,15 +1218,15 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1260,12 +1258,12 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 			for i := 0; i < 100; i++ {
 				buf := new(bytes.Buffer)
 				binary.Write(buf, binary.LittleEndian, i)
-				s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payload.EncodeBytes(buf.Bytes()), identity))
+				s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
 			}
 
 			buf := new(bytes.Buffer)
 			binary.Write(buf, binary.LittleEndian, 101)
-			signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", payload.EncodeBytes(buf.Bytes()), identity)
+			signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity)
 			s.Nil(signalErr)
 
 			// this decision will be ignored as he decision task is already failed
@@ -1276,7 +1274,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1317,15 +1315,15 @@ func (s *integrationSuite) TestBufferedEvents() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1350,7 +1348,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 						WorkflowId: id,
 					},
 					SignalName: "buffered-signal",
-					Input:      payload.EncodeString("buffered-signal-input"),
+					Input:      payloads.EncodeString("buffered-signal-input"),
 					Identity:   identity,
 				})
 			s.NoError(err)
@@ -1360,7 +1358,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: "test-activity-type"},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeString("test-input"),
+					Input:                         payloads.EncodeString("test-input"),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -1379,7 +1377,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1433,15 +1431,15 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1479,7 +1477,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 					ActivityId:                    "1",
 					ActivityType:                  &commonpb.ActivityType{Name: "test-activity-type"},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeString("test-input"),
+					Input:                         payloads.EncodeString("test-input"),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -1492,14 +1490,14 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
-		return payload.EncodeString("Activity Result"), false, nil
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1557,15 +1555,15 @@ func (s *integrationSuite) TestVisibility() {
 	identity := "worker1"
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id1,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id1,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	startResponse, err0 := s.engine.StartWorkflowExecution(NewContext(), startRequest)
@@ -1577,7 +1575,7 @@ func (s *integrationSuite) TestVisibility() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -1619,15 +1617,15 @@ func (s *integrationSuite) TestVisibility() {
 	}
 
 	startRequest = &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id2,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id2,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	_, err2 := s.engine.StartWorkflowExecution(NewContext(), startRequest)
@@ -1697,20 +1695,20 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	taskListChild.Name = tlChild
 
 	header := &commonpb.Header{
-		Fields: map[string][]byte{"tracing": []byte("sample payload")},
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          parentID,
-		WorkflowType:                        parentWorkflowType,
-		TaskList:                            taskListParent,
-		Input:                               nil,
-		Header:                              header,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 parentID,
+		WorkflowType:               parentWorkflowType,
+		TaskList:                   taskListParent,
+		Input:                      nil,
+		Header:                     header,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1748,16 +1746,16 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 				return []*decisionpb.Decision{{
 					DecisionType: decisionpb.DecisionType_StartChildWorkflowExecution,
 					Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
-						WorkflowId:                          childID,
-						WorkflowType:                        childWorkflowType,
-						TaskList:                            taskListChild,
-						Input:                               payload.EncodeString("child-workflow-input"),
-						Header:                              header,
-						ExecutionStartToCloseTimeoutSeconds: 200,
-						TaskStartToCloseTimeoutSeconds:      2,
-						Control:                             "",
-						Memo:                                memo,
-						SearchAttributes:                    searchAttr,
+						WorkflowId:                 childID,
+						WorkflowType:               childWorkflowType,
+						TaskList:                   taskListChild,
+						Input:                      payloads.EncodeString("child-workflow-input"),
+						Header:                     header,
+						WorkflowRunTimeoutSeconds:  200,
+						WorkflowTaskTimeoutSeconds: 2,
+						Control:                    "",
+						Memo:                       memo,
+						SearchAttributes:           searchAttr,
 					}},
 				}}, nil
 			} else if previousStartedEventID > 0 {
@@ -1772,7 +1770,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						return []*decisionpb.Decision{{
 							DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 							Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-								Result: payload.EncodeString("Done"),
+								Result: payloads.EncodeString("Done"),
 							}},
 						}}, nil
 					}
@@ -1796,7 +1794,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Child Done"),
+				Result: payloads.EncodeString("Child Done"),
 			}},
 		}}, nil
 	}
@@ -1859,7 +1857,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
 	var r string
-	err = payload.Decode(completedAttributes.GetResult(), &r)
+	err = payloads.Decode(completedAttributes.GetResult(), &r)
 	s.NoError(err)
 	s.Equal("Child Done", r)
 }
@@ -1884,15 +1882,15 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	taskListChild := &tasklistpb.TaskList{Name: tlChild}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          parentID,
-		WorkflowType:                        parentWorkflowType,
-		TaskList:                            taskListParent,
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 parentID,
+		WorkflowType:               parentWorkflowType,
+		TaskList:                   taskListParent,
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	startParentWorkflowTS := time.Now()
@@ -1916,14 +1914,14 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_StartChildWorkflowExecution,
 				Attributes: &decisionpb.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &decisionpb.StartChildWorkflowExecutionDecisionAttributes{
-					WorkflowId:                          childID,
-					WorkflowType:                        childWorkflowType,
-					TaskList:                            taskListChild,
-					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: 200,
-					TaskStartToCloseTimeoutSeconds:      2,
-					Control:                             "",
-					CronSchedule:                        cronSchedule,
+					WorkflowId:                 childID,
+					WorkflowType:               childWorkflowType,
+					TaskList:                   taskListChild,
+					Input:                      nil,
+					WorkflowRunTimeoutSeconds:  200,
+					WorkflowTaskTimeoutSeconds: 2,
+					Control:                    "",
+					CronSchedule:               cronSchedule,
 				}},
 			}}, nil
 		}
@@ -1933,7 +1931,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 				return []*decisionpb.Decision{{
 					DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 					Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-						Result: payload.EncodeString("Done"),
+						Result: payloads.EncodeString("Done"),
 					}},
 				}}, nil
 			}
@@ -2074,15 +2072,15 @@ func (s *integrationSuite) TestWorkflowTimeout() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 1,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  1,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2091,6 +2089,8 @@ func (s *integrationSuite) TestWorkflowTimeout() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowComplete := false
+
+	time.Sleep(time.Second)
 
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
@@ -2106,7 +2106,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if lastEvent.GetEventType() != eventpb.EventType_WorkflowExecutionTimedOut {
-			s.Logger.Warn("Execution not timedout yet")
+			s.Logger.Warn("Execution not timedout yet. Last event: " + lastEvent.GetEventType().String())
 			time.Sleep(200 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -2152,15 +2152,15 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      10,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 10,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2213,7 +2213,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 2,
 					StartToCloseTimeoutSeconds:    50,
@@ -2236,16 +2236,16 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
-		return payload.EncodeString("Activity Result"), false, nil
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -2350,15 +2350,15 @@ func (s *integrationSuite) TestDescribeTaskList() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          workflowID,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 workflowID,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2384,7 +2384,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 					ActivityId:                    strconv.Itoa(int(1)),
 					ActivityType:                  &commonpb.ActivityType{Name: activityName},
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeBytes(buf.Bytes()),
+					Input:                         payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 25,
 					StartToCloseTimeoutSeconds:    50,
@@ -2396,14 +2396,14 @@ func (s *integrationSuite) TestDescribeTaskList() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
-		return payload.EncodeString("Activity Result"), false, nil
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -2469,15 +2469,15 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      2,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 2,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2512,7 +2512,7 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -2559,15 +2559,15 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      20,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 20,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2591,7 +2591,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 						WorkflowId: id,
 					},
 					SignalName: "buffered-signal-1",
-					Input:      payload.EncodeString("buffered-signal-input"),
+					Input:      payloads.EncodeString("buffered-signal-input"),
 					Identity:   identity,
 				})
 			s.NoError(err)
@@ -2599,11 +2599,11 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ContinueAsNewWorkflowExecution,
 				Attributes: &decisionpb.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-					WorkflowType:                        workflowType,
-					TaskList:                            &tasklistpb.TaskList{Name: tl},
-					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: 1000,
-					TaskStartToCloseTimeoutSeconds:      100,
+					WorkflowType:               workflowType,
+					TaskList:                   &tasklistpb.TaskList{Name: tl},
+					Input:                      nil,
+					WorkflowRunTimeoutSeconds:  1000,
+					WorkflowTaskTimeoutSeconds: 100,
 				}},
 			}}, nil
 		}
@@ -2612,7 +2612,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -2650,15 +2650,15 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      2,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 2,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2745,15 +2745,15 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 601,
-		TaskStartToCloseTimeoutSeconds:      600,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  601,
+		WorkflowTaskTimeoutSeconds: 600,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2795,7 +2795,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -2819,7 +2819,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	// Send one signal to create a new decision
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, 0)
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payload.EncodeBytes(buf.Bytes()), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
 
 	// Drop decision to cause all events to be buffered from now on
 	_, err = poller.PollAndProcessDecisionTask(false, true)
@@ -2830,13 +2830,13 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	for i := 1; i < 101; i++ {
 		buf := new(bytes.Buffer)
 		binary.Write(buf, binary.LittleEndian, i)
-		s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payload.EncodeBytes(buf.Bytes()), identity))
+		s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
 	}
 
 	// 101 signal, which will fail the decision
 	buf = new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, 101)
-	signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", payload.EncodeBytes(buf.Bytes()), identity)
+	signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity)
 	s.Nil(signalErr)
 
 	// Process signal in decider
@@ -2861,15 +2861,15 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -2894,7 +2894,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "local activity marker",
-					Details:    payload.EncodeString("local activity data"),
+					Details:    payloads.EncodeString("local activity data"),
 				}},
 			}}, nil
 		}
@@ -2919,7 +2919,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -2944,7 +2944,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
-		Input:             payload.EncodeString("signal input"),
+		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.New(),
 	})
@@ -2975,7 +2975,7 @@ WaitForStickyTimeoutLoop:
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",
-		Input:             payload.EncodeString("signal input"),
+		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.New(),
 	})
@@ -3029,15 +3029,15 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -3062,7 +3062,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "local activity marker",
-					Details:    payload.EncodeString("local activity data"),
+					Details:    payloads.EncodeString("local activity data"),
 				}},
 			}}, nil
 		}
@@ -3075,7 +3075,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -3100,7 +3100,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
-		Input:             payload.EncodeString("signal input"),
+		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.New(),
 	})
@@ -3137,7 +3137,7 @@ WaitForStickyTimeoutLoop:
 		Namespace:         s.namespace,
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",
-		Input:             payload.EncodeString("signal input"),
+		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.New(),
 	})
@@ -3186,15 +3186,15 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      20,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 20,
+		Identity:                   identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -3221,7 +3221,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "some random marker name",
-					Details:    payload.EncodeString("some random marker details"),
+					Details:    payloads.EncodeString("some random marker details"),
 				}},
 			}, {
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
@@ -3230,7 +3230,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 					ActivityType:                  &commonpb.ActivityType{Name: "ActivityType"},
 					Namespace:                     s.namespace,
 					TaskList:                      &tasklistpb.TaskList{Name: tl},
-					Input:                         payload.EncodeString("some random activity input"),
+					Input:                         payloads.EncodeString("some random activity input"),
 					ScheduleToCloseTimeoutSeconds: 100,
 					ScheduleToStartTimeoutSeconds: 100,
 					StartToCloseTimeoutSeconds:    100,
@@ -3245,7 +3245,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 				DecisionType: decisionpb.DecisionType_RecordMarker,
 				Attributes: &decisionpb.Decision_RecordMarkerDecisionAttributes{RecordMarkerDecisionAttributes: &decisionpb.RecordMarkerDecisionAttributes{
 					MarkerName: "some random marker name",
-					Details:    payload.EncodeString("some random marker details"),
+					Details:    payloads.EncodeString("some random marker details"),
 				}},
 			}}, nil
 		}
@@ -3254,14 +3254,14 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
 	// activity handler
 	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payload, taskToken []byte) (*commonpb.Payload, bool, error) {
-		return payload.EncodeString("Activity Result"), false, nil
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -3350,16 +3350,16 @@ func (s *integrationSuite) TestStartWithMemo() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		Identity:                            identity,
-		Memo:                                memo,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		Identity:                   identity,
+		Memo:                       memo,
 	}
 
 	fn := func() (RunIdGetter, error) {
@@ -3381,20 +3381,20 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 	}
 
 	signalName := "my signal"
-	signalInput := payload.EncodeString("my signal input")
+	signalInput := payloads.EncodeString("my signal input")
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1,
-		SignalName:                          signalName,
-		SignalInput:                         signalInput,
-		Identity:                            identity,
-		Memo:                                memo,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1,
+		SignalName:                 signalName,
+		SignalInput:                signalInput,
+		Identity:                   identity,
+		Memo:                       memo,
 	}
 
 	fn := func() (RunIdGetter, error) {
@@ -3410,15 +3410,15 @@ func (s *integrationSuite) TestCancelTimer() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1000,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1000,
+		Identity:                   identity,
 	}
 
 	creatResp, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -3480,7 +3480,7 @@ func (s *integrationSuite) TestCancelTimer() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -3501,14 +3501,14 @@ func (s *integrationSuite) TestCancelTimer() {
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payload.EncodeString("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payload.EncodeString("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
@@ -3541,15 +3541,15 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                           uuid.New(),
-		Namespace:                           s.namespace,
-		WorkflowId:                          id,
-		WorkflowType:                        &commonpb.WorkflowType{Name: wt},
-		TaskList:                            &tasklistpb.TaskList{Name: tl},
-		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: 100,
-		TaskStartToCloseTimeoutSeconds:      1000,
-		Identity:                            identity,
+		RequestId:                  uuid.New(),
+		Namespace:                  s.namespace,
+		WorkflowId:                 id,
+		WorkflowType:               &commonpb.WorkflowType{Name: wt},
+		TaskList:                   &tasklistpb.TaskList{Name: tl},
+		Input:                      nil,
+		WorkflowRunTimeoutSeconds:  100,
+		WorkflowTaskTimeoutSeconds: 1000,
+		Identity:                   identity,
 	}
 
 	creatResp, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -3612,7 +3612,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -3633,14 +3633,14 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payload.EncodeString("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payload.EncodeString("random signal payload"), identity))
+	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask: completed")
@@ -3680,7 +3680,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 		return []*decisionpb.Decision{{
 			DecisionType: decisionpb.DecisionType_CompleteWorkflowExecution,
 			Attributes: &decisionpb.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &decisionpb.CompleteWorkflowExecutionDecisionAttributes{
-				Result: payload.EncodeString("Done"),
+				Result: payloads.EncodeString("Done"),
 			}},
 		}}, nil
 	}
@@ -3777,7 +3777,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 }
 
 func (s *integrationSuite) sendSignal(namespace string, execution *executionpb.WorkflowExecution, signalName string,
-	input *commonpb.Payload, identity string) error {
+	input *commonpb.Payloads, identity string) error {
 	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         namespace,
 		WorkflowExecution: execution,

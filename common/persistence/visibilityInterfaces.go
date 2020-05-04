@@ -48,7 +48,7 @@ type (
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
-		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
+		RunTimeout         int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
 		Memo               *commonpb.Memo
 		TaskList           string

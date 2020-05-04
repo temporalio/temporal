@@ -39,7 +39,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/primitives"
 )
 
@@ -205,7 +205,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 				namespaceID,
 				targetNamespaceID,
 				attr,
-				executionInfo.WorkflowTimeout,
+				executionInfo.WorkflowRunTimeout,
 			)
 		},
 		eventpb.DecisionTaskFailedCause_BadScheduleActivityAttributes,
@@ -269,7 +269,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 				ai.ScheduleID,
 				ai.StartedID,
 				actCancelReqEvent.GetEventId(),
-				payload.EncodeString(activityCancellationMsgActivityNotStarted),
+				payloads.EncodeString(activityCancellationMsgActivityNotStarted),
 				handler.identity,
 			)
 			if err != nil {
@@ -663,12 +663,22 @@ func (handler *decisionTaskHandlerImpl) handleDecisionContinueAsNewWorkflow(
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
 		metrics.DecisionTypeTag(decisionpb.DecisionType_ContinueAsNewWorkflowExecution.String()),
 		attr.GetInput().Size(),
-		"ContinueAsNewWorkflowExecutionDecisionAttributes.Input exceeds size limit.",
+		"ContinueAsNewWorkflowExecutionDecisionAttributes. Input exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
 		return err
 	}
+
+	if attr.WorkflowRunTimeoutSeconds <= 0 {
+		// TODO(maxim): is decisionTaskCompletedID the correct id?
+		// TODO(maxim): should we introduce new TimeoutTypes (Workflow, Run) for workflows?
+		handler.stopProcessing = true
+		_, err := handler.mutableState.AddTimeoutWorkflowEvent(handler.decisionTaskCompletedID)
+		return err
+	}
+	handler.logger.Debug("!!!! Continued as new without timeout",
+		tag.WorkflowRunID(executionInfo.RunID))
 
 	// If the decision has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
@@ -868,9 +878,7 @@ func searchAttributesSize(fields map[string]*commonpb.Payload) int {
 
 	for k, v := range fields {
 		result += len(k)
-		for _, payloadItem := range v.Items {
-			result += len(payloadItem.GetData())
-		}
+		result += len(v.GetData())
 	}
 	return result
 }
@@ -880,26 +888,26 @@ func (handler *decisionTaskHandlerImpl) retryCronContinueAsNew(
 	backoffInterval int32,
 	continueAsNewIter commonpb.ContinueAsNewInitiator,
 	failureReason string,
-	failureDetails *commonpb.Payload,
-	lastCompletionResult *commonpb.Payload,
+	failureDetails *commonpb.Payloads,
+	lastCompletionResult *commonpb.Payloads,
 ) error {
 
 	continueAsNewAttributes := &decisionpb.ContinueAsNewWorkflowExecutionDecisionAttributes{
-		WorkflowType:                        attr.WorkflowType,
-		TaskList:                            attr.TaskList,
-		RetryPolicy:                         attr.RetryPolicy,
-		Input:                               attr.Input,
-		ExecutionStartToCloseTimeoutSeconds: attr.ExecutionStartToCloseTimeoutSeconds,
-		TaskStartToCloseTimeoutSeconds:      attr.TaskStartToCloseTimeoutSeconds,
-		CronSchedule:                        attr.CronSchedule,
-		BackoffStartIntervalInSeconds:       backoffInterval,
-		Initiator:                           continueAsNewIter,
-		FailureReason:                       failureReason,
-		FailureDetails:                      failureDetails,
-		LastCompletionResult:                lastCompletionResult,
-		Header:                              attr.Header,
-		Memo:                                attr.Memo,
-		SearchAttributes:                    attr.SearchAttributes,
+		WorkflowType:                  attr.WorkflowType,
+		TaskList:                      attr.TaskList,
+		RetryPolicy:                   attr.RetryPolicy,
+		Input:                         attr.Input,
+		WorkflowRunTimeoutSeconds:     attr.WorkflowRunTimeoutSeconds,
+		WorkflowTaskTimeoutSeconds:    attr.WorkflowTaskTimeoutSeconds,
+		CronSchedule:                  attr.CronSchedule,
+		BackoffStartIntervalInSeconds: backoffInterval,
+		Initiator:                     continueAsNewIter,
+		FailureReason:                 failureReason,
+		FailureDetails:                failureDetails,
+		LastCompletionResult:          lastCompletionResult,
+		Header:                        attr.Header,
+		Memo:                          attr.Memo,
+		SearchAttributes:              attr.SearchAttributes,
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
