@@ -69,6 +69,8 @@ var keys = map[Key]string{
 	EnableBatcher:                       "worker.enableBatcher",
 	EnableParentClosePolicyWorker:       "system.enableParentClosePolicyWorker",
 	EnableStickyQuery:                   "system.enableStickyQuery",
+	EnablePriorityTaskProcessor:         "system.enablePriorityTaskProcessor",
+	EnableAuthorization:                 "system.enableAuthorization",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -306,7 +308,10 @@ const (
 	MaxDecisionStartToCloseSeconds
 	// DisallowQuery is the key to disallow query for a domain
 	DisallowQuery
-
+	// EnablePriorityTaskProcessor is the key for enabling priority task processor
+	EnablePriorityTaskProcessor
+	// EnableAuthorization is the key to enable authorization for a domain
+	EnableAuthorization
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning

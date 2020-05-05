@@ -336,6 +336,11 @@ func Address(ad string) Tag {
 	return newStringTag("address", ad)
 }
 
+// Env return tag for runtime environment
+func Env(env string) Tag {
+	return newStringTag("env", env)
+}
+
 // Key returns tag for Key
 func Key(k string) Tag {
 	return newStringTag("key", k)
