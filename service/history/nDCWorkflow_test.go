@@ -308,12 +308,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:                s.namespaceID,
-		WorkflowID:                 s.workflowID,
-		RunID:                      s.runID,
-		LastEventTaskID:            lastEventTaskID,
-		WorkflowExecutionInfoState: checksumproto.WorkflowExecutionState_Running,
-		Status:                     executionpb.WorkflowExecutionStatus_Running,
+		NamespaceID:     s.namespaceID,
+		WorkflowID:      s.workflowID,
+		RunID:           s.runID,
+		LastEventTaskID: lastEventTaskID,
+		State:           checksumproto.WorkflowExecutionState_Running,
+		Status:          executionpb.WorkflowExecutionStatus_Running,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	nDCWorkflow := newNDCWorkflow(
@@ -359,6 +359,6 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	policy, err = nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
-	s.Equal(checksumproto.WorkflowExecutionState_Zombie, executionInfo.WorkflowExecutionInfoState)
+	s.Equal(checksumproto.WorkflowExecutionState_Zombie, executionInfo.State)
 	s.EqualValues(executionpb.WorkflowExecutionStatus_Running, executionInfo.Status)
 }

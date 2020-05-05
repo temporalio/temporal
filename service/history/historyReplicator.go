@@ -834,7 +834,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 		if err != nil {
 			return "", 0, 0, err
 		}
-		return executionInfo.RunID, lastWriteVersion, executionInfo.WorkflowExecutionInfoState, nil
+		return executionInfo.RunID, lastWriteVersion, executionInfo.State, nil
 	}
 
 	// terminate the current running workflow

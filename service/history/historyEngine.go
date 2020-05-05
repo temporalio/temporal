@@ -1290,7 +1290,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		}
 		result.WorkflowExecutionInfo.ParentNamespaceId = executionInfo.ParentNamespaceID
 	}
-	if executionInfo.WorkflowExecutionInfoState == checksumproto.WorkflowExecutionState_Completed {
+	if executionInfo.State == checksumproto.WorkflowExecutionState_Completed {
 		// for closed workflow
 		result.WorkflowExecutionInfo.Status = executionInfo.Status
 		completionEvent, err := mutableState.GetCompletionEvent()
@@ -2832,7 +2832,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 
 	prevStartRequestID := prevExecutionInfo.CreateRequestID
 	prevRunID := prevExecutionInfo.RunID
-	prevState := prevExecutionInfo.WorkflowExecutionInfoState
+	prevState := prevExecutionInfo.State
 	prevStatus := prevExecutionInfo.Status
 
 	return e.applyWorkflowIDReusePolicyHelper(

@@ -787,7 +787,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		resp.MutableStateUpdateSessionStats,
 	)
 	// emit workflow completion stats if any
-	if currentWorkflow.ExecutionInfo.WorkflowExecutionInfoState == checksumproto.WorkflowExecutionState_Completed {
+	if currentWorkflow.ExecutionInfo.State == checksumproto.WorkflowExecutionState_Completed {
 		if event, err := c.mutableState.GetCompletionEvent(); err == nil {
 			taskList := currentWorkflow.ExecutionInfo.TaskList
 			emitWorkflowCompletionStats(c.metricsClient, namespace, taskList, event)

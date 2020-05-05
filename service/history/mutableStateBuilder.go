@@ -228,10 +228,10 @@ func newMutableStateBuilder(
 		DecisionRequestID:  emptyUUID,
 		DecisionTimeout:    0,
 
-		NextEventID:                common.FirstEventID,
-		WorkflowExecutionInfoState: checksumproto.WorkflowExecutionState_Created,
-		Status:                     executionpb.WorkflowExecutionStatus_Running,
-		LastProcessedEvent:         common.EmptyEventID,
+		NextEventID:        common.FirstEventID,
+		State:              checksumproto.WorkflowExecutionState_Created,
+		Status:             executionpb.WorkflowExecutionStatus_Running,
+		LastProcessedEvent: common.EmptyEventID,
 	}
 	s.hBuilder = newHistoryBuilder(s, logger)
 	s.taskGenerator = newMutableStateTaskGenerator(shard.GetNamespaceCache(), s.logger, s)
@@ -313,7 +313,7 @@ func (e *mutableStateBuilder) Load(
 	e.currentVersion = common.EmptyVersion
 	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
 	// TODO: remove the cast.
-	e.stateInDB = state.ExecutionInfo.WorkflowExecutionInfoState
+	e.stateInDB = state.ExecutionInfo.State
 	e.nextEventIDInDB = state.ExecutionInfo.NextEventID
 	e.versionHistories = state.VersionHistories
 	e.checksum = state.Checksum
@@ -835,7 +835,7 @@ func (e *mutableStateBuilder) IsCurrentWorkflowGuaranteed() bool {
 	case checksumproto.WorkflowExecutionState_Corrupted:
 		return false
 	default:
-		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.WorkflowExecutionInfoState))
+		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
 	}
 }
 
@@ -1113,7 +1113,7 @@ func (e *mutableStateBuilder) GetSignalInfo(
 
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (e *mutableStateBuilder) GetCompletionEvent() (*eventpb.HistoryEvent, error) {
-	if e.executionInfo.WorkflowExecutionInfoState != checksumproto.WorkflowExecutionState_Completed {
+	if e.executionInfo.State != checksumproto.WorkflowExecutionState_Completed {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
 
@@ -1560,7 +1560,7 @@ func (e *mutableStateBuilder) GetPreviousStartedEventID() int64 {
 }
 
 func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
-	switch e.executionInfo.WorkflowExecutionInfoState {
+	switch e.executionInfo.State {
 	case checksumproto.WorkflowExecutionState_Created:
 		return true
 	case checksumproto.WorkflowExecutionState_Running:
@@ -1572,7 +1572,7 @@ func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
 	case checksumproto.WorkflowExecutionState_Corrupted:
 		return false
 	default:
-		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.WorkflowExecutionInfoState))
+		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
 	}
 }
 
@@ -2657,7 +2657,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowState(e.executionInfo.WorkflowExecutionInfoState),
+			tag.WorkflowState(e.executionInfo.State),
 			tag.Bool(e.executionInfo.CancelRequested),
 			tag.Key(e.executionInfo.CancelRequestID),
 		)
@@ -3841,7 +3841,7 @@ func (e *mutableStateBuilder) GetUpdateCondition() int64 {
 func (e *mutableStateBuilder) GetWorkflowStateStatus() (checksumproto.WorkflowExecutionState, executionpb.WorkflowExecutionStatus) {
 
 	executionInfo := e.executionInfo
-	return executionInfo.WorkflowExecutionInfoState, executionInfo.Status
+	return executionInfo.State, executionInfo.Status
 }
 
 func (e *mutableStateBuilder) UpdateWorkflowStateStatus(
@@ -4126,7 +4126,7 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	}
 
 	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
-	e.stateInDB = e.executionInfo.WorkflowExecutionInfoState
+	e.stateInDB = e.executionInfo.State
 	e.nextEventIDInDB = e.GetNextEventID()
 
 	e.insertTransferTasks = nil
@@ -4311,7 +4311,7 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	}
 
 	// only do check if workflow is finished
-	if e.GetExecutionInfo().WorkflowExecutionInfoState != checksumproto.WorkflowExecutionState_Completed {
+	if e.GetExecutionInfo().State != checksumproto.WorkflowExecutionState_Completed {
 		return nil
 	}
 
@@ -4558,7 +4558,7 @@ func (e *mutableStateBuilder) checkMutability(
 			mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowState(e.executionInfo.WorkflowExecutionInfoState),
+			tag.WorkflowState(e.executionInfo.State),
 			actionTag,
 		)
 		return ErrWorkflowFinished

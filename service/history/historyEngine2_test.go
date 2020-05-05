@@ -805,7 +805,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	tl := "testTaskList"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
-	msBuilder.GetExecutionInfo().WorkflowExecutionInfoState = checksumproto.WorkflowExecutionState_Completed
+	msBuilder.GetExecutionInfo().State = checksumproto.WorkflowExecutionState_Completed
 	ms1 := createMutableState(msBuilder)
 	gwmsResponse1 := &p.GetWorkflowExecutionResponse{State: ms1}
 
@@ -895,7 +895,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	executionBuilder := s.getBuilder(namespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(checksumproto.WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().WorkflowExecutionInfoState)
+	s.Equal(checksumproto.WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -1319,7 +1319,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.WorkflowExecutionInfoState = checksumproto.WorkflowExecutionState_Completed
+	ms.ExecutionInfo.State = checksumproto.WorkflowExecutionState_Completed
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 
@@ -1371,7 +1371,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.WorkflowExecutionInfoState = checksumproto.WorkflowExecutionState_Completed
+	ms.ExecutionInfo.State = checksumproto.WorkflowExecutionState_Completed
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &p.WorkflowExecutionAlreadyStartedError{
@@ -1431,7 +1431,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), runID)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.WorkflowExecutionInfoState = checksumproto.WorkflowExecutionState_Completed
+	ms.ExecutionInfo.State = checksumproto.WorkflowExecutionState_Completed
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &p.WorkflowExecutionAlreadyStartedError{

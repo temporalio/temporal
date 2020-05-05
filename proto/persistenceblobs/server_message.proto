@@ -33,7 +33,6 @@ import "execution/enum.proto";
 import "namespace/enum.proto";
 import "namespace/message.proto";
 import "tasklist/enum.proto";
-import "checksum/server_message.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -221,8 +220,9 @@ message RequestCancelInfo {
 message WorkflowExecutionState {
     string createRequestId = 1;
     bytes runId = 2;
-    int32 state = 3;
+    // TODO: replace with checksum.WorkflowExecutionState enum.
     // checksum.WorkflowExecutionState state = 3;
+    int32 state = 3;
     execution.WorkflowExecutionStatus status = 4;
 }
 

@@ -53,31 +53,31 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	status executionpb.WorkflowExecutionStatus,
 ) error {
 
-	switch e.WorkflowExecutionInfoState {
+	switch e.State {
 	case checksumproto.WorkflowExecutionState_Void:
 		// no validation
 	case checksumproto.WorkflowExecutionState_Created:
 		switch state {
 		case checksumproto.WorkflowExecutionState_Created:
 			if status != executionpb.WorkflowExecutionStatus_Running {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case checksumproto.WorkflowExecutionState_Running:
 			if status != executionpb.WorkflowExecutionStatus_Running {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case checksumproto.WorkflowExecutionState_Completed:
 			if status != executionpb.WorkflowExecutionStatus_Terminated &&
 				status != executionpb.WorkflowExecutionStatus_TimedOut &&
 				status != executionpb.WorkflowExecutionStatus_ContinuedAsNew {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case checksumproto.WorkflowExecutionState_Zombie:
 			if status != executionpb.WorkflowExecutionStatus_Running {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		default:
@@ -86,21 +86,21 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	case checksumproto.WorkflowExecutionState_Running:
 		switch state {
 		case checksumproto.WorkflowExecutionState_Created:
-			return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		case checksumproto.WorkflowExecutionState_Running:
 			if status != executionpb.WorkflowExecutionStatus_Running {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case checksumproto.WorkflowExecutionState_Completed:
 			if status == executionpb.WorkflowExecutionStatus_Running {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case checksumproto.WorkflowExecutionState_Zombie:
 			if status != executionpb.WorkflowExecutionStatus_Running {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		default:
@@ -109,18 +109,18 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 	case checksumproto.WorkflowExecutionState_Completed:
 		switch state {
 		case checksumproto.WorkflowExecutionState_Created:
-			return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		case checksumproto.WorkflowExecutionState_Running:
-			return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		case checksumproto.WorkflowExecutionState_Completed:
 			if status != e.Status {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 
 			}
 		case checksumproto.WorkflowExecutionState_Zombie:
-			return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
@@ -129,22 +129,22 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 		switch state {
 		case checksumproto.WorkflowExecutionState_Created:
 			if status != executionpb.WorkflowExecutionStatus_Running {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case checksumproto.WorkflowExecutionState_Running:
 			if status != executionpb.WorkflowExecutionStatus_Running {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case checksumproto.WorkflowExecutionState_Completed:
 			if status == executionpb.WorkflowExecutionStatus_Running {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		case checksumproto.WorkflowExecutionState_Zombie:
 			if status == executionpb.WorkflowExecutionStatus_Running {
-				return e.createInvalidStateTransitionErr(e.WorkflowExecutionInfoState, state, status)
+				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
 		default:
@@ -154,7 +154,7 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 	}
 
-	e.WorkflowExecutionInfoState = state
+	e.State = state
 	e.Status = status
 	return nil
 
