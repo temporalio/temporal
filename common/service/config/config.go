@@ -48,7 +48,7 @@ type (
 	// Config contains the configuration for a set of temporal services
 	Config struct {
 		// Global is process-wide service-related configuration
-		Global Global `yaml:"server"`
+		Global Global `yaml:"global"`
 		// Persistence contains the configuration for temporal datastores
 		Persistence Persistence `yaml:"persistence"`
 		// Log is the logging config
