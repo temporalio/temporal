@@ -40,6 +40,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -275,22 +276,22 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	activityResult := payloads.EncodeString("activity_result")
 
 	info := &persistence.WorkflowExecutionInfo{
-		NamespaceID:          namespaceID,
-		WorkflowID:           we.GetWorkflowId(),
-		RunID:                we.GetRunId(),
-		TaskList:             tl,
-		WorkflowTypeName:     "wType",
-		WorkflowRunTimeout:   200,
-		WorkflowTaskTimeout:  100,
-		State:                persistence.WorkflowStateRunning,
-		Status:               executionpb.WorkflowExecutionStatus_Running,
-		NextEventID:          int64(8),
-		LastProcessedEvent:   int64(3),
-		LastUpdatedTimestamp: time.Now(),
-		DecisionVersion:      common.EmptyVersion,
-		DecisionScheduleID:   common.EmptyEventID,
-		DecisionStartedID:    common.EmptyEventID,
-		DecisionTimeout:      100,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 we.GetWorkflowId(),
+		RunID:                      we.GetRunId(),
+		TaskList:                   tl,
+		WorkflowTypeName:           "wType",
+		WorkflowRunTimeout:         200,
+		WorkflowTaskTimeout:        100,
+		WorkflowExecutionInfoState: checksumproto.WorkflowExecutionState_Running,
+		Status:                     executionpb.WorkflowExecutionStatus_Running,
+		NextEventID:                int64(8),
+		LastProcessedEvent:         int64(3),
+		LastUpdatedTimestamp:       time.Now(),
+		DecisionVersion:            common.EmptyVersion,
+		DecisionScheduleID:         common.EmptyEventID,
+		DecisionStartedID:          common.EmptyEventID,
+		DecisionTimeout:            100,
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{
@@ -733,22 +734,22 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	failoverVersion := int64(300)
 
 	info := &persistence.WorkflowExecutionInfo{
-		NamespaceID:          namespaceID,
-		WorkflowID:           we.GetWorkflowId(),
-		RunID:                we.GetRunId(),
-		TaskList:             tl,
-		WorkflowTypeName:     "wType",
-		WorkflowRunTimeout:   200,
-		WorkflowTaskTimeout:  100,
-		State:                persistence.WorkflowStateRunning,
-		Status:               executionpb.WorkflowExecutionStatus_Running,
-		NextEventID:          int64(101),
-		LastProcessedEvent:   int64(99),
-		LastUpdatedTimestamp: time.Now(),
-		DecisionVersion:      failoverVersion,
-		DecisionScheduleID:   common.EmptyEventID,
-		DecisionStartedID:    common.EmptyEventID,
-		DecisionTimeout:      100,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 we.GetWorkflowId(),
+		RunID:                      we.GetRunId(),
+		TaskList:                   tl,
+		WorkflowTypeName:           "wType",
+		WorkflowRunTimeout:         200,
+		WorkflowTaskTimeout:        100,
+		WorkflowExecutionInfoState: checksumproto.WorkflowExecutionState_Running,
+		Status:                     executionpb.WorkflowExecutionStatus_Running,
+		NextEventID:                int64(101),
+		LastProcessedEvent:         int64(99),
+		LastUpdatedTimestamp:       time.Now(),
+		DecisionVersion:            failoverVersion,
+		DecisionScheduleID:         common.EmptyEventID,
+		DecisionStartedID:          common.EmptyEventID,
+		DecisionTimeout:            100,
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{

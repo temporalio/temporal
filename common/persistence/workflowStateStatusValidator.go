@@ -27,17 +27,18 @@ package persistence
 import (
 	"fmt"
 
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 var (
-	validWorkflowStates = map[int]struct{}{
-		WorkflowStateCreated:   {},
-		WorkflowStateRunning:   {},
-		WorkflowStateCompleted: {},
-		WorkflowStateZombie:    {},
-		WorkflowStateCorrupted: {},
+	validWorkflowStates = map[checksumproto.WorkflowExecutionState]struct{}{
+		checksumproto.WorkflowExecutionState_Created:   {},
+		checksumproto.WorkflowExecutionState_Running:   {},
+		checksumproto.WorkflowExecutionState_Completed: {},
+		checksumproto.WorkflowExecutionState_Zombie:    {},
+		checksumproto.WorkflowExecutionState_Corrupted: {},
 	}
 
 	validWorkflowStatuses = map[executionpb.WorkflowExecutionStatus]struct{}{
@@ -53,7 +54,7 @@ var (
 
 // ValidateCreateWorkflowStateStatus validate workflow state and close status
 func ValidateCreateWorkflowStateStatus(
-	state int,
+	state checksumproto.WorkflowExecutionState,
 	status executionpb.WorkflowExecutionStatus,
 ) error {
 
@@ -65,7 +66,7 @@ func ValidateCreateWorkflowStateStatus(
 	}
 
 	// validate workflow state & close status
-	if state == WorkflowStateCompleted || status != executionpb.WorkflowExecutionStatus_Running {
+	if state == checksumproto.WorkflowExecutionState_Completed || status != executionpb.WorkflowExecutionStatus_Running {
 		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or close status: %v", state, status))
 	}
 	return nil
@@ -73,7 +74,7 @@ func ValidateCreateWorkflowStateStatus(
 
 // ValidateUpdateWorkflowStateStatus validate workflow state and close status
 func ValidateUpdateWorkflowStateStatus(
-	state int,
+	state checksumproto.WorkflowExecutionState,
 	status executionpb.WorkflowExecutionStatus,
 ) error {
 
@@ -86,7 +87,7 @@ func ValidateUpdateWorkflowStateStatus(
 
 	// validate workflow state & close status
 	if status == executionpb.WorkflowExecutionStatus_Running {
-		if state == WorkflowStateCompleted {
+		if state == checksumproto.WorkflowExecutionState_Completed {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	} else {
@@ -96,7 +97,7 @@ func ValidateUpdateWorkflowStateStatus(
 		// executionpb.WorkflowExecutionStatus_Terminated
 		// executionpb.WorkflowExecutionStatus_ContinuedAsNew
 		// executionpb.WorkflowExecutionStatus_TimedOut
-		if state != WorkflowStateCompleted {
+		if state != checksumproto.WorkflowExecutionState_Completed {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, status))
 		}
 	}
@@ -105,7 +106,7 @@ func ValidateUpdateWorkflowStateStatus(
 
 // validateWorkflowState validate workflow state
 func validateWorkflowState(
-	state int,
+	state checksumproto.WorkflowExecutionState,
 ) error {
 
 	if _, ok := validWorkflowStates[state]; !ok {

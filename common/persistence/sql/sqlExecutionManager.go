@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -158,11 +159,11 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 						workflowID, row.LastWriteVersion, request.PreviousLastWriteVersion),
 				}
 			}
-			if row.State != p.WorkflowStateCompleted {
+			if row.State != checksumproto.WorkflowExecutionState_Completed {
 				return nil, &p.CurrentWorkflowConditionFailedError{
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
 						"State: %v, Expected: %v",
-						workflowID, row.State, p.WorkflowStateCompleted),
+						workflowID, row.State, checksumproto.WorkflowExecutionState_Completed),
 				}
 			}
 			runIDStr := row.RunID.String()

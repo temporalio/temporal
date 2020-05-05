@@ -28,6 +28,7 @@ import (
 	"database/sql"
 	"time"
 
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/persistence"
@@ -168,7 +169,7 @@ type (
 		WorkflowID       string
 		RunID            primitives.UUID
 		CreateRequestID  string
-		State            int
+		State            checksumproto.WorkflowExecutionState
 		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 		StartVersion     int64

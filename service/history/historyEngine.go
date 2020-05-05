@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"
 
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -1289,7 +1290,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		}
 		result.WorkflowExecutionInfo.ParentNamespaceId = executionInfo.ParentNamespaceID
 	}
-	if executionInfo.State == persistence.WorkflowStateCompleted {
+	if executionInfo.WorkflowExecutionInfoState == checksumproto.WorkflowExecutionState_Completed {
 		// for closed workflow
 		result.WorkflowExecutionInfo.Status = executionInfo.Status
 		completionEvent, err := mutableState.GetCompletionEvent()
@@ -2831,7 +2832,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 
 	prevStartRequestID := prevExecutionInfo.CreateRequestID
 	prevRunID := prevExecutionInfo.RunID
-	prevState := prevExecutionInfo.State
+	prevState := prevExecutionInfo.WorkflowExecutionInfoState
 	prevStatus := prevExecutionInfo.Status
 
 	return e.applyWorkflowIDReusePolicyHelper(
@@ -2849,7 +2850,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	prevStartRequestID,
 	prevRunID string,
-	prevState int,
+	prevState checksumproto.WorkflowExecutionState,
 	prevStatus executionpb.WorkflowExecutionStatus,
 	namespaceID string,
 	execution executionpb.WorkflowExecution,
@@ -2859,11 +2860,11 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	// here we know there is some information about the prev workflow, i.e. either running right now
 	// or has history check if the this workflow is finished
 	switch prevState {
-	case persistence.WorkflowStateCreated,
-		persistence.WorkflowStateRunning:
+	case checksumproto.WorkflowExecutionState_Created,
+		checksumproto.WorkflowExecutionState_Running:
 		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
 		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
-	case persistence.WorkflowStateCompleted:
+	case checksumproto.WorkflowExecutionState_Completed:
 		// previous workflow completed, proceed
 	default:
 		// persistence.WorkflowStateZombie or unknown type

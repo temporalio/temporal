@@ -33,7 +33,9 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
+
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
@@ -195,7 +197,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
-	if state, _ := mutableState.GetWorkflowStateStatus(); state == persistence.WorkflowStateZombie {
+	if state, _ := mutableState.GetWorkflowStateStatus(); state == checksumproto.WorkflowExecutionState_Zombie {
 		updateMode = persistence.UpdateWorkflowModeBypassCurrent
 	}
 
@@ -282,7 +284,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			}
 		}
 
-		if state, _ := mutableState.GetWorkflowStateStatus(); state == persistence.WorkflowStateCompleted {
+		if state, _ := mutableState.GetWorkflowStateStatus(); state == checksumproto.WorkflowExecutionState_Completed {
 			return false, nil
 		}
 	} else if mutableState.GetReplicationState() != nil {

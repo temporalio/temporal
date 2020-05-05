@@ -35,6 +35,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cache"
@@ -156,7 +157,7 @@ type (
 		GetUserTimerInfoByEventID(int64) (*persistenceblobs.TimerInfo, bool)
 		GetUserTimerInfo(string) (*persistenceblobs.TimerInfo, bool)
 		GetWorkflowType() *commonpb.WorkflowType
-		GetWorkflowStateStatus() (int, executionpb.WorkflowExecutionStatus)
+		GetWorkflowStateStatus() (checksumproto.WorkflowExecutionState, executionpb.WorkflowExecutionStatus)
 		GetQueryRegistry() queryRegistry
 		HasBufferedEvents() bool
 		HasInFlightDecision() bool
@@ -223,7 +224,7 @@ type (
 		UpdateReplicationStateLastEventID(int64, int64)
 		UpdateUserTimer(*persistenceblobs.TimerInfo) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
-		UpdateWorkflowStateStatus(state int, status executionpb.WorkflowExecutionStatus) error
+		UpdateWorkflowStateStatus(state checksumproto.WorkflowExecutionState, status executionpb.WorkflowExecutionStatus) error
 
 		AddTransferTasks(transferTasks ...persistence.Task)
 		AddTimerTasks(timerTasks ...persistence.Task)

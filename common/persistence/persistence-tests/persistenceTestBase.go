@@ -34,6 +34,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -291,23 +292,23 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestID:     uuid.New(),
-				NamespaceID:         namespaceID,
-				WorkflowID:          workflowExecution.GetWorkflowId(),
-				RunID:               workflowExecution.GetRunId(),
-				TaskList:            taskList,
-				WorkflowTypeName:    wType,
-				WorkflowRunTimeout:  wTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
-				State:               p.WorkflowStateRunning,
-				Status:              executionpb.WorkflowExecutionStatus_Running,
-				LastFirstEventID:    common.FirstEventID,
-				NextEventID:         nextEventID,
-				LastProcessedEvent:  lastProcessedEventID,
-				DecisionScheduleID:  decisionScheduleID,
-				DecisionStartedID:   common.EmptyEventID,
-				DecisionTimeout:     1,
-				BranchToken:         branchToken,
+				CreateRequestID:            uuid.New(),
+				NamespaceID:                namespaceID,
+				WorkflowID:                 workflowExecution.GetWorkflowId(),
+				RunID:                      workflowExecution.GetRunId(),
+				TaskList:                   taskList,
+				WorkflowTypeName:           wType,
+				WorkflowRunTimeout:         wTimeout,
+				WorkflowTaskTimeout:        decisionTimeout,
+				WorkflowExecutionInfoState: checksumproto.WorkflowExecutionState_Running,
+				Status:                     executionpb.WorkflowExecutionStatus_Running,
+				LastFirstEventID:           common.FirstEventID,
+				NextEventID:                nextEventID,
+				LastProcessedEvent:         lastProcessedEventID,
+				DecisionScheduleID:         decisionScheduleID,
+				DecisionStartedID:          common.EmptyEventID,
+				DecisionTimeout:            1,
+				BranchToken:                branchToken,
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks: []p.Task{
@@ -360,22 +361,22 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, wo
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestID:     uuid.New(),
-				NamespaceID:         namespaceID,
-				WorkflowID:          workflowExecution.GetWorkflowId(),
-				RunID:               workflowExecution.GetRunId(),
-				TaskList:            taskList,
-				WorkflowTypeName:    wType,
-				WorkflowRunTimeout:  wTimeout,
-				WorkflowTaskTimeout: decisionTimeout,
-				State:               p.WorkflowStateRunning,
-				Status:              executionpb.WorkflowExecutionStatus_Running,
-				LastFirstEventID:    common.FirstEventID,
-				NextEventID:         nextEventID,
-				LastProcessedEvent:  lastProcessedEventID,
-				DecisionScheduleID:  decisionScheduleID,
-				DecisionStartedID:   common.EmptyEventID,
-				DecisionTimeout:     1,
+				CreateRequestID:            uuid.New(),
+				NamespaceID:                namespaceID,
+				WorkflowID:                 workflowExecution.GetWorkflowId(),
+				RunID:                      workflowExecution.GetRunId(),
+				TaskList:                   taskList,
+				WorkflowTypeName:           wType,
+				WorkflowRunTimeout:         wTimeout,
+				WorkflowTaskTimeout:        decisionTimeout,
+				WorkflowExecutionInfoState: checksumproto.WorkflowExecutionState_Running,
+				Status:                     executionpb.WorkflowExecutionStatus_Running,
+				LastFirstEventID:           common.FirstEventID,
+				NextEventID:                nextEventID,
+				LastProcessedEvent:         lastProcessedEventID,
+				DecisionScheduleID:         decisionScheduleID,
+				DecisionStartedID:          common.EmptyEventID,
+				DecisionTimeout:            1,
 			},
 			ExecutionStats:   &p.ExecutionStats{},
 			ReplicationState: state,
@@ -418,19 +419,19 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestID:    uuid.New(),
-				NamespaceID:        namespaceID,
-				WorkflowID:         workflowExecution.GetWorkflowId(),
-				RunID:              workflowExecution.GetRunId(),
-				TaskList:           taskList,
-				State:              p.WorkflowStateRunning,
-				Status:             executionpb.WorkflowExecutionStatus_Running,
-				LastFirstEventID:   common.FirstEventID,
-				NextEventID:        nextEventID,
-				LastProcessedEvent: lastProcessedEventID,
-				DecisionScheduleID: common.EmptyEventID,
-				DecisionStartedID:  common.EmptyEventID,
-				DecisionTimeout:    1,
+				CreateRequestID:            uuid.New(),
+				NamespaceID:                namespaceID,
+				WorkflowID:                 workflowExecution.GetWorkflowId(),
+				RunID:                      workflowExecution.GetRunId(),
+				TaskList:                   taskList,
+				WorkflowExecutionInfoState: checksumproto.WorkflowExecutionState_Running,
+				Status:                     executionpb.WorkflowExecutionStatus_Running,
+				LastFirstEventID:           common.FirstEventID,
+				NextEventID:                nextEventID,
+				LastProcessedEvent:         lastProcessedEventID,
+				DecisionScheduleID:         common.EmptyEventID,
+				DecisionStartedID:          common.EmptyEventID,
+				DecisionTimeout:            1,
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks:  transferTasks,
@@ -463,14 +464,14 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
 
-				State:              p.WorkflowStateCreated,
-				Status:             executionpb.WorkflowExecutionStatus_Running,
-				LastFirstEventID:   common.FirstEventID,
-				NextEventID:        nextEventID,
-				LastProcessedEvent: lastProcessedEventID,
-				DecisionScheduleID: decisionScheduleID,
-				DecisionStartedID:  common.EmptyEventID,
-				DecisionTimeout:    1,
+				WorkflowExecutionInfoState: checksumproto.WorkflowExecutionState_Created,
+				Status:                     executionpb.WorkflowExecutionStatus_Running,
+				LastFirstEventID:           common.FirstEventID,
+				NextEventID:                nextEventID,
+				LastProcessedEvent:         lastProcessedEventID,
+				DecisionScheduleID:         decisionScheduleID,
+				DecisionStartedID:          common.EmptyEventID,
+				DecisionTimeout:            1,
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks: []p.Task{
@@ -574,15 +575,15 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 				WorkflowRunTimeout:  updatedInfo.WorkflowRunTimeout,
 				WorkflowTaskTimeout: updatedInfo.WorkflowTaskTimeout,
 
-				State:              updatedInfo.State,
-				Status:             updatedInfo.Status,
-				LastFirstEventID:   common.FirstEventID,
-				NextEventID:        nextEventID,
-				LastProcessedEvent: common.EmptyEventID,
-				DecisionScheduleID: decisionScheduleID,
-				DecisionStartedID:  common.EmptyEventID,
-				DecisionTimeout:    1,
-				AutoResetPoints:    prevResetPoints,
+				WorkflowExecutionInfoState: updatedInfo.WorkflowExecutionInfoState,
+				Status:                     updatedInfo.Status,
+				LastFirstEventID:           common.FirstEventID,
+				NextEventID:                nextEventID,
+				LastProcessedEvent:         common.EmptyEventID,
+				DecisionScheduleID:         decisionScheduleID,
+				DecisionStartedID:          common.EmptyEventID,
+				DecisionTimeout:            1,
+				AutoResetPoints:            prevResetPoints,
 			},
 			ExecutionStats:   updatedStats,
 			ReplicationState: afterState,
@@ -592,7 +593,7 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
 	}
-	req.UpdateWorkflowMutation.ExecutionInfo.State = p.WorkflowStateCompleted
+	req.UpdateWorkflowMutation.ExecutionInfo.WorkflowExecutionInfoState = checksumproto.WorkflowExecutionState_Completed
 	req.UpdateWorkflowMutation.ExecutionInfo.Status = executionpb.WorkflowExecutionStatus_ContinuedAsNew
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(req)
 	return err
@@ -934,7 +935,7 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 }
 
 // ConflictResolveWorkflowExecution is  utility method to reset mutable state
-func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWriteVersion int64, prevState int,
+func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWriteVersion int64, prevState checksumproto.WorkflowExecutionState,
 	info *p.WorkflowExecutionInfo, stats *p.ExecutionStats, replicationState *p.ReplicationState, nextEventID int64,
 	activityInfos []*p.ActivityInfo, timerInfos []*persistenceblobs.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
 	requestCancelInfos []*persistenceblobs.RequestCancelInfo, signalInfos []*persistenceblobs.SignalInfo, ids []string) error {

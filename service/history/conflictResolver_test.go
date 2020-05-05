@@ -39,7 +39,9 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -149,7 +151,7 @@ func (s *conflictResolverSuite) TestReset() {
 
 	prevRunID := uuid.New()
 	prevLastWriteVersion := int64(123)
-	prevState := persistence.WorkflowStateRunning
+	prevState := checksumproto.WorkflowExecutionState_Running
 
 	sourceCluster := cluster.TestAlternativeClusterName
 	startTime := time.Now()
@@ -197,34 +199,34 @@ func (s *conflictResolverSuite) TestReset() {
 	createRequestID := uuid.New()
 
 	executionInfo := &persistence.WorkflowExecutionInfo{
-		NamespaceID:              namespaceID,
-		WorkflowID:               execution.GetWorkflowId(),
-		RunID:                    execution.GetRunId(),
-		ParentNamespaceID:        "",
-		ParentWorkflowID:         "",
-		ParentRunID:              "",
-		InitiatedID:              common.EmptyEventID,
-		TaskList:                 event1.GetWorkflowExecutionStartedEventAttributes().TaskList.GetName(),
-		WorkflowTypeName:         event1.GetWorkflowExecutionStartedEventAttributes().WorkflowType.GetName(),
-		WorkflowExecutionTimeout: event1.GetWorkflowExecutionStartedEventAttributes().WorkflowExecutionTimeoutSeconds,
-		WorkflowRunTimeout:       event1.GetWorkflowExecutionStartedEventAttributes().WorkflowRunTimeoutSeconds,
-		WorkflowTaskTimeout:      event1.GetWorkflowExecutionStartedEventAttributes().WorkflowTaskTimeoutSeconds,
-		State:                    persistence.WorkflowStateCreated,
-		Status:                   executionpb.WorkflowExecutionStatus_Running,
-		LastFirstEventID:         event1.GetEventId(),
-		NextEventID:              nextEventID,
-		LastProcessedEvent:       common.EmptyEventID,
-		StartTimestamp:           startTime,
-		LastUpdatedTimestamp:     startTime,
-		DecisionVersion:          common.EmptyVersion,
-		DecisionScheduleID:       common.EmptyEventID,
-		DecisionStartedID:        common.EmptyEventID,
-		DecisionRequestID:        emptyUUID,
-		DecisionTimeout:          0,
-		DecisionAttempt:          0,
-		DecisionStartedTimestamp: 0,
-		CreateRequestID:          createRequestID,
-		BranchToken:              branchToken,
+		NamespaceID:                namespaceID,
+		WorkflowID:                 execution.GetWorkflowId(),
+		RunID:                      execution.GetRunId(),
+		ParentNamespaceID:          "",
+		ParentWorkflowID:           "",
+		ParentRunID:                "",
+		InitiatedID:                common.EmptyEventID,
+		TaskList:                   event1.GetWorkflowExecutionStartedEventAttributes().TaskList.GetName(),
+		WorkflowTypeName:           event1.GetWorkflowExecutionStartedEventAttributes().WorkflowType.GetName(),
+		WorkflowExecutionTimeout:   event1.GetWorkflowExecutionStartedEventAttributes().WorkflowExecutionTimeoutSeconds,
+		WorkflowRunTimeout:         event1.GetWorkflowExecutionStartedEventAttributes().WorkflowRunTimeoutSeconds,
+		WorkflowTaskTimeout:        event1.GetWorkflowExecutionStartedEventAttributes().WorkflowTaskTimeoutSeconds,
+		WorkflowExecutionInfoState: checksumproto.WorkflowExecutionState_Created,
+		Status:                     executionpb.WorkflowExecutionStatus_Running,
+		LastFirstEventID:           event1.GetEventId(),
+		NextEventID:                nextEventID,
+		LastProcessedEvent:         common.EmptyEventID,
+		StartTimestamp:             startTime,
+		LastUpdatedTimestamp:       startTime,
+		DecisionVersion:            common.EmptyVersion,
+		DecisionScheduleID:         common.EmptyEventID,
+		DecisionStartedID:          common.EmptyEventID,
+		DecisionRequestID:          emptyUUID,
+		DecisionTimeout:            0,
+		DecisionAttempt:            0,
+		DecisionStartedTimestamp:   0,
+		CreateRequestID:            createRequestID,
+		BranchToken:                branchToken,
 	}
 	// this is only a shallow test, meaning
 	// the mutable state only has the minimal information

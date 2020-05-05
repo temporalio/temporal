@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
@@ -110,8 +111,8 @@ func WorkflowType(wfType string) Tag {
 }
 
 // WorkflowState returns tag for WorkflowState
-func WorkflowState(s int) Tag {
-	return newInt("wf-state", s)
+func WorkflowState(s checksumproto.WorkflowExecutionState) Tag {
+	return newInt("wf-state", int(s))
 }
 
 // WorkflowRunID returns tag for WorkflowRunID

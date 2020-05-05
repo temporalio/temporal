@@ -35,6 +35,8 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -785,7 +787,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		resp.MutableStateUpdateSessionStats,
 	)
 	// emit workflow completion stats if any
-	if currentWorkflow.ExecutionInfo.State == persistence.WorkflowStateCompleted {
+	if currentWorkflow.ExecutionInfo.WorkflowExecutionInfoState == checksumproto.WorkflowExecutionState_Completed {
 		if event, err := c.mutableState.GetCompletionEvent(); err == nil {
 			taskList := currentWorkflow.ExecutionInfo.TaskList
 			emitWorkflowCompletionStats(c.metricsClient, namespace, taskList, event)

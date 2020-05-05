@@ -37,9 +37,10 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
@@ -136,9 +137,9 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 	// set workflow state to running, since decision is scheduled
 	// NOTE: for zombie workflow, should not change the state
 	state, _ := m.msb.GetWorkflowStateStatus()
-	if state != persistence.WorkflowStateZombie {
+	if state != checksumproto.WorkflowExecutionState_Zombie {
 		if err := m.msb.UpdateWorkflowStateStatus(
-			persistence.WorkflowStateRunning,
+			checksumproto.WorkflowExecutionState_Running,
 			executionpb.WorkflowExecutionStatus_Running,
 		); err != nil {
 			return nil, err

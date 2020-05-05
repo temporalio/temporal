@@ -27,6 +27,7 @@ package persistence
 import (
 	"fmt"
 
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -50,8 +51,8 @@ func ValidateCreateWorkflowModeState(
 	case CreateWorkflowModeBrandNew,
 		CreateWorkflowModeWorkflowIDReuse,
 		CreateWorkflowModeContinueAsNew:
-		if workflowState == WorkflowStateZombie ||
-			workflowState == WorkflowStateCompleted {
+		if workflowState == checksumproto.WorkflowExecutionState_Zombie ||
+			workflowState == checksumproto.WorkflowExecutionState_Completed {
 			return newInvalidCreateWorkflowMode(
 				mode,
 				workflowState,
@@ -60,9 +61,9 @@ func ValidateCreateWorkflowModeState(
 		return nil
 
 	case CreateWorkflowModeZombie:
-		if workflowState == WorkflowStateCreated ||
-			workflowState == WorkflowStateRunning ||
-			workflowState == WorkflowStateCompleted {
+		if workflowState == checksumproto.WorkflowExecutionState_Created ||
+			workflowState == checksumproto.WorkflowExecutionState_Running ||
+			workflowState == checksumproto.WorkflowExecutionState_Completed {
 			return newInvalidCreateWorkflowMode(
 				mode,
 				workflowState,
@@ -86,7 +87,7 @@ func ValidateUpdateWorkflowModeState(
 	if err := checkWorkflowState(currentWorkflowState); err != nil {
 		return err
 	}
-	var newWorkflowState *int
+	var newWorkflowState *checksumproto.WorkflowExecutionState
 	if newWorkflowSnapshot != nil {
 		newWorkflowState = &newWorkflowSnapshot.ExecutionInfo.State
 		if err := checkWorkflowState(*newWorkflowState); err != nil {
@@ -105,17 +106,17 @@ func ValidateUpdateWorkflowModeState(
 
 		// case 1
 		if newWorkflowState == nil {
-			if currentWorkflowState == WorkflowStateZombie {
+			if currentWorkflowState == checksumproto.WorkflowExecutionState_Zombie {
 				return newInvalidUpdateWorkflowMode(mode, currentWorkflowState)
 			}
 			return nil
 		}
 
 		// case 2
-		if currentWorkflowState == WorkflowStateCreated ||
-			currentWorkflowState == WorkflowStateRunning ||
-			*newWorkflowState == WorkflowStateZombie ||
-			*newWorkflowState == WorkflowStateCompleted {
+		if currentWorkflowState == checksumproto.WorkflowExecutionState_Created ||
+			currentWorkflowState == checksumproto.WorkflowExecutionState_Running ||
+			*newWorkflowState == checksumproto.WorkflowExecutionState_Zombie ||
+			*newWorkflowState == checksumproto.WorkflowExecutionState_Completed {
 			return newInvalidUpdateWorkflowWithNewMode(mode, currentWorkflowState, *newWorkflowState)
 		}
 		return nil
@@ -130,19 +131,19 @@ func ValidateUpdateWorkflowModeState(
 
 		// case 1
 		if newWorkflowState == nil {
-			if currentWorkflowState == WorkflowStateCreated ||
-				currentWorkflowState == WorkflowStateRunning {
+			if currentWorkflowState == checksumproto.WorkflowExecutionState_Created ||
+				currentWorkflowState == checksumproto.WorkflowExecutionState_Running {
 				return newInvalidUpdateWorkflowMode(mode, currentWorkflowState)
 			}
 			return nil
 		}
 
 		// case 2
-		if currentWorkflowState == WorkflowStateCreated ||
-			currentWorkflowState == WorkflowStateRunning ||
-			*newWorkflowState == WorkflowStateCreated ||
-			*newWorkflowState == WorkflowStateRunning ||
-			*newWorkflowState == WorkflowStateCompleted {
+		if currentWorkflowState == checksumproto.WorkflowExecutionState_Created ||
+			currentWorkflowState == checksumproto.WorkflowExecutionState_Running ||
+			*newWorkflowState == checksumproto.WorkflowExecutionState_Created ||
+			*newWorkflowState == checksumproto.WorkflowExecutionState_Running ||
+			*newWorkflowState == checksumproto.WorkflowExecutionState_Completed {
 			return newInvalidUpdateWorkflowWithNewMode(
 				mode,
 				currentWorkflowState,
@@ -168,14 +169,14 @@ func ValidateConflictResolveWorkflowModeState(
 	if err := checkWorkflowState(resetWorkflowState); err != nil {
 		return err
 	}
-	var newWorkflowState *int
+	var newWorkflowState *checksumproto.WorkflowExecutionState
 	if newWorkflowSnapshot != nil {
 		newWorkflowState = &newWorkflowSnapshot.ExecutionInfo.State
 		if err := checkWorkflowState(*newWorkflowState); err != nil {
 			return err
 		}
 	}
-	var currentWorkflowState *int
+	var currentWorkflowState *checksumproto.WorkflowExecutionState
 	if currentWorkflowMutation != nil {
 		currentWorkflowState = &currentWorkflowMutation.ExecutionInfo.State
 		if err := checkWorkflowState(*currentWorkflowState); err != nil {
@@ -208,7 +209,7 @@ func ValidateConflictResolveWorkflowModeState(
 		if currentWorkflowState == nil {
 			// case 1
 			if newWorkflowState == nil {
-				if resetWorkflowState == WorkflowStateZombie {
+				if resetWorkflowState == checksumproto.WorkflowExecutionState_Zombie {
 					return newInvalidConflictResolveWorkflowMode(
 						mode,
 						resetWorkflowState,
@@ -218,11 +219,11 @@ func ValidateConflictResolveWorkflowModeState(
 			}
 
 			// case 2
-			if resetWorkflowState == WorkflowStateCreated ||
-				resetWorkflowState == WorkflowStateRunning ||
-				resetWorkflowState == WorkflowStateZombie ||
-				*newWorkflowState == WorkflowStateZombie ||
-				*newWorkflowState == WorkflowStateCompleted {
+			if resetWorkflowState == checksumproto.WorkflowExecutionState_Created ||
+				resetWorkflowState == checksumproto.WorkflowExecutionState_Running ||
+				resetWorkflowState == checksumproto.WorkflowExecutionState_Zombie ||
+				*newWorkflowState == checksumproto.WorkflowExecutionState_Zombie ||
+				*newWorkflowState == checksumproto.WorkflowExecutionState_Completed {
 				return newInvalidConflictResolveWorkflowWithNewMode(
 					mode,
 					resetWorkflowState,
@@ -235,9 +236,9 @@ func ValidateConflictResolveWorkflowModeState(
 		// case 3 & 4
 		// case 3
 		if newWorkflowState == nil {
-			if *currentWorkflowState == WorkflowStateCreated ||
-				*currentWorkflowState == WorkflowStateRunning ||
-				resetWorkflowState == WorkflowStateZombie {
+			if *currentWorkflowState == checksumproto.WorkflowExecutionState_Created ||
+				*currentWorkflowState == checksumproto.WorkflowExecutionState_Running ||
+				resetWorkflowState == checksumproto.WorkflowExecutionState_Zombie {
 				return newInvalidConflictResolveWorkflowWithCurrentMode(
 					mode,
 					resetWorkflowState,
@@ -248,13 +249,13 @@ func ValidateConflictResolveWorkflowModeState(
 		}
 
 		// case 4
-		if *currentWorkflowState == WorkflowStateCreated ||
-			*currentWorkflowState == WorkflowStateRunning ||
-			resetWorkflowState == WorkflowStateCreated ||
-			resetWorkflowState == WorkflowStateRunning ||
-			resetWorkflowState == WorkflowStateZombie ||
-			*newWorkflowState == WorkflowStateZombie ||
-			*newWorkflowState == WorkflowStateCompleted {
+		if *currentWorkflowState == checksumproto.WorkflowExecutionState_Created ||
+			*currentWorkflowState == checksumproto.WorkflowExecutionState_Running ||
+			resetWorkflowState == checksumproto.WorkflowExecutionState_Created ||
+			resetWorkflowState == checksumproto.WorkflowExecutionState_Running ||
+			resetWorkflowState == checksumproto.WorkflowExecutionState_Zombie ||
+			*newWorkflowState == checksumproto.WorkflowExecutionState_Zombie ||
+			*newWorkflowState == checksumproto.WorkflowExecutionState_Completed {
 			return newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
 				mode,
 				resetWorkflowState,
@@ -280,8 +281,8 @@ func ValidateConflictResolveWorkflowModeState(
 
 		// case 1
 		if newWorkflowState == nil {
-			if resetWorkflowState == WorkflowStateCreated ||
-				resetWorkflowState == WorkflowStateRunning {
+			if resetWorkflowState == checksumproto.WorkflowExecutionState_Created ||
+				resetWorkflowState == checksumproto.WorkflowExecutionState_Running {
 				return newInvalidConflictResolveWorkflowMode(
 					mode,
 					resetWorkflowState,
@@ -291,12 +292,12 @@ func ValidateConflictResolveWorkflowModeState(
 		}
 
 		// case 2
-		if resetWorkflowState == WorkflowStateCreated ||
-			resetWorkflowState == WorkflowStateRunning ||
-			resetWorkflowState == WorkflowStateZombie ||
-			*newWorkflowState == WorkflowStateCreated ||
-			*newWorkflowState == WorkflowStateRunning ||
-			*newWorkflowState == WorkflowStateCompleted {
+		if resetWorkflowState == checksumproto.WorkflowExecutionState_Created ||
+			resetWorkflowState == checksumproto.WorkflowExecutionState_Running ||
+			resetWorkflowState == checksumproto.WorkflowExecutionState_Zombie ||
+			*newWorkflowState == checksumproto.WorkflowExecutionState_Created ||
+			*newWorkflowState == checksumproto.WorkflowExecutionState_Running ||
+			*newWorkflowState == checksumproto.WorkflowExecutionState_Completed {
 			return newInvalidConflictResolveWorkflowWithNewMode(
 				mode,
 				resetWorkflowState,
@@ -310,13 +311,13 @@ func ValidateConflictResolveWorkflowModeState(
 	}
 }
 
-func checkWorkflowState(state int) error {
+func checkWorkflowState(state checksumproto.WorkflowExecutionState) error {
 	switch state {
-	case WorkflowStateCreated,
-		WorkflowStateRunning,
-		WorkflowStateZombie,
-		WorkflowStateCompleted,
-		WorkflowStateCorrupted:
+	case checksumproto.WorkflowExecutionState_Created,
+		checksumproto.WorkflowExecutionState_Running,
+		checksumproto.WorkflowExecutionState_Zombie,
+		checksumproto.WorkflowExecutionState_Completed,
+		checksumproto.WorkflowExecutionState_Corrupted:
 		return nil
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
@@ -325,7 +326,7 @@ func checkWorkflowState(state int) error {
 
 func newInvalidCreateWorkflowMode(
 	mode CreateWorkflowMode,
-	workflowState int,
+	workflowState checksumproto.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow create mode %v, state: %v",
@@ -337,7 +338,7 @@ func newInvalidCreateWorkflowMode(
 
 func newInvalidUpdateWorkflowMode(
 	mode UpdateWorkflowMode,
-	currentWorkflowState int,
+	currentWorkflowState checksumproto.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow update mode %v, state: %v",
@@ -349,8 +350,8 @@ func newInvalidUpdateWorkflowMode(
 
 func newInvalidUpdateWorkflowWithNewMode(
 	mode UpdateWorkflowMode,
-	currentWorkflowState int,
-	newWorkflowState int,
+	currentWorkflowState checksumproto.WorkflowExecutionState,
+	newWorkflowState checksumproto.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow update mode %v, current state: %v, new state: %v",
@@ -363,7 +364,7 @@ func newInvalidUpdateWorkflowWithNewMode(
 
 func newInvalidConflictResolveWorkflowMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState int,
+	resetWorkflowState checksumproto.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v",
@@ -375,8 +376,8 @@ func newInvalidConflictResolveWorkflowMode(
 
 func newInvalidConflictResolveWorkflowWithNewMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState int,
-	newWorkflowState int,
+	resetWorkflowState checksumproto.WorkflowExecutionState,
+	newWorkflowState checksumproto.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v",
@@ -389,8 +390,8 @@ func newInvalidConflictResolveWorkflowWithNewMode(
 
 func newInvalidConflictResolveWorkflowWithCurrentMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState int,
-	currentWorkflowState int,
+	resetWorkflowState checksumproto.WorkflowExecutionState,
+	currentWorkflowState checksumproto.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, current state: %v",
@@ -403,9 +404,9 @@ func newInvalidConflictResolveWorkflowWithCurrentMode(
 
 func newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState int,
-	newWorkflowState int,
-	currentWorkflowState int,
+	resetWorkflowState checksumproto.WorkflowExecutionState,
+	newWorkflowState checksumproto.WorkflowExecutionState,
+	currentWorkflowState checksumproto.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v, current state: %v",

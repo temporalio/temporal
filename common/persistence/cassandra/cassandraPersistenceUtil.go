@@ -30,6 +30,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
@@ -971,7 +972,7 @@ func createOrUpdateCurrentExecution(
 	namespaceID string,
 	workflowID string,
 	runID string,
-	state int,
+	state checksumproto.WorkflowExecutionState,
 	status executionpb.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
@@ -1038,7 +1039,7 @@ func createOrUpdateCurrentExecution(
 			rowTypeExecutionTaskID,
 			previousRunID,
 			previousLastWriteVersion,
-			p.WorkflowStateCompleted,
+			checksumproto.WorkflowExecutionState_Completed,
 		)
 	case p.CreateWorkflowModeBrandNew:
 		batch.Query(templateCreateCurrentWorkflowExecutionQuery,

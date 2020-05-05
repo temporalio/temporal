@@ -60,17 +60,17 @@ func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableState
 	executionInfo := ms.GetExecutionInfo()
 	replicationState := ms.GetReplicationState()
 	payload := &checksumproto.MutableStateChecksumPayload{
-		CancelRequested:      executionInfo.CancelRequested,
-		State:                int32(executionInfo.State),
-		LastFirstEventId:     executionInfo.LastFirstEventID,
-		NextEventId:          executionInfo.NextEventID,
-		LastProcessedEventId: executionInfo.LastProcessedEvent,
-		SignalCount:          int64(executionInfo.SignalCount),
-		DecisionAttempt:      int32(executionInfo.DecisionAttempt),
-		DecisionScheduledId:  executionInfo.DecisionScheduleID,
-		DecisionStartedId:    executionInfo.DecisionStartedID,
-		DecisionVersion:      executionInfo.DecisionVersion,
-		StickyTaskListName:   executionInfo.StickyTaskList,
+		CancelRequested:                  executionInfo.CancelRequested,
+		MutableStateChecksumPayloadState: executionInfo.WorkflowExecutionInfoState,
+		LastFirstEventId:                 executionInfo.LastFirstEventID,
+		NextEventId:                      executionInfo.NextEventID,
+		LastProcessedEventId:             executionInfo.LastProcessedEvent,
+		SignalCount:                      int64(executionInfo.SignalCount),
+		DecisionAttempt:                  int32(executionInfo.DecisionAttempt),
+		DecisionScheduledId:              executionInfo.DecisionScheduleID,
+		DecisionStartedId:                executionInfo.DecisionStartedID,
+		DecisionVersion:                  executionInfo.DecisionVersion,
+		StickyTaskListName:               executionInfo.StickyTaskList,
 	}
 
 	if replicationState != nil {

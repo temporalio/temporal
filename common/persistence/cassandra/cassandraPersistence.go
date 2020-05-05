@@ -31,6 +31,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cassandra"
@@ -999,7 +1000,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 							Msg:              msg,
 							StartRequestID:   protoState.CreateRequestId,
 							RunID:            primitives.UUIDString(protoState.RunId),
-							State:            int(protoState.State),
+							State:            checksumproto.WorkflowExecutionState(protoState.State),
 							Status:           protoState.Status,
 							LastWriteVersion: lastWriteVersion,
 						}
@@ -1872,7 +1873,7 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 	return &p.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
 		StartRequestID:   executionInfo.CreateRequestId,
-		State:            int(executionInfo.State),
+		State:            checksumproto.WorkflowExecutionState(executionInfo.State),
 		Status:           executionInfo.Status,
 		LastWriteVersion: replicationVersions.LastWriteVersion.GetValue(),
 	}, nil

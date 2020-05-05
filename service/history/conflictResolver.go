@@ -27,6 +27,7 @@
 package history
 
 import (
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/convert"
@@ -43,7 +44,7 @@ type (
 		reset(
 			prevRunID string,
 			prevLastWriteVersion int64,
-			prevState int,
+			prevState checksumproto.WorkflowExecutionState,
 			requestID string,
 			replayEventID int64,
 			info *persistence.WorkflowExecutionInfo,
@@ -75,7 +76,7 @@ func newConflictResolver(shard ShardContext, context workflowExecutionContext, h
 func (r *conflictResolverImpl) reset(
 	prevRunID string,
 	prevLastWriteVersion int64,
-	prevState int,
+	prevState checksumproto.WorkflowExecutionState,
 	requestID string,
 	replayEventID int64,
 	info *persistence.WorkflowExecutionInfo,
