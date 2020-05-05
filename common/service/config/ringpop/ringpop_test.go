@@ -53,7 +53,7 @@ func (s *RingpopSuite) SetupTest() {
 }
 
 func (s *RingpopSuite) TestHostsMode() {
-	var cfg config.Ringpop
+	var cfg config.Membership
 	err := yaml.Unmarshal([]byte(getHostsConfig()), &cfg)
 	s.Nil(err)
 	s.Equal("test", cfg.Name)
@@ -79,7 +79,7 @@ func (resolver *mockResolver) LookupHost(ctx context.Context, host string) ([]st
 }
 
 func (s *RingpopSuite) TestInvalidConfig() {
-	var cfg config.Ringpop
+	var cfg config.Membership
 	s.Error(validateRingpopConfig(&cfg))
 	cfg.Name = "test"
 	s.NoError(validateRingpopConfig(&cfg))
