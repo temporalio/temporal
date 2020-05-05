@@ -371,7 +371,7 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 	var lastEvent *eventpb.HistoryEvent // used for print result of this run
 	ticker := time.NewTicker(time.Second).C
 
-	tcCtx, cancel := newContextForBackground(c)
+	tcCtx, cancel := newIndefiniteContext(c)
 	defer cancel()
 
 	showDetails := c.Bool(FlagShowDetail)
