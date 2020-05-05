@@ -19,7 +19,7 @@ persistence:
           host: "127.0.0.1:9200"
         indices:
           visibility: temporal-visibility-dev
-server:
+global:
   ringpop:
     name: temporal
     maxJoinDuration: 30s

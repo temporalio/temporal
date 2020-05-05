@@ -47,8 +47,8 @@ const (
 type (
 	// Config contains the configuration for a set of temporal services
 	Config struct {
-		// Server is process-wide service-related configuration
-		Server Server `yaml:"server"`
+		// Global is process-wide service-related configuration
+		Global Global `yaml:"server"`
 		// Persistence contains the configuration for temporal datastores
 		Persistence Persistence `yaml:"persistence"`
 		// Log is the logging config
@@ -104,8 +104,8 @@ type (
 		LogLevel string `yaml:"logLevel"`
 	}
 
-	// Server contains config items that apply process-wide to all services
-	Server struct {
+	// Global contains config items that apply process-wide to all services
+	Global struct {
 		// Ringpop is the ringpop related configuration
 		Ringpop Ringpop `yaml:"ringpop"`
 		// PProf is the PProf configuration

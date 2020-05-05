@@ -11,7 +11,7 @@ persistence:
       cassandra:
         hosts: "127.0.0.1"
         keyspace: "temporal_visibility_active"
-server:
+global:
   ringpop:
     name: temporal_active
     maxJoinDuration: 30s

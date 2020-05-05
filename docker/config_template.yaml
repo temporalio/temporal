@@ -80,7 +80,7 @@ persistence:
                     visibility: temporal-visibility-dev
         {{- end }}
 
-server:
+global:
     ringpop:
         name: temporal
         maxJoinDuration: 30s
