@@ -20,7 +20,7 @@ persistence:
         indices:
           visibility: temporal-visibility-dev
 global:
-  ringpop:
+  membership:
     name: temporal
     maxJoinDuration: 30s
   pprof:

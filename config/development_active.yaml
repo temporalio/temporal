@@ -12,7 +12,7 @@ persistence:
         hosts: "127.0.0.1"
         keyspace: "temporal_visibility_active"
 global:
-  ringpop:
+  membership:
     name: temporal_active
     maxJoinDuration: 30s
     broadcastAddress: "127.0.0.1"

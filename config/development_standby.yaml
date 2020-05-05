@@ -13,7 +13,7 @@ persistence:
         keyspace: "temporal_visibility_standby"
 
 global:
-  ringpop:
+  membership:
     name: temporal_standby
     maxJoinDuration: 30s
   pprof:

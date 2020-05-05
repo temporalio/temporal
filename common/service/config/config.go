@@ -74,13 +74,13 @@ type (
 
 	// Service contains the service specific config items
 	Service struct {
-		// TChannel is the tchannel configuration
+		// RPC is the rpc configuration
 		RPC RPC `yaml:"rpc"`
 		// Metrics is the metrics subsystem configuration
 		Metrics Metrics `yaml:"metrics"`
 	}
 
-	// PProf contains the rpc config items
+	// PProf contains the config items for the pprof utility
 	PProf struct {
 		// Port is the port on which the PProf will bind to
 		Port int `yaml:"port"`
@@ -106,17 +106,17 @@ type (
 
 	// Global contains config items that apply process-wide to all services
 	Global struct {
-		// Ringpop is the ringpop related configuration
-		Ringpop Ringpop `yaml:"ringpop"`
+		// Membership is the ringpop related configuration
+		Membership Membership `yaml:"membership"`
 		// PProf is the PProf configuration
 		PProf PProf `yaml:"pprof"`
 	}
 
-	// Ringpop contains the ringpop config items
-	Ringpop struct {
-		// Name to be used in ringpop advertisement
+	// Membership contains config items related to the membership layer of temporal
+	Membership struct {
+		// Name to be used in advertisement to other nodes
 		Name string `yaml:"name" validate:"nonzero"`
-		// MaxJoinDuration is the max wait time to join the ring
+		// MaxJoinDuration is the max wait time to join the gossip ring
 		MaxJoinDuration time.Duration `yaml:"maxJoinDuration"`
 		// BroadcastAddress is used as the address that is communicated to remote nodes to connect on.
 		// This is generally used when BindOnIP would be the same across several nodes (ie: 0.0.0.0)

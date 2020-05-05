@@ -27,7 +27,7 @@ persistence:
         maxConnLifetime: "1h"
 
 global:
-  ringpop:
+  membership:
     name: temporal
     maxJoinDuration: 30s
   pprof:

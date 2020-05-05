@@ -81,7 +81,7 @@ persistence:
         {{- end }}
 
 global:
-    ringpop:
+    membership:
         name: temporal
         maxJoinDuration: 30s
         broadcastAddress: {{ default .Env.TEMPORAL_BROADCAST_ADDRESS "" }}
