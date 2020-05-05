@@ -581,17 +581,10 @@ func (e *historyEngineImpl) startWorkflowHelper(
 				prevLastWriteVersion,
 			)
 		}
-		// for signalWithStart, WorkflowIDReusePolicy is default to WorkflowIDReusePolicyAllowDuplicate
-		// while for startWorkflow it is default to WorkflowIdReusePolicyAllowDuplicateFailedOnly.
-		policy := workflow.WorkflowIdReusePolicyAllowDuplicate
-		if request.WorkflowIdReusePolicy != nil {
-			policy = request.GetWorkflowIdReusePolicy()
-		}
-
 		err = e.applyWorkflowIDReusePolicyForSigWithStart(
 			prevMutableState.GetExecutionInfo(),
 			workflowExecution,
-			policy,
+			request.GetWorkflowIdReusePolicy(),
 		)
 		if err != nil {
 			return nil, err
@@ -2850,7 +2843,6 @@ func getStartRequest(
 	return startRequest
 }
 
-// for startWorkflowExecution & signalWithStart to handle workflow reuse policy
 func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 	prevExecutionInfo *persistence.WorkflowExecutionInfo,
 	execution workflow.WorkflowExecution,

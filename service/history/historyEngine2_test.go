@@ -1283,6 +1283,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	signalName := "my signal name"
 	input := []byte("test input")
 	requestID := uuid.New()
+	policy := workflow.WorkflowIdReusePolicyAllowDuplicate
 	sRequest = &h.SignalWithStartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		SignalWithStartRequest: &workflow.SignalWithStartWorkflowExecutionRequest{
@@ -1296,6 +1297,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 			SignalName:                          common.StringPtr(signalName),
 			Input:                               input,
 			RequestId:                           common.StringPtr(requestID),
+			WorkflowIdReusePolicy:               &policy,
 		},
 	}
 
@@ -1327,6 +1329,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	signalName := "my signal name"
 	input := []byte("test input")
 	requestID := "testRequestID"
+	policy := workflow.WorkflowIdReusePolicyAllowDuplicate
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		SignalWithStartRequest: &workflow.SignalWithStartWorkflowExecutionRequest{
@@ -1340,6 +1343,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 			SignalName:                          common.StringPtr(signalName),
 			Input:                               input,
 			RequestId:                           common.StringPtr(requestID),
+			WorkflowIdReusePolicy:               &policy,
 		},
 	}
 
@@ -1379,6 +1383,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	signalName := "my signal name"
 	input := []byte("test input")
 	requestID := "testRequestID"
+	policy := workflow.WorkflowIdReusePolicyAllowDuplicate
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		SignalWithStartRequest: &workflow.SignalWithStartWorkflowExecutionRequest{
@@ -1392,6 +1397,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 			SignalName:                          common.StringPtr(signalName),
 			Input:                               input,
 			RequestId:                           common.StringPtr(requestID),
+			WorkflowIdReusePolicy:               &policy,
 		},
 	}
 
