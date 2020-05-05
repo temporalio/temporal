@@ -37,7 +37,7 @@ enum WorkflowExecutionState {
 
 message MutableStateChecksumPayload {
     bool cancelRequested = 1;
-    WorkflowExecutionState mutableStateChecksumPayloadState = 2;
+    WorkflowExecutionState state = 2;
     int32 status = 3;
 
     int64 lastWriteVersion = 4;
