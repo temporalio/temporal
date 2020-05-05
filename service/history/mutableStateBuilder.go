@@ -312,7 +312,6 @@ func (e *mutableStateBuilder) Load(
 
 	e.currentVersion = common.EmptyVersion
 	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
-	// TODO: remove the cast.
 	e.stateInDB = state.ExecutionInfo.State
 	e.nextEventIDInDB = state.ExecutionInfo.NextEventID
 	e.versionHistories = state.VersionHistories
