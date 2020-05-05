@@ -220,8 +220,6 @@ message RequestCancelInfo {
 message WorkflowExecutionState {
     string createRequestId = 1;
     bytes runId = 2;
-    // TODO: replace with checksum.WorkflowExecutionState enum.
-    // checksum.WorkflowExecutionState state = 3;
     int32 state = 3;
     execution.WorkflowExecutionStatus status = 4;
 }
