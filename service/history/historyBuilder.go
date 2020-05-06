@@ -247,28 +247,14 @@ func (b *historyBuilder) AddTimerFiredEvent(
 }
 
 func (b *historyBuilder) AddActivityTaskCancelRequestedEvent(decisionCompletedEventID int64,
-	activityID string) *eventpb.HistoryEvent {
+	scheduleID int64) *eventpb.HistoryEvent {
 
 	attributes := &eventpb.ActivityTaskCancelRequestedEventAttributes{}
-	attributes.ActivityId = activityID
+	attributes.ScheduledEventId = scheduleID
 	attributes.DecisionTaskCompletedEventId = decisionCompletedEventID
 
 	event := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_ActivityTaskCancelRequested)
 	event.Attributes = &eventpb.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{ActivityTaskCancelRequestedEventAttributes: attributes}
-
-	return b.addEventToHistory(event)
-}
-
-func (b *historyBuilder) AddRequestCancelActivityTaskFailedEvent(decisionCompletedEventID int64,
-	activityID string, cause string) *eventpb.HistoryEvent {
-
-	attributes := &eventpb.RequestCancelActivityTaskFailedEventAttributes{}
-	attributes.ActivityId = activityID
-	attributes.DecisionTaskCompletedEventId = decisionCompletedEventID
-	attributes.Cause = cause
-
-	event := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_RequestCancelActivityTaskFailed)
-	event.Attributes = &eventpb.HistoryEvent_RequestCancelActivityTaskFailedEventAttributes{RequestCancelActivityTaskFailedEventAttributes: attributes}
 
 	return b.addEventToHistory(event)
 }

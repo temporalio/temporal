@@ -65,7 +65,7 @@ type (
 	}
 
 	mutableState interface {
-		AddActivityTaskCancelRequestedEvent(int64, string, string) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error)
+		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*eventpb.HistoryEvent, error)
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*eventpb.HistoryEvent, error)
 		AddActivityTaskFailedEvent(int64, int64, *workflowservice.RespondActivityTaskFailedRequest) (*eventpb.HistoryEvent, error)
@@ -93,7 +93,6 @@ type (
 		AddExternalWorkflowExecutionSignaled(int64, string, string, string, string) (*eventpb.HistoryEvent, error)
 		AddFailWorkflowEvent(int64, *decisionpb.FailWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, error)
 		AddRecordMarkerEvent(int64, *decisionpb.RecordMarkerDecisionAttributes) (*eventpb.HistoryEvent, error)
-		AddRequestCancelActivityTaskFailedEvent(int64, string, string) (*eventpb.HistoryEvent, error)
 		AddRequestCancelExternalWorkflowExecutionFailedEvent(int64, int64, string, string, string, eventpb.WorkflowExecutionFailedCause) (*eventpb.HistoryEvent, error)
 		AddRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, string, *decisionpb.RequestCancelExternalWorkflowExecutionDecisionAttributes) (*eventpb.HistoryEvent, *persistenceblobs.RequestCancelInfo, error)
 		AddSignalExternalWorkflowExecutionFailedEvent(int64, int64, string, string, string, string, eventpb.WorkflowExecutionFailedCause) (*eventpb.HistoryEvent, error)

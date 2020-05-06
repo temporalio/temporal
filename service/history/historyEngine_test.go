@@ -3578,7 +3578,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 1)
 	addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
-	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityID, identity)
+	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityScheduledEvent.EventId, identity)
 	s.Nil(err)
 
 	ms := createMutableState(msBuilder)
@@ -3637,7 +3637,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 1)
 	addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
-	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityID, identity)
+	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityScheduledEvent.EventId, identity)
 	s.Nil(err)
 
 	ms := createMutableState(msBuilder)
