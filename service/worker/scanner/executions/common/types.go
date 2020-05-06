@@ -23,7 +23,16 @@
 package common
 
 import (
+	"time"
+
 	"github.com/uber/cadence/common/persistence"
+)
+
+var (
+	// BlobstoreSeparatorToken is used to separate entries written to blobstore
+	BlobstoreSeparatorToken = []byte("\r\n")
+	// BlobstoreTimeout is the timeout used for blobstore requests
+	BlobstoreTimeout = time.Second * 10
 )
 
 type (

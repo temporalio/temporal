@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package util
+package pagination
 
 import (
 	"errors"
@@ -30,13 +30,12 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-var getMap = map[int][]byte{
+var fetchMap = map[PageToken][]Entity{
 	0: nil,
 	1: {},
-	2: []byte("\r\n\r\n\r\n"),
-	3: []byte("\"one\"\r\n\"two\"\r\n"),
-	4: []byte("\"three\"\r\n\"four\"\r\n\r\n\"five\"\r\n"),
-	5: []byte("\r\n\"six\"\r\n\"seven\"\r\n\"eight\"\r\n"),
+	2: {"one", "two", "three"},
+	3: {"four", "five", "six", "seven"},
+	4: {"eight"},
 }
 
 type IteratorSuite struct {
@@ -53,52 +52,74 @@ func (s *IteratorSuite) SetupTest() {
 }
 
 func (s *IteratorSuite) TestInitializedToEmpty() {
-	getFn := func(page int) ([]byte, error) {
-		return getMap[page], nil
+	fetchFn := func(token PageToken) (Page, error) {
+		if token.(int) == 2 {
+			return Page{
+				CurrentToken: token,
+				NextToken:    nil,
+				Entities:     nil,
+			}, nil
+		}
+		return Page{
+			CurrentToken: token,
+			NextToken:    token.(int) + 1,
+			Entities:     fetchMap[token],
+		}, nil
 	}
-	itr := NewIterator(0, 2, getFn, []byte("\r\n"))
+	itr := NewIterator(0, fetchFn)
 	s.False(itr.HasNext())
 	_, err := itr.Next()
-	s.Error(err)
+	s.Equal(ErrIteratorFinished, err)
 }
 
 func (s *IteratorSuite) TestNonEmptyNoErrors() {
-	getFn := func(page int) ([]byte, error) {
-		return getMap[page], nil
+	fetchFn := func(token PageToken) (Page, error) {
+		var nextPageToken interface{} = token.(int) + 1
+		if nextPageToken.(int) == 5 {
+			nextPageToken = nil
+		}
+		return Page{
+			CurrentToken: token,
+			NextToken:    nextPageToken,
+			Entities:     fetchMap[token],
+		}, nil
 	}
-	itr := NewIterator(0, 5, getFn, []byte("\r\n"))
-	expectedResults := []string{"\"one\"", "\"two\"", "\"three\"", "\"four\"", "\"five\"", "\"six\"", "\"seven\"", "\"eight\""}
+	itr := NewIterator(0, fetchFn)
+	expectedResults := []string{"one", "two", "three", "four", "five", "six", "seven", "eight"}
 	i := 0
 	for itr.HasNext() {
 		curr, err := itr.Next()
 		s.NoError(err)
-		expectedCurr := []byte(expectedResults[i])
-		s.Equal(expectedCurr, curr)
+		s.Equal(expectedResults[i], curr.(string))
 		i++
 	}
 	s.False(itr.HasNext())
 	_, err := itr.Next()
-	s.Error(err)
+	s.Equal(ErrIteratorFinished, err)
 }
 
 func (s *IteratorSuite) TestNonEmptyWithErrors() {
-	getFn := func(page int) ([]byte, error) {
-		if page > 4 {
-			return nil, errors.New("error getting next page")
+	fetchFn := func(token PageToken) (Page, error) {
+		if token.(int) == 4 {
+			return Page{}, errors.New("got error")
 		}
-		return getMap[page], nil
+		return Page{
+			CurrentToken: token,
+			NextToken:    token.(int) + 1,
+			Entities:     fetchMap[token],
+		}, nil
 	}
-	itr := NewIterator(0, 5, getFn, []byte("\r\n"))
-	expectedResults := []string{"\"one\"", "\"two\"", "\"three\"", "\"four\"", "\"five\""}
+	itr := NewIterator(0, fetchFn)
+	expectedResults := []string{"one", "two", "three", "four", "five", "six", "seven"}
 	i := 0
 	for itr.HasNext() {
 		curr, err := itr.Next()
 		s.NoError(err)
-		expectedCurr := []byte(expectedResults[i])
-		s.Equal(expectedCurr, curr)
+		s.Equal(expectedResults[i], curr.(string))
 		i++
 	}
 	s.False(itr.HasNext())
-	_, err := itr.Next()
-	s.Error(err)
+	curr, err := itr.Next()
+	s.Nil(curr)
+	s.Equal("got error", err.Error())
 }

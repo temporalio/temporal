@@ -109,6 +109,11 @@ func (c *client) Delete(_ context.Context, request *blobstore.DeleteRequest) (*b
 	return &blobstore.DeleteResponse{}, nil
 }
 
+// IsRetryableError returns true if the error is retryable false otherwise
+func (c *client) IsRetryableError(err error) bool {
+	return false
+}
+
 func (c *client) deserializeBlob(data []byte) (blobstore.Blob, error) {
 	var blob blobstore.Blob
 	if err := json.Unmarshal(data, &blob); err != nil {

@@ -35,6 +35,7 @@ type (
 )
 
 // NewPagingIterator create a new paging iterator
+// TODO: this implementation should be removed in favor of pagination/iterator.go
 func NewPagingIterator(paginationFn PaginationFn) Iterator {
 	iter := &PagingIteratorImpl{
 		paginationFn:      paginationFn,

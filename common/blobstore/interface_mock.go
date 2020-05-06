@@ -126,3 +126,18 @@ func (_m *MockClient) Put(_a0 context.Context, _a1 *PutRequest) (*PutResponse, e
 
 	return r0, r1
 }
+
+func (_m *MockClient) IsRetryableError(_a0 error) bool {
+	ret := _m.Called(_a0)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(error) bool); ok {
+		r0 = rf(_a0)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(bool)
+		}
+	}
+
+	return r0
+}
