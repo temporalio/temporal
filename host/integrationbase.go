@@ -77,7 +77,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	if clusterConfig.FrontendAddress != "" {
 		s.Logger.Info("Running integration test against specified frontend", tag.Address(TestFlags.FrontendAddr))
 
-		connection, err := rpc.Dial(TestFlags.FrontendAddrGRPC)
+		connection, err := rpc.Dial(TestFlags.FrontendAddrGRPC, nil)
 		if err != nil {
 			s.Require().NoError(err)
 		}

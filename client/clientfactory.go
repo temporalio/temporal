@@ -119,7 +119,7 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateGRPCConnection(clientKey)
+		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
 		return historyservice.NewHistoryServiceClient(connection), nil
 	}
 
@@ -149,7 +149,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateGRPCConnection(clientKey)
+		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), nil
 	}
 
@@ -177,7 +177,7 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateGRPCConnection(rpcAddress)
+		connection := cf.rpcFactory.CreateFrontendGRPCConnection(rpcAddress)
 		return workflowservice.NewWorkflowServiceClient(connection), nil
 	}
 
@@ -197,7 +197,7 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateGRPCConnection(rpcAddress)
+		connection := cf.rpcFactory.CreateFrontendGRPCConnection(rpcAddress)
 		return adminservice.NewAdminServiceClient(connection), nil
 	}
 

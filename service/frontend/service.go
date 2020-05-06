@@ -246,7 +246,12 @@ func (s *Service) Start() {
 		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
 	}
 
-	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+	opts, err := s.params.RPCFactory.GetFrontendGRPCServerOptions()
+	if err != nil {
+		logger.Fatal("creating grpc server options failed", tag.Error(err))
+	}
+	opts = append(opts, grpc.UnaryInterceptor(interceptor))
+	s.server = grpc.NewServer(opts...)
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
 	s.handler = NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
