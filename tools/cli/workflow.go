@@ -35,12 +35,6 @@ import (
 func newWorkflowCommands() []cli.Command {
 	return []cli.Command{
 		{
-			Name:        "activity",
-			Aliases:     []string{"act"},
-			Usage:       "operate activities of workflow",
-			Subcommands: newActivityCommands(),
-		},
-		{
 			Name:  "show",
 			Usage: "show workflow history",
 			Flags: getFlagsForShow(),
@@ -335,74 +329,6 @@ func newWorkflowCommands() []cli.Command {
 			Name:        "batch",
 			Usage:       "batch operation on a list of workflows from query.",
 			Subcommands: newBatchCommands(),
-		},
-	}
-}
-
-func newActivityCommands() []cli.Command {
-	return []cli.Command{
-		{
-			Name:    "complete",
-			Aliases: []string{"comp"},
-			Usage:   "complete an activity",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowId",
-				},
-				cli.StringFlag{
-					Name:  FlagRunIDWithAlias,
-					Usage: "RunId",
-				},
-				cli.StringFlag{
-					Name:  FlagActivityIDWithAlias,
-					Usage: "The activityId to operate on",
-				},
-				cli.StringFlag{
-					Name:  FlagResult,
-					Usage: "Result of the activity",
-				},
-				cli.StringFlag{
-					Name:  FlagIdentity,
-					Usage: "Identity of the operator",
-				},
-			},
-			Action: func(c *cli.Context) {
-				CompleteActivity(c)
-			},
-		},
-		{
-			Name:  "fail",
-			Usage: "fail an activity",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagWorkflowIDWithAlias,
-					Usage: "WorkflowId",
-				},
-				cli.StringFlag{
-					Name:  FlagRunIDWithAlias,
-					Usage: "RunId",
-				},
-				cli.StringFlag{
-					Name:  FlagActivityIDWithAlias,
-					Usage: "The activityId to operate on",
-				},
-				cli.StringFlag{
-					Name:  FlagReason,
-					Usage: "Reason to fail the activity",
-				},
-				cli.StringFlag{
-					Name:  FlagDetail,
-					Usage: "Detail to fail the activity",
-				},
-				cli.StringFlag{
-					Name:  FlagIdentity,
-					Usage: "Identity of the operator",
-				},
-			},
-			Action: func(c *cli.Context) {
-				FailActivity(c)
-			},
 		},
 	}
 }
