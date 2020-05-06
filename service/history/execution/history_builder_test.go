@@ -88,8 +88,7 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.msBuilder = NewMutableStateBuilder(s.mockShard, s.mockEventsCache,
-		s.logger, testLocalDomainEntry)
+	s.msBuilder = NewMutableStateBuilder(s.mockShard, s.logger, testLocalDomainEntry)
 	s.builder = NewHistoryBuilder(s.msBuilder, s.logger)
 }
 

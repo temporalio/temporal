@@ -120,7 +120,6 @@ func (r *conflictResolverImpl) reset(
 		if firstEvent.GetEventId() == common.FirstEventID {
 			resetMutableStateBuilder = execution.NewMutableStateBuilderWithReplicationState(
 				r.shard,
-				r.shard.GetEventsCache(),
 				r.logger,
 				domainEntry,
 			)

@@ -165,8 +165,12 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	stickyTl := "stickyTaskList"
 	identity := "testIdentity"
 
-	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId(), constants.TestLocalDomainEntry)
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.historyEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		we.GetRunId(),
+		constants.TestLocalDomainEntry,
+	)
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.LastUpdatedTimestamp = time.Now()
 	executionInfo.StickyTaskList = stickyTl
@@ -286,8 +290,12 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), runID, constants.TestLocalDomainEntry)
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.historyEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		runID,
+		constants.TestLocalDomainEntry,
+	)
 	ms := execution.CreatePersistenceMutableState(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}

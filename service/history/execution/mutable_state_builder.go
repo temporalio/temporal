@@ -162,16 +162,14 @@ var _ MutableState = (*mutableStateBuilder)(nil)
 // NewMutableStateBuilder creates a new workflow mutable state builder
 func NewMutableStateBuilder(
 	shard shard.Context,
-	eventsCache events.Cache,
 	logger log.Logger,
 	domainEntry *cache.DomainCacheEntry,
 ) MutableState {
-	return newMutableStateBuilder(shard, eventsCache, logger, domainEntry)
+	return newMutableStateBuilder(shard, logger, domainEntry)
 }
 
 func newMutableStateBuilder(
 	shard shard.Context,
-	eventsCache events.Cache,
 	logger log.Logger,
 	domainEntry *cache.DomainCacheEntry,
 ) *mutableStateBuilder {
@@ -214,7 +212,7 @@ func newMutableStateBuilder(
 
 		shard:           shard,
 		clusterMetadata: shard.GetClusterMetadata(),
-		eventsCache:     eventsCache,
+		eventsCache:     shard.GetEventsCache(),
 		config:          shard.GetConfig(),
 		timeSource:      shard.GetTimeSource(),
 		logger:          logger,
@@ -242,11 +240,10 @@ func newMutableStateBuilder(
 // NewMutableStateBuilderWithReplicationState creates mutable state builder with replication state initialized
 func NewMutableStateBuilderWithReplicationState(
 	shard shard.Context,
-	eventsCache events.Cache,
 	logger log.Logger,
 	domainEntry *cache.DomainCacheEntry,
 ) MutableState {
-	s := newMutableStateBuilder(shard, eventsCache, logger, domainEntry)
+	s := newMutableStateBuilder(shard, logger, domainEntry)
 	s.replicationState = &persistence.ReplicationState{
 		StartVersion:        s.currentVersion,
 		CurrentVersion:      s.currentVersion,
@@ -260,12 +257,11 @@ func NewMutableStateBuilderWithReplicationState(
 // NewMutableStateBuilderWithVersionHistories creates mutable state builder with version history initialized
 func NewMutableStateBuilderWithVersionHistories(
 	shard shard.Context,
-	eventsCache events.Cache,
 	logger log.Logger,
 	domainEntry *cache.DomainCacheEntry,
 ) MutableState {
 
-	s := newMutableStateBuilder(shard, eventsCache, logger, domainEntry)
+	s := newMutableStateBuilder(shard, logger, domainEntry)
 	s.versionHistories = persistence.NewVersionHistories(&persistence.VersionHistory{})
 	return s
 }
@@ -273,13 +269,12 @@ func NewMutableStateBuilderWithVersionHistories(
 // NewMutableStateBuilderWithEventV2 is used only in test
 func NewMutableStateBuilderWithEventV2(
 	shard shard.Context,
-	eventsCache events.Cache,
 	logger log.Logger,
 	runID string,
 	domainEntry *cache.DomainCacheEntry,
 ) MutableState {
 
-	msBuilder := NewMutableStateBuilder(shard, eventsCache, logger, domainEntry)
+	msBuilder := NewMutableStateBuilder(shard, logger, domainEntry)
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -288,14 +283,13 @@ func NewMutableStateBuilderWithEventV2(
 // NewMutableStateBuilderWithReplicationStateWithEventV2 is used only in test
 func NewMutableStateBuilderWithReplicationStateWithEventV2(
 	shard shard.Context,
-	eventsCache events.Cache,
 	logger log.Logger,
 	version int64,
 	runID string,
 	domainEntry *cache.DomainCacheEntry,
 ) MutableState {
 
-	msBuilder := NewMutableStateBuilderWithReplicationState(shard, eventsCache, logger, domainEntry)
+	msBuilder := NewMutableStateBuilderWithReplicationState(shard, logger, domainEntry)
 	msBuilder.GetReplicationState().StartVersion = version
 	err := msBuilder.UpdateCurrentVersion(version, true)
 	if err != nil {
@@ -3360,7 +3354,6 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	if e.config.EnableNDC(domainName) || e.GetVersionHistories() != nil {
 		newStateBuilder = NewMutableStateBuilderWithVersionHistories(
 			e.shard,
-			e.shard.GetEventsCache(),
 			e.logger,
 			e.domainEntry,
 		).(*mutableStateBuilder)
@@ -3371,12 +3364,11 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 			// target clusters or not, for 2DC case
 			newStateBuilder = NewMutableStateBuilderWithReplicationState(
 				e.shard,
-				e.eventsCache,
 				e.logger,
 				e.domainEntry,
 			).(*mutableStateBuilder)
 		} else {
-			newStateBuilder = newMutableStateBuilder(e.shard, e.eventsCache, e.logger, e.domainEntry)
+			newStateBuilder = newMutableStateBuilder(e.shard, e.logger, e.domainEntry)
 		}
 	}
 

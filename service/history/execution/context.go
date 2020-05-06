@@ -259,7 +259,6 @@ func (c *contextImpl) LoadWorkflowExecutionForReplication(
 
 		c.mutableState = NewMutableStateBuilder(
 			c.shard,
-			c.shard.GetEventsCache(),
 			c.logger,
 			domainEntry,
 		)
@@ -344,7 +343,6 @@ func (c *contextImpl) LoadWorkflowExecution() (MutableState, error) {
 
 		c.mutableState = NewMutableStateBuilder(
 			c.shard,
-			c.shard.GetEventsCache(),
 			c.logger,
 			domainEntry,
 		)

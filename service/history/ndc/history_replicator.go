@@ -172,7 +172,6 @@ func NewHistoryReplicator(
 		) execution.MutableState {
 			return execution.NewMutableStateBuilderWithVersionHistories(
 				shard,
-				shard.GetEventsCache(),
 				logger,
 				domainEntry,
 			)

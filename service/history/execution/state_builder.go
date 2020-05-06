@@ -611,14 +611,12 @@ func (b *stateBuilderImpl) ApplyEvents(
 				if newRunNDC {
 					newRunMutableStateBuilder = NewMutableStateBuilderWithVersionHistories(
 						b.shard,
-						b.shard.GetEventsCache(),
 						b.logger,
 						b.mutableState.GetDomainEntry(),
 					)
 				} else {
 					newRunMutableStateBuilder = NewMutableStateBuilderWithReplicationState(
 						b.shard,
-						b.shard.GetEventsCache(),
 						b.logger,
 						b.mutableState.GetDomainEntry(),
 					)

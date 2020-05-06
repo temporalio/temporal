@@ -187,7 +187,6 @@ func (r *stateRebuilderImpl) initializeBuilders(
 ) (MutableState, StateBuilder) {
 	resetMutableStateBuilder := NewMutableStateBuilderWithVersionHistories(
 		r.shard,
-		r.shard.GetEventsCache(),
 		r.logger,
 		domainEntry,
 	)

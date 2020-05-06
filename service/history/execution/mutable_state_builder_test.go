@@ -91,12 +91,12 @@ func (s *mutableStateSuite) SetupTest() {
 	s.mockShard.GetConfig().MutableStateChecksumGenProbability = func(domain string) int { return 100 }
 	s.mockShard.GetConfig().MutableStateChecksumVerifyProbability = func(domain string) int { return 100 }
 
-	s.mockEventsCache = s.mockShard.MockEventsCache
+	s.mockEventsCache = s.mockShard.GetEventsCache().(*events.MockCache)
 
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
-	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger, testLocalDomainEntry)
+	s.msBuilder = newMutableStateBuilder(s.mockShard, s.logger, testLocalDomainEntry)
 }
 
 func (s *mutableStateSuite) TearDownTest() {
@@ -109,7 +109,6 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 	runID := uuid.New()
 	s.msBuilder = NewMutableStateBuilderWithReplicationStateWithEventV2(
 		s.mockShard,
-		s.mockEventsCache,
 		s.logger,
 		version,
 		runID,
@@ -140,7 +139,6 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 	runID := uuid.New()
 	s.msBuilder = NewMutableStateBuilderWithReplicationStateWithEventV2(
 		s.mockShard,
-		s.mockEventsCache,
 		s.logger,
 		version,
 		runID,
@@ -160,7 +158,6 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 	runID := uuid.New()
 	s.msBuilder = NewMutableStateBuilderWithReplicationStateWithEventV2(
 		s.mockShard,
-		s.mockEventsCache,
 		s.logger,
 		version,
 		runID,

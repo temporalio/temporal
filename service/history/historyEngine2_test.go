@@ -168,8 +168,12 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	stickyTl := "stickyTaskList"
 	identity := "testIdentity"
 
-	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId(), constants.TestLocalDomainEntry)
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.historyEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		we.GetRunId(),
+		constants.TestLocalDomainEntry,
+	)
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.StickyTaskList = stickyTl
 
@@ -236,8 +240,12 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	stickyTl := "stickyTaskList"
 	identity := "testIdentity"
 
-	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId(), constants.TestLocalDomainEntry)
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.historyEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		we.GetRunId(),
+		constants.TestLocalDomainEntry,
+	)
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.LastUpdatedTimestamp = time.Now()
 	executionInfo.StickyTaskList = stickyTl
@@ -818,8 +826,12 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 
 func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution, tl, identity string,
 	startDecision bool) execution.MutableState {
-	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		s.logger, we.GetRunId(), constants.TestLocalDomainEntry)
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.historyEngine.shard,
+		s.logger,
+		we.GetRunId(),
+		constants.TestLocalDomainEntry,
+	)
 	test.AddWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := test.AddDecisionTaskScheduledEvent(msBuilder)
 	if startDecision {
@@ -851,8 +863,12 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	markerDetails := []byte("marker details")
 	markerName := "marker name"
 
-	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId(), constants.TestLocalDomainEntry)
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.historyEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		we.GetRunId(),
+		constants.TestLocalDomainEntry,
+	)
 	test.AddWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := test.AddDecisionTaskScheduledEvent(msBuilder)
 	test.AddDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -1169,8 +1185,12 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), runID, constants.TestLocalDomainEntry)
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.historyEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		runID,
+		constants.TestLocalDomainEntry,
+	)
 	ms := execution.CreatePersistenceMutableState(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
@@ -1301,8 +1321,12 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 		},
 	}
 
-	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), runID, constants.TestLocalDomainEntry)
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.historyEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		runID,
+		constants.TestLocalDomainEntry,
+	)
 	ms := execution.CreatePersistenceMutableState(msBuilder)
 	ms.ExecutionInfo.State = p.WorkflowStateCompleted
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
@@ -1347,8 +1371,12 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 		},
 	}
 
-	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), runID, constants.TestLocalDomainEntry)
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.historyEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		runID,
+		constants.TestLocalDomainEntry,
+	)
 	ms := execution.CreatePersistenceMutableState(msBuilder)
 	ms.ExecutionInfo.State = p.WorkflowStateCompleted
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
@@ -1401,8 +1429,12 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 		},
 	}
 
-	msBuilder := execution.NewMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), runID, constants.TestLocalDomainEntry)
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.historyEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		runID,
+		constants.TestLocalDomainEntry,
+	)
 	ms := execution.CreatePersistenceMutableState(msBuilder)
 	ms.ExecutionInfo.State = p.WorkflowStateCompleted
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}

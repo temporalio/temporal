@@ -146,7 +146,6 @@ func newHistoryReplicator(
 		getNewMutableState: func(domainEntry *cache.DomainCacheEntry, logger log.Logger) execution.MutableState {
 			return execution.NewMutableStateBuilderWithReplicationState(
 				shard,
-				shard.GetEventsCache(),
 				logger,
 				domainEntry,
 			)
