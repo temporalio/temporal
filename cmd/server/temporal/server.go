@@ -133,7 +133,7 @@ func (s *server) startService() common.Daemon {
 	params.MembershipFactoryInitializer =
 		func(persistenceBean persistenceClient.Bean, logger l.Logger) (resource.MembershipMonitorFactory, error) {
 			return ringpop.NewRingpopFactory(
-				&s.cfg.Server.Ringpop,
+				&s.cfg.Global.Membership,
 				params.RPCFactory.GetRingpopChannel(),
 				params.Name,
 				servicePortMap,
