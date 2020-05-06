@@ -46,7 +46,12 @@ func NewContextFromParentWithTimeoutAndHeaders(parentCtx context.Context, timeou
 	return context.WithTimeout(headers.SetVersions(parentCtx), timeout)
 }
 
-// NewContextWithTimeoutAndHeaders creates context with timeout and version headers for CLI.
+// NewContextWithCLIHeaders creates context with version headers for CLI.
+func NewContextWithCLIHeaders() (context.Context, context.CancelFunc) {
+	return context.WithCancel(headers.SetCLIVersions(context.Background()))
+}
+
+// NewContextWithTimeoutAndCLIHeaders creates context with timeout and version headers for CLI.
 func NewContextWithTimeoutAndCLIHeaders(timeout time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(headers.SetCLIVersions(context.Background()), timeout)
 }

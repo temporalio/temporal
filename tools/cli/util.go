@@ -729,6 +729,15 @@ func newContextForLongPoll(c *cli.Context) (context.Context, context.CancelFunc)
 	return newContextWithTimeout(c, defaultContextTimeoutForLongPoll)
 }
 
+func newIndefiniteContext(c *cli.Context) (context.Context, context.CancelFunc) {
+	if c.GlobalIsSet(FlagContextTimeout) {
+		timeout := time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
+		return rpc.NewContextWithTimeoutAndCLIHeaders(timeout)
+	}
+
+	return rpc.NewContextWithCLIHeaders()
+}
+
 func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if c.GlobalIsSet(FlagContextTimeout) {
 		timeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
