@@ -47,6 +47,7 @@ var keys = map[Key]string{
 	testGetDurationPropertyFilteredByDomainKey:       "testGetDurationPropertyFilteredByDomainKey",
 	testGetIntPropertyFilteredByTaskListInfoKey:      "testGetIntPropertyFilteredByTaskListInfoKey",
 	testGetDurationPropertyFilteredByTaskListInfoKey: "testGetDurationPropertyFilteredByTaskListInfoKey",
+	testGetBoolPropertyFilteredByDomainIDKey:         "testGetBoolPropertyFilteredByDomainIDKey",
 	testGetBoolPropertyFilteredByTaskListInfoKey:     "testGetBoolPropertyFilteredByTaskListInfoKey",
 
 	// system settings
@@ -223,6 +224,7 @@ var keys = map[Key]string{
 	MutableStateChecksumVerifyProbability:                 "history.mutableStateChecksumVerifyProbability",
 	MutableStateChecksumInvalidateBefore:                  "history.mutableStateChecksumInvalidateBefore",
 	ReplicationEventsFromCurrentCluster:                   "history.ReplicationEventsFromCurrentCluster",
+	EnableDropStuckTaskByDomainID:                         "history.DropStuckTaskByDomain",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -269,6 +271,7 @@ const (
 	testGetDurationPropertyFilteredByDomainKey
 	testGetIntPropertyFilteredByTaskListInfoKey
 	testGetDurationPropertyFilteredByTaskListInfoKey
+	testGetBoolPropertyFilteredByDomainIDKey
 	testGetBoolPropertyFilteredByTaskListInfoKey
 
 	// EnableGlobalDomain is key for enable global domain
@@ -333,7 +336,7 @@ const (
 
 	// FrontendPersistenceMaxQPS is the max qps frontend host can query DB
 	FrontendPersistenceMaxQPS
-	// FrontendPersistenceMaxGlobalQPS is the max qps frontend cluster can query DB
+	// FrontendPersistenceGlobalMaxQPS is the max qps frontend cluster can query DB
 	FrontendPersistenceGlobalMaxQPS
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize
@@ -382,7 +385,7 @@ const (
 	MatchingRPS
 	// MatchingPersistenceMaxQPS is the max qps matching host can query DB
 	MatchingPersistenceMaxQPS
-	// MatchingPersistenceMaxQPS is the max qps matching cluster can query DB
+	// MatchingPersistenceGlobalMaxQPS is the max qps matching cluster can query DB
 	MatchingPersistenceGlobalMaxQPS
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task list throttling
 	MatchingMinTaskThrottlingBurstSize
@@ -582,6 +585,9 @@ const (
 	// DecisionHeartbeatTimeout for decision heartbeat
 	DecisionHeartbeatTimeout
 
+	// EnableDropStuckTaskByDomainID is whether stuck timer/transfer task should be dropped for a domain
+	EnableDropStuckTaskByDomainID
+
 	// key for worker
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
@@ -698,6 +704,7 @@ func (f Filter) String() string {
 var filters = []string{
 	"unknownFilter",
 	"domainName",
+	"domainID",
 	"taskListName",
 	"taskType",
 }
@@ -706,6 +713,8 @@ const (
 	unknownFilter Filter = iota
 	// DomainName is the domain name
 	DomainName
+	// DomainID is the domainID
+	DomainID
 	// TaskListName is the tasklist name
 	TaskListName
 	// TaskType is the task type (0:Decision, 1:Activity)
@@ -729,6 +738,13 @@ func TaskListFilter(name string) FilterOption {
 func DomainFilter(name string) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
 		filterMap[DomainName] = name
+	}
+}
+
+// DomainIDFilter filters by domainID
+func DomainIDFilter(id string) FilterOption {
+	return func(filterMap map[Filter]interface{}) {
+		filterMap[DomainID] = id
 	}
 }
 

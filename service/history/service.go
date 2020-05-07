@@ -205,6 +205,8 @@ type Config struct {
 
 	//Crocess DC Replication configuration
 	ReplicationEventsFromCurrentCluster dynamicconfig.BoolPropertyFnWithDomainFilter
+
+	EnableDropStuckTaskByDomainID dynamicconfig.BoolPropertyFnWithDomainIDFilter
 }
 
 const (
@@ -337,6 +339,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		MutableStateChecksumInvalidateBefore:  dc.GetFloat64Property(dynamicconfig.MutableStateChecksumInvalidateBefore, 0),
 
 		ReplicationEventsFromCurrentCluster: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.ReplicationEventsFromCurrentCluster, false),
+
+		EnableDropStuckTaskByDomainID: dc.GetBoolPropertyFnWithDomainIDFilter(dynamicconfig.EnableDropStuckTaskByDomainID, false),
 	}
 
 	return cfg
