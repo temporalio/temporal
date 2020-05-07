@@ -321,11 +321,8 @@ func (v *decisionAttrValidator) validateActivityCancelAttributes(
 	if attributes == nil {
 		return serviceerror.NewInvalidArgument("RequestCancelActivityTaskDecisionAttributes is not set on decision.")
 	}
-	if attributes.GetActivityId() == "" {
-		return serviceerror.NewInvalidArgument("ActivityId is not set on decision.")
-	}
-	if len(attributes.GetActivityId()) > v.maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("ActivityId exceeds length limit.")
+	if attributes.GetScheduledEventId() <= 0 {
+		return serviceerror.NewInvalidArgument("ScheduledEventId is not set on decision.")
 	}
 	return nil
 }

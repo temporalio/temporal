@@ -3578,7 +3578,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 1)
 	addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
-	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityID, identity)
+	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityScheduledEvent.EventId, identity)
 	s.Nil(err)
 
 	ms := createMutableState(msBuilder)
@@ -3637,7 +3637,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 1)
 	addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
-	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityID, identity)
+	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityScheduledEvent.EventId, identity)
 	s.Nil(err)
 
 	ms := createMutableState(msBuilder)
@@ -3764,7 +3764,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	}
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
-	activityID := "activity1_id"
+	activityScheduleID := int64(99)
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
@@ -3775,14 +3775,17 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: activityScheduleID,
 		}},
 	}}
 
-	ms := createMutableState(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	ms1 := createMutableState(msBuilder)
+	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
+	ms2 := createMutableState(msBuilder)
+	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
@@ -3796,10 +3799,10 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	})
 	s.Nil(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(7), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
-	s.False(executionBuilder.HasPendingDecision())
+	s.True(executionBuilder.HasPendingDecision())
 }
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled() {
@@ -3826,7 +3829,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
-	addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
+	_, aInfo := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 1)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
@@ -3837,7 +3840,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: aInfo.ScheduleID,
 		}},
 	}}
 
@@ -3902,7 +3905,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: activityScheduledEvent.GetEventId(),
 		}},
 	}}
 
@@ -3952,7 +3955,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
-	addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
+	_, aInfo := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 0)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
@@ -3961,7 +3964,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 		{
 			DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 			Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-				ActivityId: activityID,
+				ScheduledEventId: aInfo.ScheduleID,
 			}},
 		},
 		{
@@ -4031,7 +4034,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: activityScheduledEvent.GetEventId(),
 		}},
 	}}
 
@@ -4134,7 +4137,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: activityScheduledEvent.GetEventId(),
 		}},
 	}}
 
@@ -4236,7 +4239,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: activityScheduledEvent.GetEventId(),
 		}},
 	}}
 
