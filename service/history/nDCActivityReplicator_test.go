@@ -38,7 +38,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -646,7 +646,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
-	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(checksumproto.WorkflowExecutionState_Created, executionpb.WorkflowExecutionStatus_Running).AnyTimes()
+	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created, executionpb.WorkflowExecutionStatus_Running).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
@@ -723,7 +723,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersion
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().
-		Return(checksumproto.WorkflowExecutionState_Created, executionpb.WorkflowExecutionStatus_Running).AnyTimes()
+		Return(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created, executionpb.WorkflowExecutionStatus_Running).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
@@ -1107,7 +1107,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
-	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(checksumproto.WorkflowExecutionState_Running, executionpb.WorkflowExecutionStatus_Unknown).AnyTimes()
+	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionpb.WorkflowExecutionStatus_Unknown).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},
@@ -1191,7 +1191,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflo
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
-	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(checksumproto.WorkflowExecutionState_Zombie, executionpb.WorkflowExecutionStatus_Unknown).AnyTimes()
+	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie, executionpb.WorkflowExecutionStatus_Unknown).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
 			&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: namespace},

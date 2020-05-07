@@ -30,7 +30,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
-	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
@@ -972,7 +972,7 @@ func createOrUpdateCurrentExecution(
 	namespaceID string,
 	workflowID string,
 	runID string,
-	state checksumproto.WorkflowExecutionState,
+	state executiongenproto.WorkflowExecutionState,
 	status executionpb.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
@@ -984,7 +984,7 @@ func createOrUpdateCurrentExecution(
 	executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
 		RunId:           primitives.MustParseUUID(runID),
 		CreateRequestId: createRequestID,
-		State:           int32(state),
+		State:           state,
 		Status:          status,
 	})
 
@@ -1039,7 +1039,7 @@ func createOrUpdateCurrentExecution(
 			rowTypeExecutionTaskID,
 			previousRunID,
 			previousLastWriteVersion,
-			checksumproto.WorkflowExecutionState_Completed,
+			executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed,
 		)
 	case p.CreateWorkflowModeBrandNew:
 		batch.Query(templateCreateCurrentWorkflowExecutionQuery,

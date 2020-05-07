@@ -39,7 +39,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
-	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -151,7 +151,7 @@ func (s *conflictResolverSuite) TestReset() {
 
 	prevRunID := uuid.New()
 	prevLastWriteVersion := int64(123)
-	prevState := checksumproto.WorkflowExecutionState_Running
+	prevState := executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running
 
 	sourceCluster := cluster.TestAlternativeClusterName
 	startTime := time.Now()
@@ -211,7 +211,7 @@ func (s *conflictResolverSuite) TestReset() {
 		WorkflowExecutionTimeout: event1.GetWorkflowExecutionStartedEventAttributes().WorkflowExecutionTimeoutSeconds,
 		WorkflowRunTimeout:       event1.GetWorkflowExecutionStartedEventAttributes().WorkflowRunTimeoutSeconds,
 		WorkflowTaskTimeout:      event1.GetWorkflowExecutionStartedEventAttributes().WorkflowTaskTimeoutSeconds,
-		State:                    checksumproto.WorkflowExecutionState_Created,
+		State:                    executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
 		Status:                   executionpb.WorkflowExecutionStatus_Running,
 		LastFirstEventID:         event1.GetEventId(),
 		NextEventID:              nextEventID,

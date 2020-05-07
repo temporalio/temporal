@@ -32,7 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+	execution "github.com/temporalio/temporal/.gen/proto/execution"
 	persistence "github.com/temporalio/temporal/common/persistence"
 )
 
@@ -60,7 +60,7 @@ func (m *MockconflictResolver) EXPECT() *MockconflictResolverMockRecorder {
 }
 
 // reset mocks base method.
-func (m *MockconflictResolver) reset(prevRunID string, prevLastWriteVersion int64, prevState checksumproto.WorkflowExecutionState, requestID string, replayEventID int64, info *persistence.WorkflowExecutionInfo, updateCondition int64) (mutableState, error) {
+func (m *MockconflictResolver) reset(prevRunID string, prevLastWriteVersion int64, prevState execution.WorkflowExecutionState, requestID string, replayEventID int64, info *persistence.WorkflowExecutionInfo, updateCondition int64) (mutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "reset", prevRunID, prevLastWriteVersion, prevState, requestID, replayEventID, info, updateCondition)
 	ret0, _ := ret[0].(mutableState)

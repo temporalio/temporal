@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
-	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
 )
 
 type (
@@ -69,10 +69,10 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCr
 		executionpb.WorkflowExecutionStatus_TimedOut,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Created, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateCreateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created, executionpb.WorkflowExecutionStatus_Running))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Created, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created, status))
 	}
 }
 
@@ -86,10 +86,10 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateRu
 		executionpb.WorkflowExecutionStatus_TimedOut,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Running, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateCreateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionpb.WorkflowExecutionStatus_Running))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Running, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, status))
 	}
 }
 
@@ -105,7 +105,7 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCo
 	}
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Completed, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed, status))
 	}
 }
 
@@ -119,10 +119,10 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateZo
 		executionpb.WorkflowExecutionStatus_TimedOut,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Zombie, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateCreateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie, executionpb.WorkflowExecutionStatus_Running))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Zombie, status))
+		s.NotNil(ValidateCreateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie, status))
 	}
 }
 
@@ -138,10 +138,10 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCr
 		executionpb.WorkflowExecutionStatus_TimedOut,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Created, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created, executionpb.WorkflowExecutionStatus_Running))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Created, status))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created, status))
 	}
 }
 
@@ -155,10 +155,10 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateRu
 		executionpb.WorkflowExecutionStatus_TimedOut,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Running, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionpb.WorkflowExecutionStatus_Running))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Running, status))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, status))
 	}
 }
 
@@ -172,10 +172,10 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCo
 		executionpb.WorkflowExecutionStatus_TimedOut,
 	}
 
-	s.NotNil(ValidateUpdateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Completed, executionpb.WorkflowExecutionStatus_Running))
+	s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed, executionpb.WorkflowExecutionStatus_Running))
 
 	for _, status := range statuses {
-		s.Nil(ValidateUpdateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Completed, status))
+		s.Nil(ValidateUpdateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed, status))
 	}
 }
 
@@ -189,9 +189,9 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateZo
 		executionpb.WorkflowExecutionStatus_TimedOut,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Zombie, executionpb.WorkflowExecutionStatus_Running))
+	s.Nil(ValidateUpdateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie, executionpb.WorkflowExecutionStatus_Running))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(checksumproto.WorkflowExecutionState_Zombie, status))
+		s.NotNil(ValidateUpdateWorkflowStateStatus(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie, status))
 	}
 }

@@ -34,7 +34,7 @@ import (
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
-	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/primitives"
@@ -128,7 +128,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				WorkflowTypeName:    "wType",
 				WorkflowRunTimeout:  20,
 				WorkflowTaskTimeout: 13,
-				State:               checksumproto.WorkflowExecutionState_Running,
+				State:               executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running,
 				Status:              executionpb.WorkflowExecutionStatus_Running,
 				NextEventID:         3,
 				LastProcessedEvent:  0,
@@ -232,7 +232,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				WorkflowRunTimeout:  20,
 				WorkflowTaskTimeout: 13,
 
-				State:              checksumproto.WorkflowExecutionState_Running,
+				State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running,
 				Status:             executionpb.WorkflowExecutionStatus_Running,
 				NextEventID:        common.EmptyEventID,
 				LastProcessedEvent: 0,
@@ -315,7 +315,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	info0 := state0.ExecutionInfo
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
-	updatedInfo.State = checksumproto.WorkflowExecutionState_Completed
+	updatedInfo.State = executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed
 	updatedInfo.Status = executionpb.WorkflowExecutionStatus_Completed
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
@@ -355,7 +355,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 				WorkflowRunTimeout:  updatedInfo.WorkflowRunTimeout,
 				WorkflowTaskTimeout: updatedInfo.WorkflowTaskTimeout,
 
-				State:              checksumproto.WorkflowExecutionState_Running,
+				State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running,
 				Status:             executionpb.WorkflowExecutionStatus_Running,
 				NextEventID:        info0.NextEventID,
 				LastProcessedEvent: common.EmptyEventID,
@@ -377,14 +377,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	prevExecutionState, err3 := s.GetWorkflowExecutionInfo(namespaceID, workflowExecution)
 	s.NoError(err3)
 	prevExecutionInfo := prevExecutionState.ExecutionInfo
-	s.Equal(checksumproto.WorkflowExecutionState_Completed, prevExecutionInfo.State)
+	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed, prevExecutionInfo.State)
 	s.Equal(int64(5), prevExecutionInfo.NextEventID)
 	s.Equal(int64(2), prevExecutionInfo.LastProcessedEvent)
 
 	newExecutionState, err4 := s.GetWorkflowExecutionInfo(namespaceID, newWorkflowExecution)
 	s.NoError(err4)
 	newExecutionInfo := newExecutionState.ExecutionInfo
-	s.Equal(checksumproto.WorkflowExecutionState_Running, newExecutionInfo.State)
+	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, newExecutionInfo.State)
 	s.EqualValues(executionpb.WorkflowExecutionStatus_Running, newExecutionInfo.Status)
 	s.Equal(int64(3), newExecutionInfo.NextEventID)
 	s.Equal(common.EmptyEventID, newExecutionInfo.LastProcessedEvent)
@@ -649,7 +649,7 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 				WorkflowTypeName:    wType,
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
-				State:               checksumproto.WorkflowExecutionState_Running,
+				State:               executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running,
 				Status:              executionpb.WorkflowExecutionStatus_Running,
 				NextEventID:         nextEventID,
 				LastProcessedEvent:  lastProcessedEventID,
@@ -1220,7 +1220,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(int64(3), info0.NextEventID)
 	s.Equal(int64(0), info0.LastProcessedEvent)
 	s.Equal(int64(2), info0.DecisionScheduleID)
-	s.Equal(checksumproto.WorkflowExecutionState_Running, info0.State)
+	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, info0.State)
 	s.EqualValues(executionpb.WorkflowExecutionStatus_Running, info0.Status)
 	s.Equal(int64(9), replicationState0.CurrentVersion)
 	s.Equal(int64(8), replicationState0.StartVersion)
@@ -1241,7 +1241,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		}
 	}
 
-	info0.State = checksumproto.WorkflowExecutionState_Completed
+	info0.State = executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed
 	info0.Status = executionpb.WorkflowExecutionStatus_Completed
 	err = s.UpdateWorklowStateAndReplication(info0, stats0, replicationState0, nil, info0.NextEventID, nil)
 	s.Nil(err)
@@ -1257,7 +1257,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	}
 	insertInfo := copyWorkflowExecutionInfo(info0)
 	insterStats := copyExecutionStats(state0.ExecutionStats)
-	insertInfo.State = checksumproto.WorkflowExecutionState_Running
+	insertInfo.State = executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running
 	insertInfo.Status = executionpb.WorkflowExecutionStatus_Running
 	insertInfo.RunID = newRunID
 	insertInfo.NextEventID = int64(50)

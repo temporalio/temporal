@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
@@ -542,7 +542,7 @@ func createOrUpdateCurrentExecution(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-	state checksumproto.WorkflowExecutionState,
+	state executiongenproto.WorkflowExecutionState,
 	status executionpb.WorkflowExecutionStatus,
 	createRequestID string,
 	startVersion int64,
@@ -970,7 +970,7 @@ func assertRunIDAndUpdateCurrentExecution(
 	newRunID primitives.UUID,
 	previousRunID primitives.UUID,
 	createRequestID string,
-	state checksumproto.WorkflowExecutionState,
+	state executiongenproto.WorkflowExecutionState,
 	status executionpb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1001,9 +1001,9 @@ func assertAndUpdateCurrentExecution(
 	newRunID primitives.UUID,
 	previousRunID primitives.UUID,
 	previousLastWriteVersion int64,
-	previousState checksumproto.WorkflowExecutionState,
+	previousState executiongenproto.WorkflowExecutionState,
 	createRequestID string,
-	state checksumproto.WorkflowExecutionState,
+	state executiongenproto.WorkflowExecutionState,
 	status executionpb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,
@@ -1078,7 +1078,7 @@ func updateCurrentExecution(
 	workflowID string,
 	runID primitives.UUID,
 	createRequestID string,
-	state checksumproto.WorkflowExecutionState,
+	state executiongenproto.WorkflowExecutionState,
 	status executionpb.WorkflowExecutionStatus,
 	startVersion int64,
 	lastWriteVersion int64,

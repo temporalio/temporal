@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -728,7 +728,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 	}
 
 	// current workflow is completed
-	if currentState == checksumproto.WorkflowExecutionState_Completed {
+	if currentState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed {
 		// allow the application of workflow creation if currentLastWriteVersion > incomingVersion
 		// because this can be caused by the combination of missing replication events and failovers
 		// proceed to create workflow
@@ -821,7 +821,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 	incomingVersion int64,
 	incomingTimestamp int64,
 	logger log.Logger,
-) (string, int64, checksumproto.WorkflowExecutionState, error) {
+) (string, int64, executiongenproto.WorkflowExecutionState, error) {
 
 	// this function aims to solve the edge case when this workflow, when going through
 	// reset, has already started a next generation (continue as new-ed workflow)
@@ -886,7 +886,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 		logError(logger, "Conflict resolution err terminating current workflow.", err)
 		return "", 0, 0, err
 	}
-	return currentRunID, currentLastWriteVetsion, checksumproto.WorkflowExecutionState_Completed, nil
+	return currentRunID, currentLastWriteVetsion, executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed, nil
 }
 
 func (r *historyReplicator) getCurrentWorkflowMutableState(

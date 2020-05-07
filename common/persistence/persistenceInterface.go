@@ -33,7 +33,7 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 
-	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
+	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -222,7 +222,7 @@ type (
 		WorkflowRunTimeout                 int32
 		WorkflowExecutionTimeout           int32
 		WorkflowTaskTimeout                int32
-		State                              checksumproto.WorkflowExecutionState
+		State                              executiongenproto.WorkflowExecutionState
 		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
@@ -735,7 +735,7 @@ func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
 func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, currentVersion int64, replicationState *ReplicationState, versionHistories *serialization.DataBlob) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
 	state := &persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: executionInfo.CreateRequestID,
-		State:           int32(executionInfo.State),
+		State:           executionInfo.State,
 		Status:          executionInfo.Status,
 		RunId:           primitives.MustParseUUID(executionInfo.RunID),
 	}
@@ -827,17 +827,16 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 
 func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.WorkflowExecutionInfo, state *persistenceblobs.WorkflowExecutionState, nextEventID int64) *InternalWorkflowExecutionInfo {
 	executionInfo := &InternalWorkflowExecutionInfo{
-		NamespaceID:              primitives.UUIDString(info.NamespaceId),
-		WorkflowID:               info.WorkflowId,
-		RunID:                    primitives.UUIDString(state.RunId),
-		NextEventID:              nextEventID,
-		TaskList:                 info.GetTaskList(),
-		WorkflowTypeName:         info.GetWorkflowTypeName(),
-		WorkflowExecutionTimeout: info.GetWorkflowExecutionTimeoutSeconds(),
-		WorkflowRunTimeout:       info.GetWorkflowRunTimeoutSeconds(),
-		WorkflowTaskTimeout:      info.GetWorkflowTaskTimeoutSeconds(),
-		// TOOD: remove this cast.
-		State:                              checksumproto.WorkflowExecutionState(state.GetState()),
+		NamespaceID:                        primitives.UUIDString(info.NamespaceId),
+		WorkflowID:                         info.WorkflowId,
+		RunID:                              primitives.UUIDString(state.RunId),
+		NextEventID:                        nextEventID,
+		TaskList:                           info.GetTaskList(),
+		WorkflowTypeName:                   info.GetWorkflowTypeName(),
+		WorkflowExecutionTimeout:           info.GetWorkflowExecutionTimeoutSeconds(),
+		WorkflowRunTimeout:                 info.GetWorkflowRunTimeoutSeconds(),
+		WorkflowTaskTimeout:                info.GetWorkflowTaskTimeoutSeconds(),
+		State:                              state.GetState(),
 		Status:                             state.GetStatus(),
 		LastFirstEventID:                   info.GetLastFirstEventId(),
 		LastProcessedEvent:                 info.GetLastProcessedEvent(),
