@@ -96,6 +96,11 @@ func NewCliApp() *cli.App {
 			Subcommands: newTaskListCommands(),
 		},
 		{
+			Name:        "batch",
+			Usage:       "batch operation on a list of workflows from query.",
+			Subcommands: newBatchCommands(),
+		},
+		{
 			Name:    "admin",
 			Aliases: []string{"adm"},
 			Usage:   "Run admin operation",
