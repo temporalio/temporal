@@ -373,9 +373,9 @@ func AdminRemoveTask(c *cli.Context) {
 
 	shardID := getRequiredIntOption(c, FlagShardID)
 	taskID := getRequiredInt64Option(c, FlagTaskID)
-	typeID := getRequiredIntOption(c, FlagTaskType)
+	taskType := adminservice.TaskType(getRequiredIntOption(c, FlagTaskType))
 	var visibilityTimestamp int64
-	if common.TaskType(typeID) == common.TaskTypeTimer {
+	if taskType == adminservice.TaskType_Timer {
 		visibilityTimestamp = getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
 	}
 
@@ -384,7 +384,7 @@ func AdminRemoveTask(c *cli.Context) {
 
 	req := &adminservice.RemoveTaskRequest{
 		ShardId:             int32(shardID),
-		Type:                int32(typeID),
+		Type:                taskType,
 		TaskId:              taskID,
 		VisibilityTimestamp: visibilityTimestamp,
 	}
