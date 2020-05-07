@@ -23,13 +23,11 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
-
-	"github.com/uber/cadence/common/auth"
-
 	"io"
 	"io/ioutil"
 	"os"
@@ -46,12 +44,15 @@ import (
 	"github.com/urfave/cli"
 	"go.uber.org/thriftrw/protocol"
 	"go.uber.org/thriftrw/wire"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 
+	"github.com/uber/cadence/.gen/go/admin"
+	serverAdmin "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	"github.com/uber/cadence/.gen/go/indexer"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/auth"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/persistence"
@@ -79,11 +80,12 @@ const (
 )
 
 const (
-	bufferSize                 = 8192
-	preambleVersion0      byte = 0x59
-	malformedMessage           = "Input was malformed"
-	chanBufferSize             = 10000
-	maxRereplicateEventID      = 999999
+	bufferSize                       = 8192
+	preambleVersion0            byte = 0x59
+	malformedMessage                 = "Input was malformed"
+	chanBufferSize                   = 10000
+	maxRereplicateEventID            = 999999
+	defaultResendContextTimeout      = 30 * time.Second
 )
 
 var (
@@ -484,7 +486,21 @@ type ClustersConfig struct {
 	TLS      auth.TLS
 }
 
-func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, targets []string, producer messaging.Producer, session *gocql.Session) {
+func doRereplicate(
+	ctx context.Context,
+	shardID int,
+	domainID string,
+	wid string,
+	rid string,
+	minID int64,
+	maxID int64,
+	startVersion *int64,
+	targets []string,
+	producer messaging.Producer,
+	session *gocql.Session,
+	adminClient serverAdmin.Interface,
+) {
+
 	if minID <= 0 {
 		minID = 1
 	}
@@ -509,6 +525,26 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 		})
 		if err != nil {
 			ErrorAndExit("GetWorkflowExecution error", err)
+		}
+
+		versionHistories := resp.State.VersionHistories
+		if versionHistories != nil {
+			if startVersion == nil {
+				ErrorAndExit("Use input file to resend NDC workflow is not support", nil)
+			}
+			if err := adminClient.ResendReplicationTasks(
+				ctx,
+				&admin.ResendReplicationTasksRequest{
+					DomainID:      common.StringPtr(domainID),
+					WorkflowID:    common.StringPtr(wid),
+					RunID:         common.StringPtr(rid),
+					RemoteCluster: common.StringPtr(targets[0]),
+					StartVersion:  startVersion,
+				},
+			); err != nil {
+				ErrorAndExit("Failed to resend ndc workflow", err)
+			}
+			return
 		}
 
 		currVersion := resp.State.ReplicationState.CurrentVersion
@@ -594,8 +630,22 @@ func AdminRereplicate(c *cli.Context) {
 	target := getRequiredOption(c, FlagTargetCluster)
 	targets := []string{target}
 
-	producer := newKafkaProducer(c)
 	session := connectToCassandra(c)
+	adminClient := cFactory.ServerAdminClient(c)
+	var startVersion *int64
+	var producer messaging.Producer
+	if c.IsSet(FlagStartEventVersion) {
+		startVersion = common.Int64Ptr(c.Int64(FlagStartEventVersion))
+	} else {
+		producer = newKafkaProducer(c)
+	}
+
+	contextTimeout := defaultResendContextTimeout
+	if c.GlobalIsSet(FlagContextTimeout) {
+		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+	defer cancel()
 
 	if c.IsSet(FlagInputFile) {
 		inFile := c.String(FlagInputFile)
@@ -642,7 +692,7 @@ func AdminRereplicate(c *cli.Context) {
 			}
 
 			shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-			doRereplicate(shardID, domainID, wid, rid, minID, maxID, targets, producer, session)
+			doRereplicate(ctx, shardID, domainID, wid, rid, minID, maxID, startVersion, targets, producer, session, adminClient)
 			fmt.Printf("Done processing line %v ...\n", idx)
 		}
 		if err := scanner.Err(); err != nil {
@@ -654,9 +704,9 @@ func AdminRereplicate(c *cli.Context) {
 		rid := getRequiredOption(c, FlagRunID)
 		minID := c.Int64(FlagMinEventID)
 		maxID := c.Int64(FlagMaxEventID)
-
 		shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
-		doRereplicate(shardID, domainID, wid, rid, minID, maxID, targets, producer, session)
+
+		doRereplicate(ctx, shardID, domainID, wid, rid, minID, maxID, startVersion, targets, producer, session, adminClient)
 	}
 }
 

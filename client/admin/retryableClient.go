@@ -275,3 +275,15 @@ func (c *retryableClient) RefreshWorkflowTasks(
 	}
 	return backoff.Retry(op, c.policy, c.isRetryable)
 }
+
+func (c *retryableClient) ResendReplicationTasks(
+	ctx context.Context,
+	request *admin.ResendReplicationTasksRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	op := func() error {
+		return c.client.ResendReplicationTasks(ctx, request, opts...)
+	}
+	return backoff.Retry(op, c.policy, c.isRetryable)
+}
