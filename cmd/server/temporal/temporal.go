@@ -74,7 +74,7 @@ func startHandler(c *cli.Context) {
 		log.Fatalf("sql schema version compatibility check failed: %v", err)
 	}
 
-	if err := cfg.Server.PProf.NewInitializer(loggerimpl.NewLogger(cfg.Log.NewZapLogger())).Start(); err != nil {
+	if err := cfg.Global.PProf.NewInitializer(loggerimpl.NewLogger(cfg.Log.NewZapLogger())).Start(); err != nil {
 		log.Fatalf("fail to start PProf: %v", err)
 	}
 
