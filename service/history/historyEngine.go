@@ -797,7 +797,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 				response.NextEventId = event.nextEventID
 				response.IsWorkflowRunning = event.workflowStatus == executionpb.WorkflowExecutionStatus_Running
 				response.PreviousStartedEventId = event.previousStartedEventID
-				response.WorkflowState = int32(event.workflowState)
+				response.WorkflowState = event.workflowState
 				response.WorkflowStatus = event.workflowStatus
 				if !bytes.Equal(request.CurrentBranchToken, event.currentBranchToken) {
 					return nil, serviceerror.NewCurrentBranchChanged("Current branch token and request branch token doesn't match.", event.currentBranchToken)
@@ -1117,7 +1117,7 @@ func (e *historyEngineImpl) getMutableState(
 		IsWorkflowRunning:                    mutableState.IsWorkflowExecutionRunning(),
 		StickyTaskListScheduleToStartTimeout: executionInfo.StickyScheduleToStartTimeout,
 		CurrentBranchToken:                   currentBranchToken,
-		WorkflowState:                        int32(workflowState),
+		WorkflowState:                        workflowState,
 		WorkflowStatus:                       workflowStatus,
 		IsStickyTaskListEnabled:              mutableState.IsStickyTaskListEnabled(),
 	}
