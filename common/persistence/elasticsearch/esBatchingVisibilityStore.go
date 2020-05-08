@@ -59,7 +59,7 @@ type (
 
 var _ p.VisibilityStore = (*esBatchingVisibilityStore)(nil)
 
-// NewElasticSearchVisibilityStore create a visibility store connecting to ElasticSearch
+// NewElasticSearchBatchingVisibilityStore create a visibility store connecting to ElasticSearch
 func NewElasticSearchBatchingVisibilityStore(esClient es.Client, index string, config *config.VisibilityConfig, logger log.Logger) p.VisibilityStore {
 	return &esVisibilityStore{
 		esClient: esClient,
@@ -76,17 +76,42 @@ func (v *esBatchingVisibilityStore) GetName() string {
 }
 
 func (v *esBatchingVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
-	return nil
-}
-
-func (v *esBatchingVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
-	// TODO becker
-	return nil
+	return v.esProcessor.AddUpsert(
+		request.DomainUUID,
+		request.WorkflowID,
+		request.RunID,
+		request.WorkflowTypeName,
+		request.StartTimestamp,
+		request.ExecutionTimestamp,
+		request.TaskID,
+		request.Memo.Data,
+		request.Memo.Encoding,
+		request.SearchAttributes,
+	)
 }
 
 func (v *esBatchingVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
-	// TODO becker
-	return nil
+	return v.esProcessor.AddUpsert(
+		request.DomainUUID,
+		request.WorkflowID,
+		request.RunID,
+		request.WorkflowTypeName,
+		request.StartTimestamp,
+		request.ExecutionTimestamp,
+		request.TaskID,
+		request.Memo.Data,
+		request.Memo.Encoding,
+		request.SearchAttributes,
+	)
+}
+
+func (v *esBatchingVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
+	return v.esProcessor.AddDelete(
+		request.DomainUUID,
+		request.WorkflowID,
+		request.RunID,
+		request.TaskID,
+	)
 }
 
 func (v *esBatchingVisibilityStore) ListOpenWorkflowExecutions(

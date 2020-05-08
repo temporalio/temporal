@@ -293,7 +293,7 @@ func (p *esBatchUpdaterImpl) bulkAfterAction(id int64, requests []elastic.Bulkab
 			case !isResponseRetriable(resp.Status):
 				p.logger.Error("ES request failed.",
 					tag.ESResponseStatus(resp.Status), tag.ESResponseError(getErrorMsgFromESResp(resp)))
-				p.failInsert(key, fmt.Errorf("Failed to insert to ES. Status: %s, Error: %s",
+				p.failInsert(key, fmt.Errorf("Failed to insert to ES. Status: %d, Error: %s",
 					resp.Status, getErrorMsgFromESResp(resp)))
 			default: // bulk processor will retry
 				p.logger.Info("ES request retried.", tag.ESResponseStatus(resp.Status))
