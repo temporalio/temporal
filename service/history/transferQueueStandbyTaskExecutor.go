@@ -30,12 +30,12 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/xdc"
 )
@@ -85,31 +85,31 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 	}
 
 	if !shouldProcessTask &&
-		transferTask.TaskType != persistence.TransferTaskTypeCloseExecution {
+		transferTask.TaskType != commongenproto.TaskType_TransferTaskTypeCloseExecution {
 		// guarantee the processing of workflow execution close
 		return nil
 	}
 
 	switch transferTask.TaskType {
-	case persistence.TransferTaskTypeActivityTask:
+	case commongenproto.TaskType_TransferTaskTypeActivityTask:
 		return t.processActivityTask(transferTask)
-	case persistence.TransferTaskTypeDecisionTask:
+	case commongenproto.TaskType_TransferTaskTypeDecisionTask:
 		return t.processDecisionTask(transferTask)
-	case persistence.TransferTaskTypeCloseExecution:
+	case commongenproto.TaskType_TransferTaskTypeCloseExecution:
 		return t.processCloseExecution(transferTask)
-	case persistence.TransferTaskTypeCancelExecution:
+	case commongenproto.TaskType_TransferTaskTypeCancelExecution:
 		return t.processCancelExecution(transferTask)
-	case persistence.TransferTaskTypeSignalExecution:
+	case commongenproto.TaskType_TransferTaskTypeSignalExecution:
 		return t.processSignalExecution(transferTask)
-	case persistence.TransferTaskTypeStartChildExecution:
+	case commongenproto.TaskType_TransferTaskTypeStartChildExecution:
 		return t.processStartChildExecution(transferTask)
-	case persistence.TransferTaskTypeRecordWorkflowStarted:
+	case commongenproto.TaskType_TransferTaskTypeRecordWorkflowStarted:
 		return t.processRecordWorkflowStarted(transferTask)
-	case persistence.TransferTaskTypeResetWorkflow:
+	case commongenproto.TaskType_TransferTaskTypeResetWorkflow:
 		// no reset needed for standby
 		// TODO: add error logs
 		return nil
-	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
+	case commongenproto.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes:
 		return t.processUpsertWorkflowSearchAttributes(transferTask)
 	default:
 		return errUnknownTransferTask

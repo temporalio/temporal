@@ -35,3 +35,26 @@ enum TaskSource {
     History = 1;    // Task produced by history service
     DbBacklog = 2;  // Task produced from matching db backlog
 }
+
+enum TaskType {
+    ReplicationTaskTypeHistory = 0;
+    ReplicationTaskTypeSyncActivity = 1;
+
+    TransferTaskTypeDecisionTask = 2;
+    TransferTaskTypeActivityTask = 3;
+    TransferTaskTypeCloseExecution = 4;
+    TransferTaskTypeCancelExecution = 5;
+    TransferTaskTypeStartChildExecution = 6;
+    TransferTaskTypeSignalExecution = 7;
+    TransferTaskTypeRecordWorkflowStarted = 8;
+    TransferTaskTypeResetWorkflow = 9;
+    TransferTaskTypeUpsertWorkflowSearchAttributes = 10;
+
+    TaskTypeDecisionTimeout = 11;
+    TaskTypeActivityTimeout = 12;
+    TaskTypeUserTimer = 13;
+    TaskTypeWorkflowRunTimeout = 14;
+    TaskTypeDeleteHistoryEvent = 15;
+    TaskTypeActivityRetryTimer = 16;
+    TaskTypeWorkflowBackoffTimer = 17;
+}

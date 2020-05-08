@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"
 
+	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
 	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -1404,7 +1405,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			if !isRunning {
 				// Looks like ActivityTask already completed as a result of another call.
 				// It is OK to drop the task at this point.
-				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TransferTaskTypeActivityTask))
+				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenproto.TaskType_TransferTaskTypeActivityTask))
 				return ErrActivityTaskNotFound
 			}
 
@@ -1425,7 +1426,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 
 				// Looks like ActivityTask already started as a result of another call.
 				// It is OK to drop the task at this point.
-				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TransferTaskTypeActivityTask))
+				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenproto.TaskType_TransferTaskTypeActivityTask))
 				return serviceerror.NewEventAlreadyStarted("Activity task already started.")
 			}
 

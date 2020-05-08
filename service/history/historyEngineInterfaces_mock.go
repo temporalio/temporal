@@ -34,6 +34,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
 
+	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
 	task "github.com/temporalio/temporal/common/task"
 )
 
@@ -89,10 +90,10 @@ func (mr *MockqueueTaskInfoMockRecorder) GetTaskID() *gomock.Call {
 }
 
 // GetTaskType mocks base method
-func (m *MockqueueTaskInfo) GetTaskType() int32 {
+func (m *MockqueueTaskInfo) GetTaskType() commongenproto.TaskType {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTaskType")
-	ret0, _ := ret[0].(int32)
+	ret0, _ := ret[0].(commongenproto.TaskType)
 	return ret0
 }
 
@@ -316,10 +317,10 @@ func (mr *MockqueueTaskMockRecorder) GetTaskID() *gomock.Call {
 }
 
 // GetTaskType mocks base method
-func (m *MockqueueTask) GetTaskType() int32 {
+func (m *MockqueueTask) GetTaskType() commongenproto.TaskType {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTaskType")
-	ret0, _ := ret[0].(int32)
+	ret0, _ := ret[0].(commongenproto.TaskType)
 	return ret0
 }
 
