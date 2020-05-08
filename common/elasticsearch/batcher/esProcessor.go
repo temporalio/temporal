@@ -104,10 +104,12 @@ const (
 	esDocType        = "_doc"
 
 	versionTypeExternal = "external"
+
+	processorName = "batching-es-processor"
 )
 
 // NewESProcessorAndStart create new ESProcessor and start
-func NewESProcessorAndStart(config *Config, client es.Client, processorName string,
+func NewESProcessorAndStart(config *Config, client es.Client,
 	logger log.Logger, metricsClient metrics.Client) (ESProcessor, error) {
 	p := &esBatchUpdaterImpl{
 		config:        config,

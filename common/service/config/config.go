@@ -156,6 +156,8 @@ type (
 
 	// VisibilityConfig is config for visibility sampling
 	VisibilityConfig struct {
+		// Enable kafka-less Elasticsearch
+		EnableKafkaLessES dynamicconfig.BoolPropertyFnWithDomainFilter `yaml:"-" json:"-"`
 		// EnableSampling for visibility
 		EnableSampling dynamicconfig.BoolPropertyFn `yaml:"-" json:"-"`
 		// EnableReadFromClosedExecutionV2 read closed from v2 table

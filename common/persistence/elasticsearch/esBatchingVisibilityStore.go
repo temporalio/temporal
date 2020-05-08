@@ -53,14 +53,14 @@ type (
 		index       string
 		logger      log.Logger
 		config      *config.VisibilityConfig
-		esProcessor *esbatcher.ESProcessor
+		esProcessor esbatcher.ESProcessor
 	}
 )
 
 var _ p.VisibilityStore = (*esBatchingVisibilityStore)(nil)
 
 // NewElasticSearchBatchingVisibilityStore create a visibility store connecting to ElasticSearch
-func NewElasticSearchBatchingVisibilityStore(esClient es.Client, esProcessor *esbatcher.ESProcessor, index string, config *config.VisibilityConfig, logger log.Logger) p.VisibilityStore {
+func NewElasticSearchBatchingVisibilityStore(esClient es.Client, esProcessor esbatcher.ESProcessor, index string, config *config.VisibilityConfig, logger log.Logger) p.VisibilityStore {
 	return &esBatchingVisibilityStore{
 		esClient:    esClient,
 		index:       index,
@@ -77,7 +77,7 @@ func (v *esBatchingVisibilityStore) GetName() string {
 }
 
 func (v *esBatchingVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
-	return (*v.esProcessor).AddUpsert(
+	return v.esProcessor.AddUpsert(
 		request.DomainUUID,
 		request.WorkflowID,
 		request.RunID,
@@ -92,7 +92,7 @@ func (v *esBatchingVisibilityStore) RecordWorkflowExecutionStarted(request *p.In
 }
 
 func (v *esBatchingVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
-	return (*v.esProcessor).AddUpsert(
+	return v.esProcessor.AddUpsert(
 		request.DomainUUID,
 		request.WorkflowID,
 		request.RunID,
@@ -107,7 +107,7 @@ func (v *esBatchingVisibilityStore) UpsertWorkflowExecution(request *p.InternalU
 }
 
 func (v *esBatchingVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
-	return (*v.esProcessor).AddDelete(
+	return v.esProcessor.AddDelete(
 		request.DomainUUID,
 		request.WorkflowID,
 		request.RunID,

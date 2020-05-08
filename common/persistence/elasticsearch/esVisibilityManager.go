@@ -22,6 +22,7 @@ package elasticsearch
 
 import (
 	es "github.com/temporalio/temporal/common/elasticsearch"
+	esbatcher "github.com/temporalio/temporal/common/elasticsearch/batcher"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
@@ -34,10 +35,12 @@ import (
 // In history, it only needs kafka producer for writing data;
 // In frontend, it only needs ES client and related config for reading data
 func NewESVisibilityManager(indexName string, esClient es.Client, config *config.VisibilityConfig,
-	producer messaging.Producer, metricsClient metrics.Client, log log.Logger) p.VisibilityManager {
+	producer messaging.Producer, metricsClient metrics.Client, log log.Logger,
+	batchingProcessor esbatcher.ESProcessor) p.VisibilityManager {
 
 	visibilityFromESStore := NewElasticSearchVisibilityStore(esClient, indexName, producer, config, log)
-	visibilityFromES := p.NewVisibilityManagerImpl(visibilityFromESStore, log)
+	batchingVisibilityFromESStore := NewElasticSearchBatchingVisibilityStore(esClient, batchingProcessor, indexName, config, log)
+	visibilityFromES := p.NewVisibilityManagerImpl(visibilityFromESStore, batchingVisibilityFromESStore, config.EnableKafkaLessES, log)
 
 	if config != nil {
 		// wrap with rate limiter

@@ -27,6 +27,7 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -35,9 +36,11 @@ import (
 
 type (
 	visibilityManagerImpl struct {
-		serializer  PayloadSerializer
-		persistence VisibilityStore
-		logger      log.Logger
+		serializer           PayloadSerializer
+		persistence          VisibilityStore
+		kafkaLessPersistence VisibilityStore
+		enableKakfaLessES    dynamicconfig.BoolPropertyFnWithDomainFilter
+		logger               log.Logger
 	}
 )
 
@@ -47,11 +50,13 @@ const VisibilityEncoding = common.EncodingTypeThriftRW
 var _ VisibilityManager = (*visibilityManagerImpl)(nil)
 
 // NewVisibilityManagerImpl returns new VisibilityManager
-func NewVisibilityManagerImpl(persistence VisibilityStore, logger log.Logger) VisibilityManager {
+func NewVisibilityManagerImpl(persistence VisibilityStore, kafkaLessPersistence VisibilityStore, enableKafkaLessES dynamicconfig.BoolPropertyFnWithDomainFilter, logger log.Logger) VisibilityManager {
 	return &visibilityManagerImpl{
-		serializer:  NewPayloadSerializer(),
-		persistence: persistence,
-		logger:      logger,
+		serializer:           NewPayloadSerializer(),
+		persistence:          persistence,
+		kafkaLessPersistence: kafkaLessPersistence,
+		enableKakfaLessES:    enableKafkaLessES,
+		logger:               logger,
 	}
 }
 
@@ -76,6 +81,9 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWo
 		Memo:               v.serializeMemo(request.Memo, request.DomainUUID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
 		SearchAttributes:   request.SearchAttributes,
 	}
+	if v.enableKakfaLessES(request.Domain) {
+		return v.kafkaLessPersistence.RecordWorkflowExecutionStarted(req)
+	}
 	return v.persistence.RecordWorkflowExecutionStarted(req)
 }
 
@@ -95,6 +103,9 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWor
 		HistoryLength:      request.HistoryLength,
 		RetentionSeconds:   request.RetentionSeconds,
 	}
+	if v.enableKakfaLessES(request.Domain) {
+		v.kafkaLessPersistence.RecordWorkflowExecutionClosed(req)
+	}
 	return v.persistence.RecordWorkflowExecutionClosed(req)
 }
 
@@ -109,6 +120,9 @@ func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowE
 		TaskID:             request.TaskID,
 		Memo:               v.serializeMemo(request.Memo, request.DomainUUID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
 		SearchAttributes:   request.SearchAttributes,
+	}
+	if v.enableKakfaLessES(request.Domain) {
+		v.kafkaLessPersistence.UpsertWorkflowExecution(req)
 	}
 	return v.persistence.UpsertWorkflowExecution(req)
 }

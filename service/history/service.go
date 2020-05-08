@@ -32,6 +32,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
+	esbatcher "github.com/temporalio/temporal/common/elasticsearch/batcher"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -368,7 +369,8 @@ type Service struct {
 func NewService(
 	params *resource.BootstrapParams,
 ) (resource.Resource, error) {
-	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
+	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
+	serviceConfig := NewConfig(dc,
 		params.PersistenceConfig.NumHistoryShards,
 		params.PersistenceConfig.DefaultStoreType(),
 		params.PersistenceConfig.IsAdvancedVisibilityConfigExist())
@@ -379,6 +381,15 @@ func NewService(
 		VisibilityClosedMaxQPS:          serviceConfig.VisibilityClosedMaxQPS,
 		EnableSampling:                  serviceConfig.EnableVisibilitySampling,
 		EnableReadFromClosedExecutionV2: serviceConfig.EnableReadFromClosedExecutionV2,
+	}
+
+	batchingProcessorConfig := esbatcher.Config{
+		IndexerConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 1000),
+		ESProcessorNumOfWorkers:  dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),
+		ESProcessorBulkActions:   dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 1000),
+		ESProcessorBulkSize:      dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB
+		ESProcessorFlushInterval: dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 1*time.Second),
+		ValidSearchAttributes:    dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
 	}
 
 	visibilityManagerInitializer := func(
@@ -393,8 +404,19 @@ func NewService(
 			if err != nil {
 				logger.Fatal("Creating visibility producer failed", tag.Error(err))
 			}
-			visibilityFromES = espersistence.NewESVisibilityManager("", nil, nil, visibilityProducer,
-				params.MetricsClient, logger)
+			batchingESProcessor, err := esbatcher.NewESProcessorAndStart(&batchingProcessorConfig, params.ESClient, logger, params.MetricsClient)
+			if err != nil {
+				logger.Fatal("Creating batching ES processor failed", tag.Error(err))
+			}
+			visibilityFromES = espersistence.NewESVisibilityManager(
+				"",
+				nil,
+				nil,
+				visibilityProducer,
+				params.MetricsClient,
+				logger,
+				batchingESProcessor,
+			)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,

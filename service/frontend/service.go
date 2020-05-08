@@ -173,7 +173,7 @@ func NewService(
 				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 			}
 			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
-				nil, params.MetricsClient, logger)
+				nil, params.MetricsClient, logger, nil)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,
