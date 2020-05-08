@@ -101,6 +101,7 @@ var keys = map[Key]string{
 	ValidSearchAttributes:                 "frontend.validSearchAttributes",
 	SendRawWorkflowHistory:                "frontend.sendRawWorkflowHistory",
 	FrontendEnableRPCReplication:          "frontend.enableRPCReplication",
+	FrontendEnableCleanupReplicationTask:  "frontend.enableCleanupReplicationTask",
 	SearchAttributesNumberOfKeysLimit:     "frontend.searchAttributesNumberOfKeysLimit",
 	SearchAttributesSizeOfValueLimit:      "frontend.searchAttributesSizeOfValueLimit",
 	SearchAttributesTotalSizeLimit:        "frontend.searchAttributesTotalSizeLimit",
@@ -236,6 +237,7 @@ var keys = map[Key]string{
 	ReplicationTaskProcessorCleanupJitterCoefficient:       "history.ReplicationTaskProcessorCleanupJitterCoefficient",
 	HistoryEnableRPCReplication:                            "history.EnableRPCReplication",
 	HistoryEnableKafkaReplication:                          "history.EnableKafkaReplication",
+	HistoryEnableCleanupReplicationTask:                    "history.EnableCleanupReplicationTask",
 	EnableConsistentQuery:                                  "history.EnableConsistentQuery",
 	EnableConsistentQueryByDomain:                          "history.EnableConsistentQueryByDomain",
 	MaxBufferedQueryCount:                                  "history.MaxBufferedQueryCount",
@@ -391,6 +393,8 @@ const (
 	SendRawWorkflowHistory
 	// FrontendEnableRPCReplication is a feature flag for rpc replication
 	FrontendEnableRPCReplication
+	// FrontendEnableCleanupReplicationTask is a feature flag for rpc replication cleanup
+	FrontendEnableCleanupReplicationTask
 	// SearchAttributesNumberOfKeysLimit is the limit of number of keys
 	SearchAttributesNumberOfKeysLimit
 	// SearchAttributesSizeOfValueLimit is the size limit of each value
@@ -733,6 +737,8 @@ const (
 	HistoryEnableRPCReplication
 	// HistoryEnableKafkaReplication is the migration flag for Kafka replication
 	HistoryEnableKafkaReplication
+	// HistoryEnableCleanupReplicationTask is the migration flag for Kafka replication
+	HistoryEnableCleanupReplicationTask
 	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
 	EnableConsistentQuery
 	// EnableConsistentQueryByDomain indicates if consistent query is enabled for a domain
