@@ -125,7 +125,7 @@ func (s *ClientSuite) TestCrudOperations() {
 	get2, err := c.Get(nil, &blobstore.GetRequest{Key: key2})
 	s.NoError(err)
 	s.Equal(map[string]string{"key1": "value1"}, get2.Blob.Tags)
-	s.Nil(get2.Blob.Body)
+	s.Empty(get2.Blob.Body)
 	get3, err := c.Get(nil, &blobstore.GetRequest{Key: key3})
 	s.NoError(err)
 	s.Equal(map[string]string{"key1": "value1", "key2": "value2"}, get3.Blob.Tags)

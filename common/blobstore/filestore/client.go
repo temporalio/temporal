@@ -64,12 +64,21 @@ func NewFilestoreClient(cfg *config.FileBlobstore) (blobstore.Client, error) {
 }
 
 // Put stores a blob
-func (c *client) Put(_ context.Context, request *blobstore.PutRequest) (*blobstore.PutResponse, error) {
-	data, err := c.serializeBlob(request.Blob)
+func (c *client) Put(_ context.Context, request *blobstore.PutRequest) (resp *blobstore.PutResponse, err error) {
+	defer func() {
+		if err != nil {
+			os.Remove(c.bodyPath(request.Key))
+			os.Remove(c.tagsPath(request.Key))
+		}
+	}()
+	if err := util.WriteFile(c.bodyPath(request.Key), request.Blob.Body, os.FileMode(0666)); err != nil {
+		return nil, err
+	}
+	tagsData, err := json.Marshal(request.Blob.Tags)
 	if err != nil {
 		return nil, err
 	}
-	if err := util.WriteFile(c.filepath(request.Key), data, os.FileMode(0666)); err != nil {
+	if err := util.WriteFile(c.tagsPath(request.Key), tagsData, os.FileMode(0666)); err != nil {
 		return nil, err
 	}
 	return &blobstore.PutResponse{}, nil
@@ -77,22 +86,29 @@ func (c *client) Put(_ context.Context, request *blobstore.PutRequest) (*blobsto
 
 // Get fetches a blob
 func (c *client) Get(_ context.Context, request *blobstore.GetRequest) (*blobstore.GetResponse, error) {
-	data, err := util.ReadFile(c.filepath(request.Key))
+	data, err := util.ReadFile(c.bodyPath(request.Key))
 	if err != nil {
 		return nil, err
 	}
-	blob, err := c.deserializeBlob(data)
+	tagsData, err := util.ReadFile(c.tagsPath(request.Key))
 	if err != nil {
+		return nil, err
+	}
+	tags := make(map[string]string)
+	if err := json.Unmarshal(tagsData, &tags); err != nil {
 		return nil, err
 	}
 	return &blobstore.GetResponse{
-		Blob: blob,
+		Blob: blobstore.Blob{
+			Body: data,
+			Tags: tags,
+		},
 	}, nil
 }
 
 // Exists determines if a blob exists
 func (c *client) Exists(_ context.Context, request *blobstore.ExistsRequest) (*blobstore.ExistsResponse, error) {
-	exists, err := util.FileExists(c.filepath(request.Key))
+	exists, err := util.FileExists(c.bodyPath(request.Key))
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +119,10 @@ func (c *client) Exists(_ context.Context, request *blobstore.ExistsRequest) (*b
 
 // Delete deletes a blob
 func (c *client) Delete(_ context.Context, request *blobstore.DeleteRequest) (*blobstore.DeleteResponse, error) {
-	if err := os.Remove(c.filepath(request.Key)); err != nil {
+	if err := os.Remove(c.bodyPath(request.Key)); err != nil {
+		return nil, err
+	}
+	if err := os.Remove(c.tagsPath(request.Key)); err != nil {
 		return nil, err
 	}
 	return &blobstore.DeleteResponse{}, nil
@@ -114,18 +133,10 @@ func (c *client) IsRetryableError(err error) bool {
 	return false
 }
 
-func (c *client) deserializeBlob(data []byte) (blobstore.Blob, error) {
-	var blob blobstore.Blob
-	if err := json.Unmarshal(data, &blob); err != nil {
-		return blobstore.Blob{}, err
-	}
-	return blob, nil
-}
-
-func (c *client) serializeBlob(blob blobstore.Blob) ([]byte, error) {
-	return json.Marshal(blob)
-}
-
-func (c *client) filepath(key string) string {
+func (c *client) bodyPath(key string) string {
 	return fmt.Sprintf("%v/%v", c.outputDirectory, key)
+}
+
+func (c *client) tagsPath(key string) string {
+	return fmt.Sprintf("%v/.%v.tags", c.outputDirectory, key)
 }

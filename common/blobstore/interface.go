@@ -22,7 +22,9 @@
 
 package blobstore
 
-import "context"
+import (
+	"context"
+)
 
 type (
 	// Client defines the interface to a blobstore client.
