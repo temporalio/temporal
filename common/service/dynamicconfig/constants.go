@@ -769,6 +769,7 @@ var filters = []string{
 	"domainID",
 	"taskListName",
 	"taskType",
+	"shardID",
 }
 
 const (
@@ -781,6 +782,8 @@ const (
 	TaskListName
 	// TaskType is the task type (0:Decision, 1:Activity)
 	TaskType
+	// ShardID is the shard id
+	ShardID
 
 	// lastFilterTypeForTest must be the last one in this const group for testing purpose
 	lastFilterTypeForTest
@@ -814,5 +817,12 @@ func DomainIDFilter(domainID string) FilterOption {
 func TaskTypeFilter(taskType int) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
 		filterMap[TaskType] = taskType
+	}
+}
+
+// ShardIDFilter filters by shard id
+func ShardIDFilter(shardID int) FilterOption {
+	return func(filterMap map[Filter]interface{}) {
+		filterMap[ShardID] = shardID
 	}
 }

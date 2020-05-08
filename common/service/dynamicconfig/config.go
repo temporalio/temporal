@@ -86,8 +86,14 @@ type IntPropertyFnWithDomainFilter func(domain string) int
 // IntPropertyFnWithTaskListInfoFilters is a wrapper to get int property from dynamic config with three filters: domain, taskList, taskType
 type IntPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) int
 
+// IntPropertyFnWithShardIDFilter is a wrapper to get int property from dynamic config with shardID as filter
+type IntPropertyFnWithShardIDFilter func(shardID int) int
+
 // FloatPropertyFn is a wrapper to get float property from dynamic config
 type FloatPropertyFn func(opts ...FilterOption) float64
+
+// FloatPropertyFnWithShardIDFilter is a wrapper to get float property from dynamic config with shardID as filter
+type FloatPropertyFnWithShardIDFilter func(shardID int) float64
 
 // DurationPropertyFn is a wrapper to get duration property from dynamic config
 type DurationPropertyFn func(opts ...FilterOption) time.Duration
@@ -100,6 +106,9 @@ type DurationPropertyFnWithDomainIDFilter func(domainID string) time.Duration
 
 // DurationPropertyFnWithTaskListInfoFilters is a wrapper to get duration property from dynamic config  with three filters: domain, taskList, taskType
 type DurationPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) time.Duration
+
+// DurationPropertyFnWithShardIDFilter is a wrapper to get duration property from dynamic config with shardID as filter
+type DurationPropertyFnWithShardIDFilter func(shardID int) time.Duration
 
 // BoolPropertyFn is a wrapper to get bool property from dynamic config
 type BoolPropertyFn func(opts ...FilterOption) bool
@@ -180,10 +189,42 @@ func (c *Collection) GetIntPropertyFilteredByTaskListInfo(key Key, defaultValue 
 	}
 }
 
+// GetIntPropertyFilteredByShardID gets property with shardID as filter and asserts that it's an integer
+func (c *Collection) GetIntPropertyFilteredByShardID(key Key, defaultValue int) IntPropertyFnWithShardIDFilter {
+	return func(shardID int) int {
+		val, err := c.client.GetIntValue(
+			key,
+			getFilterMap(ShardIDFilter(shardID)),
+			defaultValue,
+		)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, intCompareEquals)
+		return val
+	}
+}
+
 // GetFloat64Property gets property and asserts that it's a float64
 func (c *Collection) GetFloat64Property(key Key, defaultValue float64) FloatPropertyFn {
 	return func(opts ...FilterOption) float64 {
 		val, err := c.client.GetFloatValue(key, getFilterMap(opts...), defaultValue)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, float64CompareEquals)
+		return val
+	}
+}
+
+// GetFloat64PropertyFilteredByShardID gets property with shardID filter and asserts that it's a float64
+func (c *Collection) GetFloat64PropertyFilteredByShardID(key Key, defaultValue float64) FloatPropertyFnWithShardIDFilter {
+	return func(shardID int) float64 {
+		val, err := c.client.GetFloatValue(
+			key,
+			getFilterMap(ShardIDFilter(shardID)),
+			defaultValue,
+		)
 		if err != nil {
 			c.logError(key, err)
 		}
@@ -234,6 +275,22 @@ func (c *Collection) GetDurationPropertyFilteredByTaskListInfo(key Key, defaultV
 		val, err := c.client.GetDurationValue(
 			key,
 			getFilterMap(DomainFilter(domain), TaskListFilter(taskList), TaskTypeFilter(taskType)),
+			defaultValue,
+		)
+		if err != nil {
+			c.logError(key, err)
+		}
+		c.logValue(key, val, defaultValue, durationCompareEquals)
+		return val
+	}
+}
+
+// GetDurationPropertyFilteredByShardID gets property with shardID id as filter and asserts that it's a duration
+func (c *Collection) GetDurationPropertyFilteredByShardID(key Key, defaultValue time.Duration) DurationPropertyFnWithShardIDFilter {
+	return func(shardID int) time.Duration {
+		val, err := c.client.GetDurationValue(
+			key,
+			getFilterMap(ShardIDFilter(shardID)),
 			defaultValue,
 		)
 		if err != nil {

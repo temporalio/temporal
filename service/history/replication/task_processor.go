@@ -106,14 +106,15 @@ func NewTaskProcessor(
 	taskFetcher TaskFetcher,
 	taskExecutor TaskExecutor,
 ) TaskProcessor {
-	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait())
+	shardID := shard.GetShardID()
+	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID))
 	taskRetryPolicy.SetBackoffCoefficient(taskErrorRetryBackoffCoefficient)
-	taskRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts())
+	taskRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID))
 
 	dlqRetryPolicy := backoff.NewExponentialRetryPolicy(dlqErrorRetryWait)
 	dlqRetryPolicy.SetExpirationInterval(backoff.NoInterval)
 
-	noTaskBackoffPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorNoTaskRetryWait())
+	noTaskBackoffPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorNoTaskRetryWait(shardID))
 	noTaskBackoffPolicy.SetBackoffCoefficient(1)
 	noTaskBackoffPolicy.SetExpirationInterval(backoff.NoInterval)
 	noTaskRetrier := backoff.NewRetrier(noTaskBackoffPolicy, backoff.SystemClock)
@@ -201,9 +202,10 @@ Loop:
 
 func (p *taskProcessorImpl) cleanupReplicationTaskLoop() {
 
+	shardID := p.shard.GetShardID()
 	timer := time.NewTimer(backoff.JitDuration(
-		p.config.ReplicationTaskProcessorCleanupInterval(),
-		p.config.ReplicationTaskProcessorCleanupJitterCoefficient(),
+		p.config.ReplicationTaskProcessorCleanupInterval(shardID),
+		p.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 	))
 	for {
 		select {
@@ -217,8 +219,8 @@ func (p *taskProcessorImpl) cleanupReplicationTaskLoop() {
 				p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
 			}
 			timer.Reset(backoff.JitDuration(
-				p.config.ShardSyncMinInterval(),
-				p.config.ShardSyncTimerJitterCoefficient(),
+				p.config.ReplicationTaskProcessorCleanupInterval(shardID),
+				p.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 			))
 		}
 	}
