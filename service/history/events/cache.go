@@ -136,8 +136,11 @@ func newEventKey(domainID, workflowID, runID string, eventID int64) eventKey {
 	}
 }
 
-func (e *cacheImpl) GetEvent(domainID, workflowID, runID string, firstEventID, eventID int64,
-	branchToken []byte) (*shared.HistoryEvent, error) {
+func (e *cacheImpl) GetEvent(
+	domainID, workflowID, runID string,
+	firstEventID, eventID int64,
+	branchToken []byte,
+) (*shared.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetEventScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -152,7 +155,7 @@ func (e *cacheImpl) GetEvent(domainID, workflowID, runID string, firstEventID, e
 	}
 
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheMissCounter)
-	event, err := e.getHistoryEventFromStore(domainID, workflowID, runID, firstEventID, eventID, branchToken)
+	event, err := e.getHistoryEventFromStore(firstEventID, eventID, branchToken)
 	if err != nil {
 		e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheFailures)
 		e.logger.Error("EventsCache unable to retrieve event from store",
@@ -186,8 +189,7 @@ func (e *cacheImpl) DeleteEvent(domainID, workflowID, runID string, eventID int6
 	e.Delete(key)
 }
 
-func (e *cacheImpl) getHistoryEventFromStore(domainID, workflowID, runID string, firstEventID, eventID int64,
-	branchToken []byte) (*shared.HistoryEvent, error) {
+func (e *cacheImpl) getHistoryEventFromStore(firstEventID, eventID int64, branchToken []byte) (*shared.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetFromStoreScope, metrics.CacheLatency)
 	defer sw.Stop()

@@ -31,13 +31,11 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/locks"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/service/history/engine"
 	"github.com/uber/cadence/service/history/events"
 	"github.com/uber/cadence/service/history/shard"
 )
@@ -148,11 +146,9 @@ type (
 		domainID          string
 		workflowExecution workflow.WorkflowExecution
 		shard             shard.Context
-		engine            engine.Engine
 		executionManager  persistence.ExecutionManager
 		logger            log.Logger
 		metricsClient     metrics.Client
-		timeSource        clock.TimeSource
 
 		mutex           locks.Mutex
 		mutableState    MutableState
@@ -179,11 +175,9 @@ func NewContext(
 		domainID:          domainID,
 		workflowExecution: execution,
 		shard:             shard,
-		engine:            shard.GetEngine(),
 		executionManager:  executionManager,
 		logger:            logger,
 		metricsClient:     shard.GetMetricsClient(),
-		timeSource:        shard.GetTimeSource(),
 		mutex:             locks.NewMutex(),
 		stats: &persistence.ExecutionStats{
 			HistorySize: 0,
@@ -562,7 +556,7 @@ func (c *contextImpl) ConflictResolveWorkflowExecution(
 
 	workflowState, workflowCloseState := resetMutableState.GetWorkflowStateCloseStatus()
 	// Current branch changed and notify the watchers
-	c.engine.NotifyNewHistoryEvent(events.NewNotification(
+	c.shard.GetEngine().NotifyNewHistoryEvent(events.NewNotification(
 		c.domainID,
 		&c.workflowExecution,
 		resetMutableState.GetLastFirstEventID(),
@@ -759,7 +753,7 @@ func (c *contextImpl) UpdateWorkflowExecutionWithNew(
 		return err
 	}
 	workflowState, workflowCloseState := c.mutableState.GetWorkflowStateCloseStatus()
-	c.engine.NotifyNewHistoryEvent(events.NewNotification(
+	c.shard.GetEngine().NotifyNewHistoryEvent(events.NewNotification(
 		c.domainID,
 		&c.workflowExecution,
 		c.mutableState.GetLastFirstEventID(),
@@ -815,9 +809,9 @@ func (c *contextImpl) notifyTasks(
 	replicationTasks []persistence.Task,
 	timerTasks []persistence.Task,
 ) {
-	c.engine.NotifyNewTransferTasks(transferTasks)
-	c.engine.NotifyNewReplicationTasks(replicationTasks)
-	c.engine.NotifyNewTimerTasks(timerTasks)
+	c.shard.GetEngine().NotifyNewTransferTasks(transferTasks)
+	c.shard.GetEngine().NotifyNewReplicationTasks(replicationTasks)
+	c.shard.GetEngine().NotifyNewTimerTasks(timerTasks)
 }
 
 func (c *contextImpl) mergeContinueAsNewReplicationTasks(
@@ -1079,9 +1073,9 @@ func (c *contextImpl) ResetWorkflowExecution(
 	baseRunNextEventID int64,
 ) (retError error) {
 
-	now := c.timeSource.Now()
-	currTransferTasks := []persistence.Task{}
-	currTimerTasks := []persistence.Task{}
+	now := c.shard.GetTimeSource().Now()
+	var currTransferTasks []persistence.Task
+	var currTimerTasks []persistence.Task
 	if closeTask != nil {
 		currTransferTasks = append(currTransferTasks, closeTask)
 	}
@@ -1172,15 +1166,12 @@ func (c *contextImpl) ResetWorkflowExecution(
 	}
 
 	resetWFReq := &persistence.ResetWorkflowExecutionRequest{
-		BaseRunID:          baseRunID,
-		BaseRunNextEventID: baseRunNextEventID,
-
-		CurrentRunID:          currMutableState.GetExecutionInfo().RunID,
-		CurrentRunNextEventID: currMutableState.GetExecutionInfo().NextEventID,
-
+		BaseRunID:               baseRunID,
+		BaseRunNextEventID:      baseRunNextEventID,
+		CurrentRunID:            currMutableState.GetExecutionInfo().RunID,
+		CurrentRunNextEventID:   currMutableState.GetExecutionInfo().NextEventID,
 		CurrentWorkflowMutation: nil,
-
-		NewWorkflowSnapshot: *resetWorkflow,
+		NewWorkflowSnapshot:     *resetWorkflow,
 	}
 
 	if updateCurr {
