@@ -33,7 +33,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 	persistenceblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	cache "github.com/temporalio/temporal/common/cache"
@@ -1406,10 +1406,10 @@ func (mr *MockmutableStateMockRecorder) GetWorkflowType() *gomock.Call {
 }
 
 // GetWorkflowStateStatus mocks base method.
-func (m *MockmutableState) GetWorkflowStateStatus() (executiongenproto.WorkflowExecutionState, execution.WorkflowExecutionStatus) {
+func (m *MockmutableState) GetWorkflowStateStatus() (executiongenpb.WorkflowExecutionState, execution.WorkflowExecutionStatus) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowStateStatus")
-	ret0, _ := ret[0].(executiongenproto.WorkflowExecutionState)
+	ret0, _ := ret[0].(executiongenpb.WorkflowExecutionState)
 	ret1, _ := ret[1].(execution.WorkflowExecutionStatus)
 	return ret0, ret1
 }
@@ -2338,7 +2338,7 @@ func (mr *MockmutableStateMockRecorder) UpdateCurrentVersion(version, forceUpdat
 }
 
 // UpdateWorkflowStateStatus mocks base method.
-func (m *MockmutableState) UpdateWorkflowStateStatus(state executiongenproto.WorkflowExecutionState, status execution.WorkflowExecutionStatus) error {
+func (m *MockmutableState) UpdateWorkflowStateStatus(state executiongenpb.WorkflowExecutionState, status execution.WorkflowExecutionStatus) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateWorkflowStateStatus", state, status)
 	ret0, _ := ret[0].(error)

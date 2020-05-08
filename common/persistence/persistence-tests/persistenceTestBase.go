@@ -34,7 +34,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -300,7 +300,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				WorkflowTypeName:    wType,
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
-				State:               executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running,
+				State:               executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
 				Status:              executionpb.WorkflowExecutionStatus_Running,
 				LastFirstEventID:    common.FirstEventID,
 				NextEventID:         nextEventID,
@@ -369,7 +369,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(namespaceID string, wo
 				WorkflowTypeName:    wType,
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
-				State:               executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running,
+				State:               executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
 				Status:              executionpb.WorkflowExecutionStatus_Running,
 				LastFirstEventID:    common.FirstEventID,
 				NextEventID:         nextEventID,
@@ -424,7 +424,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 				WorkflowID:         workflowExecution.GetWorkflowId(),
 				RunID:              workflowExecution.GetRunId(),
 				TaskList:           taskList,
-				State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running,
+				State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
 				Status:             executionpb.WorkflowExecutionStatus_Running,
 				LastFirstEventID:   common.FirstEventID,
 				NextEventID:        nextEventID,
@@ -464,7 +464,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				WorkflowRunTimeout:  wTimeout,
 				WorkflowTaskTimeout: decisionTimeout,
 
-				State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+				State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 				Status:             executionpb.WorkflowExecutionStatus_Running,
 				LastFirstEventID:   common.FirstEventID,
 				NextEventID:        nextEventID,
@@ -593,7 +593,7 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 		RangeID:  s.ShardInfo.GetRangeId(),
 		Encoding: pickRandomEncoding(),
 	}
-	req.UpdateWorkflowMutation.ExecutionInfo.State = executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed
+	req.UpdateWorkflowMutation.ExecutionInfo.State = executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed
 	req.UpdateWorkflowMutation.ExecutionInfo.Status = executionpb.WorkflowExecutionStatus_ContinuedAsNew
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(req)
 	return err
@@ -935,7 +935,7 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 }
 
 // ConflictResolveWorkflowExecution is  utility method to reset mutable state
-func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWriteVersion int64, prevState executiongenproto.WorkflowExecutionState,
+func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWriteVersion int64, prevState executiongenpb.WorkflowExecutionState,
 	info *p.WorkflowExecutionInfo, stats *p.ExecutionStats, replicationState *p.ReplicationState, nextEventID int64,
 	activityInfos []*p.ActivityInfo, timerInfos []*persistenceblobs.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
 	requestCancelInfos []*persistenceblobs.RequestCancelInfo, signalInfos []*persistenceblobs.SignalInfo, ids []string) error {

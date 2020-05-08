@@ -31,7 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/uber-go/tally"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
@@ -88,7 +88,7 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	lastFirstEventID := int64(3)
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
-	workflowState := executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created
+	workflowState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created
 	workflowStatus := executionpb.WorkflowExecutionStatus_Running
 	branchToken := make([]byte, 0)
 	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
@@ -121,7 +121,7 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	lastFirstEventID := int64(3)
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
-	workflowState := executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created
+	workflowState := executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created
 	workflowStatus := executionpb.WorkflowExecutionStatus_Running
 	branchToken := make([]byte, 0)
 	historyEvent := newHistoryEventNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)

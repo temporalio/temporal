@@ -28,7 +28,7 @@ import (
 	"database/sql"
 	"time"
 
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/persistence"
@@ -169,7 +169,7 @@ type (
 		WorkflowID       string
 		RunID            primitives.UUID
 		CreateRequestID  string
-		State            executiongenproto.WorkflowExecutionState
+		State            executiongenpb.WorkflowExecutionState
 		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 		StartVersion     int64
