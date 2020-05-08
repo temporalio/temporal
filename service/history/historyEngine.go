@@ -258,6 +258,7 @@ func NewEngineWithShardContext(
 			return shard.GetService().GetHistoryClient().ReplicateEventsV2(ctx, request)
 		},
 		shard.GetService().GetPayloadSerializer(),
+		nil,
 		shard.GetLogger(),
 	)
 	historyRereplicator := xdc.NewHistoryRereplicator(
