@@ -254,10 +254,10 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 		return err
 	}
 
-	activityID := attr.GetActivityId()
+	scheduleID := attr.GetScheduledEventId()
 	actCancelReqEvent, ai, err := handler.mutableState.AddActivityTaskCancelRequestedEvent(
 		handler.decisionTaskCompletedID,
-		activityID,
+		scheduleID,
 		handler.identity,
 	)
 	switch err.(type) {
@@ -279,12 +279,10 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 		}
 		return nil
 	case *serviceerror.InvalidArgument:
-		_, err = handler.mutableState.AddRequestCancelActivityTaskFailedEvent(
-			handler.decisionTaskCompletedID,
-			activityID,
-			activityCancellationMsgActivityIDUnknown,
+		return handler.handlerFailDecision(
+			eventpb.DecisionTaskFailedCause_BadRequestCancelActivityAttributes, "",
 		)
-		return err
+
 	default:
 		return err
 	}

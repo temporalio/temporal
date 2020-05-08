@@ -1253,32 +1253,6 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCancelRequested
 	s.Nil(err)
 }
 
-func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelActivityTaskFailed() {
-	version := int64(1)
-	requestID := uuid.New()
-
-	execution := executionpb.WorkflowExecution{
-		WorkflowId: "some random workflow ID",
-		RunId:      testRunID,
-	}
-
-	now := time.Now()
-	evenType := eventpb.EventType_RequestCancelActivityTaskFailed
-	event := &eventpb.HistoryEvent{
-		Version:    version,
-		EventId:    130,
-		Timestamp:  now.UnixNano(),
-		EventType:  evenType,
-		Attributes: &eventpb.HistoryEvent_RequestCancelActivityTaskFailedEventAttributes{RequestCancelActivityTaskFailedEventAttributes: &eventpb.RequestCancelActivityTaskFailedEventAttributes{}},
-	}
-	s.mockUpdateVersion(event)
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
-	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
-
-	_, err := s.stateBuilder.applyEvents(testNamespaceID, requestID, execution, s.toHistory(event), nil, false)
-	s.Nil(err)
-}
-
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCanceled() {
 	version := int64(1)
 	requestID := uuid.New()
