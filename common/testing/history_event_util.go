@@ -476,7 +476,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.EventType = eventpb.EventType_ActivityTaskCancelRequested
 		historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{ActivityTaskCancelRequestedEventAttributes: &eventpb.ActivityTaskCancelRequestedEventAttributes{
 			DecisionTaskCompletedEventId: lastEvent.GetActivityTaskScheduledEventAttributes().DecisionTaskCompletedEventId,
-			ActivityId:                   lastEvent.GetActivityTaskScheduledEventAttributes().ActivityId,
+			ScheduledEventId:             lastEvent.GetEventId(),
 		}}
 		return historyEvent
 	})
@@ -493,22 +493,6 @@ func InitializeHistoryEventGenerator(
 			ScheduledEventId:             lastEvent.EventId,
 			StartedEventId:               lastEvent.EventId,
 			Identity:                     identity,
-		}}
-		return historyEvent
-	})
-	activityCancelRequestFail := NewHistoryEventVertex(eventpb.EventType_RequestCancelActivityTaskFailed.String())
-	activityCancelRequestFail.SetDataFunc(func(input ...interface{}) interface{} {
-		lastEvent := input[0].(*eventpb.HistoryEvent)
-		lastGeneratedEvent := input[1].(*eventpb.HistoryEvent)
-		eventID := lastGeneratedEvent.GetEventId() + 1
-		versionBump := input[2].(int64)
-		subVersion := input[3].(int64)
-		version := lastGeneratedEvent.GetVersion() + versionBump + subVersion
-		historyEvent := getDefaultHistoryEvent(eventID, version)
-		historyEvent.EventType = eventpb.EventType_RequestCancelActivityTaskFailed
-		historyEvent.Attributes = &eventpb.HistoryEvent_RequestCancelActivityTaskFailedEventAttributes{RequestCancelActivityTaskFailedEventAttributes: &eventpb.RequestCancelActivityTaskFailedEventAttributes{
-			ActivityId:                   uuid.New(),
-			DecisionTaskCompletedEventId: lastEvent.GetActivityTaskCancelRequestedEventAttributes().DecisionTaskCompletedEventId,
 		}}
 		return historyEvent
 	})
@@ -541,14 +525,10 @@ func InitializeHistoryEventGenerator(
 	activityCancelReqToCancel := NewHistoryEventEdge(activityCancelRequest, activityCancel)
 	activityCancelReqToCancel.SetCondition(hasPendingActivity)
 
-	activityCancelReqToCancelFail := NewHistoryEventEdge(activityCancelRequest, activityCancelRequestFail)
-	activityCancelRequestFailToDecisionSchedule := NewHistoryEventEdge(activityCancelRequestFail, decisionSchedule)
-	activityCancelRequestFailToDecisionSchedule.SetCondition(notPendingDecisionTask)
-
 	activityModel.AddEdge(decisionCompleteToATSchedule, activityScheduleToStart, activityStartToComplete,
 		activityStartToFail, activityStartToTimedOut, decisionCompleteToATSchedule, activityCompleteToDecisionSchedule,
 		activityFailToDecisionSchedule, activityTimedOutToDecisionSchedule, activityCancelReqToCancel,
-		activityCancelReqToCancelFail, activityCancelToDecisionSchedule, activityCancelRequestFailToDecisionSchedule)
+		activityCancelToDecisionSchedule)
 
 	// Setup timer model
 	timerModel := NewHistoryEventModel()
