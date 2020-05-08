@@ -193,6 +193,8 @@ type Config struct {
 	ReplicationTaskProcessorCleanupInterval          dynamicconfig.DurationPropertyFn
 	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFn
 
+	EnableCleanupReplicationTask dynamicconfig.BoolPropertyFn
+
 	// The following are used by consistent query
 	EnableConsistentQuery         dynamicconfig.BoolPropertyFn
 	EnableConsistentQueryByDomain dynamicconfig.BoolPropertyFnWithDomainFilter
@@ -207,7 +209,7 @@ type Config struct {
 	ReplicationEventsFromCurrentCluster dynamicconfig.BoolPropertyFnWithDomainFilter
 
 	EnableDropStuckTaskByDomainID dynamicconfig.BoolPropertyFnWithDomainIDFilter
-	SkipReapplicationByDomainId dynamicconfig.BoolPropertyFnWithDomainIDFilter
+	SkipReapplicationByDomainId   dynamicconfig.BoolPropertyFnWithDomainIDFilter
 }
 
 const (
@@ -331,6 +333,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ReplicationTaskProcessorNoTaskRetryWait:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
 		ReplicationTaskProcessorCleanupInterval:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorCleanupInterval, 1*time.Minute),
 		ReplicationTaskProcessorCleanupJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient, 0.15),
+		EnableCleanupReplicationTask:                     dc.GetBoolProperty(dynamicconfig.HistoryEnableCleanupReplicationTask, true),
 
 		EnableConsistentQuery:                 dc.GetBoolProperty(dynamicconfig.EnableConsistentQuery, true),
 		EnableConsistentQueryByDomain:         dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableConsistentQueryByDomain, false),
@@ -342,7 +345,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ReplicationEventsFromCurrentCluster: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.ReplicationEventsFromCurrentCluster, false),
 
 		EnableDropStuckTaskByDomainID: dc.GetBoolPropertyFnWithDomainIDFilter(dynamicconfig.EnableDropStuckTaskByDomainID, false),
-		SkipReapplicationByDomainId: dc.GetBoolPropertyFnWithDomainIDFilter(dynamicconfig.SkipReapplicationByDomainId, false),
+		SkipReapplicationByDomainId:   dc.GetBoolPropertyFnWithDomainIDFilter(dynamicconfig.SkipReapplicationByDomainId, false),
 	}
 
 	return cfg

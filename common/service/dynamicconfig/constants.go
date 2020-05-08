@@ -100,6 +100,9 @@ var keys = map[Key]string{
 	FrontendThrottledLogRPS:               "frontend.throttledLogRPS",
 	EnableClientVersionCheck:              "frontend.enableClientVersionCheck",
 	ValidSearchAttributes:                 "frontend.validSearchAttributes",
+	SendRawWorkflowHistory:                "frontend.sendRawWorkflowHistory",
+	FrontendEnableRPCReplication:          "frontend.enableRPCReplication",
+	FrontendEnableCleanupReplicationTask:  "frontend.enableCleanupReplicationTask",
 	SearchAttributesNumberOfKeysLimit:     "frontend.searchAttributesNumberOfKeysLimit",
 	SearchAttributesSizeOfValueLimit:      "frontend.searchAttributesSizeOfValueLimit",
 	SearchAttributesTotalSizeLimit:        "frontend.searchAttributesTotalSizeLimit",
@@ -225,7 +228,7 @@ var keys = map[Key]string{
 	MutableStateChecksumInvalidateBefore:                  "history.mutableStateChecksumInvalidateBefore",
 	ReplicationEventsFromCurrentCluster:                   "history.ReplicationEventsFromCurrentCluster",
 	EnableDropStuckTaskByDomainID:                         "history.DropStuckTaskByDomain",
-	SkipReapplicationByDomainId:                             "history.SkipReapplicationByDomainId",
+	SkipReapplicationByDomainId:                           "history.SkipReapplicationByDomainId",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -368,6 +371,12 @@ const (
 	FrontendMaxBadBinaries
 	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
 	ValidSearchAttributes
+	// SendRawWorkflowHistory is whether to enable raw history retrieving
+	SendRawWorkflowHistory
+	// FrontendEnableRPCReplication is a feature flag for rpc replication
+	FrontendEnableRPCReplication
+	// FrontendEnableCleanupReplicationTask is a feature flag for rpc replication cleanup
+	FrontendEnableCleanupReplicationTask
 	// SearchAttributesNumberOfKeysLimit is the limit of number of keys
 	SearchAttributesNumberOfKeysLimit
 	// SearchAttributesSizeOfValueLimit is the size limit of each value
@@ -677,6 +686,12 @@ const (
 	ReplicationTaskProcessorCleanupInterval
 	// ReplicationTaskProcessorCleanupJitterCoefficient is the jitter for cleanup timer
 	ReplicationTaskProcessorCleanupJitterCoefficient
+	// HistoryEnableRPCReplication is the feature flag for RPC replication
+	HistoryEnableRPCReplication
+	// HistoryEnableKafkaReplication is the migration flag for Kafka replication
+	HistoryEnableKafkaReplication
+	// HistoryEnableCleanupReplicationTask is the migration flag for Kafka replication
+	HistoryEnableCleanupReplicationTask
 	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
 	EnableConsistentQuery
 	// EnableConsistentQueryByDomain indicates if consistent query is enabled for a domain
