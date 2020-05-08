@@ -187,11 +187,11 @@ type Config struct {
 	ReplicationTaskFetcherAggregationInterval        dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherTimerJitterCoefficient     dynamicconfig.FloatPropertyFn
 	ReplicationTaskFetcherErrorRetryWait             dynamicconfig.DurationPropertyFn
-	ReplicationTaskProcessorErrorRetryWait           dynamicconfig.DurationPropertyFn
-	ReplicationTaskProcessorErrorRetryMaxAttempts    dynamicconfig.IntPropertyFn
-	ReplicationTaskProcessorNoTaskRetryWait          dynamicconfig.DurationPropertyFn
-	ReplicationTaskProcessorCleanupInterval          dynamicconfig.DurationPropertyFn
-	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFn
+	ReplicationTaskProcessorErrorRetryWait           dynamicconfig.DurationPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorErrorRetryMaxAttempts    dynamicconfig.IntPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorNoTaskRetryWait          dynamicconfig.DurationPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorCleanupInterval          dynamicconfig.DurationPropertyFnWithShardIDFilter
+	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFnWithShardIDFilter
 
 	EnableKafkaReplication       dynamicconfig.BoolPropertyFn
 	EnableRPCReplication         dynamicconfig.BoolPropertyFn
@@ -330,11 +330,11 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ReplicationTaskFetcherAggregationInterval:        dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
 		ReplicationTaskFetcherTimerJitterCoefficient:     dc.GetFloat64Property(dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient, 0.15),
 		ReplicationTaskFetcherErrorRetryWait:             dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherErrorRetryWait, time.Second),
-		ReplicationTaskProcessorErrorRetryWait:           dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryWait, time.Second),
-		ReplicationTaskProcessorErrorRetryMaxAttempts:    dc.GetIntProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts, 20),
-		ReplicationTaskProcessorNoTaskRetryWait:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
-		ReplicationTaskProcessorCleanupInterval:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorCleanupInterval, 1*time.Minute),
-		ReplicationTaskProcessorCleanupJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient, 0.15),
+		ReplicationTaskProcessorErrorRetryWait:           dc.GetDurationPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorErrorRetryWait, time.Second),
+		ReplicationTaskProcessorErrorRetryMaxAttempts:    dc.GetIntPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts, 20),
+		ReplicationTaskProcessorNoTaskRetryWait:          dc.GetDurationPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
+		ReplicationTaskProcessorCleanupInterval:          dc.GetDurationPropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorCleanupInterval, 1*time.Minute),
+		ReplicationTaskProcessorCleanupJitterCoefficient: dc.GetFloat64PropertyFilteredByShardID(dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient, 0.15),
 		EnableRPCReplication:                             dc.GetBoolProperty(dynamicconfig.HistoryEnableRPCReplication, true),
 		EnableKafkaReplication:                           dc.GetBoolProperty(dynamicconfig.HistoryEnableKafkaReplication, true),
 		EnableCleanupReplicationTask:                     dc.GetBoolProperty(dynamicconfig.HistoryEnableCleanupReplicationTask, true),
