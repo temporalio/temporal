@@ -24,13 +24,13 @@ package adminservice;
 
 option go_package = "github.com/temporalio/temporal/.gen/proto/adminservice";
 
-enum TaskType {
-        TaskTypeUnspecified = 0;
-	// Transfer is the task type for transfer task
-	Transfer = 2; // starting from 2 here to be consistent with the row type define for cassandra
-	// Timer is the task type for timer task
-	Timer = 3;
-	// Replication is the task type for replication task
-	Replication = 4;
+enum TaskCategory {
+    Unspecified = 0;
+    // Transfer is the task type for transfer task
+    Transfer = 2; // starting from 2 here to be consistent with the row type define for cassandra
+    // Timer is the task type for timer task
+    Timer = 3;
+    // Replication is the task type for replication task
+    Replication = 4;
 }
 

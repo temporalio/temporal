@@ -433,7 +433,7 @@ message CloseShardResponse {
 
 message RemoveTaskRequest {
     int32 shardId = 1;
-    adminservice.TaskType type = 2;
+    adminservice.TaskCategory category = 2;
     int64 taskId = 3;
     int64 visibilityTimestamp = 4;
 }

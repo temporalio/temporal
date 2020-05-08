@@ -694,17 +694,17 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 		return nil, err
 	}
 
-	switch request.GetType() {
-	case adminservicegenproto.TaskType_Transfer:
+	switch request.GetCategory() {
+	case adminservicegenproto.TaskCategory_Transfer:
 		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
 			TaskID: request.GetTaskId(),
 		})
-	case adminservicegenproto.TaskType_Timer:
+	case adminservicegenproto.TaskCategory_Timer:
 		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
 			VisibilityTimestamp: time.Unix(0, request.GetVisibilityTimestamp()),
 			TaskID:              request.GetTaskId(),
 		})
-	case adminservicegenproto.TaskType_Replication:
+	case adminservicegenproto.TaskCategory_Replication:
 		err = executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
 			TaskID: request.GetTaskId(),
 		})
