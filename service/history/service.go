@@ -207,6 +207,7 @@ type Config struct {
 	ReplicationEventsFromCurrentCluster dynamicconfig.BoolPropertyFnWithDomainFilter
 
 	EnableDropStuckTaskByDomainID dynamicconfig.BoolPropertyFnWithDomainIDFilter
+	SkipReapplicationByDomainId dynamicconfig.BoolPropertyFnWithDomainIDFilter
 }
 
 const (
@@ -341,6 +342,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ReplicationEventsFromCurrentCluster: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.ReplicationEventsFromCurrentCluster, false),
 
 		EnableDropStuckTaskByDomainID: dc.GetBoolPropertyFnWithDomainIDFilter(dynamicconfig.EnableDropStuckTaskByDomainID, false),
+		SkipReapplicationByDomainId: dc.GetBoolPropertyFnWithDomainIDFilter(dynamicconfig.SkipReapplicationByDomainId, false),
 	}
 
 	return cfg

@@ -225,6 +225,7 @@ var keys = map[Key]string{
 	MutableStateChecksumInvalidateBefore:                  "history.mutableStateChecksumInvalidateBefore",
 	ReplicationEventsFromCurrentCluster:                   "history.ReplicationEventsFromCurrentCluster",
 	EnableDropStuckTaskByDomainID:                         "history.DropStuckTaskByDomain",
+	SkipReapplicationByDomainId:                             "history.SkipReapplicationByDomainId",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
@@ -588,6 +589,8 @@ const (
 
 	// EnableDropStuckTaskByDomainID is whether stuck timer/transfer task should be dropped for a domain
 	EnableDropStuckTaskByDomainID
+	// SkipReapplicationByDomainId is whether skipping a event re-application for a domain
+	SkipReapplicationByDomainId
 
 	// key for worker
 
