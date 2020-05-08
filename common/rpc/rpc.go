@@ -128,7 +128,6 @@ func (d *RPCFactory) GetGRPCListener() net.Listener {
 		var err error
 		d.grpcListener, err = net.Listen("tcp", hostAddress)
 
-
 		if err != nil {
 			d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
 		}
@@ -199,7 +198,7 @@ func (d *RPCFactory) CreateFrontendGRPCConnection(hostName string) *grpc.ClientC
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
-		tlsClientConfig, err =  d.tlsFactory.GenerateFrontendClientConfig()
+		tlsClientConfig, err = d.tlsFactory.GenerateFrontendClientConfig()
 		if err != nil {
 			d.logger.Fatal("Failed to create tls config for grpc connection", tag.Error(err))
 		}
@@ -213,7 +212,7 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
-		tlsClientConfig, err =  d.tlsFactory.GenerateInternodeClientConfig()
+		tlsClientConfig, err = d.tlsFactory.GenerateInternodeClientConfig()
 		if err != nil {
 			d.logger.Fatal("Failed to create tls config for grpc connection", tag.Error(err))
 		}

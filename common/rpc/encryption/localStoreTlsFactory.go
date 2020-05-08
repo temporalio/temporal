@@ -34,23 +34,23 @@ import (
 type localStoreTlsFactory struct {
 	sync.RWMutex
 
-	settings              *config.RootTLS
+	settings *config.RootTLS
 
 	internodeCertProvider CertProvider
 	frontendCertProvider  CertProvider
 
 	internodeServerConfig *tls.Config
 	internodeClientConfig *tls.Config
-	frontendServerConfig *tls.Config
-	frontendClientConfig *tls.Config
+	frontendServerConfig  *tls.Config
+	frontendClientConfig  *tls.Config
 }
 
 func NewLocalStoreTlsFactory(tlsConfig *config.RootTLS) (TLSFactory, error) {
 	return &localStoreTlsFactory{
 		internodeCertProvider: &localStoreCertProvider{tlsSettings: &tlsConfig.Internode},
-		frontendCertProvider: &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
-		RWMutex:  sync.RWMutex{},
-		settings: tlsConfig,
+		frontendCertProvider:  &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
+		RWMutex:               sync.RWMutex{},
+		settings:              tlsConfig,
 	}, nil
 }
 
@@ -153,6 +153,6 @@ func generateClientTLSConfig(localProvider CertProvider, remoteProvider CertProv
 
 	return &tls.Config{
 		Certificates: clientCerts,
-		RootCAs: serverCa,
+		RootCAs:      serverCa,
 	}, nil
 }

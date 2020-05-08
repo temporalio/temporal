@@ -57,12 +57,12 @@ func (s *HelloServer) SayHello(ctx context.Context, in *helloworld.HelloRequest)
 
 var (
 	rpcTestCfgDefault = &config.RPC{
-		GRPCPort:        7500,
-		MembershipPort:  7600,
-		BindOnIP:        "127.0.0.1",
+		GRPCPort:       7500,
+		MembershipPort: 7600,
+		BindOnIP:       "127.0.0.1",
 	}
 	serverCfgInsecure = &config.Global{
-		Membership:    config.Membership{
+		Membership: config.Membership{
 			Name:             "its-a-me-mario",
 			MaxJoinDuration:  5,
 			BroadcastAddress: "127.0.0.1",
@@ -73,7 +73,7 @@ var (
 func startHelloWorldServer(s suite.Suite, factory *TestFactory) *grpc.Server {
 	var opts []grpc.ServerOption
 	var err error
-	if factory.serverUsage ==	Internode {
+	if factory.serverUsage == Internode {
 		opts, err = factory.GetInternodeGRPCServerOptions()
 	} else {
 		opts, err = factory.GetFrontendGRPCServerOptions()
@@ -126,6 +126,8 @@ func dialHello(s suite.Suite, hostport string, clientFactory *TestFactory, serve
 		s.NotNil(reply)
 		s.True(strings.Contains(reply.Message, request.Name))
 	}
+
+	_ = clientConn.Close()
 
 	return err
 }

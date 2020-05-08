@@ -136,7 +136,7 @@ func buildCAPool(caFiles []string) (*x509.CertPool, error) {
 	return caPool, nil
 }
 
-func NewLocalStoreCertProvider(settings *config.GroupTLS) (*localStoreCertProvider) {
+func NewLocalStoreCertProvider(settings *config.GroupTLS) *localStoreCertProvider {
 	return &localStoreCertProvider{
 		RWMutex:     sync.RWMutex{},
 		tlsSettings: settings,

@@ -43,7 +43,7 @@ type localStoreRPCSuite struct {
 	*require.Assertions
 	suite.Suite
 
-	logger                       log.Logger
+	logger log.Logger
 
 	insecureRPCFactory           *TestFactory
 	internodeMutualTLSRPCFactory *TestFactory
@@ -51,14 +51,14 @@ type localStoreRPCSuite struct {
 	frontendMutualTLSRPCFactory  *TestFactory
 	frontendServerTLSRPCFactory  *TestFactory
 
-	internodeCertDir             string
-	frontendCertDir              string
+	internodeCertDir string
+	frontendCertDir  string
 }
 
 type CertChain struct {
 	CertPubFile string
-	CertKeyFile  string
-	CaPubFile string
+	CertKeyFile string
+	CaPubFile   string
 }
 
 func TestLocalStoreTLSSuite(t *testing.T) {
@@ -107,10 +107,10 @@ func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendCha
 		TLS: config.RootTLS{
 			Frontend: config.GroupTLS{
 				Server: config.ServerTLS{
-					CertFile:          frontendChain.CertPubFile,
-					KeyFile:           frontendChain.CertKeyFile,
+					CertFile: frontendChain.CertPubFile,
+					KeyFile:  frontendChain.CertKeyFile,
 				},
-				Client:   config.ClientTLS{RootCAFiles: []string{frontendChain.CaPubFile}},
+				Client: config.ClientTLS{RootCAFiles: []string{frontendChain.CaPubFile}},
 			},
 		},
 	}
@@ -129,7 +129,7 @@ func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendCha
 					ClientCAFiles:     []string{internodeChain.CaPubFile},
 					RequireClientAuth: true,
 				},
-				Client:  config.ClientTLS{
+				Client: config.ClientTLS{
 					RootCAFiles: []string{frontendChain.CaPubFile},
 				},
 			},
@@ -158,10 +158,10 @@ func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendCh
 		TLS: config.RootTLS{
 			Internode: config.GroupTLS{
 				Server: config.ServerTLS{
-					CertFile:          internodeChain.CertPubFile,
-					KeyFile:           internodeChain.CertKeyFile,
+					CertFile: internodeChain.CertPubFile,
+					KeyFile:  internodeChain.CertKeyFile,
 				},
-				Client:        config.ClientTLS{
+				Client: config.ClientTLS{
 					RootCAFiles: []string{internodeChain.CaPubFile},
 				},
 			},
@@ -195,7 +195,7 @@ func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendCh
 				Server: config.ServerTLS{
 					RequireClientAuth: true,
 				},
-				Client:            config.ClientTLS{
+				Client: config.ClientTLS{
 					RootCAFiles: []string{frontendChain.CaPubFile},
 				},
 			},
@@ -239,7 +239,7 @@ func (s *localStoreRPCSuite) GenerateTestChain(tempDir string) CertChain {
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(privKey),
 	})
-	return CertChain{CaPubFile: caPubFile, CertPubFile: certPubFile, CertKeyFile:certPrivFile}
+	return CertChain{CaPubFile: caPubFile, CertPubFile: certPubFile, CertKeyFile: certPrivFile}
 }
 
 func (s *localStoreRPCSuite) EncodePemToFile(file string, block *pem.Block) {
@@ -289,5 +289,3 @@ func (s *localStoreRPCSuite) TestMutualTLSButClientNoCert() {
 func (s *localStoreRPCSuite) TestServerTLSButClientAddsCert() {
 	runHelloWorldTest(s.Suite, s.internodeServerTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
 }
-
-

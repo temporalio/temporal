@@ -29,7 +29,6 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 )
 
-
 type (
 	// TLSFactory creates certificates based on Encryption internodeSettings
 	TLSFactory interface {
@@ -41,9 +40,9 @@ type (
 
 	CertProvider interface {
 		FetchServerCertificate() (*tls.Certificate, error)
-		FetchClientCAs () (*x509.CertPool, error)
+		FetchClientCAs() (*x509.CertPool, error)
 		FetchServerRootCAsForClient() (*x509.CertPool, error)
-		GetSettings() (*config.GroupTLS)
+		GetSettings() *config.GroupTLS
 	}
 
 	// GRPCDialer creates gRPC connection.
@@ -58,7 +57,7 @@ const (
 )
 
 func NewTLSFactoryFromConfig(encryptionSettings *config.RootTLS, hostname string) (TLSFactory, error) {
-	if encryptionSettings == nil /*|| encryptionSettings.Provider == "" */{
+	if encryptionSettings == nil /*|| encryptionSettings.Provider == "" */ {
 		return nil, nil
 	}
 
@@ -71,6 +70,3 @@ func NewTLSFactoryFromConfig(encryptionSettings *config.RootTLS, hostname string
 
 	//return nil, fmt.Errorf("unknown provider: %v", encryptionSettings.Provider)
 }
-
-
-

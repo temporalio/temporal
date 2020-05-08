@@ -20,7 +20,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-
 package encryption
 
 import (
@@ -37,7 +36,7 @@ import (
 
 // GenerateSelfSignedUseEverywhereX509 generates a TLS serverCert that is self-signed
 func GenerateSelfSignedUseEverywhereX509(commonName string) (*tls.Certificate, error) {
-	return GenerateSelfSignedX509CA(commonName, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth,})
+	return GenerateSelfSignedX509CA(commonName, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
 }
 
 // GenerateSelfSignedUseEverywhereX509 generates a TLS serverCert that is self-signed
@@ -96,8 +95,8 @@ func GenerateServerX509UsingCA(commonName string, ca *tls.Certificate) (*tls.Cer
 		NotBefore:             now.Add(-time.Minute),
 		NotAfter:              now.AddDate(3, 0, 0), // 3 year expiry
 		BasicConstraintsValid: true,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth,},
-		KeyUsage: x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		KeyUsage:              x509.KeyUsageDigitalSignature,
 	}
 
 	if ip := net.ParseIP(commonName).To4(); ip != nil {
