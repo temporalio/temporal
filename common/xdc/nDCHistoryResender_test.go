@@ -116,6 +116,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 			return s.mockHistoryClient.ReplicateEventsV2(ctx, request)
 		},
 		persistence.NewPayloadSerializer(),
+		nil,
 		s.logger,
 	)
 }
@@ -269,7 +270,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 	}
 
 	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil).Times(1)
-	err := s.rereplicator.sendReplicationRawRequest(request)
+	err := s.rereplicator.sendReplicationRawRequest(context.Background(), request)
 	s.Nil(err)
 }
 
@@ -299,7 +300,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 	}
 
 	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(retryErr).Times(1)
-	err := s.rereplicator.sendReplicationRawRequest(request)
+	err := s.rereplicator.sendReplicationRawRequest(context.Background(), request)
 	s.Equal(retryErr, err)
 }
 
@@ -336,6 +337,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 	}).Return(response, nil).Times(1)
 
 	out, err := s.rereplicator.getHistory(
+		context.Background(),
 		s.domainID,
 		workflowID,
 		runID,

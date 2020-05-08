@@ -114,6 +114,7 @@ func newTransferQueueProcessor(
 					return historyService.ReplicateEventsV2(ctx, request)
 				},
 				shard.GetService().GetPayloadSerializer(),
+				nil,
 				logger,
 			)
 			standbyTaskProcessors[clusterName] = newTransferQueueStandbyProcessor(

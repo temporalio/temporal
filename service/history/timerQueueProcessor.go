@@ -111,6 +111,7 @@ func newTimerQueueProcessor(
 					return historyService.ReplicateEventsV2(ctx, request)
 				},
 				shard.GetService().GetPayloadSerializer(),
+				nil,
 				logger,
 			)
 			standbyTimerProcessors[clusterName] = newTimerQueueStandbyProcessor(
