@@ -27,7 +27,7 @@
 package history
 
 import (
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/convert"
@@ -44,7 +44,7 @@ type (
 		reset(
 			prevRunID string,
 			prevLastWriteVersion int64,
-			prevState executiongenproto.WorkflowExecutionState,
+			prevState executiongenpb.WorkflowExecutionState,
 			requestID string,
 			replayEventID int64,
 			info *persistence.WorkflowExecutionInfo,
@@ -76,7 +76,7 @@ func newConflictResolver(shard ShardContext, context workflowExecutionContext, h
 func (r *conflictResolverImpl) reset(
 	prevRunID string,
 	prevLastWriteVersion int64,
-	prevState executiongenproto.WorkflowExecutionState,
+	prevState executiongenpb.WorkflowExecutionState,
 	requestID string,
 	replayEventID int64,
 	info *persistence.WorkflowExecutionInfo,
@@ -176,7 +176,7 @@ func (r *conflictResolverImpl) reset(
 		resetMutableStateBuilder.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{})
 	}
 
-	r.logger.Info("All events applied for executiongenproto.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
+	r.logger.Info("All events applied for executiongenpb.", tag.WorkflowResetNextEventID(resetMutableStateBuilder.GetNextEventID()))
 	r.context.setHistorySize(totalSize)
 	if err := r.context.conflictResolveWorkflowExecution(
 		startTime,

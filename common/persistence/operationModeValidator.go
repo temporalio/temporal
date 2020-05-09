@@ -27,7 +27,7 @@ package persistence
 import (
 	"fmt"
 
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -51,8 +51,8 @@ func ValidateCreateWorkflowModeState(
 	case CreateWorkflowModeBrandNew,
 		CreateWorkflowModeWorkflowIDReuse,
 		CreateWorkflowModeContinueAsNew:
-		if workflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
-			workflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed {
+		if workflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
+			workflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 			return newInvalidCreateWorkflowMode(
 				mode,
 				workflowState,
@@ -61,9 +61,9 @@ func ValidateCreateWorkflowModeState(
 		return nil
 
 	case CreateWorkflowModeZombie:
-		if workflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-			workflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running ||
-			workflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed {
+		if workflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+			workflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running ||
+			workflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 			return newInvalidCreateWorkflowMode(
 				mode,
 				workflowState,
@@ -87,7 +87,7 @@ func ValidateUpdateWorkflowModeState(
 	if err := checkWorkflowState(currentWorkflowState); err != nil {
 		return err
 	}
-	var newWorkflowState *executiongenproto.WorkflowExecutionState
+	var newWorkflowState *executiongenpb.WorkflowExecutionState
 	if newWorkflowSnapshot != nil {
 		newWorkflowState = &newWorkflowSnapshot.ExecutionInfo.State
 		if err := checkWorkflowState(*newWorkflowState); err != nil {
@@ -106,17 +106,17 @@ func ValidateUpdateWorkflowModeState(
 
 		// case 1
 		if newWorkflowState == nil {
-			if currentWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie {
+			if currentWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie {
 				return newInvalidUpdateWorkflowMode(mode, currentWorkflowState)
 			}
 			return nil
 		}
 
 		// case 2
-		if currentWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-			currentWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running ||
-			*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
-			*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed {
+		if currentWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+			currentWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running ||
+			*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
+			*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 			return newInvalidUpdateWorkflowWithNewMode(mode, currentWorkflowState, *newWorkflowState)
 		}
 		return nil
@@ -131,19 +131,19 @@ func ValidateUpdateWorkflowModeState(
 
 		// case 1
 		if newWorkflowState == nil {
-			if currentWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-				currentWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running {
+			if currentWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+				currentWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running {
 				return newInvalidUpdateWorkflowMode(mode, currentWorkflowState)
 			}
 			return nil
 		}
 
 		// case 2
-		if currentWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-			currentWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running ||
-			*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-			*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running ||
-			*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed {
+		if currentWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+			currentWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running ||
+			*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+			*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running ||
+			*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 			return newInvalidUpdateWorkflowWithNewMode(
 				mode,
 				currentWorkflowState,
@@ -169,14 +169,14 @@ func ValidateConflictResolveWorkflowModeState(
 	if err := checkWorkflowState(resetWorkflowState); err != nil {
 		return err
 	}
-	var newWorkflowState *executiongenproto.WorkflowExecutionState
+	var newWorkflowState *executiongenpb.WorkflowExecutionState
 	if newWorkflowSnapshot != nil {
 		newWorkflowState = &newWorkflowSnapshot.ExecutionInfo.State
 		if err := checkWorkflowState(*newWorkflowState); err != nil {
 			return err
 		}
 	}
-	var currentWorkflowState *executiongenproto.WorkflowExecutionState
+	var currentWorkflowState *executiongenpb.WorkflowExecutionState
 	if currentWorkflowMutation != nil {
 		currentWorkflowState = &currentWorkflowMutation.ExecutionInfo.State
 		if err := checkWorkflowState(*currentWorkflowState); err != nil {
@@ -209,7 +209,7 @@ func ValidateConflictResolveWorkflowModeState(
 		if currentWorkflowState == nil {
 			// case 1
 			if newWorkflowState == nil {
-				if resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie {
+				if resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie {
 					return newInvalidConflictResolveWorkflowMode(
 						mode,
 						resetWorkflowState,
@@ -219,11 +219,11 @@ func ValidateConflictResolveWorkflowModeState(
 			}
 
 			// case 2
-			if resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-				resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running ||
-				resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
-				*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
-				*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed {
+			if resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+				resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running ||
+				resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
+				*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
+				*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 				return newInvalidConflictResolveWorkflowWithNewMode(
 					mode,
 					resetWorkflowState,
@@ -236,9 +236,9 @@ func ValidateConflictResolveWorkflowModeState(
 		// case 3 & 4
 		// case 3
 		if newWorkflowState == nil {
-			if *currentWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-				*currentWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running ||
-				resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie {
+			if *currentWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+				*currentWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running ||
+				resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie {
 				return newInvalidConflictResolveWorkflowWithCurrentMode(
 					mode,
 					resetWorkflowState,
@@ -249,13 +249,13 @@ func ValidateConflictResolveWorkflowModeState(
 		}
 
 		// case 4
-		if *currentWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-			*currentWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running ||
-			resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-			resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running ||
-			resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
-			*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
-			*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed {
+		if *currentWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+			*currentWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running ||
+			resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+			resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running ||
+			resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
+			*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
+			*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 			return newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
 				mode,
 				resetWorkflowState,
@@ -281,8 +281,8 @@ func ValidateConflictResolveWorkflowModeState(
 
 		// case 1
 		if newWorkflowState == nil {
-			if resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-				resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running {
+			if resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+				resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running {
 				return newInvalidConflictResolveWorkflowMode(
 					mode,
 					resetWorkflowState,
@@ -292,12 +292,12 @@ func ValidateConflictResolveWorkflowModeState(
 		}
 
 		// case 2
-		if resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-			resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running ||
-			resetWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
-			*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created ||
-			*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running ||
-			*newWorkflowState == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed {
+		if resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+			resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running ||
+			resetWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie ||
+			*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created ||
+			*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running ||
+			*newWorkflowState == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 			return newInvalidConflictResolveWorkflowWithNewMode(
 				mode,
 				resetWorkflowState,
@@ -311,13 +311,13 @@ func ValidateConflictResolveWorkflowModeState(
 	}
 }
 
-func checkWorkflowState(state executiongenproto.WorkflowExecutionState) error {
+func checkWorkflowState(state executiongenpb.WorkflowExecutionState) error {
 	switch state {
-	case executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
-		executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running,
-		executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Zombie,
-		executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed,
-		executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Corrupted:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Corrupted:
 		return nil
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
@@ -326,7 +326,7 @@ func checkWorkflowState(state executiongenproto.WorkflowExecutionState) error {
 
 func newInvalidCreateWorkflowMode(
 	mode CreateWorkflowMode,
-	workflowState executiongenproto.WorkflowExecutionState,
+	workflowState executiongenpb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow create mode %v, state: %v",
@@ -338,7 +338,7 @@ func newInvalidCreateWorkflowMode(
 
 func newInvalidUpdateWorkflowMode(
 	mode UpdateWorkflowMode,
-	currentWorkflowState executiongenproto.WorkflowExecutionState,
+	currentWorkflowState executiongenpb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow update mode %v, state: %v",
@@ -350,8 +350,8 @@ func newInvalidUpdateWorkflowMode(
 
 func newInvalidUpdateWorkflowWithNewMode(
 	mode UpdateWorkflowMode,
-	currentWorkflowState executiongenproto.WorkflowExecutionState,
-	newWorkflowState executiongenproto.WorkflowExecutionState,
+	currentWorkflowState executiongenpb.WorkflowExecutionState,
+	newWorkflowState executiongenpb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow update mode %v, current state: %v, new state: %v",
@@ -364,7 +364,7 @@ func newInvalidUpdateWorkflowWithNewMode(
 
 func newInvalidConflictResolveWorkflowMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState executiongenproto.WorkflowExecutionState,
+	resetWorkflowState executiongenpb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v",
@@ -376,8 +376,8 @@ func newInvalidConflictResolveWorkflowMode(
 
 func newInvalidConflictResolveWorkflowWithNewMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState executiongenproto.WorkflowExecutionState,
-	newWorkflowState executiongenproto.WorkflowExecutionState,
+	resetWorkflowState executiongenpb.WorkflowExecutionState,
+	newWorkflowState executiongenpb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v",
@@ -390,8 +390,8 @@ func newInvalidConflictResolveWorkflowWithNewMode(
 
 func newInvalidConflictResolveWorkflowWithCurrentMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState executiongenproto.WorkflowExecutionState,
-	currentWorkflowState executiongenproto.WorkflowExecutionState,
+	resetWorkflowState executiongenpb.WorkflowExecutionState,
+	currentWorkflowState executiongenpb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, current state: %v",
@@ -404,9 +404,9 @@ func newInvalidConflictResolveWorkflowWithCurrentMode(
 
 func newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowState executiongenproto.WorkflowExecutionState,
-	newWorkflowState executiongenproto.WorkflowExecutionState,
-	currentWorkflowState executiongenproto.WorkflowExecutionState,
+	resetWorkflowState executiongenpb.WorkflowExecutionState,
+	newWorkflowState executiongenpb.WorkflowExecutionState,
+	currentWorkflowState executiongenpb.WorkflowExecutionState,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v, current state: %v",

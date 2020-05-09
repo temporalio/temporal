@@ -37,7 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -223,7 +223,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
@@ -247,7 +247,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
@@ -769,7 +769,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
-	compareCurrExeInfo.State = executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed
+	compareCurrExeInfo.State = executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed
 	compareCurrExeInfo.Status = executionpb.WorkflowExecutionStatus_Terminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.CompletionEventBatchID = 1
@@ -905,7 +905,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
@@ -929,7 +929,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
@@ -1489,7 +1489,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -1522,7 +1522,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
@@ -2051,7 +2051,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
-	compareCurrExeInfo.State = executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed
+	compareCurrExeInfo.State = executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed
 	compareCurrExeInfo.Status = executionpb.WorkflowExecutionStatus_Terminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.LastFirstEventID = 1
@@ -2192,7 +2192,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -2225,7 +2225,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
@@ -2789,7 +2789,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -2819,7 +2819,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		TaskList:           taskListName,
 		RunID:              currRunID,
 		NextEventID:        common.FirstEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
@@ -3467,7 +3467,7 @@ func (s *resetorSuite) TestApplyReset() {
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 	}
 
 	forkRepState := &persistence.ReplicationState{
@@ -3497,7 +3497,7 @@ func (s *resetorSuite) TestApplyReset() {
 		TaskList:           taskListName,
 		RunID:              currRunID,
 		NextEventID:        common.FirstEventID,
-		State:              executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,

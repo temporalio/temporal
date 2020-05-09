@@ -622,6 +622,51 @@ func (e *mutableStateBuilder) UpdateReplicationStateLastEventID(
 	}
 }
 
+func (e *mutableStateBuilder) scanForBufferedActivityCompletion(
+	scheduleID int64,
+) *eventpb.HistoryEvent {
+	var completionEvent *eventpb.HistoryEvent
+
+	completionEvent = scanForBufferedActivityCompletion(scheduleID, e.bufferedEvents)
+	if completionEvent != nil {
+		return completionEvent
+	}
+
+	return scanForBufferedActivityCompletion(scheduleID, e.updateBufferedEvents)
+}
+
+func scanForBufferedActivityCompletion(
+	scheduleID int64,
+	events []*eventpb.HistoryEvent,
+) *eventpb.HistoryEvent {
+	for _, event := range events {
+		switch event.GetEventType() {
+		case eventpb.EventType_ActivityTaskCompleted:
+			if event.GetActivityTaskCompletedEventAttributes().GetScheduledEventId() == scheduleID {
+				return event
+			}
+
+		case eventpb.EventType_ActivityTaskFailed:
+			if event.GetActivityTaskFailedEventAttributes().GetScheduledEventId() == scheduleID {
+				return event
+			}
+
+		case eventpb.EventType_ActivityTaskTimedOut:
+			if event.GetActivityTaskTimedOutEventAttributes().GetScheduledEventId() == scheduleID {
+				return event
+			}
+
+		case eventpb.EventType_ActivityTaskCanceled:
+			if event.GetActivityTaskCanceledEventAttributes().GetScheduledEventId() == scheduleID {
+				return event
+			}
+		}
+	}
+
+	// Completion event not found
+	return nil
+}
+
 func (e *mutableStateBuilder) checkAndClearTimerFiredEvent(
 	timerID string,
 ) *eventpb.HistoryEvent {
@@ -2396,7 +2441,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskTimedOutEvent(
 
 func (e *mutableStateBuilder) AddActivityTaskCancelRequestedEvent(
 	decisionCompletedEventID int64,
-	activityID string,
+	scheduleID int64,
 	identity string,
 ) (*eventpb.HistoryEvent, *persistence.ActivityInfo, error) {
 
@@ -2405,21 +2450,34 @@ func (e *mutableStateBuilder) AddActivityTaskCancelRequestedEvent(
 		return nil, nil, err
 	}
 
-	// we need to add the cancel request event even if activity not in mutable state
-	// if activity not in mutable state or already cancel requested,
-	// we do not need to call the replication function
-	actCancelReqEvent := e.hBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEventID, activityID)
+	ai, ok := e.GetActivityInfo(scheduleID)
+	if !ok {
+		// It is possible both started and completed events are buffered for this activity
+		completedEvent := e.scanForBufferedActivityCompletion(scheduleID)
+		if completedEvent == nil {
+			e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
+				tag.WorkflowEventID(e.GetNextEventID()),
+				tag.ErrorTypeInvalidHistoryAction,
+				tag.Bool(ok),
+				tag.WorkflowScheduleID(scheduleID))
 
-	ai, ok := e.GetActivityByActivityID(activityID)
-	if !ok || ai.CancelRequested {
+			return nil, nil, e.createCallerError(opTag)
+		}
+	}
+
+	// Check for duplicate cancellation
+	if ok && ai.CancelRequested {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
-			tag.WorkflowActivityID(activityID))
+			tag.WorkflowScheduleID(scheduleID))
 
 		return nil, nil, e.createCallerError(opTag)
 	}
+
+	// At this point we know this is a valid activity cancellation request
+	actCancelReqEvent := e.hBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEventID, scheduleID)
 
 	if err := e.ReplicateActivityTaskCancelRequestedEvent(actCancelReqEvent); err != nil {
 		return nil, nil, err
@@ -2433,11 +2491,13 @@ func (e *mutableStateBuilder) ReplicateActivityTaskCancelRequestedEvent(
 ) error {
 
 	attributes := event.GetActivityTaskCancelRequestedEventAttributes()
-	activityID := attributes.GetActivityId()
-	ai, ok := e.GetActivityByActivityID(activityID)
+	scheduleID := attributes.GetScheduledEventId()
+	ai, ok := e.GetActivityInfo(scheduleID)
 	if !ok {
-		// On active side, if the ActivityTaskCancelRequested is invalid, it will created a RequestCancelActivityTaskFailed
-		// Passive will rely on active side logic
+		// This will only be called on active cluster if activity info is found in mutable state
+		// Passive side logic should always have activity info in mutable state if this is called, as the only
+		// scenario where active side logic could have this event without activity info in mutable state is when
+		// activity start and complete events are buffered.
 		return nil
 	}
 
@@ -2451,20 +2511,6 @@ func (e *mutableStateBuilder) ReplicateActivityTaskCancelRequestedEvent(
 	ai.CancelRequestID = event.GetEventId()
 	e.updateActivityInfos[ai] = struct{}{}
 	return nil
-}
-
-func (e *mutableStateBuilder) AddRequestCancelActivityTaskFailedEvent(
-	decisionCompletedEventID int64,
-	activityID string,
-	cause string,
-) (*eventpb.HistoryEvent, error) {
-
-	opTag := tag.WorkflowActionActivityTaskCancelFailed
-	if err := e.checkMutability(opTag); err != nil {
-		return nil, err
-	}
-
-	return e.hBuilder.AddRequestCancelActivityTaskFailedEvent(decisionCompletedEventID, activityID, cause), nil
 }
 
 func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(

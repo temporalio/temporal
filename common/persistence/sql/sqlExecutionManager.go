@@ -34,7 +34,7 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -160,11 +160,11 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 						workflowID, row.LastWriteVersion, request.PreviousLastWriteVersion),
 				}
 			}
-			if row.State != executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed {
+			if row.State != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 				return nil, &p.CurrentWorkflowConditionFailedError{
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
 						"State: %v, Expected: %v",
-						workflowID, row.State, executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed),
+						workflowID, row.State, executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed),
 				}
 			}
 			runIDStr := row.RunID.String()

@@ -32,7 +32,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/collection"
@@ -52,7 +52,7 @@ type (
 		previousStartedEventID int64
 		timestamp              time.Time
 		currentBranchToken     []byte
-		workflowState          executiongenproto.WorkflowExecutionState
+		workflowState          executiongenpb.WorkflowExecutionState
 		workflowStatus         executionpb.WorkflowExecutionStatus
 	}
 
@@ -85,7 +85,7 @@ func newHistoryEventNotification(
 	nextEventID int64,
 	previousStartedEventID int64,
 	currentBranchToken []byte,
-	workflowState executiongenproto.WorkflowExecutionState,
+	workflowState executiongenpb.WorkflowExecutionState,
 	workflowStatus executionpb.WorkflowExecutionStatus,
 ) *historyEventNotification {
 

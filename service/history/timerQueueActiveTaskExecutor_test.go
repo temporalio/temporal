@@ -42,7 +42,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
@@ -1314,7 +1314,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 	s.NoError(err)
 
 	state, status := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetWorkflowStateStatus()
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed, state)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed, state)
 	s.EqualValues(executionpb.WorkflowExecutionStatus_ContinuedAsNew, status)
 }
 
@@ -1373,7 +1373,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cr
 	s.NoError(err)
 
 	state, status := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetWorkflowStateStatus()
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed, state)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed, state)
 	s.EqualValues(executionpb.WorkflowExecutionStatus_ContinuedAsNew, status)
 }
 

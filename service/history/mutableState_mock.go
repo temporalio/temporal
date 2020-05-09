@@ -33,7 +33,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 	persistenceblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	cache "github.com/temporalio/temporal/common/cache"
@@ -70,7 +70,7 @@ func (m *MockmutableState) EXPECT() *MockmutableStateMockRecorder {
 }
 
 // AddActivityTaskCancelRequestedEvent mocks base method.
-func (m *MockmutableState) AddActivityTaskCancelRequestedEvent(arg0 int64, arg1, arg2 string) (*event.HistoryEvent, *persistence.ActivityInfo, error) {
+func (m *MockmutableState) AddActivityTaskCancelRequestedEvent(arg0, arg1 int64, arg2 string) (*event.HistoryEvent, *persistence.ActivityInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTaskCancelRequestedEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -490,21 +490,6 @@ func (m *MockmutableState) AddRecordMarkerEvent(arg0 int64, arg1 *decision.Recor
 func (mr *MockmutableStateMockRecorder) AddRecordMarkerEvent(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddRecordMarkerEvent", reflect.TypeOf((*MockmutableState)(nil).AddRecordMarkerEvent), arg0, arg1)
-}
-
-// AddRequestCancelActivityTaskFailedEvent mocks base method.
-func (m *MockmutableState) AddRequestCancelActivityTaskFailedEvent(arg0 int64, arg1, arg2 string) (*event.HistoryEvent, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddRequestCancelActivityTaskFailedEvent", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*event.HistoryEvent)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AddRequestCancelActivityTaskFailedEvent indicates an expected call of AddRequestCancelActivityTaskFailedEvent.
-func (mr *MockmutableStateMockRecorder) AddRequestCancelActivityTaskFailedEvent(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddRequestCancelActivityTaskFailedEvent", reflect.TypeOf((*MockmutableState)(nil).AddRequestCancelActivityTaskFailedEvent), arg0, arg1, arg2)
 }
 
 // AddRequestCancelExternalWorkflowExecutionFailedEvent mocks base method.
@@ -1406,10 +1391,10 @@ func (mr *MockmutableStateMockRecorder) GetWorkflowType() *gomock.Call {
 }
 
 // GetWorkflowStateStatus mocks base method.
-func (m *MockmutableState) GetWorkflowStateStatus() (executiongenproto.WorkflowExecutionState, execution.WorkflowExecutionStatus) {
+func (m *MockmutableState) GetWorkflowStateStatus() (executiongenpb.WorkflowExecutionState, execution.WorkflowExecutionStatus) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowStateStatus")
-	ret0, _ := ret[0].(executiongenproto.WorkflowExecutionState)
+	ret0, _ := ret[0].(executiongenpb.WorkflowExecutionState)
 	ret1, _ := ret[1].(execution.WorkflowExecutionStatus)
 	return ret0, ret1
 }
@@ -2338,7 +2323,7 @@ func (mr *MockmutableStateMockRecorder) UpdateCurrentVersion(version, forceUpdat
 }
 
 // UpdateWorkflowStateStatus mocks base method.
-func (m *MockmutableState) UpdateWorkflowStateStatus(state executiongenproto.WorkflowExecutionState, status execution.WorkflowExecutionStatus) error {
+func (m *MockmutableState) UpdateWorkflowStateStatus(state executiongenpb.WorkflowExecutionState, status execution.WorkflowExecutionStatus) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateWorkflowStateStatus", state, status)
 	ret0, _ := ret[0].(error)

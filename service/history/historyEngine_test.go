@@ -48,7 +48,7 @@ import (
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -447,7 +447,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			int64(4),
 			int64(1),
 			[]byte{1},
-			executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created,
+			executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 			executionpb.WorkflowExecutionStatus_Running))
 	}
 
@@ -1337,7 +1337,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(15), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(decisionStartedEvent1.EventId, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 	di3, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
@@ -1419,7 +1419,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(15), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(decisionStartedEvent1.EventId, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 	di3, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
@@ -1605,7 +1605,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		if !iVar.expectDecisionFail {
 			s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 			s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-			s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+			s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 			s.False(executionBuilder.HasPendingDecision())
 
 			activity1Attributes := s.getActivityScheduledEvent(executionBuilder, int64(5)).GetActivityTaskScheduledEventAttributes()
@@ -1615,7 +1615,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		} else {
 			s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID, iVar)
 			s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent, iVar)
-			s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State, iVar)
+			s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State, iVar)
 			s.True(executionBuilder.HasPendingDecision(), iVar)
 		}
 		s.TearDownTest()
@@ -1682,7 +1682,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	executionBuilder := s.getBuilder(namespaceID, we)
 	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 }
 
@@ -1741,7 +1741,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 
 	activity1Attributes := s.getActivityScheduledEvent(executionBuilder, int64(5)).GetActivityTaskScheduledEventAttributes()
@@ -1933,7 +1933,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -1987,7 +1987,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -2635,7 +2635,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(10))
@@ -2742,7 +2742,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(8))
@@ -2803,7 +2803,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(8))
@@ -3179,7 +3179,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(12), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(10))
@@ -3286,7 +3286,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(8))
@@ -3349,7 +3349,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(8))
@@ -3455,7 +3455,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -3578,7 +3578,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 1)
 	addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
-	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityID, identity)
+	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityScheduledEvent.EventId, identity)
 	s.Nil(err)
 
 	ms := createMutableState(msBuilder)
@@ -3600,7 +3600,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(9))
@@ -3637,7 +3637,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 1)
 	addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
-	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityID, identity)
+	_, _, err := msBuilder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.EventId, activityScheduledEvent.EventId, identity)
 	s.Nil(err)
 
 	ms := createMutableState(msBuilder)
@@ -3661,7 +3661,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 
 	s.True(executionBuilder.HasPendingDecision())
 	di, ok := executionBuilder.GetDecisionInfo(int64(9))
@@ -3764,7 +3764,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	}
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
-	activityID := "activity1_id"
+	activityScheduleID := int64(99)
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
@@ -3775,14 +3775,17 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: activityScheduleID,
 		}},
 	}}
 
-	ms := createMutableState(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	ms1 := createMutableState(msBuilder)
+	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
+	ms2 := createMutableState(msBuilder)
+	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
@@ -3796,9 +3799,9 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	})
 	s.Nil(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(int64(7), executionBuilder.GetExecutionInfo().NextEventID)
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(int64(5), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(common.EmptyEventID, executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -3826,7 +3829,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
-	addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
+	_, aInfo := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 1)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
@@ -3837,7 +3840,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: aInfo.ScheduleID,
 		}},
 	}}
 
@@ -3858,7 +3861,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(12), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 	di2, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
@@ -3902,7 +3905,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: activityScheduledEvent.GetEventId(),
 		}},
 	}}
 
@@ -3923,7 +3926,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -3952,7 +3955,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, decisionStartedEvent.EventId, identity)
-	addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
+	_, aInfo := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 0)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
@@ -3961,7 +3964,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 		{
 			DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 			Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-				ActivityId: activityID,
+				ScheduledEventId: aInfo.ScheduleID,
 			}},
 		},
 		{
@@ -3991,7 +3994,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -4031,7 +4034,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: activityScheduledEvent.GetEventId(),
 		}},
 	}}
 
@@ -4052,7 +4055,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 
 	// Try recording activity heartbeat
@@ -4094,7 +4097,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	executionBuilder = s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 }
 
@@ -4134,7 +4137,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: activityScheduledEvent.GetEventId(),
 		}},
 	}}
 
@@ -4155,7 +4158,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 
 	// Try recording activity heartbeat
@@ -4197,7 +4200,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	executionBuilder = s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 }
 
@@ -4236,7 +4239,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 		Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-			ActivityId: activityID,
+			ScheduledEventId: activityScheduledEvent.GetEventId(),
 		}},
 	}}
 
@@ -4282,7 +4285,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 	s.Len(qr.getCompletedIDs(), 2)
 	completed1, err := qr.getTerminationState(id1)
@@ -4340,7 +4343,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	executionBuilder = s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 }
 
@@ -4397,7 +4400,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	s.Nil(err)
 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 
 	// Try to add the same timer ID again.
 	di2 := addDecisionTaskScheduledEvent(executionBuilder)
@@ -4435,7 +4438,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 
 	s.True(decisionFailedEvent)
 	executionBuilder = s.getBuilder(testNamespaceID, we)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecision())
 	di3, ok := executionBuilder.GetDecisionInfo(executionBuilder.GetExecutionInfo().NextEventID)
 	s.True(ok, "DI.ScheduleID: %v, ScheduleID: %v, StartedID: %v", di2.ScheduleID,
@@ -4498,7 +4501,7 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -4552,7 +4555,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 }
 
@@ -4618,7 +4621,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
-	s.Equal(executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
+	s.Equal(executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecision())
 	s.False(executionBuilder.HasBufferedEvents())
 }
@@ -4737,7 +4740,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 	addWorkflowExecutionStartedEvent(msBuilder, *we, "wType", tasklist, payloads.EncodeString("input"), 100, 50, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 	ms := createMutableState(msBuilder)
-	ms.ExecutionInfo.State = executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Completed
+	ms.ExecutionInfo.State = executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
@@ -4801,7 +4804,7 @@ func (s *engineSuite) printHistory(builder mutableState) string {
 
 func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowExecution executionpb.WorkflowExecution,
 	workflowType, taskList string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout int32,
-	parentInfo *executiongenproto.ParentExecutionInfo, identity string) *eventpb.HistoryEvent {
+	parentInfo *executiongenpb.ParentExecutionInfo, identity string) *eventpb.HistoryEvent {
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:                      workflowExecution.WorkflowId,

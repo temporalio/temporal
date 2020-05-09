@@ -38,7 +38,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/temporalio/temporal/common"
@@ -808,5 +808,5 @@ func preconditionForDBCall(totalDBRequests *int64, limiter *quotas.DynamicRateLi
 }
 
 func executionOpen(execution *persistence.InternalWorkflowExecutionInfo) bool {
-	return execution.State == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Created || execution.State == executiongenproto.WorkflowExecutionState_WorkflowExecutionState_Running
+	return execution.State == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created || execution.State == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running
 }

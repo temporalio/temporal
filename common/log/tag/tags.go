@@ -30,7 +30,7 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/temporalio/temporal/.gen/proto/common"
-	executiongenproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
@@ -112,7 +112,7 @@ func WorkflowType(wfType string) Tag {
 }
 
 // WorkflowState returns tag for WorkflowState
-func WorkflowState(s executiongenproto.WorkflowExecutionState) Tag {
+func WorkflowState(s executiongenpb.WorkflowExecutionState) Tag {
 	return newInt("wf-state", int(s))
 }
 
