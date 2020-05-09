@@ -70,7 +70,7 @@ func (m *MockmutableState) EXPECT() *MockmutableStateMockRecorder {
 }
 
 // AddActivityTaskCancelRequestedEvent mocks base method.
-func (m *MockmutableState) AddActivityTaskCancelRequestedEvent(arg0 int64, arg1, arg2 string) (*event.HistoryEvent, *persistence.ActivityInfo, error) {
+func (m *MockmutableState) AddActivityTaskCancelRequestedEvent(arg0, arg1 int64, arg2 string) (*event.HistoryEvent, *persistence.ActivityInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTaskCancelRequestedEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -490,21 +490,6 @@ func (m *MockmutableState) AddRecordMarkerEvent(arg0 int64, arg1 *decision.Recor
 func (mr *MockmutableStateMockRecorder) AddRecordMarkerEvent(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddRecordMarkerEvent", reflect.TypeOf((*MockmutableState)(nil).AddRecordMarkerEvent), arg0, arg1)
-}
-
-// AddRequestCancelActivityTaskFailedEvent mocks base method.
-func (m *MockmutableState) AddRequestCancelActivityTaskFailedEvent(arg0 int64, arg1, arg2 string) (*event.HistoryEvent, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddRequestCancelActivityTaskFailedEvent", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*event.HistoryEvent)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AddRequestCancelActivityTaskFailedEvent indicates an expected call of AddRequestCancelActivityTaskFailedEvent.
-func (mr *MockmutableStateMockRecorder) AddRequestCancelActivityTaskFailedEvent(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddRequestCancelActivityTaskFailedEvent", reflect.TypeOf((*MockmutableState)(nil).AddRequestCancelActivityTaskFailedEvent), arg0, arg1, arg2)
 }
 
 // AddRequestCancelExternalWorkflowExecutionFailedEvent mocks base method.

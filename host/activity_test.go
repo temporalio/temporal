@@ -1122,6 +1122,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 	activityCounter := int32(0)
 	scheduleActivity := true
 	requestCancellation := false
+	activityScheduleID := int64(0)
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
@@ -1130,6 +1131,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
+			activityScheduleID = startedEventID + 2
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
@@ -1149,7 +1151,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 				Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-					ActivityId: strconv.Itoa(int(activityCounter)),
+					ScheduledEventId: activityScheduleID,
 				}},
 			}}, nil
 		}
@@ -1247,6 +1249,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	activityCounter := int32(0)
 	scheduleActivity := true
 	requestCancellation := false
+	activityScheduleID := int64(0)
 
 	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
@@ -1255,6 +1258,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 			s.Logger.Info("Scheduling activity")
+			activityScheduleID = startedEventID + 2
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_ScheduleActivityTask,
 				Attributes: &decisionpb.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &decisionpb.ScheduleActivityTaskDecisionAttributes{
@@ -1275,7 +1279,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_RequestCancelActivityTask,
 				Attributes: &decisionpb.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &decisionpb.RequestCancelActivityTaskDecisionAttributes{
-					ActivityId: strconv.Itoa(int(activityCounter)),
+					ScheduledEventId: activityScheduleID,
 				}},
 			}}, nil
 		}
