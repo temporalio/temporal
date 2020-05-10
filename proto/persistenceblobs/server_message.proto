@@ -340,7 +340,6 @@ message NamespaceConfig {
     int32 retentionDays = 1;
     bool emitMetric = 2;
     string archivalBucket = 3;
-    int32 archivalStatus = 4;
     namespace.BadBinaries badBinaries = 16;
     namespace.ArchivalStatus historyArchivalStatus = 18;
     string historyArchivalURI = 19;
