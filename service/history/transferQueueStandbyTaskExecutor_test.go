@@ -39,7 +39,7 @@ import (
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
@@ -223,7 +223,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeActivityTask,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeActivityTask,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -279,7 +279,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeActivityTask,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeActivityTask,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -335,7 +335,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeActivityTask,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeActivityTask,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -385,7 +385,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending(
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeDecisionTask,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeDecisionTask,
 		ScheduleId:          di.ScheduleID,
 	}
 
@@ -434,7 +434,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Pending_
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeDecisionTask,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeDecisionTask,
 		ScheduleId:          di.ScheduleID,
 	}
 
@@ -483,7 +483,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeDecisionTask,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeDecisionTask,
 		ScheduleId:          di.ScheduleID,
 	}
 
@@ -539,7 +539,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessDecisionTask_Success_
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeDecisionTask,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeDecisionTask,
 		ScheduleId:          di.ScheduleID,
 	}
 
@@ -595,7 +595,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeCloseExecution,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeCloseExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -659,7 +659,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 		TargetRunId:         primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeCancelExecution,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeCancelExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -733,7 +733,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 		TargetRunId:         primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeCancelExecution,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeCancelExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -799,7 +799,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 		TargetRunId:         primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeSignalExecution,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeSignalExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -875,7 +875,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 		TargetRunId:         primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeSignalExecution,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeSignalExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -939,7 +939,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 		TargetRunId:         nil,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeStartChildExecution,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeStartChildExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -1013,7 +1013,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 		TargetRunId:         nil,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeStartChildExecution,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeStartChildExecution,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -1065,7 +1065,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeRecordWorkflowStarted,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeRecordWorkflowStarted,
 		ScheduleId:          event.GetEventId(),
 	}
 
@@ -1128,7 +1128,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 		VisibilityTimestamp: now,
 		TaskId:              taskID,
 		TaskList:            taskListName,
-		TaskType:            commongenproto.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes,
+		TaskType:            commongenpb.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes,
 		ScheduleId:          event.GetEventId(),
 	}
 

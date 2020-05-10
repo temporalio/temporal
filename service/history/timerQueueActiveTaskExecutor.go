@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -90,19 +90,19 @@ func (t *timerQueueActiveTaskExecutor) execute(
 	}
 
 	switch timerTask.TaskType {
-	case commongenproto.TaskType_TaskTypeUserTimer:
+	case commongenpb.TaskType_TaskTypeUserTimer:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case commongenproto.TaskType_TaskTypeActivityTimeout:
+	case commongenpb.TaskType_TaskTypeActivityTimeout:
 		return t.executeActivityTimeoutTask(timerTask)
-	case commongenproto.TaskType_TaskTypeDecisionTimeout:
+	case commongenpb.TaskType_TaskTypeDecisionTimeout:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case commongenproto.TaskType_TaskTypeWorkflowRunTimeout:
+	case commongenpb.TaskType_TaskTypeWorkflowRunTimeout:
 		return t.executeWorkflowTimeoutTask(timerTask)
-	case commongenproto.TaskType_TaskTypeActivityRetryTimer:
+	case commongenpb.TaskType_TaskTypeActivityRetryTimer:
 		return t.executeActivityRetryTimerTask(timerTask)
-	case commongenproto.TaskType_TaskTypeWorkflowBackoffTimer:
+	case commongenpb.TaskType_TaskTypeWorkflowBackoffTimer:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
-	case commongenproto.TaskType_TaskTypeDeleteHistoryEvent:
+	case commongenpb.TaskType_TaskTypeDeleteHistoryEvent:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
 		return errUnknownTimerTask
@@ -282,7 +282,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	scheduleID := task.GetEventId()
 	decision, ok := mutableState.GetDecisionInfo(scheduleID)
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenproto.TaskType_TaskTypeDecisionTimeout))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TaskType_TaskTypeDecisionTimeout))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)

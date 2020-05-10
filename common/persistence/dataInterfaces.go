@@ -37,7 +37,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	executionproto "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -294,7 +294,7 @@ type (
 
 	// Task is the generic interface for workflow tasks
 	Task interface {
-		GetType() commongenproto.TaskType
+		GetType() commongenpb.TaskType
 		GetVersion() int64
 		SetVersion(version int64)
 		GetTaskID() int64
@@ -1480,8 +1480,8 @@ func IsTimeoutError(err error) bool {
 }
 
 // GetType returns the type of the activity task
-func (a *ActivityTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TransferTaskTypeActivityTask
+func (a *ActivityTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TransferTaskTypeActivityTask
 }
 
 // GetVersion returns the version of the activity task
@@ -1515,8 +1515,8 @@ func (a *ActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the decision task
-func (d *DecisionTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TransferTaskTypeDecisionTask
+func (d *DecisionTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TransferTaskTypeDecisionTask
 }
 
 // GetVersion returns the version of the decision task
@@ -1555,8 +1555,8 @@ func (d *DecisionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the record workflow started task
-func (a *RecordWorkflowStartedTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TransferTaskTypeRecordWorkflowStarted
+func (a *RecordWorkflowStartedTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TransferTaskTypeRecordWorkflowStarted
 }
 
 // GetVersion returns the version of the record workflow started task
@@ -1590,8 +1590,8 @@ func (a *RecordWorkflowStartedTask) SetVisibilityTimestamp(timestamp time.Time) 
 }
 
 // GetType returns the type of the ResetWorkflowTask
-func (a *ResetWorkflowTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TransferTaskTypeResetWorkflow
+func (a *ResetWorkflowTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TransferTaskTypeResetWorkflow
 }
 
 // GetVersion returns the version of the ResetWorkflowTask
@@ -1625,8 +1625,8 @@ func (a *ResetWorkflowTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the close execution task
-func (a *CloseExecutionTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TransferTaskTypeCloseExecution
+func (a *CloseExecutionTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TransferTaskTypeCloseExecution
 }
 
 // GetVersion returns the version of the close execution task
@@ -1660,8 +1660,8 @@ func (a *CloseExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the delete execution task
-func (a *DeleteHistoryEventTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TaskTypeDeleteHistoryEvent
+func (a *DeleteHistoryEventTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TaskTypeDeleteHistoryEvent
 }
 
 // GetVersion returns the version of the delete execution task
@@ -1695,8 +1695,8 @@ func (a *DeleteHistoryEventTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the timer task
-func (d *DecisionTimeoutTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TaskTypeDecisionTimeout
+func (d *DecisionTimeoutTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TaskTypeDecisionTimeout
 }
 
 // GetVersion returns the version of the timer task
@@ -1730,8 +1730,8 @@ func (d *DecisionTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the timer task
-func (a *ActivityTimeoutTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TaskTypeActivityTimeout
+func (a *ActivityTimeoutTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TaskTypeActivityTimeout
 }
 
 // GetVersion returns the version of the timer task
@@ -1765,8 +1765,8 @@ func (a *ActivityTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the timer task
-func (u *UserTimerTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TaskTypeUserTimer
+func (u *UserTimerTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TaskTypeUserTimer
 }
 
 // GetVersion returns the version of the timer task
@@ -1800,8 +1800,8 @@ func (u *UserTimerTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the retry timer task
-func (r *ActivityRetryTimerTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TaskTypeActivityRetryTimer
+func (r *ActivityRetryTimerTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TaskTypeActivityRetryTimer
 }
 
 // GetVersion returns the version of the retry timer task
@@ -1835,8 +1835,8 @@ func (r *ActivityRetryTimerTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the retry timer task
-func (r *WorkflowBackoffTimerTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TaskTypeWorkflowBackoffTimer
+func (r *WorkflowBackoffTimerTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TaskTypeWorkflowBackoffTimer
 }
 
 // GetVersion returns the version of the retry timer task
@@ -1870,8 +1870,8 @@ func (r *WorkflowBackoffTimerTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the timeout task.
-func (u *WorkflowTimeoutTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TaskTypeWorkflowRunTimeout
+func (u *WorkflowTimeoutTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TaskTypeWorkflowRunTimeout
 }
 
 // GetVersion returns the version of the timeout task
@@ -1905,8 +1905,8 @@ func (u *WorkflowTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the cancel transfer task
-func (u *CancelExecutionTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TransferTaskTypeCancelExecution
+func (u *CancelExecutionTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TransferTaskTypeCancelExecution
 }
 
 // GetVersion returns the version of the cancel transfer task
@@ -1940,8 +1940,8 @@ func (u *CancelExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the signal transfer task
-func (u *SignalExecutionTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TransferTaskTypeSignalExecution
+func (u *SignalExecutionTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TransferTaskTypeSignalExecution
 }
 
 // GetVersion returns the version of the signal transfer task
@@ -1975,8 +1975,8 @@ func (u *SignalExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the upsert search attributes transfer task
-func (u *UpsertWorkflowSearchAttributesTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes
+func (u *UpsertWorkflowSearchAttributesTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes
 }
 
 // GetVersion returns the version of the upsert search attributes transfer task
@@ -2010,8 +2010,8 @@ func (u *UpsertWorkflowSearchAttributesTask) SetVisibilityTimestamp(timestamp ti
 }
 
 // GetType returns the type of the start child transfer task
-func (u *StartChildExecutionTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_TransferTaskTypeStartChildExecution
+func (u *StartChildExecutionTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_TransferTaskTypeStartChildExecution
 }
 
 // GetVersion returns the version of the start child transfer task
@@ -2045,8 +2045,8 @@ func (u *StartChildExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the history replication task
-func (a *HistoryReplicationTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_ReplicationTaskTypeHistory
+func (a *HistoryReplicationTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_ReplicationTaskTypeHistory
 }
 
 // GetVersion returns the version of the history replication task
@@ -2080,8 +2080,8 @@ func (a *HistoryReplicationTask) SetVisibilityTimestamp(timestamp time.Time) {
 }
 
 // GetType returns the type of the history replication task
-func (a *SyncActivityTask) GetType() commongenproto.TaskType {
-	return commongenproto.TaskType_ReplicationTaskTypeSyncActivity
+func (a *SyncActivityTask) GetType() commongenpb.TaskType {
+	return commongenpb.TaskType_ReplicationTaskTypeSyncActivity
 }
 
 // GetVersion returns the version of the history replication task

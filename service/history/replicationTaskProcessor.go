@@ -36,7 +36,7 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -431,7 +431,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				WorkflowId:  taskAttributes.GetWorkflowId(),
 				RunId:       primitives.MustParseUUID(taskAttributes.GetRunId()),
 				TaskId:      replicationTask.GetSourceTaskId(),
-				TaskType:    commongenproto.TaskType_ReplicationTaskTypeSyncActivity,
+				TaskType:    commongenpb.TaskType_ReplicationTaskTypeSyncActivity,
 				ScheduledId: taskAttributes.GetScheduledId(),
 			},
 		}, nil
@@ -445,7 +445,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				WorkflowId:          taskAttributes.GetWorkflowId(),
 				RunId:               primitives.MustParseUUID(taskAttributes.GetRunId()),
 				TaskId:              replicationTask.GetSourceTaskId(),
-				TaskType:            commongenproto.TaskType_ReplicationTaskTypeHistory,
+				TaskType:            commongenpb.TaskType_ReplicationTaskTypeHistory,
 				FirstEventId:        taskAttributes.GetFirstEventId(),
 				NextEventId:         taskAttributes.GetNextEventId(),
 				Version:             taskAttributes.GetVersion(),
@@ -474,7 +474,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				WorkflowId:   taskAttributes.GetWorkflowId(),
 				RunId:        primitives.MustParseUUID(taskAttributes.GetRunId()),
 				TaskId:       replicationTask.GetSourceTaskId(),
-				TaskType:     commongenproto.TaskType_ReplicationTaskTypeHistory,
+				TaskType:     commongenpb.TaskType_ReplicationTaskTypeHistory,
 				FirstEventId: events[0].GetEventId(),
 				NextEventId:  events[len(events)-1].GetEventId(),
 				Version:      events[0].GetVersion(),

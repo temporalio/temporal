@@ -31,7 +31,7 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -93,7 +93,7 @@ func loadMutableStateForTransferTask(
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
-	isDecisionRetry := transferTask.TaskType == commongenproto.TaskType_TransferTaskTypeDecisionTask &&
+	isDecisionRetry := transferTask.TaskType == commongenpb.TaskType_TransferTaskTypeDecisionTask &&
 		executionInfo.DecisionScheduleID == transferTask.GetScheduleId() &&
 		executionInfo.DecisionAttempt > 0
 
@@ -138,7 +138,7 @@ func loadMutableStateForTimerTask(
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
-	isDecisionRetry := timerTask.TaskType == commongenproto.TaskType_TaskTypeDecisionTimeout &&
+	isDecisionRetry := timerTask.TaskType == commongenpb.TaskType_TaskTypeDecisionTimeout &&
 		executionInfo.DecisionScheduleID == timerTask.GetEventId() &&
 		executionInfo.DecisionAttempt > 0
 

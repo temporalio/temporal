@@ -33,7 +33,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -832,7 +832,7 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 		}
 
 		var lastReplicationInfo map[string]*replicationgenpb.ReplicationInfo
-		if info.GetTaskType() == commongenproto.TaskType_ReplicationTaskTypeHistory {
+		if info.GetTaskType() == commongenpb.TaskType_ReplicationTaskTypeHistory {
 			lastReplicationInfo = make(map[string]*replicationgenpb.ReplicationInfo, len(info.LastReplicationInfo))
 			for k, v := range info.LastReplicationInfo {
 				lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.GetLastEventId()}

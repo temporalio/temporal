@@ -38,7 +38,7 @@ import (
 
 	m "github.com/temporalio/temporal/.gen/proto/matchingservice"
 
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
@@ -104,7 +104,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != commongenproto.TaskType_TransferTaskTypeActivityTask {
+	if task.TaskType != commongenpb.TaskType_TransferTaskTypeActivityTask {
 		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
 	}
 
@@ -132,7 +132,7 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != commongenproto.TaskType_TransferTaskTypeDecisionTask {
+	if task.TaskType != commongenpb.TaskType_TransferTaskTypeDecisionTask {
 		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
 	}
 

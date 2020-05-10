@@ -32,7 +32,7 @@ import (
 	eventpb "go.temporal.io/temporal-proto/event"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
@@ -88,28 +88,28 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 	}
 
 	if !shouldProcessTask &&
-		timerTask.TaskType != commongenproto.TaskType_TaskTypeWorkflowRunTimeout &&
-		timerTask.TaskType != commongenproto.TaskType_TaskTypeDeleteHistoryEvent {
+		timerTask.TaskType != commongenpb.TaskType_TaskTypeWorkflowRunTimeout &&
+		timerTask.TaskType != commongenpb.TaskType_TaskTypeDeleteHistoryEvent {
 		// guarantee the processing of workflow execution history deletion
 		return nil
 	}
 
 	switch timerTask.TaskType {
-	case commongenproto.TaskType_TaskTypeUserTimer:
+	case commongenpb.TaskType_TaskTypeUserTimer:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case commongenproto.TaskType_TaskTypeActivityTimeout:
+	case commongenpb.TaskType_TaskTypeActivityTimeout:
 		return t.executeActivityTimeoutTask(timerTask)
-	case commongenproto.TaskType_TaskTypeDecisionTimeout:
+	case commongenpb.TaskType_TaskTypeDecisionTimeout:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case commongenproto.TaskType_TaskTypeWorkflowRunTimeout:
+	case commongenpb.TaskType_TaskTypeWorkflowRunTimeout:
 		return t.executeWorkflowTimeoutTask(timerTask)
-	case commongenproto.TaskType_TaskTypeActivityRetryTimer:
+	case commongenpb.TaskType_TaskTypeActivityRetryTimer:
 		// retry backoff timer should not get created on passive cluster
 		// TODO: add error logs
 		return nil
-	case commongenproto.TaskType_TaskTypeWorkflowBackoffTimer:
+	case commongenpb.TaskType_TaskTypeWorkflowBackoffTimer:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
-	case commongenproto.TaskType_TaskTypeDeleteHistoryEvent:
+	case commongenpb.TaskType_TaskTypeDeleteHistoryEvent:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
 		return errUnknownTimerTask

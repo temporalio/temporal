@@ -32,7 +32,7 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/temporalio/temporal/common"
@@ -445,64 +445,64 @@ func (t *timerQueueProcessorBase) getTimerFiredCount() uint64 {
 
 //nolint:unused
 func (t *timerQueueProcessorBase) getTimerTaskType(
-	taskType commongenproto.TaskType,
+	taskType commongenpb.TaskType,
 ) string {
 
 	switch taskType {
-	case commongenproto.TaskType_TaskTypeUserTimer:
+	case commongenpb.TaskType_TaskTypeUserTimer:
 		return "UserTimer"
-	case commongenproto.TaskType_TaskTypeActivityTimeout:
+	case commongenpb.TaskType_TaskTypeActivityTimeout:
 		return "ActivityTimeout"
-	case commongenproto.TaskType_TaskTypeDecisionTimeout:
+	case commongenpb.TaskType_TaskTypeDecisionTimeout:
 		return "DecisionTimeout"
-	case commongenproto.TaskType_TaskTypeWorkflowRunTimeout:
+	case commongenpb.TaskType_TaskTypeWorkflowRunTimeout:
 		return "WorkflowRunTimeout"
-	case commongenproto.TaskType_TaskTypeDeleteHistoryEvent:
+	case commongenpb.TaskType_TaskTypeDeleteHistoryEvent:
 		return "DeleteHistoryEvent"
-	case commongenproto.TaskType_TaskTypeActivityRetryTimer:
+	case commongenpb.TaskType_TaskTypeActivityRetryTimer:
 		return "ActivityRetryTimerTask"
-	case commongenproto.TaskType_TaskTypeWorkflowBackoffTimer:
+	case commongenpb.TaskType_TaskTypeWorkflowBackoffTimer:
 		return "WorkflowBackoffTimerTask"
 	}
 	return "UnKnown"
 }
 
 func getTimerTaskMetricScope(
-	taskType commongenproto.TaskType,
+	taskType commongenpb.TaskType,
 	isActive bool,
 ) int {
 	switch taskType {
-	case commongenproto.TaskType_TaskTypeDecisionTimeout:
+	case commongenpb.TaskType_TaskTypeDecisionTimeout:
 		if isActive {
 			return metrics.TimerActiveTaskDecisionTimeoutScope
 		}
 		return metrics.TimerStandbyTaskDecisionTimeoutScope
-	case commongenproto.TaskType_TaskTypeActivityTimeout:
+	case commongenpb.TaskType_TaskTypeActivityTimeout:
 		if isActive {
 			return metrics.TimerActiveTaskActivityTimeoutScope
 		}
 		return metrics.TimerStandbyTaskActivityTimeoutScope
-	case commongenproto.TaskType_TaskTypeUserTimer:
+	case commongenpb.TaskType_TaskTypeUserTimer:
 		if isActive {
 			return metrics.TimerActiveTaskUserTimerScope
 		}
 		return metrics.TimerStandbyTaskUserTimerScope
-	case commongenproto.TaskType_TaskTypeWorkflowRunTimeout:
+	case commongenpb.TaskType_TaskTypeWorkflowRunTimeout:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowTimeoutScope
 		}
 		return metrics.TimerStandbyTaskWorkflowTimeoutScope
-	case commongenproto.TaskType_TaskTypeDeleteHistoryEvent:
+	case commongenpb.TaskType_TaskTypeDeleteHistoryEvent:
 		if isActive {
 			return metrics.TimerActiveTaskDeleteHistoryEventScope
 		}
 		return metrics.TimerStandbyTaskDeleteHistoryEventScope
-	case commongenproto.TaskType_TaskTypeActivityRetryTimer:
+	case commongenpb.TaskType_TaskTypeActivityRetryTimer:
 		if isActive {
 			return metrics.TimerActiveTaskActivityRetryTimerScope
 		}
 		return metrics.TimerStandbyTaskActivityRetryTimerScope
-	case commongenproto.TaskType_TaskTypeWorkflowBackoffTimer:
+	case commongenpb.TaskType_TaskTypeWorkflowBackoffTimer:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowBackoffTimerScope
 		}

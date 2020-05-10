@@ -37,7 +37,7 @@ import (
 	eventpb "go.temporal.io/temporal-proto/event"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -181,7 +181,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
-			TaskType:    commongenproto.TaskType_ReplicationTaskTypeSyncActivity,
+			TaskType:    commongenpb.TaskType_ReplicationTaskTypeSyncActivity,
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
@@ -207,7 +207,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
-			TaskType:    commongenproto.TaskType_ReplicationTaskTypeHistory,
+			TaskType:    commongenpb.TaskType_ReplicationTaskTypeHistory,
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
@@ -246,7 +246,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
-			TaskType:     commongenproto.TaskType_ReplicationTaskTypeHistory,
+			TaskType:     commongenpb.TaskType_ReplicationTaskTypeHistory,
 			FirstEventId: 1,
 			NextEventId:  1,
 			Version:      1,

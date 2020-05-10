@@ -34,7 +34,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -713,18 +713,18 @@ func createTransferTasks(
 		recordVisibility := false
 
 		switch task.GetType() {
-		case commongenproto.TaskType_TransferTaskTypeActivityTask:
+		case commongenpb.TaskType_TransferTaskTypeActivityTask:
 			targetNamespaceID = task.(*p.ActivityTask).NamespaceID
 			taskList = task.(*p.ActivityTask).TaskList
 			scheduleID = task.(*p.ActivityTask).ScheduleID
 
-		case commongenproto.TaskType_TransferTaskTypeDecisionTask:
+		case commongenpb.TaskType_TransferTaskTypeDecisionTask:
 			targetNamespaceID = task.(*p.DecisionTask).NamespaceID
 			taskList = task.(*p.DecisionTask).TaskList
 			scheduleID = task.(*p.DecisionTask).ScheduleID
 			recordVisibility = task.(*p.DecisionTask).RecordVisibility
 
-		case commongenproto.TaskType_TransferTaskTypeCancelExecution:
+		case commongenpb.TaskType_TransferTaskTypeCancelExecution:
 			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.CancelExecutionTask).TargetRunID
@@ -732,7 +732,7 @@ func createTransferTasks(
 			targetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.CancelExecutionTask).InitiatedID
 
-		case commongenproto.TaskType_TransferTaskTypeSignalExecution:
+		case commongenpb.TaskType_TransferTaskTypeSignalExecution:
 			targetNamespaceID = task.(*p.SignalExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.SignalExecutionTask).TargetRunID
@@ -740,15 +740,15 @@ func createTransferTasks(
 			targetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.SignalExecutionTask).InitiatedID
 
-		case commongenproto.TaskType_TransferTaskTypeStartChildExecution:
+		case commongenpb.TaskType_TransferTaskTypeStartChildExecution:
 			targetNamespaceID = task.(*p.StartChildExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
 
-		case commongenproto.TaskType_TransferTaskTypeCloseExecution,
-			commongenproto.TaskType_TransferTaskTypeRecordWorkflowStarted,
-			commongenproto.TaskType_TransferTaskTypeResetWorkflow,
-			commongenproto.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes:
+		case commongenpb.TaskType_TransferTaskTypeCloseExecution,
+			commongenpb.TaskType_TransferTaskTypeRecordWorkflowStarted,
+			commongenpb.TaskType_TransferTaskTypeResetWorkflow,
+			commongenpb.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes:
 			// No explicit property needs to be set
 
 		default:
@@ -818,7 +818,7 @@ func createReplicationTasks(
 		resetWorkflow := false
 
 		switch task.GetType() {
-		case commongenproto.TaskType_ReplicationTaskTypeHistory:
+		case commongenpb.TaskType_ReplicationTaskTypeHistory:
 			histTask := task.(*p.HistoryReplicationTask)
 			branchToken = histTask.BranchToken
 			newRunBranchToken = histTask.NewRunBranchToken
@@ -831,7 +831,7 @@ func createReplicationTasks(
 			}
 			resetWorkflow = histTask.ResetWorkflow
 
-		case commongenproto.TaskType_ReplicationTaskTypeSyncActivity:
+		case commongenpb.TaskType_ReplicationTaskTypeSyncActivity:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 			// cassandra does not like null

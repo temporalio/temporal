@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
@@ -266,7 +266,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 		RunId:             primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeActivityTask,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeActivityTask,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -324,7 +324,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 		RunId:             primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeActivityTask,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeActivityTask,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -373,7 +373,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDeci
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeDecisionTask,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeDecisionTask,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -426,7 +426,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstD
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeDecisionTask,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeDecisionTask,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -485,7 +485,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_No
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    stickyTaskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeDecisionTask,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeDecisionTask,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -544,7 +544,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionN
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeDecisionTask,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeDecisionTask,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -593,7 +593,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeDecisionTask,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeDecisionTask,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -657,7 +657,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeCloseExecution,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeCloseExecution,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -716,7 +716,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeCloseExecution,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeCloseExecution,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -848,7 +848,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeCloseExecution,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeCloseExecution,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -939,7 +939,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeCloseExecution,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeCloseExecution,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1029,7 +1029,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeCloseExecution,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeCloseExecution,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1089,7 +1089,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeCancelExecution,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeCancelExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1151,7 +1151,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeCancelExecution,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeCancelExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1213,7 +1213,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeCancelExecution,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeCancelExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1277,7 +1277,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeSignalExecution,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeSignalExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1352,7 +1352,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeSignalExecution,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeSignalExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1418,7 +1418,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeSignalExecution,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeSignalExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1480,7 +1480,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		TargetRunId:       nil,
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeStartChildExecution,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeStartChildExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1568,7 +1568,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		TargetRunId:       nil,
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeStartChildExecution,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeStartChildExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1649,7 +1649,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		TargetRunId:       nil,
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeStartChildExecution,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeStartChildExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1733,7 +1733,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		TargetRunId:       nil,
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          commongenproto.TaskType_TransferTaskTypeStartChildExecution,
+		TaskType:          commongenpb.TaskType_TransferTaskTypeStartChildExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1790,7 +1790,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeRecordWorkflowStarted,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeRecordWorkflowStarted,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1837,7 +1837,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAt
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    commongenproto.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes,
+		TaskType:    commongenpb.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes,
 		ScheduleId:  event.GetEventId(),
 	}
 

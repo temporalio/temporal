@@ -38,7 +38,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
-	commongenproto "github.com/temporalio/temporal/.gen/proto/common"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -102,23 +102,23 @@ func (t *transferQueueActiveTaskExecutor) execute(
 	}
 
 	switch task.TaskType {
-	case commongenproto.TaskType_TransferTaskTypeActivityTask:
+	case commongenpb.TaskType_TransferTaskTypeActivityTask:
 		return t.processActivityTask(task)
-	case commongenproto.TaskType_TransferTaskTypeDecisionTask:
+	case commongenpb.TaskType_TransferTaskTypeDecisionTask:
 		return t.processDecisionTask(task)
-	case commongenproto.TaskType_TransferTaskTypeCloseExecution:
+	case commongenpb.TaskType_TransferTaskTypeCloseExecution:
 		return t.processCloseExecution(task)
-	case commongenproto.TaskType_TransferTaskTypeCancelExecution:
+	case commongenpb.TaskType_TransferTaskTypeCancelExecution:
 		return t.processCancelExecution(task)
-	case commongenproto.TaskType_TransferTaskTypeSignalExecution:
+	case commongenpb.TaskType_TransferTaskTypeSignalExecution:
 		return t.processSignalExecution(task)
-	case commongenproto.TaskType_TransferTaskTypeStartChildExecution:
+	case commongenpb.TaskType_TransferTaskTypeStartChildExecution:
 		return t.processStartChildExecution(task)
-	case commongenproto.TaskType_TransferTaskTypeRecordWorkflowStarted:
+	case commongenpb.TaskType_TransferTaskTypeRecordWorkflowStarted:
 		return t.processRecordWorkflowStarted(task)
-	case commongenproto.TaskType_TransferTaskTypeResetWorkflow:
+	case commongenpb.TaskType_TransferTaskTypeResetWorkflow:
 		return t.processResetWorkflow(task)
-	case commongenproto.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes:
+	case commongenpb.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes:
 		return t.processUpsertWorkflowSearchAttributes(task)
 	default:
 		return errUnknownTransferTask
@@ -147,7 +147,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	ai, ok := mutableState.GetActivityInfo(task.GetScheduleId())
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenproto.TaskType_TransferTaskTypeActivityTask))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TaskType_TransferTaskTypeActivityTask))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), ai.Version, task.Version, task)
@@ -184,7 +184,7 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 
 	decision, found := mutableState.GetDecisionInfo(task.GetScheduleId())
 	if !found {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenproto.TaskType_TransferTaskTypeDecisionTask))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TaskType_TransferTaskTypeDecisionTask))
 		return nil
 	}
 	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)
