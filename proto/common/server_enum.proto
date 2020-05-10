@@ -37,24 +37,24 @@ enum TaskSource {
 }
 
 enum TaskType {
-    ReplicationTaskTypeHistory = 0;
-    ReplicationTaskTypeSyncActivity = 1;
+    ReplicationHistory = 0;
+    ReplicationSyncActivity = 1;
 
-    TransferTaskTypeDecisionTask = 2;
-    TransferTaskTypeActivityTask = 3;
-    TransferTaskTypeCloseExecution = 4;
-    TransferTaskTypeCancelExecution = 5;
-    TransferTaskTypeStartChildExecution = 6;
-    TransferTaskTypeSignalExecution = 7;
-    TransferTaskTypeRecordWorkflowStarted = 8;
-    TransferTaskTypeResetWorkflow = 9;
-    TransferTaskTypeUpsertWorkflowSearchAttributes = 10;
+    TransferDecisionTask = 2;
+    TransferActivityTask = 3;
+    TransferCloseExecution = 4;
+    TransferCancelExecution = 5;
+    TransferStartChildExecution = 6;
+    TransferSignalExecution = 7;
+    TransferRecordWorkflowStarted = 8;
+    TransferResetWorkflow = 9;
+    TransferUpsertWorkflowSearchAttributes = 10;
 
-    TaskTypeDecisionTimeout = 11;
-    TaskTypeActivityTimeout = 12;
-    TaskTypeUserTimer = 13;
-    TaskTypeWorkflowRunTimeout = 14;
-    TaskTypeDeleteHistoryEvent = 15;
-    TaskTypeActivityRetryTimer = 16;
-    TaskTypeWorkflowBackoffTimer = 17;
+    DecisionTimeout = 11;
+    ActivityTimeout = 12;
+    UserTimer = 13;
+    WorkflowRunTimeout = 14;
+    DeleteHistoryEvent = 15;
+    ActivityRetryTimer = 16;
+    WorkflowBackoffTimer = 17;
 }

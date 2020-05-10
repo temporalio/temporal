@@ -713,18 +713,18 @@ func createTransferTasks(
 		recordVisibility := false
 
 		switch task.GetType() {
-		case commongenpb.TaskType_TransferTaskTypeActivityTask:
+		case commongenpb.TaskType_TransferActivityTask:
 			targetNamespaceID = task.(*p.ActivityTask).NamespaceID
 			taskList = task.(*p.ActivityTask).TaskList
 			scheduleID = task.(*p.ActivityTask).ScheduleID
 
-		case commongenpb.TaskType_TransferTaskTypeDecisionTask:
+		case commongenpb.TaskType_TransferDecisionTask:
 			targetNamespaceID = task.(*p.DecisionTask).NamespaceID
 			taskList = task.(*p.DecisionTask).TaskList
 			scheduleID = task.(*p.DecisionTask).ScheduleID
 			recordVisibility = task.(*p.DecisionTask).RecordVisibility
 
-		case commongenpb.TaskType_TransferTaskTypeCancelExecution:
+		case commongenpb.TaskType_TransferCancelExecution:
 			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.CancelExecutionTask).TargetRunID
@@ -732,7 +732,7 @@ func createTransferTasks(
 			targetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.CancelExecutionTask).InitiatedID
 
-		case commongenpb.TaskType_TransferTaskTypeSignalExecution:
+		case commongenpb.TaskType_TransferSignalExecution:
 			targetNamespaceID = task.(*p.SignalExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.SignalExecutionTask).TargetRunID
@@ -740,15 +740,15 @@ func createTransferTasks(
 			targetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.SignalExecutionTask).InitiatedID
 
-		case commongenpb.TaskType_TransferTaskTypeStartChildExecution:
+		case commongenpb.TaskType_TransferStartChildExecution:
 			targetNamespaceID = task.(*p.StartChildExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
 
-		case commongenpb.TaskType_TransferTaskTypeCloseExecution,
-			commongenpb.TaskType_TransferTaskTypeRecordWorkflowStarted,
-			commongenpb.TaskType_TransferTaskTypeResetWorkflow,
-			commongenpb.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes:
+		case commongenpb.TaskType_TransferCloseExecution,
+			commongenpb.TaskType_TransferRecordWorkflowStarted,
+			commongenpb.TaskType_TransferResetWorkflow,
+			commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes:
 			// No explicit property needs to be set
 
 		default:
@@ -818,7 +818,7 @@ func createReplicationTasks(
 		resetWorkflow := false
 
 		switch task.GetType() {
-		case commongenpb.TaskType_ReplicationTaskTypeHistory:
+		case commongenpb.TaskType_ReplicationHistory:
 			histTask := task.(*p.HistoryReplicationTask)
 			branchToken = histTask.BranchToken
 			newRunBranchToken = histTask.NewRunBranchToken
@@ -831,7 +831,7 @@ func createReplicationTasks(
 			}
 			resetWorkflow = histTask.ResetWorkflow
 
-		case commongenpb.TaskType_ReplicationTaskTypeSyncActivity:
+		case commongenpb.TaskType_ReplicationSyncActivity:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 			// cassandra does not like null

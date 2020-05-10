@@ -90,19 +90,19 @@ func (t *timerQueueActiveTaskExecutor) execute(
 	}
 
 	switch timerTask.TaskType {
-	case commongenpb.TaskType_TaskTypeUserTimer:
+	case commongenpb.TaskType_UserTimer:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case commongenpb.TaskType_TaskTypeActivityTimeout:
+	case commongenpb.TaskType_ActivityTimeout:
 		return t.executeActivityTimeoutTask(timerTask)
-	case commongenpb.TaskType_TaskTypeDecisionTimeout:
+	case commongenpb.TaskType_DecisionTimeout:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case commongenpb.TaskType_TaskTypeWorkflowRunTimeout:
+	case commongenpb.TaskType_WorkflowRunTimeout:
 		return t.executeWorkflowTimeoutTask(timerTask)
-	case commongenpb.TaskType_TaskTypeActivityRetryTimer:
+	case commongenpb.TaskType_ActivityRetryTimer:
 		return t.executeActivityRetryTimerTask(timerTask)
-	case commongenpb.TaskType_TaskTypeWorkflowBackoffTimer:
+	case commongenpb.TaskType_WorkflowBackoffTimer:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
-	case commongenpb.TaskType_TaskTypeDeleteHistoryEvent:
+	case commongenpb.TaskType_DeleteHistoryEvent:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
 		return errUnknownTimerTask
@@ -282,7 +282,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	scheduleID := task.GetEventId()
 	decision, ok := mutableState.GetDecisionInfo(scheduleID)
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TaskType_TaskTypeDecisionTimeout))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TaskType_DecisionTimeout))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)

@@ -181,7 +181,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
-			TaskType:    commongenpb.TaskType_ReplicationTaskTypeSyncActivity,
+			TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
@@ -207,7 +207,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
-			TaskType:    commongenpb.TaskType_ReplicationTaskTypeHistory,
+			TaskType:    commongenpb.TaskType_ReplicationHistory,
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
@@ -246,7 +246,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
-			TaskType:     commongenpb.TaskType_ReplicationTaskTypeHistory,
+			TaskType:     commongenpb.TaskType_ReplicationHistory,
 			FirstEventId: 1,
 			NextEventId:  1,
 			Version:      1,

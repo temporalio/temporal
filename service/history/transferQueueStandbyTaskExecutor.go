@@ -85,31 +85,31 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 	}
 
 	if !shouldProcessTask &&
-		transferTask.TaskType != commongenpb.TaskType_TransferTaskTypeCloseExecution {
+		transferTask.TaskType != commongenpb.TaskType_TransferCloseExecution {
 		// guarantee the processing of workflow execution close
 		return nil
 	}
 
 	switch transferTask.TaskType {
-	case commongenpb.TaskType_TransferTaskTypeActivityTask:
+	case commongenpb.TaskType_TransferActivityTask:
 		return t.processActivityTask(transferTask)
-	case commongenpb.TaskType_TransferTaskTypeDecisionTask:
+	case commongenpb.TaskType_TransferDecisionTask:
 		return t.processDecisionTask(transferTask)
-	case commongenpb.TaskType_TransferTaskTypeCloseExecution:
+	case commongenpb.TaskType_TransferCloseExecution:
 		return t.processCloseExecution(transferTask)
-	case commongenpb.TaskType_TransferTaskTypeCancelExecution:
+	case commongenpb.TaskType_TransferCancelExecution:
 		return t.processCancelExecution(transferTask)
-	case commongenpb.TaskType_TransferTaskTypeSignalExecution:
+	case commongenpb.TaskType_TransferSignalExecution:
 		return t.processSignalExecution(transferTask)
-	case commongenpb.TaskType_TransferTaskTypeStartChildExecution:
+	case commongenpb.TaskType_TransferStartChildExecution:
 		return t.processStartChildExecution(transferTask)
-	case commongenpb.TaskType_TransferTaskTypeRecordWorkflowStarted:
+	case commongenpb.TaskType_TransferRecordWorkflowStarted:
 		return t.processRecordWorkflowStarted(transferTask)
-	case commongenpb.TaskType_TransferTaskTypeResetWorkflow:
+	case commongenpb.TaskType_TransferResetWorkflow:
 		// no reset needed for standby
 		// TODO: add error logs
 		return nil
-	case commongenpb.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes:
+	case commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes:
 		return t.processUpsertWorkflowSearchAttributes(transferTask)
 	default:
 		return errUnknownTransferTask

@@ -680,17 +680,17 @@ func createTransferTasks(
 		transferTasksRows[i].TaskID = task.GetTaskID()
 
 		switch task.GetType() {
-		case commongenpb.TaskType_TransferTaskTypeActivityTask:
+		case commongenpb.TaskType_TransferActivityTask:
 			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.ActivityTask).NamespaceID)
 			info.TaskList = task.(*p.ActivityTask).TaskList
 			info.ScheduleId = task.(*p.ActivityTask).ScheduleID
 
-		case commongenpb.TaskType_TransferTaskTypeDecisionTask:
+		case commongenpb.TaskType_TransferDecisionTask:
 			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.DecisionTask).NamespaceID)
 			info.TaskList = task.(*p.DecisionTask).TaskList
 			info.ScheduleId = task.(*p.DecisionTask).ScheduleID
 
-		case commongenpb.TaskType_TransferTaskTypeCancelExecution:
+		case commongenpb.TaskType_TransferCancelExecution:
 			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetNamespaceID)
 			info.TargetWorkflowId = task.(*p.CancelExecutionTask).TargetWorkflowID
 			if task.(*p.CancelExecutionTask).TargetRunID != "" {
@@ -699,7 +699,7 @@ func createTransferTasks(
 			info.TargetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleId = task.(*p.CancelExecutionTask).InitiatedID
 
-		case commongenpb.TaskType_TransferTaskTypeSignalExecution:
+		case commongenpb.TaskType_TransferSignalExecution:
 			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetNamespaceID)
 			info.TargetWorkflowId = task.(*p.SignalExecutionTask).TargetWorkflowID
 			if task.(*p.SignalExecutionTask).TargetRunID != "" {
@@ -708,15 +708,15 @@ func createTransferTasks(
 			info.TargetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleId = task.(*p.SignalExecutionTask).InitiatedID
 
-		case commongenpb.TaskType_TransferTaskTypeStartChildExecution:
+		case commongenpb.TaskType_TransferStartChildExecution:
 			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.StartChildExecutionTask).TargetNamespaceID)
 			info.TargetWorkflowId = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			info.ScheduleId = task.(*p.StartChildExecutionTask).InitiatedID
 
-		case commongenpb.TaskType_TransferTaskTypeCloseExecution,
-			commongenpb.TaskType_TransferTaskTypeRecordWorkflowStarted,
-			commongenpb.TaskType_TransferTaskTypeResetWorkflow,
-			commongenpb.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes:
+		case commongenpb.TaskType_TransferCloseExecution,
+			commongenpb.TaskType_TransferRecordWorkflowStarted,
+			commongenpb.TaskType_TransferResetWorkflow,
+			commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes:
 			// No explicit property needs to be set
 
 		default:
@@ -784,7 +784,7 @@ func createReplicationTasks(
 		var resetWorkflow bool
 
 		switch task.GetType() {
-		case commongenpb.TaskType_ReplicationTaskTypeHistory:
+		case commongenpb.TaskType_ReplicationHistory:
 			historyReplicationTask, ok := task.(*p.HistoryReplicationTask)
 			if !ok {
 				return serviceerror.NewInternal(fmt.Sprintf("createReplicationTasks failed. Failed to cast %v to HistoryReplicationTask", task))
@@ -800,7 +800,7 @@ func createReplicationTasks(
 				lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
 			}
 
-		case commongenpb.TaskType_ReplicationTaskTypeSyncActivity:
+		case commongenpb.TaskType_ReplicationSyncActivity:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 			lastReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{}

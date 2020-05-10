@@ -102,23 +102,23 @@ func (t *transferQueueActiveTaskExecutor) execute(
 	}
 
 	switch task.TaskType {
-	case commongenpb.TaskType_TransferTaskTypeActivityTask:
+	case commongenpb.TaskType_TransferActivityTask:
 		return t.processActivityTask(task)
-	case commongenpb.TaskType_TransferTaskTypeDecisionTask:
+	case commongenpb.TaskType_TransferDecisionTask:
 		return t.processDecisionTask(task)
-	case commongenpb.TaskType_TransferTaskTypeCloseExecution:
+	case commongenpb.TaskType_TransferCloseExecution:
 		return t.processCloseExecution(task)
-	case commongenpb.TaskType_TransferTaskTypeCancelExecution:
+	case commongenpb.TaskType_TransferCancelExecution:
 		return t.processCancelExecution(task)
-	case commongenpb.TaskType_TransferTaskTypeSignalExecution:
+	case commongenpb.TaskType_TransferSignalExecution:
 		return t.processSignalExecution(task)
-	case commongenpb.TaskType_TransferTaskTypeStartChildExecution:
+	case commongenpb.TaskType_TransferStartChildExecution:
 		return t.processStartChildExecution(task)
-	case commongenpb.TaskType_TransferTaskTypeRecordWorkflowStarted:
+	case commongenpb.TaskType_TransferRecordWorkflowStarted:
 		return t.processRecordWorkflowStarted(task)
-	case commongenpb.TaskType_TransferTaskTypeResetWorkflow:
+	case commongenpb.TaskType_TransferResetWorkflow:
 		return t.processResetWorkflow(task)
-	case commongenpb.TaskType_TransferTaskTypeUpsertWorkflowSearchAttributes:
+	case commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes:
 		return t.processUpsertWorkflowSearchAttributes(task)
 	default:
 		return errUnknownTransferTask
@@ -147,7 +147,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	ai, ok := mutableState.GetActivityInfo(task.GetScheduleId())
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TaskType_TransferTaskTypeActivityTask))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TaskType_TransferActivityTask))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), ai.Version, task.Version, task)
@@ -184,7 +184,7 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 
 	decision, found := mutableState.GetDecisionInfo(task.GetScheduleId())
 	if !found {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TaskType_TransferTaskTypeDecisionTask))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TaskType_TransferDecisionTask))
 		return nil
 	}
 	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)

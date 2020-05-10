@@ -130,7 +130,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TaskType_ReplicationTaskTypeSyncActivity,
+		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 		TaskId:      taskID,
 		NamespaceId: primitives.MustParseUUID(namespaceID),
 		WorkflowId:  workflowID,
@@ -173,7 +173,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TaskType_ReplicationTaskTypeSyncActivity,
+		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 		TaskId:      taskID,
 		NamespaceId: primitives.MustParseUUID(namespaceID),
 		WorkflowId:  workflowID,
@@ -221,7 +221,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TaskType_ReplicationTaskTypeSyncActivity,
+		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 		TaskId:      taskID,
 		NamespaceId: primitives.MustParseUUID(namespaceID),
 		WorkflowId:  workflowID,
@@ -271,7 +271,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TaskType_ReplicationTaskTypeSyncActivity,
+		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 		TaskId:      taskID,
 		NamespaceId: primitives.MustParseUUID(namespaceID),
 		WorkflowId:  workflowID,
@@ -384,7 +384,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &persistenceblobs.ReplicationTaskInfo{
-		TaskType:    commongenpb.TaskType_ReplicationTaskTypeSyncActivity,
+		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 		TaskId:      taskID,
 		NamespaceId: primitives.MustParseUUID(namespaceID),
 		WorkflowId:  workflowID,

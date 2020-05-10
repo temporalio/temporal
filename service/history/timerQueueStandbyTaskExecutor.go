@@ -88,28 +88,28 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 	}
 
 	if !shouldProcessTask &&
-		timerTask.TaskType != commongenpb.TaskType_TaskTypeWorkflowRunTimeout &&
-		timerTask.TaskType != commongenpb.TaskType_TaskTypeDeleteHistoryEvent {
+		timerTask.TaskType != commongenpb.TaskType_WorkflowRunTimeout &&
+		timerTask.TaskType != commongenpb.TaskType_DeleteHistoryEvent {
 		// guarantee the processing of workflow execution history deletion
 		return nil
 	}
 
 	switch timerTask.TaskType {
-	case commongenpb.TaskType_TaskTypeUserTimer:
+	case commongenpb.TaskType_UserTimer:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case commongenpb.TaskType_TaskTypeActivityTimeout:
+	case commongenpb.TaskType_ActivityTimeout:
 		return t.executeActivityTimeoutTask(timerTask)
-	case commongenpb.TaskType_TaskTypeDecisionTimeout:
+	case commongenpb.TaskType_DecisionTimeout:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case commongenpb.TaskType_TaskTypeWorkflowRunTimeout:
+	case commongenpb.TaskType_WorkflowRunTimeout:
 		return t.executeWorkflowTimeoutTask(timerTask)
-	case commongenpb.TaskType_TaskTypeActivityRetryTimer:
+	case commongenpb.TaskType_ActivityRetryTimer:
 		// retry backoff timer should not get created on passive cluster
 		// TODO: add error logs
 		return nil
-	case commongenpb.TaskType_TaskTypeWorkflowBackoffTimer:
+	case commongenpb.TaskType_WorkflowBackoffTimer:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
-	case commongenpb.TaskType_TaskTypeDeleteHistoryEvent:
+	case commongenpb.TaskType_DeleteHistoryEvent:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
 		return errUnknownTimerTask
