@@ -21,6 +21,8 @@
 package postgres
 
 import (
+	"os"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -30,12 +32,26 @@ import (
 )
 
 const (
-	testUser      = "postgres"
-	testPassword  = "cadence"
 	testSchemaDir = "schema/postgres"
 )
 
 func getTestClusterOption() *pt.TestBaseOptions {
+	testUser := "postgres"
+	testPassword := "cadence"
+
+	if runtime.GOOS == "darwin" {
+		testUser = os.Getenv("USER")
+		testPassword = ""
+	}
+
+	if os.Getenv("POSTGRES_USER") != "" {
+		testUser = os.Getenv("POSTGRES_USER")
+	}
+
+	if os.Getenv("POSTGRES_PASSWORD") != "" {
+		testUser = os.Getenv("POSTGRES_PASSWORD")
+	}
+
 	return &pt.TestBaseOptions{
 		SQLDBPluginName: PluginName,
 		DBUsername:      testUser,

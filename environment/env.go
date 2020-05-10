@@ -161,7 +161,7 @@ func GetCassandraPort() int {
 	return p
 }
 
-// GetMySQLAddress return the cassandra address
+// GetMySQLAddress return the MySQL address
 func GetMySQLAddress() string {
 	addr := os.Getenv(MySQLSeeds)
 	if addr == "" {
@@ -183,7 +183,7 @@ func GetMySQLPort() int {
 	return p
 }
 
-// GetPostgresAddress return the cassandra address
+// GetPostgresAddress return the Postgres address
 func GetPostgresAddress() string {
 	addr := os.Getenv(PostgresSeeds)
 	if addr == "" {
@@ -205,7 +205,7 @@ func GetPostgresPort() int {
 	return p
 }
 
-// GetKafkaAddress return the kafka address
+// GetKafkaAddress return the Kafka address
 func GetKafkaAddress() string {
 	addr := os.Getenv(KafkaSeeds)
 	if addr == "" {
@@ -227,7 +227,7 @@ func GetKafkaPort() int {
 	return p
 }
 
-// GetESAddress return the kafka address
+// GetESAddress return the ElasticSearch address
 func GetESAddress() string {
 	addr := os.Getenv(ESSeeds)
 	if addr == "" {
@@ -236,7 +236,7 @@ func GetESAddress() string {
 	return addr
 }
 
-// GetESPort return the Kafka port
+// GetESPort return the ElasticSearch port
 func GetESPort() int {
 	port := os.Getenv(ESPort)
 	if port == "" {
