@@ -220,8 +220,10 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
+	namespaceID, workflowExecution := t.getNamespaceIDAndWorkflowExecution(task)
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+		namespaceID,
+		workflowExecution,
 	)
 	if err != nil {
 		return err
@@ -324,7 +326,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		return err
 	}
 
-	return t.processParentClosePolicy(primitives.UUID(task.GetNamespaceId()).String(), namespace, children)
+	return t.processParentClosePolicy(namespaceID, namespace, workflowExecution, children)
 }
 
 func (t *transferQueueActiveTaskExecutor) processCancelExecution(
@@ -1345,6 +1347,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	namespaceID string,
 	namespace string,
+	workflowExecution executionpb.WorkflowExecution,
 	childInfos map[int64]*persistence.ChildExecutionInfo,
 ) error {
 
@@ -1386,6 +1389,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		if err := t.applyParentClosePolicy(
 			namespaceID,
 			namespace,
+			workflowExecution,
 			childInfo,
 		); err != nil {
 			if _, ok := err.(*serviceerror.NotFound); !ok {
@@ -1401,6 +1405,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	namespaceID string,
 	namespace string,
+	workflowExecution executionpb.WorkflowExecution,
 	childInfo *persistence.ChildExecutionInfo,
 ) error {
 
@@ -1415,6 +1420,9 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	case commonpb.ParentClosePolicy_Terminate:
 		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 			NamespaceId: namespaceID,
+			// Include parent execution info with Terminate request which allows child to be terminated with
+			// different RunID due to continue as new.
+			ParentExecution: &workflowExecution,
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: namespace,
 				WorkflowExecution: &executionpb.WorkflowExecution{

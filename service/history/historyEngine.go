@@ -2183,7 +2183,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflow(
+	err = e.updateWorkflow(
 		ctx,
 		namespaceID,
 		execution,
@@ -2201,6 +2201,45 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 				request.GetIdentity(),
 			)
 		})
+
+	// Terminate triggered due to commonpb.ParentClosePolicy_Terminate also includes ParentExecution info with the
+	// request. If Workflow already completed try to load current active workflow execution to allow terminate when
+	// child does continue as new.  Must compare parent execution to make sure terminate is triggered by the same parent.
+	if err == ErrWorkflowCompleted && len(request.WorkflowExecution.RunId) > 0 &&
+		terminateRequest.ParentExecution != nil {
+		execution = executionpb.WorkflowExecution{
+			WorkflowId: request.WorkflowExecution.WorkflowId,
+		}
+		err = e.updateWorkflow(
+			ctx,
+			namespaceID,
+			execution,
+			func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
+				if !mutableState.IsWorkflowExecutionRunning() {
+					return nil, ErrWorkflowCompleted
+				}
+
+				// Current execution is active.  Let's compare parent info before terminating child
+				executionInfo := mutableState.GetExecutionInfo()
+				if executionInfo.ParentWorkflowID == terminateRequest.ParentExecution.WorkflowId &&
+					executionInfo.ParentRunID == terminateRequest.ParentExecution.RunId {
+					eventBatchFirstEventID := mutableState.GetNextEventID()
+					return updateWorkflowWithoutDecision, terminateWorkflow(
+						mutableState,
+						eventBatchFirstEventID,
+						request.GetReason(),
+						request.GetDetails(),
+						request.GetIdentity(),
+					)
+				}
+
+				// Parent execution info did not match.  Return back ErrWorkflowCompleted to the caller for original
+				// execution
+				return nil, ErrWorkflowCompleted
+			})
+	}
+
+	return err
 }
 
 // RecordChildExecutionCompleted records the completion of child execution into parent execution history

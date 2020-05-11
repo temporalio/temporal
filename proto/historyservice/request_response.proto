@@ -254,7 +254,8 @@ message RemoveSignalMutableStateResponse {
 
 message TerminateWorkflowExecutionRequest {
     string namespaceId = 1;
-    workflowservice.TerminateWorkflowExecutionRequest terminateRequest = 2;
+    execution.WorkflowExecution parentExecution = 2;
+    workflowservice.TerminateWorkflowExecutionRequest terminateRequest = 3;
 }
 
 message TerminateWorkflowExecutionResponse {
