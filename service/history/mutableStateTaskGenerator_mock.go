@@ -29,11 +29,10 @@
 package history
 
 import (
-	reflect "reflect"
-	time "time"
-
 	gomock "github.com/golang/mock/gomock"
 	event "go.temporal.io/temporal-proto/event"
+	reflect "reflect"
+	time "time"
 )
 
 // MockmutableStateTaskGenerator is a mock of mutableStateTaskGenerator interface.

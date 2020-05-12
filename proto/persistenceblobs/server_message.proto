@@ -30,6 +30,7 @@ import "common/message.proto";
 import "persistenceblobs/server_enum.proto";
 import "replication/server_message.proto";
 import "execution/enum.proto";
+import "execution/server_enum.proto";
 import "namespace/enum.proto";
 import "namespace/message.proto";
 import "tasklist/enum.proto";
@@ -220,7 +221,7 @@ message RequestCancelInfo {
 message WorkflowExecutionState {
     string createRequestId = 1;
     bytes runId = 2;
-    int32 state = 3;
+    execution.WorkflowExecutionState state = 3;
     execution.WorkflowExecutionStatus status = 4;
 }
 

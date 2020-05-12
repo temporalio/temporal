@@ -29,11 +29,11 @@
 package history
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
+	common "go.temporal.io/temporal-proto/common"
 	event "go.temporal.io/temporal-proto/event"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice"
+	reflect "reflect"
 )
 
 // MockmutableStateDecisionTaskManager is a mock of mutableStateDecisionTaskManager interface.
@@ -237,7 +237,7 @@ func (mr *MockmutableStateDecisionTaskManagerMockRecorder) AddDecisionTaskComple
 }
 
 // AddDecisionTaskFailedEvent mocks base method.
-func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID int64, cause event.DecisionTaskFailedCause, details []byte, identity, reason, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*event.HistoryEvent, error) {
+func (m *MockmutableStateDecisionTaskManager) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID int64, cause event.DecisionTaskFailedCause, details *common.Payloads, identity, reason, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDecisionTaskFailedEvent", scheduleEventID, startedEventID, cause, details, identity, reason, binChecksum, baseRunID, newRunID, forkEventVersion)
 	ret0, _ := ret[0].(*event.HistoryEvent)
