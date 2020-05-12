@@ -118,6 +118,26 @@ func newAdminWorkflowCommands() []cli.Command {
 func newAdminShardManagementCommands() []cli.Command {
 	return []cli.Command{
 		{
+			Name:    "describe",
+			Aliases: []string{"d"},
+			Usage:   "Describe shard by id",
+			Flags: append(
+				getDBFlags(),
+				cli.IntFlag{
+					Name:  FlagShardID,
+					Usage: "The ID of the shard to describe",
+				},
+				cli.StringFlag{
+					Name:  FlagTargetCluster,
+					Value: "active",
+					Usage: "Temporal cluster to use",
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminDescribeShard(c)
+			},
+		},
+		{
 			Name:    "closeShard",
 			Aliases: []string{"clsh"},
 			Usage:   "close a shard given a shard id",
@@ -812,8 +832,14 @@ func newDBCommands() []cli.Command {
 func getDBFlags() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{
+			Name:  FlagDBEngine,
+			Value: "cassandra",
+			Usage: "Type of the DB engine to use (cassandra, mysql..)",
+		},
+		cli.StringFlag{
 			Name:  FlagDBAddress,
-			Usage: "persistence address(right now only cassandra is supported)",
+			Value: "127.0.0.1",
+			Usage: "persistence address(right now only cassandra is fully supported)",
 		},
 		cli.IntFlag{
 			Name:  FlagDBPort,
@@ -830,6 +856,7 @@ func getDBFlags() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:  FlagKeyspace,
+			Value: "temporal",
 			Usage: "cassandra keyspace",
 		},
 		cli.BoolFlag{

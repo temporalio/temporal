@@ -395,6 +395,22 @@ func AdminRemoveTask(c *cli.Context) {
 	}
 }
 
+// AdminDescribeShard describes history host
+func AdminDescribeShard(c *cli.Context) {
+	sid := getRequiredIntOption(c, FlagShardID)
+	pFactory := InitializePersistenceFactory(c)
+	shardManager, err := pFactory.NewShardManager()
+
+	if err != nil {
+		ErrorAndExit("Failed to initialize shard manager", err)
+	}
+
+	getShardReq := &persistence.GetShardRequest{ShardID: int32(sid)}
+	shard, err := shardManager.GetShard(getShardReq)
+
+	prettyPrintJSONObject(shard)
+}
+
 // AdminShardManagement describes history host
 func AdminShardManagement(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
