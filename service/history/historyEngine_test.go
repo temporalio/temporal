@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-
 	"sync"
 	"testing"
 	"time"
@@ -55,7 +54,9 @@ import (
 	"github.com/uber/cadence/service/history/constants"
 	"github.com/uber/cadence/service/history/events"
 	"github.com/uber/cadence/service/history/execution"
+	"github.com/uber/cadence/service/history/ndc"
 	"github.com/uber/cadence/service/history/query"
+	"github.com/uber/cadence/service/history/reset"
 	"github.com/uber/cadence/service/history/shard"
 	test "github.com/uber/cadence/service/history/testing"
 )
@@ -74,6 +75,8 @@ type (
 		mockMatchingClient       *matchingservicetest.MockClient
 		mockHistoryClient        *historyservicetest.MockClient
 		mockClusterMetadata      *cluster.MockMetadata
+		mockEventsReapplier      *ndc.MockEventsReapplier
+		mockWorkflowResetter     *reset.MockWorkflowResetter
 
 		mockHistoryEngine *historyEngineImpl
 		mockExecutionMgr  *mocks.ExecutionManager
@@ -104,6 +107,8 @@ func (s *engineSuite) SetupTest() {
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
+	s.mockEventsReapplier = ndc.NewMockEventsReapplier(s.controller)
+	s.mockWorkflowResetter = reset.NewMockWorkflowResetter(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
@@ -163,6 +168,8 @@ func (s *engineSuite) SetupTest() {
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
 		clientChecker:        cc.NewVersionChecker(),
+		eventsReapplier:      s.mockEventsReapplier,
+		workflowResetter:     s.mockWorkflowResetter,
 	}
 	s.mockShard.SetEngine(h)
 	h.decisionHandler = newDecisionHandler(h)
@@ -5063,6 +5070,121 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 
 	err = s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
 	s.Nil(err)
+}
+
+func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-reapply"),
+		RunId:      common.StringPtr(constants.TestRunID),
+	}
+	history := []*workflow.HistoryEvent{
+		{
+			EventId:   common.Int64Ptr(1),
+			EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
+			Version:   common.Int64Ptr(1),
+		},
+	}
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.mockHistoryEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		workflowExecution.GetRunId(),
+		constants.TestLocalDomainEntry,
+	)
+	ms := execution.CreatePersistenceMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: constants.TestRunID}
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+
+	err := s.mockHistoryEngine.ReapplyEvents(
+		context.Background(),
+		constants.TestDomainID,
+		*workflowExecution.WorkflowId,
+		*workflowExecution.RunId,
+		history,
+	)
+	s.NoError(err)
+}
+
+func (s *engineSuite) TestReapplyEvents_IgnoreSameVersionEvents() {
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-reapply-same-version"),
+		RunId:      common.StringPtr(constants.TestRunID),
+	}
+	history := []*workflow.HistoryEvent{
+		{
+			EventId:   common.Int64Ptr(1),
+			EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
+			Version:   common.Int64Ptr(common.EmptyVersion),
+		},
+	}
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.mockHistoryEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		workflowExecution.GetRunId(),
+		constants.TestLocalDomainEntry,
+	)
+
+	ms := execution.CreatePersistenceMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: constants.TestRunID}
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := s.mockHistoryEngine.ReapplyEvents(
+		context.Background(),
+		constants.TestDomainID,
+		*workflowExecution.WorkflowId,
+		*workflowExecution.RunId,
+		history,
+	)
+	s.NoError(err)
+}
+
+func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-reapply-reset-workflow"),
+		RunId:      common.StringPtr(constants.TestRunID),
+	}
+	history := []*workflow.HistoryEvent{
+		{
+			EventId:   common.Int64Ptr(1),
+			EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
+			Version:   common.Int64Ptr(100),
+		},
+	}
+	msBuilder := execution.NewMutableStateBuilderWithEventV2(
+		s.mockHistoryEngine.shard,
+		loggerimpl.NewDevelopmentForTest(s.Suite),
+		workflowExecution.GetRunId(),
+		constants.TestLocalDomainEntry,
+	)
+	ms := execution.CreatePersistenceMutableState(msBuilder)
+	ms.ExecutionInfo.State = persistence.WorkflowStateCompleted
+	ms.ExecutionInfo.LastProcessedEvent = 1
+	token, err := msBuilder.GetCurrentBranchToken()
+	s.NoError(err)
+	item := persistence.NewVersionHistoryItem(1, 1)
+	versionHistory := persistence.NewVersionHistory(token, []*persistence.VersionHistoryItem{item})
+	ms.VersionHistories = persistence.NewVersionHistories(versionHistory)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: constants.TestRunID}
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	s.mockWorkflowResetter.EXPECT().ResetWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Return(nil).Times(1)
+	err = s.mockHistoryEngine.ReapplyEvents(
+		context.Background(),
+		constants.TestDomainID,
+		*workflowExecution.WorkflowId,
+		*workflowExecution.RunId,
+		history,
+	)
+	s.NoError(err)
 }
 
 func (s *engineSuite) getBuilder(testDomainID string, we workflow.WorkflowExecution) execution.MutableState {

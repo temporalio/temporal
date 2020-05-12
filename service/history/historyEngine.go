@@ -2986,7 +2986,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 		currentExecution,
 		func(wfContext execution.Context, mutableState execution.MutableState) (*updateWorkflowAction, error) {
 			// Filter out reapply event from the same cluster
-			toReapplyEvents := make([]*workflow.HistoryEvent, len(reapplyEvents))
+			toReapplyEvents := make([]*workflow.HistoryEvent, 0, len(reapplyEvents))
 			lastWriteVersion, err := mutableState.GetLastWriteVersion()
 			if err != nil {
 				return nil, err
