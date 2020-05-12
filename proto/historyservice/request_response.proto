@@ -23,7 +23,6 @@ syntax = "proto3";
 package historyservice;
 option go_package = "github.com/temporalio/temporal/.gen/proto/historyservice";
 
-import "adminservice/server_enum.proto";
 import "common/enum.proto";
 import "common/server_enum.proto";
 import "common/message.proto";
@@ -83,9 +82,6 @@ message GetMutableStateResponse {
     int32 eventStoreVersion = 13;
     bytes currentBranchToken = 14;
     map<string, replication.ReplicationInfo> replicationInfo = 15;
-    // TODO: when migrating to gRPC, make this a enum
-    // TODO: when migrating to gRPC, unify internal & external representation
-    // NOTE: workflowState & workflowStatus are the same as persistence representation (???)
     execution.WorkflowExecutionState workflowState = 16;
     execution.WorkflowExecutionStatus workflowStatus = 17;
     event.VersionHistories versionHistories = 18;
@@ -433,7 +429,7 @@ message CloseShardResponse {
 
 message RemoveTaskRequest {
     int32 shardId = 1;
-    adminservice.TaskCategory category = 2;
+    common.TaskCategory category = 2;
     int64 taskId = 3;
     int64 visibilityTimestamp = 4;
 }

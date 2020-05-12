@@ -37,6 +37,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/auth"
@@ -373,9 +374,9 @@ func AdminRemoveTask(c *cli.Context) {
 
 	shardID := getRequiredIntOption(c, FlagShardID)
 	taskID := getRequiredInt64Option(c, FlagTaskID)
-	taskCategory := adminservice.TaskCategory(getRequiredIntOption(c, FlagTaskType))
+	taskCategory := commongenpb.TaskCategory(getRequiredIntOption(c, FlagTaskType))
 	var visibilityTimestamp int64
-	if taskCategory == adminservice.TaskCategory_Timer {
+	if taskCategory == commongenpb.TaskCategory_TaskCategory_Timer {
 		visibilityTimestamp = getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
 	}
 

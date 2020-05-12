@@ -33,8 +33,6 @@ import "replication/server_message.proto";
 import "version/message.proto";
 import "cluster/server_message.proto";
 
-import "adminservice/server_enum.proto";
-
 message DescribeWorkflowExecutionRequest {
     string namespace = 1;
     execution.WorkflowExecution execution = 2;
@@ -73,7 +71,7 @@ message CloseShardResponse {
 
 message RemoveTaskRequest {
     int32 shardId = 1;
-    TaskCategory category = 2;
+    common.TaskCategory category = 2;
     int64 taskId = 3;
     int64 visibilityTimestamp = 4;
 }
