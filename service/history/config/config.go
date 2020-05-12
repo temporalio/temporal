@@ -204,8 +204,8 @@ type Config struct {
 	ReplicationTaskProcessorCleanupInterval          dynamicconfig.DurationPropertyFnWithShardIDFilter
 	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFnWithShardIDFilter
 	// TODO: those two flags are for migration. Consider remove them after the migration complete
-	EnableRPCReplication   dynamicconfig.BoolPropertyFn
-	EnableKafkaReplication dynamicconfig.BoolPropertyFn
+	EnableRPCReplication         dynamicconfig.BoolPropertyFn
+	EnableKafkaReplication       dynamicconfig.BoolPropertyFn
 	EnableCleanupReplicationTask dynamicconfig.BoolPropertyFn
 
 	// The following are used by consistent query

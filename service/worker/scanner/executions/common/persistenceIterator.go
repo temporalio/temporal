@@ -23,6 +23,7 @@
 package common
 
 import (
+	"github.com/uber/cadence/common/codec"
 	"github.com/uber/cadence/common/pagination"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -40,7 +41,7 @@ func NewPersistenceIterator(
 	shardID int,
 ) ExecutionIterator {
 	return &persistenceIterator{
-		itr: pagination.NewIterator(nil, getPersistenceFetchPageFn(pr, pageSize, shardID)),
+		itr: pagination.NewIterator(nil, getPersistenceFetchPageFn(pr, codec.NewThriftRWEncoder(), pageSize, shardID)),
 	}
 }
 
@@ -48,7 +49,7 @@ func NewPersistenceIterator(
 func (i *persistenceIterator) Next() (*Execution, error) {
 	exec, err := i.itr.Next()
 	if exec != nil {
-		return exec.(*Execution), err
+		return exec.(*Execution), nil
 	}
 	return nil, err
 }
@@ -60,6 +61,7 @@ func (i *persistenceIterator) HasNext() bool {
 
 func getPersistenceFetchPageFn(
 	pr PersistenceRetryer,
+	encoder *codec.ThriftRWEncoder,
 	pageSize int,
 	shardID int,
 ) pagination.FetchFn {
@@ -76,22 +78,24 @@ func getPersistenceFetchPageFn(
 		}
 		executions := make([]pagination.Entity, len(resp.Executions), len(resp.Executions))
 		for i, e := range resp.Executions {
-			branchToken := e.ExecutionInfo.BranchToken
-			if e.VersionHistories != nil {
-				versionHistory, err := e.VersionHistories.GetCurrentVersionHistory()
-				if err != nil {
-					return pagination.Page{}, err
-				}
-				branchToken = versionHistory.GetBranchToken()
+			branchToken, treeID, branchID, err := GetBranchToken(e, encoder)
+			if err != nil {
+				return pagination.Page{}, err
 			}
-			executions[i] = &Execution{
+			exec := &Execution{
 				ShardID:     shardID,
 				DomainID:    e.ExecutionInfo.DomainID,
 				WorkflowID:  e.ExecutionInfo.WorkflowID,
 				RunID:       e.ExecutionInfo.RunID,
 				BranchToken: branchToken,
+				TreeID:      treeID,
+				BranchID:    branchID,
 				State:       e.ExecutionInfo.State,
 			}
+			if err := ValidateExecution(exec); err != nil {
+				return pagination.Page{}, err
+			}
+			executions[i] = exec
 		}
 		var nextToken interface{} = resp.PageToken
 		if len(resp.PageToken) == 0 {

@@ -132,7 +132,7 @@ func getExecutions(count int) []*persistence.ListConcreteExecutionsEntity {
 				DomainID:    uuid.New(),
 				WorkflowID:  uuid.New(),
 				RunID:       uuid.New(),
-				BranchToken: testBranchToken,
+				BranchToken: validBranchToken,
 				State:       0,
 			},
 		}
@@ -142,7 +142,7 @@ func getExecutions(count int) []*persistence.ListConcreteExecutionsEntity {
 				CurrentVersionHistoryIndex: 0,
 				Histories: []*persistence.VersionHistory{
 					{
-						BranchToken: testBranchToken,
+						BranchToken: validBranchToken,
 					},
 				},
 			}

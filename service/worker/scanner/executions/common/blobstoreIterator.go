@@ -87,6 +87,9 @@ func getBlobstoreFetchPageFn(
 			if err := json.Unmarshal(p, &soe); err != nil {
 				return pagination.Page{}, err
 			}
+			if err := ValidateExecution(&soe.Execution); err != nil {
+				return pagination.Page{}, err
+			}
 			executions = append(executions, &soe.Execution)
 		}
 		var nextPageToken interface{} = index + 1

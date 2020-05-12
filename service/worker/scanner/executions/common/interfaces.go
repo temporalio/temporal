@@ -49,7 +49,7 @@ type (
 	// It can also be used to fix the invariant for an execution.
 	Invariant interface {
 		Check(Execution, *InvariantResourceBag) CheckResult
-		Fix(Execution, *InvariantResourceBag) FixResult
+		Fix(Execution) FixResult
 		InvariantType() InvariantType
 	}
 
