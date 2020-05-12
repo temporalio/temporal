@@ -38,7 +38,7 @@ import (
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
-	executionproto "github.com/temporalio/temporal/.gen/proto/execution"
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 
@@ -173,7 +173,7 @@ type (
 		Msg              string
 		StartRequestID   string
 		RunID            string
-		State            executionproto.WorkflowExecutionState
+		State            executiongenpb.WorkflowExecutionState
 		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
@@ -229,7 +229,7 @@ type (
 		WorkflowRunTimeout                 int32
 		WorkflowExecutionTimeout           int32
 		WorkflowTaskTimeout                int32
-		State                              executionproto.WorkflowExecutionState
+		State                              executiongenpb.WorkflowExecutionState
 		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
@@ -639,7 +639,7 @@ type (
 	GetCurrentExecutionResponse struct {
 		StartRequestID   string
 		RunID            string
-		State            executionproto.WorkflowExecutionState
+		State            executiongenpb.WorkflowExecutionState
 		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
@@ -684,7 +684,7 @@ type (
 	CurrentWorkflowCAS struct {
 		PrevRunID            string
 		PrevLastWriteVersion int64
-		PrevState            executionproto.WorkflowExecutionState
+		PrevState            executiongenpb.WorkflowExecutionState
 	}
 
 	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run
