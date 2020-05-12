@@ -1580,11 +1580,16 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			response.ScheduledEvent = scheduledEvent
 			response.ScheduledTimestampOfThisAttempt = common.Int64Ptr(ai.ScheduledTime.UnixNano())
 
+			response.Attempt = common.Int64Ptr(int64(ai.Attempt))
+			response.HeartbeatDetails = ai.Details
+
+			response.WorkflowType = mutableState.GetWorkflowType()
+			response.WorkflowDomain = common.StringPtr(domainName)
+
 			if ai.StartedID != common.EmptyEventID {
 				// If activity is started as part of the current request scope then return a positive response
 				if ai.RequestID == requestID {
 					response.StartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
-					response.Attempt = common.Int64Ptr(int64(ai.Attempt))
 					return nil
 				}
 
@@ -1601,11 +1606,6 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			}
 
 			response.StartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
-			response.Attempt = common.Int64Ptr(int64(ai.Attempt))
-			response.HeartbeatDetails = ai.Details
-
-			response.WorkflowType = mutableState.GetWorkflowType()
-			response.WorkflowDomain = common.StringPtr(domainName)
 
 			return nil
 		})
