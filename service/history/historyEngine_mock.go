@@ -30,14 +30,13 @@ package history
 
 import (
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 	replication "github.com/temporalio/temporal/.gen/proto/replication"
 	persistence "github.com/temporalio/temporal/common/persistence"
 	event "go.temporal.io/temporal-proto/event"
 	execution "go.temporal.io/temporal-proto/execution"
+	reflect "reflect"
 )
 
 // MockEngine is a mock of Engine interface.

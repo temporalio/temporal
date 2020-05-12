@@ -30,10 +30,9 @@ package history
 
 import (
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	replication "github.com/temporalio/temporal/.gen/proto/replication"
+	reflect "reflect"
 )
 
 // MockreplicationDLQHandler is a mock of replicationDLQHandler interface.

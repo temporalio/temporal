@@ -29,10 +29,9 @@
 package dynamicconfig
 
 import (
+	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
 	time "time"
-
-	gomock "github.com/golang/mock/gomock"
 )
 
 // MockClient is a mock of Client interface.
