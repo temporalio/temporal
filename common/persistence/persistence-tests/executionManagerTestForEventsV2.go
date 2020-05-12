@@ -454,7 +454,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	taskR, err := s.GetReplicationTasks(1, false)
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
 	tsk := taskR[0]
-	s.Equal(commongenpb.TaskType_ReplicationHistory, int(tsk.TaskType))
+	s.Equal(commongenpb.TaskType_ReplicationHistory, tsk.TaskType)
 	s.Equal(namespaceID, primitives.UUID(tsk.GetNamespaceId()).String())
 	s.Equal(workflowExecution.WorkflowId, tsk.GetWorkflowId())
 	s.Equal(workflowExecution.RunId, primitives.UUID(tsk.GetRunId()).String())
@@ -552,7 +552,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	taskR1, err := s.GetReplicationTasks(1, false)
 	s.Equal(1, len(taskR1), "Expected 1 replication task.")
 	tsk1 := taskR1[0]
-	s.Equal(commongenpb.TaskType_ReplicationHistory, int(tsk1.TaskType))
+	s.Equal(commongenpb.TaskType_ReplicationHistory, tsk1.TaskType)
 	s.Equal(namespaceID, primitives.UUID(tsk1.GetNamespaceId()).String())
 	s.Equal(workflowExecution.WorkflowId, tsk1.GetWorkflowId())
 	s.Equal(workflowExecution.RunId, primitives.UUIDString(tsk1.GetRunId()))
