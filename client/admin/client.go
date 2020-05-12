@@ -298,6 +298,7 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	request *shared.RefreshWorkflowTasksRequest,
 	opts ...yarpc.CallOption,
 ) error {
+
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
 	if err != nil {
@@ -306,6 +307,22 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.RefreshWorkflowTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) ResendReplicationTasks(
+	ctx context.Context,
+	request *admin.ResendReplicationTasksRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ResendReplicationTasks(ctx, request, opts...)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

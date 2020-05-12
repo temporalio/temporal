@@ -133,6 +133,12 @@ type Interface interface {
 		Request *shared.RemoveTaskRequest,
 		opts ...yarpc.CallOption,
 	) error
+
+	ResendReplicationTasks(
+		ctx context.Context,
+		Request *admin.ResendReplicationTasksRequest,
+		opts ...yarpc.CallOption,
+	) error
 }
 
 // New builds a new client for the AdminService service.
@@ -523,5 +529,28 @@ func (c client) RemoveTask(
 	}
 
 	err = admin.AdminService_RemoveTask_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ResendReplicationTasks(
+	ctx context.Context,
+	_Request *admin.ResendReplicationTasksRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := admin.AdminService_ResendReplicationTasks_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_ResendReplicationTasks_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = admin.AdminService_ResendReplicationTasks_Helper.UnwrapResponse(&result)
 	return
 }

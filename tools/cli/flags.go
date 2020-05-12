@@ -48,6 +48,7 @@ const (
 	FlagTargetCluster                     = "target_cluster"
 	FlagMinEventID                        = "min_event_id"
 	FlagMaxEventID                        = "max_event_id"
+	FlagStartEventVersion                 = "start_event_version"
 	FlagTaskList                          = "tasklist"
 	FlagTaskListWithAlias                 = FlagTaskList + ", tl"
 	FlagTaskListType                      = "tasklisttype"

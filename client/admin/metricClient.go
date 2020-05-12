@@ -324,3 +324,20 @@ func (c *metricClient) RefreshWorkflowTasks(
 	}
 	return err
 }
+
+func (c *metricClient) ResendReplicationTasks(
+	ctx context.Context,
+	request *admin.ResendReplicationTasksRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	c.metricsClient.IncCounter(metrics.AdminClientResendReplicationTasksScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientResendReplicationTasksScope, metrics.CadenceClientLatency)
+	err := c.client.ResendReplicationTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientResendReplicationTasksScope, metrics.CadenceClientFailures)
+	}
+	return err
+}

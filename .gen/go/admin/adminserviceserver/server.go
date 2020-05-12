@@ -115,6 +115,11 @@ type Interface interface {
 		ctx context.Context,
 		Request *shared.RemoveTaskRequest,
 	) error
+
+	ResendReplicationTasks(
+		ctx context.Context,
+		Request *admin.ResendReplicationTasksRequest,
+	) error
 }
 
 // New prepares an implementation of the AdminService service for
@@ -303,10 +308,21 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 				Signature:    "RemoveTask(Request *shared.RemoveTaskRequest)",
 				ThriftModule: admin.ThriftModule,
 			},
+
+			thrift.Method{
+				Name: "ResendReplicationTasks",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ResendReplicationTasks),
+				},
+				Signature:    "ResendReplicationTasks(Request *admin.ResendReplicationTasksRequest)",
+				ThriftModule: admin.ThriftModule,
+			},
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 16)
+	procedures := make([]transport.Procedure, 0, 17)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -608,6 +624,25 @@ func (h handler) RemoveTask(ctx context.Context, body wire.Value) (thrift.Respon
 
 	hadError := err != nil
 	result, err := admin.AdminService_RemoveTask_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ResendReplicationTasks(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_ResendReplicationTasks_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.ResendReplicationTasks(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_ResendReplicationTasks_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {
