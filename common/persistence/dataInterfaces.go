@@ -37,8 +37,10 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -113,16 +115,6 @@ const (
 	// Conflict resolve workflow, without current record
 	// NOTE: current record CANNOT point to the workflow to be updated
 	ConflictResolveWorkflowModeBypassCurrent
-)
-
-// Workflow execution states
-const (
-	WorkflowStateCreated = iota
-	WorkflowStateRunning
-	WorkflowStateCompleted
-	WorkflowStateZombie
-	WorkflowStateVoid
-	WorkflowStateCorrupted
 )
 
 // Transfer task types
@@ -210,7 +202,7 @@ type (
 		Msg              string
 		StartRequestID   string
 		RunID            string
-		State            int
+		State            executiongenpb.WorkflowExecutionState
 		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
@@ -266,7 +258,7 @@ type (
 		WorkflowRunTimeout                 int32
 		WorkflowExecutionTimeout           int32
 		WorkflowTaskTimeout                int32
-		State                              int
+		State                              executiongenpb.WorkflowExecutionState
 		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
@@ -676,7 +668,7 @@ type (
 	GetCurrentExecutionResponse struct {
 		StartRequestID   string
 		RunID            string
-		State            int
+		State            executiongenpb.WorkflowExecutionState
 		Status           executionpb.WorkflowExecutionStatus
 		LastWriteVersion int64
 	}
@@ -721,7 +713,7 @@ type (
 	CurrentWorkflowCAS struct {
 		PrevRunID            string
 		PrevLastWriteVersion int64
-		PrevState            int
+		PrevState            executiongenpb.WorkflowExecutionState
 	}
 
 	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run

@@ -33,7 +33,9 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	commonpb "go.temporal.io/temporal-proto/common"
@@ -220,7 +222,7 @@ type (
 		WorkflowRunTimeout                 int32
 		WorkflowExecutionTimeout           int32
 		WorkflowTaskTimeout                int32
-		State                              int
+		State                              executiongenpb.WorkflowExecutionState
 		Status                             executionpb.WorkflowExecutionStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
@@ -733,7 +735,7 @@ func NewDataBlobFromProto(blob *commonpb.DataBlob) *serialization.DataBlob {
 func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, currentVersion int64, replicationState *ReplicationState, versionHistories *serialization.DataBlob) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
 	state := &persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: executionInfo.CreateRequestID,
-		State:           int32(executionInfo.State),
+		State:           executionInfo.State,
 		Status:          executionInfo.Status,
 		RunId:           primitives.MustParseUUID(executionInfo.RunID),
 	}
@@ -834,7 +836,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		WorkflowExecutionTimeout:           info.GetWorkflowExecutionTimeoutSeconds(),
 		WorkflowRunTimeout:                 info.GetWorkflowRunTimeoutSeconds(),
 		WorkflowTaskTimeout:                info.GetWorkflowTaskTimeoutSeconds(),
-		State:                              int(state.GetState()),
+		State:                              state.GetState(),
 		Status:                             state.GetStatus(),
 		LastFirstEventID:                   info.GetLastFirstEventId(),
 		LastProcessedEvent:                 info.GetLastProcessedEvent(),

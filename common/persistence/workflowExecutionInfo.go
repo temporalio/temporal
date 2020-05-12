@@ -27,6 +27,7 @@ package persistence
 import (
 	"fmt"
 
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
@@ -48,33 +49,33 @@ func (e *WorkflowExecutionInfo) SetLastFirstEventID(id int64) {
 
 // UpdateWorkflowStateStatus update the workflow state
 func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
-	state int,
+	state executiongenpb.WorkflowExecutionState,
 	status executionpb.WorkflowExecutionStatus,
 ) error {
 
 	switch e.State {
-	case WorkflowStateVoid:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Void:
 		// no validation
-	case WorkflowStateCreated:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:
 		switch state {
-		case WorkflowStateCreated:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:
 			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case WorkflowStateRunning:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:
 			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case WorkflowStateCompleted:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed:
 			if status != executionpb.WorkflowExecutionStatus_Terminated &&
 				status != executionpb.WorkflowExecutionStatus_TimedOut &&
 				status != executionpb.WorkflowExecutionStatus_ContinuedAsNew {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case WorkflowStateZombie:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:
 			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
@@ -82,22 +83,22 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
-	case WorkflowStateRunning:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:
 		switch state {
-		case WorkflowStateCreated:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:
 			return e.createInvalidStateTransitionErr(e.State, state, status)
 
-		case WorkflowStateRunning:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:
 			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case WorkflowStateCompleted:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed:
 			if status == executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case WorkflowStateZombie:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:
 			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
@@ -105,43 +106,43 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
-	case WorkflowStateCompleted:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed:
 		switch state {
-		case WorkflowStateCreated:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:
 			return e.createInvalidStateTransitionErr(e.State, state, status)
 
-		case WorkflowStateRunning:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:
 			return e.createInvalidStateTransitionErr(e.State, state, status)
 
-		case WorkflowStateCompleted:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed:
 			if status != e.Status {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 
 			}
-		case WorkflowStateZombie:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:
 			return e.createInvalidStateTransitionErr(e.State, state, status)
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
-	case WorkflowStateZombie:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:
 		switch state {
-		case WorkflowStateCreated:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:
 			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case WorkflowStateRunning:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:
 			if status != executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case WorkflowStateCompleted:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed:
 			if status == executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
 
-		case WorkflowStateZombie:
+		case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:
 			if status == executionpb.WorkflowExecutionStatus_Running {
 				return e.createInvalidStateTransitionErr(e.State, state, status)
 			}
@@ -161,8 +162,8 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateStatus(
 
 // UpdateWorkflowStateStatus update the workflow state
 func (e *WorkflowExecutionInfo) createInvalidStateTransitionErr(
-	currentState int,
-	targetState int,
+	currentState executiongenpb.WorkflowExecutionState,
+	targetState executiongenpb.WorkflowExecutionState,
 	targetStatus executionpb.WorkflowExecutionStatus,
 ) error {
 	return serviceerror.NewInternal(fmt.Sprintf(invalidStateTransitionMsg, currentState, targetState, targetStatus))

@@ -999,7 +999,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 							Msg:              msg,
 							StartRequestID:   protoState.CreateRequestId,
 							RunID:            primitives.UUIDString(protoState.RunId),
-							State:            int(protoState.State),
+							State:            protoState.State,
 							Status:           protoState.Status,
 							LastWriteVersion: lastWriteVersion,
 						}
@@ -1265,7 +1265,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
 				RunId:           primitives.MustParseUUID(runID),
 				CreateRequestId: executionInfo.CreateRequestID,
-				State:           int32(executionInfo.State),
+				State:           executionInfo.State,
 				Status:          executionInfo.Status,
 			})
 
@@ -1380,7 +1380,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 
 	stateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
 		CreateRequestId: newExecutionInfo.CreateRequestID,
-		State:           int32(newExecutionInfo.State),
+		State:           newExecutionInfo.State,
 		Status:          newExecutionInfo.Status,
 		RunId:           primitives.MustParseUUID(newRunID),
 	})
@@ -1543,7 +1543,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
 			RunId:           primitives.MustParseUUID(runID),
 			CreateRequestId: createRequestID,
-			State:           int32(state),
+			State:           state,
 			Status:          status,
 		})
 
@@ -1872,7 +1872,7 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 	return &p.GetCurrentExecutionResponse{
 		RunID:            currentRunID,
 		StartRequestID:   executionInfo.CreateRequestId,
-		State:            int(executionInfo.State),
+		State:            executionInfo.State,
 		Status:           executionInfo.Status,
 		LastWriteVersion: replicationVersions.LastWriteVersion.GetValue(),
 	}, nil

@@ -40,6 +40,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -282,7 +283,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		WorkflowTypeName:     "wType",
 		WorkflowRunTimeout:   200,
 		WorkflowTaskTimeout:  100,
-		State:                persistence.WorkflowStateRunning,
+		State:                executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
 		Status:               executionpb.WorkflowExecutionStatus_Running,
 		NextEventID:          int64(8),
 		LastProcessedEvent:   int64(3),
@@ -740,7 +741,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		WorkflowTypeName:     "wType",
 		WorkflowRunTimeout:   200,
 		WorkflowTaskTimeout:  100,
-		State:                persistence.WorkflowStateRunning,
+		State:                executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running,
 		Status:               executionpb.WorkflowExecutionStatus_Running,
 		NextEventID:          int64(101),
 		LastProcessedEvent:   int64(99),
