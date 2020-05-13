@@ -35,3 +35,36 @@ enum TaskSource {
     History = 1;    // Task produced by history service
     DbBacklog = 2;  // Task produced from matching db backlog
 }
+
+enum TaskCategory {
+    TaskCategory_Unspecified = 0;
+    // Transfer is the task type for transfer task
+    TaskCategory_Transfer = 2; // starting from 2 here to be consistent with the row type define for cassandra
+    // Timer is the task type for timer task
+    TaskCategory_Timer = 3;
+    // Replication is the task type for replication task
+    TaskCategory_Replication = 4;
+}
+
+enum TaskType {
+    ReplicationHistory = 0;
+    ReplicationSyncActivity = 1;
+
+    TransferDecisionTask = 2;
+    TransferActivityTask = 3;
+    TransferCloseExecution = 4;
+    TransferCancelExecution = 5;
+    TransferStartChildExecution = 6;
+    TransferSignalExecution = 7;
+    TransferRecordWorkflowStarted = 8;
+    TransferResetWorkflow = 9;
+    TransferUpsertWorkflowSearchAttributes = 10;
+
+    DecisionTimeout = 11;
+    ActivityTimeout = 12;
+    UserTimer = 13;
+    WorkflowRunTimeout = 14;
+    DeleteHistoryEvent = 15;
+    ActivityRetryTimer = 16;
+    WorkflowBackoffTimer = 17;
+}

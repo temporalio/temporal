@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
@@ -265,7 +266,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 		RunId:             primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeActivityTask,
+		TaskType:          commongenpb.TaskType_TransferActivityTask,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -323,7 +324,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 		RunId:             primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeActivityTask,
+		TaskType:          commongenpb.TaskType_TransferActivityTask,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -372,7 +373,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDeci
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeDecisionTask,
+		TaskType:    commongenpb.TaskType_TransferDecisionTask,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -425,7 +426,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstD
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeDecisionTask,
+		TaskType:    commongenpb.TaskType_TransferDecisionTask,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -484,7 +485,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_No
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    stickyTaskListName,
-		TaskType:    persistence.TransferTaskTypeDecisionTask,
+		TaskType:    commongenpb.TaskType_TransferDecisionTask,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -543,7 +544,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionN
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeDecisionTask,
+		TaskType:    commongenpb.TaskType_TransferDecisionTask,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -592,7 +593,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeDecisionTask,
+		TaskType:    commongenpb.TaskType_TransferDecisionTask,
 		ScheduleId:  di.ScheduleID,
 	}
 
@@ -656,7 +657,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeCloseExecution,
+		TaskType:    commongenpb.TaskType_TransferCloseExecution,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -715,7 +716,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeCloseExecution,
+		TaskType:    commongenpb.TaskType_TransferCloseExecution,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -847,7 +848,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeCloseExecution,
+		TaskType:    commongenpb.TaskType_TransferCloseExecution,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -938,7 +939,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeCloseExecution,
+		TaskType:    commongenpb.TaskType_TransferCloseExecution,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1028,7 +1029,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeCloseExecution,
+		TaskType:    commongenpb.TaskType_TransferCloseExecution,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1088,7 +1089,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeCancelExecution,
+		TaskType:          commongenpb.TaskType_TransferCancelExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1150,7 +1151,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeCancelExecution,
+		TaskType:          commongenpb.TaskType_TransferCancelExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1212,7 +1213,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeCancelExecution,
+		TaskType:          commongenpb.TaskType_TransferCancelExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1276,7 +1277,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeSignalExecution,
+		TaskType:          commongenpb.TaskType_TransferSignalExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1351,7 +1352,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeSignalExecution,
+		TaskType:          commongenpb.TaskType_TransferSignalExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1417,7 +1418,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 		TargetRunId:       primitives.MustParseUUID(targetExecution.GetRunId()),
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeSignalExecution,
+		TaskType:          commongenpb.TaskType_TransferSignalExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1479,7 +1480,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		TargetRunId:       nil,
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeStartChildExecution,
+		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1567,7 +1568,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		TargetRunId:       nil,
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeStartChildExecution,
+		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1648,7 +1649,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		TargetRunId:       nil,
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeStartChildExecution,
+		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1732,7 +1733,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		TargetRunId:       nil,
 		TaskId:            taskID,
 		TaskList:          taskListName,
-		TaskType:          persistence.TransferTaskTypeStartChildExecution,
+		TaskType:          commongenpb.TaskType_TransferStartChildExecution,
 		ScheduleId:        event.GetEventId(),
 	}
 
@@ -1789,7 +1790,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeRecordWorkflowStarted,
+		TaskType:    commongenpb.TaskType_TransferRecordWorkflowStarted,
 		ScheduleId:  event.GetEventId(),
 	}
 
@@ -1836,7 +1837,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAt
 		RunId:       primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:      taskID,
 		TaskList:    taskListName,
-		TaskType:    persistence.TransferTaskTypeUpsertWorkflowSearchAttributes,
+		TaskType:    commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes,
 		ScheduleId:  event.GetEventId(),
 	}
 

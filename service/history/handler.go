@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	namespacegenpb "github.com/temporalio/temporal/.gen/proto/namespace"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -693,17 +694,17 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 		return nil, err
 	}
 
-	switch taskType := common.TaskType(request.GetType()); taskType {
-	case common.TaskTypeTransfer:
+	switch request.GetCategory() {
+	case commongenpb.TaskCategory_TaskCategory_Transfer:
 		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
 			TaskID: request.GetTaskId(),
 		})
-	case common.TaskTypeTimer:
+	case commongenpb.TaskCategory_TaskCategory_Timer:
 		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
 			VisibilityTimestamp: time.Unix(0, request.GetVisibilityTimestamp()),
 			TaskID:              request.GetTaskId(),
 		})
-	case common.TaskTypeReplication:
+	case commongenpb.TaskCategory_TaskCategory_Replication:
 		err = executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
 			TaskID: request.GetTaskId(),
 		})

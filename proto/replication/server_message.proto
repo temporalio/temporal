@@ -26,6 +26,7 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/replication";
 
 import "replication/server_enum.proto";
 import "common/message.proto";
+import "common/server_enum.proto";
 import "namespace/message.proto";
 import "replication/message.proto";
 import "event/message.proto";
@@ -77,7 +78,7 @@ message ReplicationTaskInfo {
     string namespaceId = 1;
     string workflowId = 2;
     string runId = 3;
-    int32 taskType = 4;
+    common.TaskType taskType = 4;
     int64 taskId = 5;
     int64 version = 6;
     int64 firstEventId = 7;

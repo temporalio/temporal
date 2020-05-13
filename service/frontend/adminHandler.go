@@ -235,7 +235,7 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.R
 	}
 	_, err := adh.GetHistoryClient().RemoveTask(ctx, &historyservice.RemoveTaskRequest{
 		ShardId:             request.GetShardId(),
-		Type:                request.GetType(),
+		Category:            request.GetCategory(),
 		TaskId:              request.GetTaskId(),
 		VisibilityTimestamp: request.GetVisibilityTimestamp(),
 	})

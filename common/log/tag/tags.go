@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	"github.com/temporalio/temporal/.gen/proto/common"
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
@@ -527,8 +528,8 @@ func TaskID(taskID int64) Tag {
 }
 
 // TaskType returns tag for TaskType for queue processor
-func TaskType(taskType int32) Tag {
-	return newInt32("queue-task-type", taskType)
+func TaskType(taskType common.TaskType) Tag {
+	return newInt32("queue-task-type", int32(taskType))
 }
 
 // TaskVersion returns tag for TaskVersion

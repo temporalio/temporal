@@ -35,6 +35,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -679,17 +680,17 @@ func createTransferTasks(
 		transferTasksRows[i].TaskID = task.GetTaskID()
 
 		switch task.GetType() {
-		case p.TransferTaskTypeActivityTask:
+		case commongenpb.TaskType_TransferActivityTask:
 			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.ActivityTask).NamespaceID)
 			info.TaskList = task.(*p.ActivityTask).TaskList
 			info.ScheduleId = task.(*p.ActivityTask).ScheduleID
 
-		case p.TransferTaskTypeDecisionTask:
+		case commongenpb.TaskType_TransferDecisionTask:
 			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.DecisionTask).NamespaceID)
 			info.TaskList = task.(*p.DecisionTask).TaskList
 			info.ScheduleId = task.(*p.DecisionTask).ScheduleID
 
-		case p.TransferTaskTypeCancelExecution:
+		case commongenpb.TaskType_TransferCancelExecution:
 			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetNamespaceID)
 			info.TargetWorkflowId = task.(*p.CancelExecutionTask).TargetWorkflowID
 			if task.(*p.CancelExecutionTask).TargetRunID != "" {
@@ -698,7 +699,7 @@ func createTransferTasks(
 			info.TargetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleId = task.(*p.CancelExecutionTask).InitiatedID
 
-		case p.TransferTaskTypeSignalExecution:
+		case commongenpb.TaskType_TransferSignalExecution:
 			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetNamespaceID)
 			info.TargetWorkflowId = task.(*p.SignalExecutionTask).TargetWorkflowID
 			if task.(*p.SignalExecutionTask).TargetRunID != "" {
@@ -707,22 +708,22 @@ func createTransferTasks(
 			info.TargetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleId = task.(*p.SignalExecutionTask).InitiatedID
 
-		case p.TransferTaskTypeStartChildExecution:
+		case commongenpb.TaskType_TransferStartChildExecution:
 			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.StartChildExecutionTask).TargetNamespaceID)
 			info.TargetWorkflowId = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			info.ScheduleId = task.(*p.StartChildExecutionTask).InitiatedID
 
-		case p.TransferTaskTypeCloseExecution,
-			p.TransferTaskTypeRecordWorkflowStarted,
-			p.TransferTaskTypeResetWorkflow,
-			p.TransferTaskTypeUpsertWorkflowSearchAttributes:
+		case commongenpb.TaskType_TransferCloseExecution,
+			commongenpb.TaskType_TransferRecordWorkflowStarted,
+			commongenpb.TaskType_TransferResetWorkflow,
+			commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes:
 			// No explicit property needs to be set
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("createTransferTasks failed. Unknow transfer type: %v", task.GetType()))
 		}
 
-		info.TaskType = int32(task.GetType())
+		info.TaskType = task.GetType()
 		info.Version = task.GetVersion()
 
 		t, err := types.TimestampProto(task.GetVisibilityTimestamp().UTC())
@@ -783,7 +784,7 @@ func createReplicationTasks(
 		var resetWorkflow bool
 
 		switch task.GetType() {
-		case p.ReplicationTaskTypeHistory:
+		case commongenpb.TaskType_ReplicationHistory:
 			historyReplicationTask, ok := task.(*p.HistoryReplicationTask)
 			if !ok {
 				return serviceerror.NewInternal(fmt.Sprintf("createReplicationTasks failed. Failed to cast %v to HistoryReplicationTask", task))
@@ -799,7 +800,7 @@ func createReplicationTasks(
 				lastReplicationInfo[k] = &replicationgenpb.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
 			}
 
-		case p.ReplicationTaskTypeSyncActivity:
+		case commongenpb.TaskType_ReplicationSyncActivity:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 			lastReplicationInfo = map[string]*replicationgenpb.ReplicationInfo{}
@@ -813,7 +814,7 @@ func createReplicationTasks(
 			NamespaceId:             namespaceID,
 			WorkflowId:              workflowID,
 			RunId:                   runID,
-			TaskType:                int32(task.GetType()),
+			TaskType:                task.GetType(),
 			FirstEventId:            firstEventID,
 			NextEventId:             nextEventID,
 			Version:                 version,
@@ -901,7 +902,7 @@ func createTimerTasks(
 			info.WorkflowId = workflowID
 			info.RunId = runID
 			info.Version = task.GetVersion()
-			info.TaskType = int32(task.GetType())
+			info.TaskType = task.GetType()
 			info.TaskId = task.GetTaskID()
 
 			goVisTs := task.GetVisibilityTimestamp()

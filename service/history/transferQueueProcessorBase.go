@@ -27,6 +27,7 @@ package history
 import (
 	"time"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
@@ -109,51 +110,51 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 }
 
 func getTransferTaskMetricsScope(
-	taskType int32,
+	taskType commongenpb.TaskType,
 	isActive bool,
 ) int {
 	switch taskType {
-	case persistence.TransferTaskTypeActivityTask:
+	case commongenpb.TaskType_TransferActivityTask:
 		if isActive {
 			return metrics.TransferActiveTaskActivityScope
 		}
 		return metrics.TransferStandbyTaskActivityScope
-	case persistence.TransferTaskTypeDecisionTask:
+	case commongenpb.TaskType_TransferDecisionTask:
 		if isActive {
 			return metrics.TransferActiveTaskDecisionScope
 		}
 		return metrics.TransferStandbyTaskDecisionScope
-	case persistence.TransferTaskTypeCloseExecution:
+	case commongenpb.TaskType_TransferCloseExecution:
 		if isActive {
 			return metrics.TransferActiveTaskCloseExecutionScope
 		}
 		return metrics.TransferStandbyTaskCloseExecutionScope
-	case persistence.TransferTaskTypeCancelExecution:
+	case commongenpb.TaskType_TransferCancelExecution:
 		if isActive {
 			return metrics.TransferActiveTaskCancelExecutionScope
 		}
 		return metrics.TransferStandbyTaskCancelExecutionScope
-	case persistence.TransferTaskTypeSignalExecution:
+	case commongenpb.TaskType_TransferSignalExecution:
 		if isActive {
 			return metrics.TransferActiveTaskSignalExecutionScope
 		}
 		return metrics.TransferStandbyTaskSignalExecutionScope
-	case persistence.TransferTaskTypeStartChildExecution:
+	case commongenpb.TaskType_TransferStartChildExecution:
 		if isActive {
 			return metrics.TransferActiveTaskStartChildExecutionScope
 		}
 		return metrics.TransferStandbyTaskStartChildExecutionScope
-	case persistence.TransferTaskTypeRecordWorkflowStarted:
+	case commongenpb.TaskType_TransferRecordWorkflowStarted:
 		if isActive {
 			return metrics.TransferActiveTaskRecordWorkflowStartedScope
 		}
 		return metrics.TransferStandbyTaskRecordWorkflowStartedScope
-	case persistence.TransferTaskTypeResetWorkflow:
+	case commongenpb.TaskType_TransferResetWorkflow:
 		if isActive {
 			return metrics.TransferActiveTaskResetWorkflowScope
 		}
 		return metrics.TransferStandbyTaskResetWorkflowScope
-	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
+	case commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes:
 		if isActive {
 			return metrics.TransferActiveTaskUpsertWorkflowSearchAttributesScope
 		}
