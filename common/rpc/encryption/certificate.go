@@ -39,7 +39,7 @@ func GenerateSelfSignedUseEverywhereX509(commonName string) (*tls.Certificate, e
 	return GenerateSelfSignedX509CA(commonName, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
 }
 
-// GenerateSelfSignedUseEverywhereX509 generates a TLS serverCert that is self-signed
+// GenerateSelfSignedX509CA generates a TLS serverCert that is self-signed
 func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage) (*tls.Certificate, error) {
 	now := time.Now().UTC()
 
@@ -80,7 +80,7 @@ func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage) (*
 	return &tlsCert, nil
 }
 
-// GenerateSelfSignedUseEverywhereX509 generates a TLS serverCert that is self-signed
+// GenerateServerX509UsingCA generates a TLS serverCert that is self-signed
 func GenerateServerX509UsingCA(commonName string, ca *tls.Certificate) (*tls.Certificate, *rsa.PrivateKey, error) {
 	now := time.Now().UTC()
 

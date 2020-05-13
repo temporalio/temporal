@@ -37,7 +37,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/rpc/encryption"
-	config "github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/common/service/config"
 )
 
 // RPCFactory is an implementation of service.RPCFactory interface
@@ -71,10 +71,10 @@ func newFactory(cfg *config.RPC, sName string, logger log.Logger, frontendTls en
 }
 
 func (d *RPCFactory) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {
-	opts := make([]grpc.ServerOption, 0, 1)
+	var opts []grpc.ServerOption
 
 	if d.tlsFactory != nil {
-		serverConfig, err := d.tlsFactory.GenerateFrontendServerConfig()
+		serverConfig, err := d.tlsFactory.GetFrontendServerConfig()
 		if err != nil {
 			return nil, err
 		}
@@ -86,17 +86,17 @@ func (d *RPCFactory) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error)
 
 func (d *RPCFactory) GetFrontendClientTlsConfig() (*tls.Config, error) {
 	if d.tlsFactory != nil {
-		return d.tlsFactory.GenerateFrontendClientConfig()
+		return d.tlsFactory.GetFrontendClientConfig()
 	}
 
 	return nil, nil
 }
 
 func (d *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error) {
-	opts := make([]grpc.ServerOption, 0, 1)
+	var opts []grpc.ServerOption
 
 	if d.tlsFactory != nil {
-		serverConfig, err := d.tlsFactory.GenerateInternodeServerConfig()
+		serverConfig, err := d.tlsFactory.GetInternodeServerConfig()
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +108,7 @@ func (d *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error
 
 func (d *RPCFactory) GetInternodeClientTlsConfig() (*tls.Config, error) {
 	if d.tlsFactory != nil {
-		return d.tlsFactory.GenerateInternodeClientConfig()
+		return d.tlsFactory.GetInternodeClientConfig()
 	}
 
 	return nil, nil
@@ -198,7 +198,7 @@ func (d *RPCFactory) CreateFrontendGRPCConnection(hostName string) *grpc.ClientC
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
-		tlsClientConfig, err = d.tlsFactory.GenerateFrontendClientConfig()
+		tlsClientConfig, err = d.tlsFactory.GetFrontendClientConfig()
 		if err != nil {
 			d.logger.Fatal("Failed to create tls config for grpc connection", tag.Error(err))
 		}
@@ -212,7 +212,7 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
-		tlsClientConfig, err = d.tlsFactory.GenerateInternodeClientConfig()
+		tlsClientConfig, err = d.tlsFactory.GetInternodeClientConfig()
 		if err != nil {
 			d.logger.Fatal("Failed to create tls config for grpc connection", tag.Error(err))
 		}

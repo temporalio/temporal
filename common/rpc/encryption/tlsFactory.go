@@ -30,12 +30,12 @@ import (
 )
 
 type (
-	// TLSFactory creates certificates based on Encryption internodeSettings
+	// TLSFactory creates certificates based on encryption internode settings.
 	TLSFactory interface {
-		GenerateInternodeServerConfig() (*tls.Config, error)
-		GenerateInternodeClientConfig() (*tls.Config, error)
-		GenerateFrontendServerConfig() (*tls.Config, error)
-		GenerateFrontendClientConfig() (*tls.Config, error)
+		GetInternodeServerConfig() (*tls.Config, error)
+		GetInternodeClientConfig() (*tls.Config, error)
+		GetFrontendServerConfig() (*tls.Config, error)
+		GetFrontendClientConfig() (*tls.Config, error)
 	}
 
 	CertProvider interface {
@@ -45,8 +45,7 @@ type (
 		GetSettings() *config.GroupTLS
 	}
 
-	// GRPCDialer creates gRPC connection.
-	tlsGenerator func(localProvider CertProvider, settingsProvider CertProvider) (*tls.Config, error)
+	tlsConfigConstructor func(localProvider CertProvider, settingsProvider CertProvider) (*tls.Config, error)
 
 	ProviderType string
 )

@@ -54,28 +54,27 @@ func NewLocalStoreTlsFactory(tlsConfig *config.RootTLS) (TLSFactory, error) {
 	}, nil
 }
 
-func (s *localStoreTlsFactory) GenerateInternodeClientConfig() (*tls.Config, error) {
-	return safelyGenerateConfig(&s.RWMutex, s.internodeCertProvider, s.internodeCertProvider, generateClientTLSConfig, &s.internodeClientConfig)
+func (s *localStoreTlsFactory) GetInternodeClientConfig() (*tls.Config, error) {
+	return s.getOrCreateConfig(&s.internodeClientConfig, newClientTLSConfig, s.internodeCertProvider, s.internodeCertProvider)
 }
 
-func (s *localStoreTlsFactory) GenerateFrontendClientConfig() (*tls.Config, error) {
-	return safelyGenerateConfig(&s.RWMutex, s.internodeCertProvider, s.frontendCertProvider, generateClientTLSConfig, &s.frontendClientConfig)
+func (s *localStoreTlsFactory) GetFrontendClientConfig() (*tls.Config, error) {
+	return s.getOrCreateConfig(&s.frontendClientConfig, newClientTLSConfig, s.internodeCertProvider, s.frontendCertProvider)
 }
 
-func (s *localStoreTlsFactory) GenerateFrontendServerConfig() (*tls.Config, error) {
-	return safelyGenerateConfig(&s.RWMutex, s.frontendCertProvider, s.frontendCertProvider, generateServerTLSConfig, &s.frontendServerConfig)
+func (s *localStoreTlsFactory) GetFrontendServerConfig() (*tls.Config, error) {
+	return s.getOrCreateConfig(&s.frontendServerConfig, newServerTLSConfig, s.frontendCertProvider, s.frontendCertProvider)
 }
 
-func (s *localStoreTlsFactory) GenerateInternodeServerConfig() (*tls.Config, error) {
-	return safelyGenerateConfig(&s.RWMutex, s.internodeCertProvider, s.internodeCertProvider, generateServerTLSConfig, &s.internodeServerConfig)
+func (s *localStoreTlsFactory) GetInternodeServerConfig() (*tls.Config, error) {
+	return s.getOrCreateConfig(&s.internodeServerConfig, newServerTLSConfig, s.internodeCertProvider, s.internodeCertProvider)
 }
 
-func safelyGenerateConfig(
-	s *sync.RWMutex,
+func (s *localStoreTlsFactory) getOrCreateConfig(
+	cachedConfig **tls.Config,
+	configConstructor tlsConfigConstructor,
 	localCertProvider CertProvider,
 	settingsProvider CertProvider,
-	cfgGenerator tlsGenerator,
-	cachedConfig **tls.Config,
 ) (*tls.Config, error) {
 	// Check if exists under a read lock first
 	s.RLock()
@@ -93,7 +92,7 @@ func safelyGenerateConfig(
 	}
 
 	// Load configuration
-	localConfig, err := cfgGenerator(localCertProvider, settingsProvider)
+	localConfig, err := configConstructor(localCertProvider, settingsProvider)
 
 	if err != nil {
 		return nil, err
@@ -103,7 +102,7 @@ func safelyGenerateConfig(
 	return *cachedConfig, nil
 }
 
-func generateServerTLSConfig(certProvider CertProvider, settingsProvider CertProvider) (*tls.Config, error) {
+func newServerTLSConfig(certProvider CertProvider, settingsProvider CertProvider) (*tls.Config, error) {
 	// Get serverCert from disk
 	serverCert, err := certProvider.FetchServerCertificate()
 	if err != nil {
@@ -134,7 +133,7 @@ func generateServerTLSConfig(certProvider CertProvider, settingsProvider CertPro
 	}, nil
 }
 
-func generateClientTLSConfig(localProvider CertProvider, remoteProvider CertProvider) (*tls.Config, error) {
+func newClientTLSConfig(localProvider CertProvider, remoteProvider CertProvider) (*tls.Config, error) {
 	// Optional ServerCA for client if not already trusted by host
 	serverCa, err := remoteProvider.FetchServerRootCAsForClient()
 	if err != nil {
