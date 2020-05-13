@@ -1177,7 +1177,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Nil(err)
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
 	tsk := taskR[0]
-	s.EqualValues(commongenpb.TaskType_ReplicationHistory, int(tsk.TaskType))
+	s.EqualValues(commongenpb.TaskType_ReplicationHistory, tsk.TaskType)
 	s.Equal(namespaceID, primitives.UUID(tsk.GetNamespaceId()).String())
 	s.Equal(workflowExecution.WorkflowId, tsk.GetWorkflowId())
 	s.Equal(workflowExecution.RunId, primitives.UUID(tsk.GetRunId()).String())
@@ -1541,7 +1541,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 
 	taskT, err := s.GetTimerIndexTasks(2, false)
 	s.Equal(1, len(taskT), "Expected 1 timer task.")
-	s.Equal(commongenpb.TaskType_WorkflowRunTimeout, int(taskT[0].TaskType))
+	s.Equal(commongenpb.TaskType_WorkflowRunTimeout, taskT[0].TaskType)
 	err = s.CompleteTimerTaskProto(taskT[0].VisibilityTimestamp, taskT[0].GetTaskId())
 	s.NoError(err)
 	taskT, err = s.GetTimerIndexTasks(2, false)

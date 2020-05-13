@@ -2221,7 +2221,7 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 
 	for index := range replicationTasks {
 		s.Equal(replicationTasks[index].GetTaskID(), respTasks[index].GetTaskId())
-		s.Equal(int32(replicationTasks[index].GetType()), respTasks[index].GetTaskType())
+		s.Equal(replicationTasks[index].GetType(), respTasks[index].GetTaskType())
 		s.Equal(replicationTasks[index].GetVersion(), respTasks[index].GetVersion())
 		switch replicationTasks[index].GetType() {
 		case commongenpb.TaskType_ReplicationHistory:
@@ -3090,7 +3090,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 replication task.")
 	task1 := tasks1[0]
-	s.Equal(commongenpb.TaskType_ReplicationHistory, int(task1.TaskType))
+	s.Equal(commongenpb.TaskType_ReplicationHistory, task1.TaskType)
 	s.Equal(namespaceID, primitives.UUID(task1.GetNamespaceId()).String())
 	s.Equal(workflowExecution.GetWorkflowId(), task1.GetWorkflowId())
 	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task1.GetRunId()).String())
@@ -3193,7 +3193,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 replication task.")
 	task1 := tasks1[0]
-	s.Equal(commongenpb.TaskType_ReplicationHistory, int(task1.TaskType))
+	s.Equal(commongenpb.TaskType_ReplicationHistory, task1.TaskType)
 	s.Equal(namespaceID, primitives.UUID(task1.GetNamespaceId()).String())
 	s.Equal(workflowExecution.GetWorkflowId(), task1.GetWorkflowId())
 	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task1.GetRunId()).String())
@@ -3208,7 +3208,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	s.NoError(err)
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	task2 := tasks2[0]
-	s.Equal(commongenpb.TaskType_ReplicationHistory, int(task2.TaskType))
+	s.Equal(commongenpb.TaskType_ReplicationHistory, task2.TaskType)
 	s.Equal(namespaceID, primitives.UUID(task2.GetNamespaceId()).String())
 	s.Equal(workflowExecution.GetWorkflowId(), task2.GetWorkflowId())
 	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task2.GetRunId()).String())
@@ -3278,7 +3278,7 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	taskR, err := s.GetReplicationTasks(1, false)
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
 	tsk := taskR[0]
-	s.Equal(commongenpb.TaskType_ReplicationHistory, int(tsk.TaskType))
+	s.Equal(commongenpb.TaskType_ReplicationHistory, tsk.TaskType)
 	s.Equal(namespaceID, primitives.UUID(tsk.GetNamespaceId()).String())
 	s.Equal(workflowExecution.GetWorkflowId(), tsk.GetWorkflowId())
 	s.Equal(workflowExecution.GetRunId(), primitives.UUID(tsk.GetRunId()).String())
@@ -3369,7 +3369,7 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	taskR1, err := s.GetReplicationTasks(1, false)
 	s.Equal(1, len(taskR1), "Expected 1 replication task.")
 	tsk1 := taskR1[0]
-	s.Equal(commongenpb.TaskType_ReplicationHistory, int(tsk1.TaskType))
+	s.Equal(commongenpb.TaskType_ReplicationHistory, tsk1.TaskType)
 	s.Equal(namespaceID, primitives.UUID(tsk1.GetNamespaceId()).String())
 	s.Equal(workflowExecution.GetWorkflowId(), tsk1.GetWorkflowId())
 	s.Equal(workflowExecution.GetRunId(), primitives.UUID(tsk1.GetRunId()).String())
