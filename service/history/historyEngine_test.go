@@ -114,14 +114,14 @@ var testWorkflowID = "random-workflow-id"
 var testRunID = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
 var testLocalNamespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(
-	&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID, Name: testNamespace},
+	&persistenceblobs.NamespaceInfo{Id: testNamespaceID, Name: testNamespace},
 	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 	cluster.TestCurrentClusterName,
 	nil,
 )
 
 var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID, Name: testNamespace},
+	&persistenceblobs.NamespaceInfo{Id: testNamespaceID, Name: testNamespace},
 	&persistenceblobs.NamespaceConfig{
 		RetentionDays:            1,
 		VisibilityArchivalStatus: namespacepb.ArchivalStatus_Enabled,
@@ -139,7 +139,7 @@ var testGlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalParentNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistenceblobs.NamespaceInfo{Id: testParentNamespaceUUID, Name: testParentNamespace},
+	&persistenceblobs.NamespaceInfo{Id: testParentNamespaceID, Name: testParentNamespace},
 	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
@@ -153,7 +153,7 @@ var testGlobalParentNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalTargetNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistenceblobs.NamespaceInfo{Id: testTargetNamespaceUUID, Name: testTargetNamespace},
+	&persistenceblobs.NamespaceInfo{Id: testTargetNamespaceID, Name: testTargetNamespace},
 	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
@@ -167,7 +167,7 @@ var testGlobalTargetNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
 )
 
 var testGlobalChildNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
-	&persistenceblobs.NamespaceInfo{Id: testChildNamespaceUUID, Name: testChildNamespace},
+	&persistenceblobs.NamespaceInfo{Id: testChildNamespaceID, Name: testChildNamespace},
 	&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 	&persistenceblobs.NamespaceReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
@@ -364,7 +364,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	asycWorkflowUpdate := func(delay time.Duration) {
 		tt := &tokengenpb.Task{
 			WorkflowId: execution.WorkflowId,
-			RunId:      primitives.MustParseUUID(execution.RunId),
+			RunId:      execution.RunId,
 			ScheduleId: 2,
 		}
 		taskToken, _ := tt.Marshal()
@@ -930,7 +930,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 
 	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(testRunID),
+		RunId:      testRunID,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -953,7 +953,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
 
 	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(testRunID),
+		RunId:      testRunID,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -981,7 +981,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1021,7 +1021,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1059,7 +1059,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1124,7 +1124,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 
 	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(we.GetRunId()),
+		RunId:      we.GetRunId(),
 		ScheduleId: di2.ScheduleID,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1216,7 +1216,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1304,7 +1304,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: di2.ScheduleID,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1385,7 +1385,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: di2.ScheduleID,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1456,7 +1456,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: di2.ScheduleID,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1554,7 +1554,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		tl := "testTaskList"
 		tt := &tokengenpb.Task{
 			WorkflowId: "wId",
-			RunId:      primitives.MustParseUUID(we.GetRunId()),
+			RunId:      we.GetRunId(),
 			ScheduleId: 2,
 		}
 		taskToken, _ := tt.Marshal()
@@ -1632,7 +1632,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(we.GetRunId()),
+		RunId:      we.GetRunId(),
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1695,7 +1695,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(we.GetRunId()),
+		RunId:      we.GetRunId(),
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1765,7 +1765,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatTimeout(
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1808,7 +1808,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1851,7 +1851,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompleted_DecisionHeartbeatNotTimeo
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1894,7 +1894,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -1946,7 +1946,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2000,7 +2000,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2055,7 +2055,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithAban
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2118,7 +2118,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2182,7 +2182,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedStartChildWorkflowWithTerm
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.GetWorkflowId(),
-		RunId:      primitives.MustParseUUID(we.GetRunId()),
+		RunId:      we.GetRunId(),
 		ScheduleId: 2,
 	}
                                   taskToken, _  := tt.Marshal()
@@ -2230,7 +2230,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2298,7 +2298,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 
 	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(testRunID),
+		RunId:      testRunID,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2343,7 +2343,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 
 	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(testRunID),
+		RunId:      testRunID,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2441,7 +2441,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2489,7 +2489,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2538,7 +2538,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2583,7 +2583,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2654,7 +2654,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2703,7 +2703,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2834,7 +2834,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 
 	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(testRunID),
+		RunId:      testRunID,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2881,7 +2881,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 
 	tt := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(testRunID),
+		RunId:      testRunID,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -2980,7 +2980,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3026,7 +3026,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3077,7 +3077,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3120,7 +3120,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3198,7 +3198,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3245,7 +3245,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3368,7 +3368,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3415,7 +3415,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3472,7 +3472,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 	activityInput := payloads.EncodeString("input1")
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: common.EmptyEventID,
 		ActivityId: activityID,
 	}
@@ -3516,7 +3516,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3560,7 +3560,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 5,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3759,7 +3759,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3814,7 +3814,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 6,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3878,7 +3878,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Started() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 7,
 	}
 	taskToken, _ := tt.Marshal()
@@ -3939,7 +3939,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Completed()
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 6,
 	}
 	taskToken, _ := tt.Marshal()
@@ -4007,7 +4007,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 7,
 	}
 	taskToken, _ := tt.Marshal()
@@ -4063,7 +4063,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 
 	att := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(we.GetRunId()),
+		RunId:      we.GetRunId(),
 		ScheduleId: 5,
 	}
 	activityTaskToken, _ := att.Marshal()
@@ -4110,7 +4110,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 7,
 	}
 	taskToken, _ := tt.Marshal()
@@ -4166,7 +4166,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 
 	att := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(we.GetRunId()),
+		RunId:      we.GetRunId(),
 		ScheduleId: 5,
 	}
 	activityTaskToken, _ := att.Marshal()
@@ -4212,7 +4212,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 7,
 	}
 	taskToken, _ := tt.Marshal()
@@ -4309,7 +4309,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 
 	att := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(we.GetRunId()),
+		RunId:      we.GetRunId(),
 		ScheduleId: 5,
 	}
 	activityTaskToken, _ := att.Marshal()
@@ -4360,7 +4360,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -4407,7 +4407,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	addDecisionTaskStartedEvent(executionBuilder, di2.ScheduleID, tl, identity)
 	tt2 := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: di2.ScheduleID,
 	}
 	taskToken2, _ := tt2.Marshal()
@@ -4456,7 +4456,7 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 6,
 	}
 	taskToken, _ := tt.Marshal()
@@ -4514,7 +4514,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 2,
 	}
 	taskToken, _ := tt.Marshal()
@@ -4568,7 +4568,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 	tl := "testTaskList"
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
-		RunId:      primitives.MustParseUUID(we.RunId),
+		RunId:      we.RunId,
 		ScheduleId: 6,
 	}
 	taskToken, _ := tt.Marshal()
@@ -5068,7 +5068,7 @@ func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCac
 	logger log.Logger, runID string) *mutableStateBuilder {
 
 	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, testLocalNamespaceEntry)
-	_ = msBuilder.SetHistoryTree(primitives.MustParseUUID(runID))
+	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
 }
@@ -5082,7 +5082,7 @@ func newMutableStateBuilderWithReplicationStateWithEventV2(shard ShardContext, e
 	if err != nil {
 		logger.Error("update current version error", tag.Error(err))
 	}
-	_ = msBuilder.SetHistoryTree(primitives.MustParseUUID(runID))
+	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
 }

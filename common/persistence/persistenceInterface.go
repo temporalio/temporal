@@ -30,7 +30,6 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
@@ -307,7 +306,7 @@ type (
 		TimerTaskStatus          int32
 		// For retry
 		Attempt            int32
-		NamespaceID        primitives.UUID
+		NamespaceID        string
 		StartedIdentity    string
 		TaskList           string
 		HasRetryPolicy     bool
@@ -494,7 +493,7 @@ type (
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
 		ForkNodeID int64
 		// branchID of the new branch
-		NewBranchID primitives.UUID
+		NewBranchID string
 		// the info for clean up data in background
 		Info string
 		// Used in sharded data stores to identify which shard to use
@@ -518,9 +517,9 @@ type (
 	// InternalReadHistoryBranchRequest is used to read a history branch
 	InternalReadHistoryBranchRequest struct {
 		// The tree of branch range to be read
-		TreeID primitives.UUID
+		TreeID string
 		// The branch range to be read
-		BranchID primitives.UUID
+		BranchID string
 		// Get the history nodes from MinNodeID. Inclusive.
 		MinNodeID int64
 		// Get the history nodes upto MaxNodeID.  Exclusive.
@@ -637,7 +636,7 @@ type (
 
 	// InternalCreateNamespaceRequest is used to create the namespace
 	InternalCreateNamespaceRequest struct {
-		ID        primitives.UUID
+		ID        string
 		Name      string
 		Namespace *serialization.DataBlob
 		IsGlobal  bool
@@ -652,7 +651,7 @@ type (
 
 	// InternalUpdateNamespaceRequest is used to update namespace
 	InternalUpdateNamespaceRequest struct {
-		Id                  primitives.UUID
+		Id                  string
 		Name                string
 		Namespace           *serialization.DataBlob
 		NotificationVersion int64
@@ -827,9 +826,9 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 
 func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.WorkflowExecutionInfo, state *persistenceblobs.WorkflowExecutionState, nextEventID int64) *InternalWorkflowExecutionInfo {
 	executionInfo := &InternalWorkflowExecutionInfo{
-		NamespaceID:                        primitives.UUIDString(info.NamespaceId),
+		NamespaceID:                        info.NamespaceId,
 		WorkflowID:                         info.WorkflowId,
-		RunID:                              primitives.UUIDString(state.RunId),
+		RunID:                              state.RunId,
 		NextEventID:                        nextEventID,
 		TaskList:                           info.GetTaskList(),
 		WorkflowTypeName:                   info.GetWorkflowTypeName(),
@@ -877,10 +876,10 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		executionInfo.ExpirationTime = time.Unix(0, info.GetRetryExpirationTimeNanos())
 	}
 
-	if info.ParentNamespaceId != nil {
-		executionInfo.ParentNamespaceID = primitives.UUID(info.ParentNamespaceId).String()
+	if info.ParentNamespaceId != "" {
+		executionInfo.ParentNamespaceID = info.ParentNamespaceId
 		executionInfo.ParentWorkflowID = info.GetParentWorkflowId()
-		executionInfo.ParentRunID = primitives.UUID(info.ParentRunId).String()
+		executionInfo.ParentRunID = info.ParentRunId
 		executionInfo.InitiatedID = info.GetInitiatedId()
 		if executionInfo.CompletionEvent != nil {
 			executionInfo.CompletionEvent = nil
@@ -1025,7 +1024,7 @@ func ProtoChildExecutionInfoToInternal(rowInfo *persistenceblobs.ChildExecutionI
 		Version:               rowInfo.GetVersion(),
 		StartedID:             rowInfo.GetStartedId(),
 		StartedWorkflowID:     rowInfo.GetStartedWorkflowId(),
-		StartedRunID:          primitives.UUID(rowInfo.GetStartedRunId()).String(),
+		StartedRunID:          rowInfo.GetStartedRunId(),
 		CreateRequestID:       rowInfo.GetCreateRequestId(),
 		Namespace:             rowInfo.GetNamespace(),
 		WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),

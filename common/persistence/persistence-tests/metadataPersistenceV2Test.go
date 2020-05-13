@@ -44,7 +44,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cluster"
 	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -97,7 +96,7 @@ func (m *MetadataPersistenceSuiteV2) TearDownSuite() {
 
 // TestCreateNamespace test
 func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
-	id := primitives.UUID(uuid.NewRandom()[:])
+	id := uuid.New()
 	name := "create-namespace-test-name"
 	status := namespacepb.NamespaceStatus_Registered
 	description := "create-namespace-test-description"
@@ -169,7 +168,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 
 	resp2, err2 := m.CreateNamespace(
 		&persistenceblobs.NamespaceInfo{
-			Id:          uuid.NewRandom(),
+		Id:          uuid.New(),
 			Name:        name,
 			Status:      status,
 			Description: "fail",
@@ -196,7 +195,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 
 // TestGetNamespace test
 func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
-	id := primitives.UUID(uuid.NewRandom()[:])
+	id := uuid.New()
 	name := "get-namespace-test-name"
 	status := namespacepb.NamespaceStatus_Registered
 	description := "get-namespace-test-description"
@@ -216,7 +215,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	isGlobalNamespace := true
 	clusters := []string{clusterActive, clusterStandby}
 
-	resp0, err0 := m.GetNamespace(nil, "does-not-exist")
+	resp0, err0 := m.GetNamespace("", "does-not-exist")
 	m.Nil(resp0)
 	m.Error(err0)
 	m.IsType(&serviceerror.NotFound{}, err0)
@@ -286,7 +285,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	m.Equal(failoverVersion, resp2.Namespace.FailoverVersion)
 	m.Equal(p.InitialFailoverNotificationVersion, resp2.Namespace.FailoverNotificationVersion)
 
-	resp3, err3 := m.GetNamespace(nil, name)
+	resp3, err3 := m.GetNamespace("", name)
 	m.NoError(err3)
 	m.NotNil(resp3)
 	m.EqualValues(id, resp3.Namespace.Info.Id)
@@ -316,14 +315,14 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	m.IsType(&serviceerror.InvalidArgument{}, err4)
 	m.Nil(resp4)
 
-	resp5, err5 := m.GetNamespace(nil, "")
+	resp5, err5 := m.GetNamespace("", "")
 	m.Nil(resp5)
 	m.IsType(&serviceerror.InvalidArgument{}, err5)
 }
 
 // TestConcurrentCreateNamespace test
 func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
-	id := primitives.UUID(uuid.NewRandom()[:])
+	id := uuid.New()
 
 	name := "concurrent-create-namespace-test-name"
 	status := namespacepb.NamespaceStatus_Registered
@@ -394,7 +393,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	wg.Wait()
 	m.Equal(int32(1), successCount)
 
-	resp, err3 := m.GetNamespace(nil, name)
+	resp, err3 := m.GetNamespace("", name)
 	m.NoError(err3)
 	m.NotNil(resp)
 	m.Equal(name, resp.Namespace.Info.Name)
@@ -427,7 +426,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 
 // TestConcurrentUpdateNamespace test
 func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
-	id := primitives.UUID(uuid.NewRandom()[:])
+	id := uuid.New()
 	name := "concurrent-update-namespace-test-name"
 	status := namespacepb.NamespaceStatus_Registered
 	description := "update-namespace-test-description"
@@ -537,7 +536,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	wg.Wait()
 	m.Equal(int32(1), successCount)
 
-	resp3, err3 := m.GetNamespace(nil, name)
+	resp3, err3 := m.GetNamespace("", name)
 	m.NoError(err3)
 	m.NotNil(resp3)
 	m.EqualValues(id, resp3.Namespace.Info.Id)
@@ -573,7 +572,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 
 // TestUpdateNamespace test
 func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
-	id := primitives.UUID(uuid.NewRandom()[:])
+	id := uuid.New()
 	name := "update-namespace-test-name"
 	status := namespacepb.NamespaceStatus_Registered
 	description := "update-namespace-test-description"
@@ -687,7 +686,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	)
 	m.NoError(err3)
 
-	resp4, err4 := m.GetNamespace(nil, name)
+	resp4, err4 := m.GetNamespace("", name)
 	m.NoError(err4)
 	m.NotNil(resp4)
 	m.EqualValues(id, resp4.Namespace.Info.Id)
@@ -804,7 +803,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 
 // TestDeleteNamespace test
 func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
-	id := primitives.UUID(uuid.NewRandom()[:])
+	id := uuid.New()
 	name := "delete-namespace-test-name"
 	status := namespacepb.NamespaceStatus_Registered
 	description := "delete-namespace-test-description"
@@ -852,14 +851,14 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	m.NoError(err1)
 	m.EqualValues(id, resp1.ID)
 
-	resp2, err2 := m.GetNamespace(nil, name)
+	resp2, err2 := m.GetNamespace("", name)
 	m.NoError(err2)
 	m.NotNil(resp2)
 
-	err3 := m.DeleteNamespace(nil, name)
+	err3 := m.DeleteNamespace("", name)
 	m.NoError(err3)
 
-	resp4, err4 := m.GetNamespace(nil, name)
+	resp4, err4 := m.GetNamespace("", name)
 	m.Error(err4)
 	m.IsType(&serviceerror.NotFound{}, err4)
 	m.Nil(resp4)
@@ -869,7 +868,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	m.IsType(&serviceerror.NotFound{}, err5)
 	m.Nil(resp5)
 
-	id = primitives.UUID(uuid.NewRandom())
+	id = uuid.New()
 	resp6, err6 := m.CreateNamespace(
 		&persistenceblobs.NamespaceInfo{
 			Id:          id,
@@ -901,7 +900,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	err7 := m.DeleteNamespace(id, "")
 	m.NoError(err7)
 
-	resp8, err8 := m.GetNamespace(nil, name)
+	resp8, err8 := m.GetNamespace("", name)
 	m.Error(err8)
 	m.IsType(&serviceerror.NotFound{}, err8)
 	m.Nil(resp8)
@@ -945,7 +944,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 		{
 			Namespace: &persistenceblobs.NamespaceDetail{
 				Info: &persistenceblobs.NamespaceInfo{
-					Id:          uuid.NewRandom(),
+		Id:          uuid.New(),
 					Name:        "list-namespace-test-name-1",
 					Status:      namespacepb.NamespaceStatus_Registered,
 					Description: "list-namespace-test-description-1",
@@ -974,7 +973,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 		{
 			Namespace: &persistenceblobs.NamespaceDetail{
 				Info: &persistenceblobs.NamespaceInfo{
-					Id:          uuid.NewRandom(),
+		Id:          uuid.New(),
 					Name:        "list-namespace-test-name-2",
 					Status:      namespacepb.NamespaceStatus_Registered,
 					Description: "list-namespace-test-description-2",
@@ -1053,7 +1052,7 @@ func (m *MetadataPersistenceSuiteV2) CreateNamespace(info *persistenceblobs.Name
 }
 
 // GetNamespace helper method
-func (m *MetadataPersistenceSuiteV2) GetNamespace(id primitives.UUID, name string) (*p.GetNamespaceResponse, error) {
+func (m *MetadataPersistenceSuiteV2) GetNamespace(id string, name string) (*p.GetNamespaceResponse, error) {
 	return m.MetadataManager.GetNamespace(&p.GetNamespaceRequest{
 		ID:   id,
 		Name: name,
@@ -1086,7 +1085,7 @@ func (m *MetadataPersistenceSuiteV2) UpdateNamespace(
 }
 
 // DeleteNamespace helper method
-func (m *MetadataPersistenceSuiteV2) DeleteNamespace(id primitives.UUID, name string) error {
+func (m *MetadataPersistenceSuiteV2) DeleteNamespace(id string, name string) error {
 	if len(id) > 0 {
 		return m.MetadataManager.DeleteNamespace(&p.DeleteNamespaceRequest{ID: id})
 	}

@@ -50,15 +50,24 @@ func applyWorkflowMutationTx(
 	shardID int,
 	workflowMutation *p.InternalWorkflowMutation,
 ) error {
-
 	executionInfo := workflowMutation.ExecutionInfo
 	replicationState := workflowMutation.ReplicationState
 	versionHistories := workflowMutation.VersionHistories
 	startVersion := workflowMutation.StartVersion
 	lastWriteVersion := workflowMutation.LastWriteVersion
-	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceID)
+	namespaceID := executionInfo.NamespaceID
 	workflowID := executionInfo.WorkflowID
-	runID := primitives.MustParseUUID(executionInfo.RunID)
+	runID := executionInfo.RunID
+
+	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
+	if err != nil{
+		return serviceerror.NewInternal(fmt.Sprintf("uuid parse failed. Error: %v", err))
+	}
+
+	runIDBytes, err := primitives.ParseUUID(runID)
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("uuid parse failed. Error: %v", err))
+	}
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -70,9 +79,9 @@ func applyWorkflowMutationTx(
 	// TODO Remove me if UPDATE holds the lock to the end of a transaction
 	if err := lockAndCheckNextEventID(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID,
+		runIDBytes,
 		workflowMutation.Condition); err != nil {
 		switch err.(type) {
 		case *p.ConditionFailedError:
@@ -108,9 +117,9 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertActivityInfos,
 		workflowMutation.DeleteActivityInfos,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
@@ -118,9 +127,9 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertTimerInfos,
 		workflowMutation.DeleteTimerInfos,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
@@ -128,9 +137,9 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertChildExecutionInfos,
 		workflowMutation.DeleteChildExecutionInfo,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
@@ -138,9 +147,9 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertRequestCancelInfos,
 		workflowMutation.DeleteRequestCancelInfo,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
@@ -148,9 +157,9 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertSignalInfos,
 		workflowMutation.DeleteSignalInfo,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
@@ -158,18 +167,18 @@ func applyWorkflowMutationTx(
 		workflowMutation.UpsertSignalRequestedIDs,
 		workflowMutation.DeleteSignalRequestedID,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
 	if workflowMutation.ClearBufferedEvents {
 		if err := deleteBufferedEvents(tx,
 			shardID,
-			namespaceID,
+			namespaceIDBytes,
 			workflowID,
-			runID); err != nil {
+			runIDBytes); err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 		}
 	}
@@ -177,9 +186,9 @@ func applyWorkflowMutationTx(
 	if err := updateBufferedEvents(tx,
 		workflowMutation.NewBufferedEvents,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 	return nil
@@ -196,9 +205,17 @@ func applyWorkflowSnapshotTxAsReset(
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceID)
 	workflowID := executionInfo.WorkflowID
-	runID := primitives.MustParseUUID(executionInfo.RunID)
+	namespaceID := executionInfo.NamespaceID
+	runID := executionInfo.RunID
+	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
+	if err != nil {
+		return err
+	}
+	runIDBytes, err := primitives.ParseUUID(runID)
+	if err != nil {
+		return err
+	}
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -210,9 +227,9 @@ func applyWorkflowSnapshotTxAsReset(
 	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
 	if err := lockAndCheckNextEventID(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID,
+		runIDBytes,
 		workflowSnapshot.Condition); err != nil {
 		switch err.(type) {
 		case *p.ConditionFailedError:
@@ -246,9 +263,9 @@ func applyWorkflowSnapshotTxAsReset(
 
 	if err := deleteActivityInfoMap(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear activity info map. Error: %v", err))
 	}
 
@@ -256,17 +273,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.ActivityInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into activity info map after clearing. Error: %v", err))
 	}
 
 	if err := deleteTimerInfoMap(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear timer info map. Error: %v", err))
 	}
 
@@ -274,17 +291,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.TimerInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into timer info map after clearing. Error: %v", err))
 	}
 
 	if err := deleteChildExecutionInfoMap(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear child execution info map. Error: %v", err))
 	}
 
@@ -292,17 +309,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.ChildExecutionInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into activity info map after clearing. Error: %v", err))
 	}
 
 	if err := deleteRequestCancelInfoMap(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear request cancel info map. Error: %v", err))
 	}
 
@@ -310,17 +327,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.RequestCancelInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into request cancel info map after clearing. Error: %v", err))
 	}
 
 	if err := deleteSignalInfoMap(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear signal info map. Error: %v", err))
 	}
 
@@ -328,17 +345,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.SignalInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into signal info map after clearing. Error: %v", err))
 	}
 
 	if err := deleteSignalsRequestedSet(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear signals requested set. Error: %v", err))
 	}
 
@@ -346,17 +363,17 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.SignalRequestedIDs,
 		"",
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into signals requested set after clearing. Error: %v", err))
 	}
 
 	if err := deleteBufferedEvents(tx,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear buffered events. Error: %v", err))
 	}
 	return nil
@@ -373,9 +390,17 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	namespaceID := primitives.MustParseUUID(executionInfo.NamespaceID)
 	workflowID := executionInfo.WorkflowID
-	runID := primitives.MustParseUUID(executionInfo.RunID)
+	namespaceID := executionInfo.NamespaceID
+	runID := executionInfo.RunID
+	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
+	if err != nil {
+		return err
+	}
+	runIDBytes, err := primitives.ParseUUID(runID)
+	if err != nil {
+		return err
+	}
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -410,9 +435,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.ActivityInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into activity info map after clearing. Error: %v", err))
 	}
 
@@ -420,9 +445,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.TimerInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into timer info map after clearing. Error: %v", err))
 	}
 
@@ -430,9 +455,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.ChildExecutionInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into activity info map after clearing. Error: %v", err))
 	}
 
@@ -440,9 +465,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.RequestCancelInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into request cancel info map after clearing. Error: %v", err))
 	}
 
@@ -450,9 +475,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.SignalInfos,
 		nil,
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into signal info map after clearing. Error: %v", err))
 	}
 
@@ -460,9 +485,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.SignalRequestedIDs,
 		"",
 		shardID,
-		namespaceID,
+		namespaceIDBytes,
 		workflowID,
-		runID); err != nil {
+		runIDBytes); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into signals requested set after clearing. Error: %v", err))
 	}
 
@@ -472,9 +497,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 func applyTasks(
 	tx sqlplugin.Tx,
 	shardID int,
-	namespaceID primitives.UUID,
+	namespaceID string,
 	workflowID string,
-	runID primitives.UUID,
+	runID string,
 	transferTasks []p.Task,
 	replicationTasks []p.Task,
 	timerTasks []p.Task,
@@ -655,9 +680,9 @@ func createTransferTasks(
 	tx sqlplugin.Tx,
 	transferTasks []p.Task,
 	shardID int,
-	namespaceID primitives.UUID,
+	namespaceID string,
 	workflowID string,
-	runID primitives.UUID,
+	runID string,
 ) error {
 
 	if len(transferTasks) == 0 {
@@ -681,35 +706,35 @@ func createTransferTasks(
 
 		switch task.GetType() {
 		case commongenpb.TaskType_TransferActivityTask:
-			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.ActivityTask).NamespaceID)
+			info.TargetNamespaceId = task.(*p.ActivityTask).NamespaceID
 			info.TaskList = task.(*p.ActivityTask).TaskList
 			info.ScheduleId = task.(*p.ActivityTask).ScheduleID
 
 		case commongenpb.TaskType_TransferDecisionTask:
-			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.DecisionTask).NamespaceID)
+			info.TargetNamespaceId = task.(*p.DecisionTask).NamespaceID
 			info.TaskList = task.(*p.DecisionTask).TaskList
 			info.ScheduleId = task.(*p.DecisionTask).ScheduleID
 
 		case commongenpb.TaskType_TransferCancelExecution:
-			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetNamespaceID)
+			info.TargetNamespaceId = task.(*p.CancelExecutionTask).TargetNamespaceID
 			info.TargetWorkflowId = task.(*p.CancelExecutionTask).TargetWorkflowID
 			if task.(*p.CancelExecutionTask).TargetRunID != "" {
-				info.TargetRunId = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetRunID)
+				info.TargetRunId = task.(*p.CancelExecutionTask).TargetRunID
 			}
 			info.TargetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleId = task.(*p.CancelExecutionTask).InitiatedID
 
 		case commongenpb.TaskType_TransferSignalExecution:
-			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetNamespaceID)
+			info.TargetNamespaceId = task.(*p.SignalExecutionTask).TargetNamespaceID
 			info.TargetWorkflowId = task.(*p.SignalExecutionTask).TargetWorkflowID
 			if task.(*p.SignalExecutionTask).TargetRunID != "" {
-				info.TargetRunId = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetRunID)
+				info.TargetRunId = task.(*p.SignalExecutionTask).TargetRunID
 			}
 			info.TargetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleId = task.(*p.SignalExecutionTask).InitiatedID
 
 		case commongenpb.TaskType_TransferStartChildExecution:
-			info.TargetNamespaceId = primitives.MustParseUUID(task.(*p.StartChildExecutionTask).TargetNamespaceID)
+			info.TargetNamespaceId = task.(*p.StartChildExecutionTask).TargetNamespaceID
 			info.TargetWorkflowId = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			info.ScheduleId = task.(*p.StartChildExecutionTask).InitiatedID
 
@@ -762,9 +787,9 @@ func createReplicationTasks(
 	tx sqlplugin.Tx,
 	replicationTasks []p.Task,
 	shardID int,
-	namespaceID primitives.UUID,
+	namespaceID string,
 	workflowID string,
-	runID primitives.UUID,
+	runID string,
 ) error {
 
 	if len(replicationTasks) == 0 {
@@ -856,9 +881,9 @@ func createTimerTasks(
 	tx sqlplugin.Tx,
 	timerTasks []p.Task,
 	shardID int,
-	namespaceID primitives.UUID,
+	namespaceID string,
 	workflowID string,
-	runID primitives.UUID,
+	runID string,
 ) error {
 
 	if len(timerTasks) > 0 {
@@ -1134,11 +1159,21 @@ func buildExecutionRow(
 		return nil, err
 	}
 
+	nsBytes, err := primitives.ParseUUID(executionInfo.NamespaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	ridBytes, err := primitives.ParseUUID(executionInfo.RunID)
+	if err != nil {
+		return nil, err
+	}
+
 	return &sqlplugin.ExecutionsRow{
 		ShardID:          shardID,
-		NamespaceID:      primitives.MustParseUUID(executionInfo.NamespaceID),
+		NamespaceID:      nsBytes,
 		WorkflowID:       executionInfo.WorkflowID,
-		RunID:            primitives.MustParseUUID(executionInfo.RunID),
+		RunID:            ridBytes,
 		NextEventID:      executionInfo.NextEventID,
 		LastWriteVersion: lastWriteVersion,
 		Data:             infoBlob.Data,

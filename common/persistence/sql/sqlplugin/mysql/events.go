@@ -93,5 +93,5 @@ func (mdb *db) SelectFromHistoryTree(filter *sqlplugin.HistoryTreeFilter) ([]sql
 
 // DeleteFromHistoryTree deletes one or more rows from history_tree table
 func (mdb *db) DeleteFromHistoryTree(filter *sqlplugin.HistoryTreeFilter) (sql.Result, error) {
-	return mdb.conn.Exec(deleteHistoryTreeQuery, filter.ShardID, filter.TreeID, *filter.BranchID)
+	return mdb.conn.Exec(deleteHistoryTreeQuery, filter.ShardID, filter.TreeID, filter.BranchID)
 }

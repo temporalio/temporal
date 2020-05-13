@@ -46,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -91,7 +90,7 @@ func (s *historyBuilderSuite) SetupTest() {
 
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.namespaceID = testNamespaceID
-	s.namespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(&persistenceblobs.NamespaceInfo{Id: s.namespaceID)}, &persistenceblobs.NamespaceConfig{}, "", nil
+	s.namespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(&persistenceblobs.NamespaceInfo{Id: s.namespaceID}, &persistenceblobs.NamespaceConfig{}, "", nil)
 
 	s.mockNamespaceCache = s.mockShard.resource.NamespaceCache
 	s.mockEventsCache = s.mockShard.mockEventsCache

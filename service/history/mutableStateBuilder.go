@@ -55,7 +55,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 const (
@@ -350,7 +349,7 @@ func (e *mutableStateBuilder) GetVersionHistories() *persistence.VersionHistorie
 
 // set treeID/historyBranches
 func (e *mutableStateBuilder) SetHistoryTree(
-	treeID []byte,
+	treeID string,
 ) error {
 
 	initialBranchToken, err := persistence.NewHistoryBranchToken(treeID)
@@ -1711,7 +1710,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:                     primitives.UUIDString(e.namespaceEntry.GetInfo().Id),
+		NamespaceId:                     e.namespaceEntry.GetInfo().Id,
 		StartRequest:                    createRequest,
 		ParentExecutionInfo:             parentExecutionInfo,
 		LastCompletionResult:            attributes.LastCompletionResult,
@@ -1744,7 +1743,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		return nil, err
 	}
 
-	if err := e.SetHistoryTree(primitives.MustParseUUID(e.GetExecutionInfo().RunID)); err != nil {
+	if err := e.SetHistoryTree(e.GetExecutionInfo().RunID); err != nil {
 		return nil, err
 	}
 
@@ -1828,7 +1827,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	e.executionInfo.CreateRequestID = requestID
-	e.executionInfo.NamespaceID = primitives.UUIDString(e.namespaceEntry.GetInfo().Id)
+	e.executionInfo.NamespaceID = e.namespaceEntry.GetInfo().Id
 	e.executionInfo.WorkflowID = execution.GetWorkflowId()
 	e.executionInfo.RunID = execution.GetRunId()
 	e.executionInfo.TaskList = event.TaskList.GetName()
@@ -2188,7 +2187,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		if err != nil {
 			return nil, err
 		}
-		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
+		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
 	scheduleEventID := event.GetEventId()
@@ -3349,7 +3348,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	firstRunID := currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId()
 
 	namespace := e.namespaceEntry.GetInfo().Name
-	namespaceID := primitives.UUIDString(e.namespaceEntry.GetInfo().Id)
+	namespaceID := e.namespaceEntry.GetInfo().Id
 	var newStateBuilder *mutableStateBuilder
 	// If a workflow is ndc enabled, the continue as new should be ndc enabled.
 	if e.config.EnableNDC(namespace) || e.GetVersionHistories() != nil {

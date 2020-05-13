@@ -30,7 +30,6 @@ import (
 	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -123,7 +122,7 @@ func (task *internalTask) isForwarded() bool {
 func (task *internalTask) workflowExecution() *executionpb.WorkflowExecution {
 	switch {
 	case task.event != nil:
-		return &executionpb.WorkflowExecution{WorkflowId: task.event.Data.GetWorkflowId(), RunId: primitives.UUIDString(task.event.Data.GetRunId())}
+		return &executionpb.WorkflowExecution{WorkflowId: task.event.Data.GetWorkflowId(), RunId: task.event.Data.GetRunId()}
 	case task.query != nil:
 		return task.query.request.GetQueryRequest().GetExecution()
 	case task.started != nil && task.started.decisionTaskInfo != nil:

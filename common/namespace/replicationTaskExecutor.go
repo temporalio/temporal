@@ -35,7 +35,6 @@ import (
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 var (
@@ -151,7 +150,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 		})
 		switch getErr.(type) {
 		case nil:
-			if primitives.UUIDString(resp.Namespace.Info.Id) != task.GetId() {
+			if resp.Namespace.Info.Id != task.GetId() {
 				return ErrNameUUIDCollision
 			}
 		case *serviceerror.NotFound:
@@ -163,7 +162,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 		}
 
 		resp, getErr = h.metadataManagerV2.GetNamespace(&persistence.GetNamespaceRequest{
-			ID: primitives.MustParseUUID(task.GetId()),
+			ID: task.GetId(),
 		})
 		switch getErr.(type) {
 		case nil:

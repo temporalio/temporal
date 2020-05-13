@@ -32,7 +32,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/xdc"
 )
 
@@ -88,7 +87,7 @@ func newTransferQueueStandbyProcessor(
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyStandbyTask(clusterName, primitives.UUID(task.GetNamespaceId()).String(), task)
+		return taskAllocator.verifyStandbyTask(clusterName, task.GetNamespaceId(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()

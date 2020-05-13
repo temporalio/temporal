@@ -39,7 +39,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -253,7 +252,7 @@ func (t *taskProcessor) processTaskOnce(
 
 	startTime := t.timeSource.Now()
 	scopeIdx, err := task.processor.process(task)
-	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(primitives.UUIDString(task.task.GetNamespaceId())))
+	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(task.task.GetNamespaceId()))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
 		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))

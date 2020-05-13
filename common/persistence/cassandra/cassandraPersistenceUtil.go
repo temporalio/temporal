@@ -30,9 +30,10 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
-	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 
 	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -41,7 +42,6 @@ import (
 	"github.com/temporalio/temporal/common/checksum"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 func applyWorkflowMutationBatch(
@@ -763,13 +763,13 @@ func createTransferTasks(
 
 		// todo ~~~ come back for record visibility
 		p := &persistenceblobs.TransferTaskInfo{
-			NamespaceId:             primitives.MustParseUUID(namespaceID),
+			NamespaceId:             namespaceID,
 			WorkflowId:              workflowID,
-			RunId:                   primitives.MustParseUUID(runID),
+			RunId:                   runID,
 			TaskType:                task.GetType(),
-			TargetNamespaceId:       primitives.MustParseUUID(targetNamespaceID),
+			TargetNamespaceId:       targetNamespaceID,
 			TargetWorkflowId:        targetWorkflowID,
-			TargetRunId:             primitives.MustParseUUID(targetRunID),
+			TargetRunId:             targetRunID,
 			TaskList:                taskList,
 			TargetChildWorkflowOnly: targetChildWorkflowOnly,
 			ScheduleId:              scheduleID,
@@ -842,9 +842,9 @@ func createReplicationTasks(
 		}
 
 		datablob, err := serialization.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
-			NamespaceId:             primitives.MustParseUUID(namespaceID),
+			NamespaceId:             namespaceID,
 			WorkflowId:              workflowID,
-			RunId:                   primitives.MustParseUUID(runID),
+			RunId:                   runID,
 			TaskId:                  task.GetTaskID(),
 			TaskType:                task.GetType(),
 			Version:                 version,
@@ -935,9 +935,9 @@ func createTimerTasks(
 		}
 
 		datablob, err := serialization.TimerTaskInfoToBlob(&persistenceblobs.TimerTaskInfo{
-			NamespaceId:         primitives.MustParseUUID(namespaceID),
+			NamespaceId:         namespaceID,
 			WorkflowId:          workflowID,
-			RunId:               primitives.MustParseUUID(runID),
+			RunId:               runID,
 			TaskType:            task.GetType(),
 			TimeoutType:         int32(timeoutType),
 			Version:             task.GetVersion(),
@@ -983,7 +983,7 @@ func createOrUpdateCurrentExecution(
 ) error {
 
 	executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
-		RunId:           primitives.MustParseUUID(runID),
+		RunId:           runID,
 		CreateRequestId: createRequestID,
 		State:           state,
 		Status:          status,

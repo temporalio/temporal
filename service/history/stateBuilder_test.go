@@ -46,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -194,7 +193,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 		event,
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
-	s.mockMutableState.EXPECT().SetHistoryTree([]byte(primitives.MustParseUUID(testRunID))).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().SetHistoryTree(testRunID).Return(nil).Times(1)
 
 	_, err := s.stateBuilder.applyEvents(testNamespaceID, requestID, execution, s.toHistory(event), nil, false)
 	s.Nil(err)
@@ -247,7 +246,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 		event,
 	).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
-	s.mockMutableState.EXPECT().SetHistoryTree([]byte(primitives.MustParseUUID(testRunID))).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().SetHistoryTree(testRunID).Return(nil).Times(1)
 
 	_, err := s.stateBuilder.applyEvents(testNamespaceID, requestID, execution, s.toHistory(event), nil, false)
 	s.Nil(err)

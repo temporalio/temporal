@@ -305,7 +305,7 @@ type (
 
 	// TaskListKey is the struct used to identity TaskLists
 	TaskListKey struct {
-		NamespaceID primitives.UUID
+		NamespaceID string
 		Name        string
 		TaskType    tasklistpb.TaskListType
 	}
@@ -874,7 +874,7 @@ type (
 
 	// LeaseTaskListRequest is used to request lease of a task list
 	LeaseTaskListRequest struct {
-		NamespaceID  primitives.UUID
+		NamespaceID  string
 		TaskList     string
 		TaskType     tasklistpb.TaskListType
 		TaskListKind tasklistpb.TaskListKind
@@ -931,7 +931,7 @@ type (
 
 	// GetTasksRequest is used to retrieve tasks of a task list
 	GetTasksRequest struct {
-		NamespaceID  primitives.UUID
+		NamespaceID  string
 		TaskList     string
 		TaskType     tasklistpb.TaskListType
 		ReadLevel    int64  // range exclusive
@@ -952,7 +952,7 @@ type (
 
 	// CompleteTasksLessThanRequest contains the request params needed to invoke CompleteTasksLessThan API
 	CompleteTasksLessThanRequest struct {
-		NamespaceID  primitives.UUID
+		NamespaceID  string
 		TaskListName string
 		TaskType     tasklistpb.TaskListType
 		TaskID       int64 // Tasks less than or equal to this ID will be completed
@@ -982,12 +982,12 @@ type (
 
 	// CreateNamespaceResponse is the response for CreateNamespace
 	CreateNamespaceResponse struct {
-		ID primitives.UUID
+		ID string
 	}
 
 	// GetNamespaceRequest is used to read namespace
 	GetNamespaceRequest struct {
-		ID   primitives.UUID
+		ID   string
 		Name string
 	}
 
@@ -1006,7 +1006,7 @@ type (
 
 	// DeleteNamespaceRequest is used to delete namespace entry from namespaces table
 	DeleteNamespaceRequest struct {
-		ID primitives.UUID
+		ID string
 	}
 
 	// DeleteNamespaceByNameRequest is used to delete namespace entry from namespaces_by_name table
@@ -1207,7 +1207,7 @@ type (
 	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
 	GetHistoryTreeRequest struct {
 		// A UUID of a tree
-		TreeID primitives.UUID
+		TreeID string
 		// Get data from this shard
 		ShardID *int
 		// optional: can provide treeID via branchToken if treeID is empty

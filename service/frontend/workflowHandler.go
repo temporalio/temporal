@@ -31,6 +31,17 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	filterpb "go.temporal.io/temporal-proto/filter"
+	namespacepb "go.temporal.io/temporal-proto/namespace"
+	querypb "go.temporal.io/temporal-proto/query"
+	"go.temporal.io/temporal-proto/serviceerror"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+	versionpb "go.temporal.io/temporal-proto/version"
+	"go.temporal.io/temporal-proto/workflowservice"
+
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -48,19 +59,8 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/namespace"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/resource"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	filterpb "go.temporal.io/temporal-proto/filter"
-	namespacepb "go.temporal.io/temporal-proto/namespace"
-	querypb "go.temporal.io/temporal-proto/query"
-	"go.temporal.io/temporal-proto/serviceerror"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
-	versionpb "go.temporal.io/temporal-proto/version"
-	"go.temporal.io/temporal-proto/workflowservice"
 
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
@@ -803,7 +803,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 	if err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
-	namespaceID := primitives.UUIDString(namespaceEntry.GetInfo().Id)
+	namespaceID := namespaceEntry.GetInfo().Id
 
 	wh.GetLogger().Debug("Poll for decision.", tag.WorkflowNamespace(namespace), tag.WorkflowNamespaceID(namespaceID))
 	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
@@ -882,7 +882,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 		return nil, wh.error(err, scope)
 	}
 
-	namespaceId := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceId := taskToken.GetNamespaceId()
 	if namespaceId == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
@@ -925,7 +925,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 		token, _ := wh.tokenSerializer.Serialize(taskToken)
 		workflowExecution := &executionpb.WorkflowExecution{
 			WorkflowId: taskToken.GetWorkflowId(),
-			RunId:      primitives.UUIDString(taskToken.GetRunId()),
+			RunId:      taskToken.GetRunId(),
 		}
 		matchingResp := common.CreateMatchingPollForDecisionTaskResponse(histResp.StartedResponse, workflowExecution, token)
 
@@ -965,7 +965,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	namespaceId := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceId := taskToken.GetNamespaceId()
 	if namespaceId == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
@@ -997,7 +997,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 		sizeLimitError,
 		namespaceId,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondDecisionTaskFailed"),
@@ -1152,7 +1152,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	namespaceId := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceId := taskToken.GetNamespaceId()
 	if namespaceId == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
@@ -1180,7 +1180,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		sizeLimitError,
 		namespaceId,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeat"),
@@ -1259,8 +1259,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	}
 
 	taskToken := &tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(namespaceID),
-		RunId:       primitives.MustParseUUID(runID),
+		NamespaceId: namespaceID,
+		RunId:       runID,
 		WorkflowId:  workflowID,
 		ScheduleId:  common.EmptyEventID,
 		ActivityId:  activityID,
@@ -1287,7 +1287,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		sizeLimitError,
 		namespaceID,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeatById"),
@@ -1352,7 +1352,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	namespaceId := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceId := taskToken.GetNamespaceId()
 	if namespaceId == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
@@ -1384,7 +1384,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 		sizeLimitError,
 		namespaceId,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskCompleted"),
@@ -1465,8 +1465,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	}
 
 	taskToken := &tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(namespaceID),
-		RunId:       primitives.MustParseUUID(runID),
+		NamespaceId: namespaceID,
+		RunId:       runID,
 		WorkflowId:  workflowID,
 		ScheduleId:  common.EmptyEventID,
 		ActivityId:  activityID,
@@ -1558,7 +1558,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	namespaceID := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceID := taskToken.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
 	}
@@ -1591,7 +1591,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 		sizeLimitError,
 		namespaceID,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
@@ -1659,8 +1659,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	}
 
 	taskToken := &tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(namespaceID),
-		RunId:       primitives.MustParseUUID(runID),
+		NamespaceId: namespaceID,
+		RunId:       runID,
 		WorkflowId:  workflowID,
 		ScheduleId:  common.EmptyEventID,
 		ActivityId:  activityID,
@@ -1742,7 +1742,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, wh.error(err, scope)
 	}
 
-	namespaceID := primitives.UUIDString(taskToken.GetNamespaceId())
+	namespaceID := taskToken.GetNamespaceId()
 
 	if namespaceID == "" {
 		return nil, wh.error(errNamespaceNotSet, scope)
@@ -1776,7 +1776,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		sizeLimitError,
 		namespaceID,
 		taskToken.GetWorkflowId(),
-		primitives.UUIDString(taskToken.GetRunId()),
+		taskToken.GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation("RespondActivityTaskCanceled"),
@@ -1789,7 +1789,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-			NamespaceId:   primitives.UUIDString(taskToken.GetNamespaceId()),
+			NamespaceId:   taskToken.GetNamespaceId(),
 			FailedRequest: failRequest,
 		})
 		if err != nil {
@@ -1797,7 +1797,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		}
 	} else {
 		_, err = wh.GetHistoryClient().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
-			NamespaceId:   primitives.UUIDString(taskToken.GetNamespaceId()),
+			NamespaceId:   taskToken.GetNamespaceId(),
 			CancelRequest: request,
 		})
 		if err != nil {
@@ -1856,8 +1856,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	}
 
 	taskToken := &tokengenpb.Task{
-		NamespaceId: primitives.MustParseUUID(namespaceID),
-		RunId:       primitives.MustParseUUID(runID),
+		NamespaceId: namespaceID,
+		RunId:       runID,
 		WorkflowId:  workflowID,
 		ScheduleId:  common.EmptyEventID,
 		ActivityId:  activityID,
@@ -2624,7 +2624,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	}
 
 	archiverRequest := &archiver.QueryVisibilityRequest{
-		NamespaceID:   primitives.UUIDString(entry.GetInfo().Id),
+		NamespaceID:   entry.GetInfo().Id,
 		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),

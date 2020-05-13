@@ -370,7 +370,7 @@ type (
 	HistoryTreeFilter struct {
 		ShardID  int
 		TreeID   primitives.UUID
-		BranchID *primitives.UUID
+		BranchID primitives.UUID
 	}
 
 	// ActivityInfoMapsRow represents a row in activity_info_maps table

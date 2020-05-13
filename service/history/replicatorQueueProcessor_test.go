@@ -46,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -132,9 +131,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 		TaskId:      taskID,
-		NamespaceId: primitives.MustParseUUID(namespaceID),
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
-		RunId:       primitives.MustParseUUID(runID),
+		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
@@ -175,9 +174,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 		TaskId:      taskID,
-		NamespaceId: primitives.MustParseUUID(namespaceID),
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
-		RunId:       primitives.MustParseUUID(runID),
+		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
@@ -223,9 +222,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 		TaskId:      taskID,
-		NamespaceId: primitives.MustParseUUID(namespaceID),
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
-		RunId:       primitives.MustParseUUID(runID),
+		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
@@ -273,9 +272,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 		TaskId:      taskID,
-		NamespaceId: primitives.MustParseUUID(namespaceID),
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
-		RunId:       primitives.MustParseUUID(runID),
+		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
@@ -386,9 +385,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    commongenpb.TaskType_ReplicationSyncActivity,
 		TaskId:      taskID,
-		NamespaceId: primitives.MustParseUUID(namespaceID),
+		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
-		RunId:       primitives.MustParseUUID(runID),
+		RunId:       runID,
 		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()

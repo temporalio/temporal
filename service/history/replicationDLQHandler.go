@@ -34,7 +34,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -123,9 +122,9 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	taskInfo := make([]*replicationgenpb.ReplicationTaskInfo, len(resp.Tasks))
 	for _, task := range resp.Tasks {
 		taskInfo = append(taskInfo, &replicationgenpb.ReplicationTaskInfo{
-			NamespaceId:  primitives.UUIDString(task.GetNamespaceId()),
+			NamespaceId:  task.GetNamespaceId(),
 			WorkflowId:   task.GetWorkflowId(),
-			RunId:        primitives.UUIDString(task.GetRunId()),
+			RunId:        task.GetRunId(),
 			TaskType:     task.GetTaskType(),
 			TaskId:       task.GetTaskId(),
 			Version:      task.GetVersion(),

@@ -514,7 +514,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{
-				Id:          uuid.NewRandom(),
+		Id:          uuid.New(),
 				Name:        namespace,
 				Status:      namespacepb.NamespaceStatus_Registered,
 				Description: description,
@@ -575,7 +575,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{
-				Id:          uuid.NewRandom(),
+		Id:          uuid.New(),
 				Name:        namespace,
 				Status:      namespacepb.NamespaceStatus_Registered,
 				Description: "",
@@ -655,7 +655,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{
-				Id:          uuid.NewRandom(),
+		Id:          uuid.New(),
 				Name:        namespace,
 				Status:      namespacepb.NamespaceStatus_Registered,
 				Description: description,
