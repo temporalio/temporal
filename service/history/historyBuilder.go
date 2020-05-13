@@ -29,6 +29,7 @@ import (
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -121,7 +122,7 @@ func (b *historyBuilder) AddDecisionTaskCompletedEvent(scheduleEventID, startedE
 }
 
 func (b *historyBuilder) AddDecisionTaskTimedOutEvent(scheduleEventID int64,
-	startedEventID int64, timeoutType eventpb.TimeoutType) *eventpb.HistoryEvent {
+	startedEventID int64, timeoutType commonpb.TimeoutType) *eventpb.HistoryEvent {
 	event := b.newDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutType)
 
 	return b.addEventToHistory(event)
@@ -144,11 +145,9 @@ func (b *historyBuilder) AddActivityTaskStartedEvent(
 	attempt int32,
 	requestID string,
 	identity string,
-	lastFailureReason string,
-	lastFailureDetails *commonpb.Payloads,
+	lastFailure *failurepb.Failure,
 ) *eventpb.HistoryEvent {
-	event := b.newActivityTaskStartedEvent(scheduleEventID, attempt, requestID, identity, lastFailureReason,
-		lastFailureDetails)
+	event := b.newActivityTaskStartedEvent(scheduleEventID, attempt, requestID, identity, lastFailure)
 
 	return b.addEventToHistory(event)
 }
@@ -170,13 +169,11 @@ func (b *historyBuilder) AddActivityTaskFailedEvent(scheduleEventID, startedEven
 func (b *historyBuilder) AddActivityTaskTimedOutEvent(
 	scheduleEventID,
 	startedEventID int64,
-	timeoutType eventpb.TimeoutType,
+	timeoutType commonpb.TimeoutType,
 	lastHeartBeatDetails *commonpb.Payloads,
-	lastFailureReason string,
-	lastFailureDetail *commonpb.Payloads,
+	lastFailure *failurepb.Failure,
 ) *eventpb.HistoryEvent {
-	event := b.newActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutType, lastHeartBeatDetails,
-		lastFailureReason, lastFailureDetail)
+	event := b.newActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutType, lastHeartBeatDetails, lastFailure)
 
 	return b.addEventToHistory(event)
 }
@@ -509,8 +506,7 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	attributes.WorkflowExecutionExpirationTimestamp = startRequest.WorkflowExecutionExpirationTimestamp
 	attributes.CronSchedule = request.CronSchedule
 	attributes.LastCompletionResult = startRequest.LastCompletionResult
-	attributes.ContinuedFailureReason = startRequest.ContinuedFailureReason
-	attributes.ContinuedFailureDetails = startRequest.ContinuedFailureDetails
+	attributes.ContinuedFailure = startRequest.GetContinuedFailure()
 	attributes.Initiator = startRequest.ContinueAsNewInitiator
 	attributes.FirstDecisionTaskBackoffSeconds = startRequest.FirstDecisionTaskBackoffSeconds
 	attributes.FirstExecutionRunId = firstRunID
@@ -570,7 +566,7 @@ func (b *historyBuilder) newDecisionTaskCompletedEvent(scheduleEventID, startedE
 	return historyEvent
 }
 
-func (b *historyBuilder) newDecisionTaskTimedOutEvent(scheduleEventID int64, startedEventID int64, timeoutType eventpb.TimeoutType) *eventpb.HistoryEvent {
+func (b *historyBuilder) newDecisionTaskTimedOutEvent(scheduleEventID int64, startedEventID int64, timeoutType commonpb.TimeoutType) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_DecisionTaskTimedOut)
 	attributes := &eventpb.DecisionTaskTimedOutEventAttributes{}
 	attributes.ScheduledEventId = scheduleEventID
@@ -612,8 +608,7 @@ func (b *historyBuilder) newActivityTaskStartedEvent(
 	attempt int32,
 	requestID string,
 	identity string,
-	lastFailureReason string,
-	lastFailureDetails *commonpb.Payloads,
+	lastFailure *failurepb.Failure,
 ) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_ActivityTaskStarted)
 	attributes := &eventpb.ActivityTaskStartedEventAttributes{}
@@ -621,8 +616,7 @@ func (b *historyBuilder) newActivityTaskStartedEvent(
 	attributes.Attempt = attempt
 	attributes.Identity = identity
 	attributes.RequestId = requestID
-	attributes.LastFailureReason = lastFailureReason
-	attributes.LastFailureDetails = lastFailureDetails
+	attributes.LastFailure = lastFailure
 	historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: attributes}
 
 	return historyEvent
@@ -643,19 +637,17 @@ func (b *historyBuilder) newActivityTaskCompletedEvent(scheduleEventID, startedE
 
 func (b *historyBuilder) newActivityTaskTimedOutEvent(
 	scheduleEventID, startedEventID int64,
-	timeoutType eventpb.TimeoutType,
+	timeoutType commonpb.TimeoutType,
 	lastHeartBeatDetails *commonpb.Payloads,
-	lastFailureReason string,
-	lastFailureDetail *commonpb.Payloads,
+	lastFailure *failurepb.Failure,
 ) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_ActivityTaskTimedOut)
 	attributes := &eventpb.ActivityTaskTimedOutEventAttributes{}
 	attributes.ScheduledEventId = scheduleEventID
 	attributes.StartedEventId = startedEventID
 	attributes.TimeoutType = timeoutType
-	attributes.Details = lastHeartBeatDetails
-	attributes.LastFailureReason = lastFailureReason
-	attributes.LastFailureDetails = lastFailureDetail
+	attributes.LastHeartbeatDetails = lastHeartBeatDetails
+	attributes.LastFailure = lastFailure
 
 	historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: attributes}
 
@@ -666,8 +658,7 @@ func (b *historyBuilder) newActivityTaskFailedEvent(scheduleEventID, startedEven
 	request *workflowservice.RespondActivityTaskFailedRequest) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_ActivityTaskFailed)
 	attributes := &eventpb.ActivityTaskFailedEventAttributes{}
-	attributes.Reason = request.Reason
-	attributes.Details = request.Details
+	attributes.Failure = request.GetFailure()
 	attributes.ScheduledEventId = scheduleEventID
 	attributes.StartedEventId = startedEventID
 	attributes.Identity = request.Identity
@@ -691,8 +682,7 @@ func (b *historyBuilder) newFailWorkflowExecutionEvent(decisionTaskCompletedEven
 	request *decisionpb.FailWorkflowExecutionDecisionAttributes) *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_WorkflowExecutionFailed)
 	attributes := &eventpb.WorkflowExecutionFailedEventAttributes{}
-	attributes.Reason = request.Reason
-	attributes.Details = request.Details
+	attributes.Failure = request.GetFailure()
 	attributes.DecisionTaskCompletedEventId = decisionTaskCompletedEventID
 	historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: attributes}
 
@@ -702,7 +692,7 @@ func (b *historyBuilder) newFailWorkflowExecutionEvent(decisionTaskCompletedEven
 func (b *historyBuilder) newTimeoutWorkflowExecutionEvent() *eventpb.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_WorkflowExecutionTimedOut)
 	attributes := &eventpb.WorkflowExecutionTimedOutEventAttributes{}
-	attributes.TimeoutType = eventpb.TimeoutType_StartToClose
+	attributes.TimeoutType = commonpb.TimeoutType_StartToClose
 	historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: attributes}
 
 	return historyEvent
@@ -763,7 +753,7 @@ func (b *historyBuilder) newWorkflowExecutionCanceledEvent(decisionTaskCompleted
 	event := b.msBuilder.CreateNewHistoryEvent(eventpb.EventType_WorkflowExecutionCanceled)
 	attributes := &eventpb.WorkflowExecutionCanceledEventAttributes{}
 	attributes.DecisionTaskCompletedEventId = decisionTaskCompletedEventID
-	attributes.Details = request.Details
+	attributes.Details = request.GetDetails()
 	event.Attributes = &eventpb.HistoryEvent_WorkflowExecutionCanceledEventAttributes{WorkflowExecutionCanceledEventAttributes: attributes}
 
 	return event
@@ -896,8 +886,7 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(decisionTaskCom
 	attributes.DecisionTaskCompletedEventId = decisionTaskCompletedEventID
 	attributes.BackoffStartIntervalInSeconds = request.GetBackoffStartIntervalInSeconds()
 	attributes.Initiator = request.Initiator
-	attributes.FailureReason = request.FailureReason
-	attributes.FailureDetails = request.FailureDetails
+	attributes.Failure = request.GetFailure()
 	attributes.LastCompletionResult = request.LastCompletionResult
 	attributes.Memo = request.Memo
 	attributes.SearchAttributes = request.SearchAttributes
@@ -994,8 +983,7 @@ func (b *historyBuilder) newChildWorkflowExecutionFailedEvent(namespace string, 
 	attributes.WorkflowType = workflowType
 	attributes.InitiatedEventId = initiatedID
 	attributes.StartedEventId = startedID
-	attributes.Reason = failedAttributes.Reason
-	attributes.Details = failedAttributes.Details
+	attributes.Failure = failedAttributes.GetFailure()
 	historyEvent.Attributes = &eventpb.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{ChildWorkflowExecutionFailedEventAttributes: attributes}
 
 	return historyEvent

@@ -35,6 +35,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -303,7 +304,7 @@ type (
 		MaximumInterval        int32
 		WorkflowExpirationTime time.Time
 		MaximumAttempts        int32
-		NonRetriableErrors     []string
+		NonRetryableErrors     []string
 		BranchToken            []byte
 		// Cron
 		CronSchedule string
@@ -582,9 +583,8 @@ type (
 		ExpirationTime     time.Time
 		MaximumAttempts    int32
 		NonRetriableErrors []string
-		LastFailureReason  string
+		LastFailure        *failurepb.Failure
 		LastWorkerIdentity string
-		LastFailureDetails *commonpb.Payloads
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}

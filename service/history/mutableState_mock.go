@@ -29,9 +29,6 @@
 package history
 
 import (
-	reflect "reflect"
-	time "time"
-
 	gomock "github.com/golang/mock/gomock"
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 	persistenceblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -42,7 +39,10 @@ import (
 	decision "go.temporal.io/temporal-proto/decision"
 	event "go.temporal.io/temporal-proto/event"
 	execution "go.temporal.io/temporal-proto/execution"
+	failure "go.temporal.io/temporal-proto/failure"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice"
+	reflect "reflect"
+	time "time"
 )
 
 // MockmutableState is a mock of mutableState interface.
@@ -161,7 +161,7 @@ func (mr *MockmutableStateMockRecorder) AddActivityTaskStartedEvent(arg0, arg1, 
 }
 
 // AddActivityTaskTimedOutEvent mocks base method.
-func (m *MockmutableState) AddActivityTaskTimedOutEvent(arg0, arg1 int64, arg2 event.TimeoutType, arg3 *common.Payloads) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddActivityTaskTimedOutEvent(arg0, arg1 int64, arg2 common.TimeoutType, arg3 *common.Payloads) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTaskTimedOutEvent", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(*event.HistoryEvent)
@@ -327,18 +327,18 @@ func (mr *MockmutableStateMockRecorder) AddDecisionTaskCompletedEvent(arg0, arg1
 }
 
 // AddDecisionTaskFailedEvent mocks base method.
-func (m *MockmutableState) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID int64, cause event.DecisionTaskFailedCause, details *common.Payloads, identity, reason, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*event.HistoryEvent, error) {
+func (m *MockmutableState) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID int64, cause event.DecisionTaskFailedCause, failure *failure.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*event.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddDecisionTaskFailedEvent", scheduleEventID, startedEventID, cause, details, identity, reason, binChecksum, baseRunID, newRunID, forkEventVersion)
+	ret := m.ctrl.Call(m, "AddDecisionTaskFailedEvent", scheduleEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion)
 	ret0, _ := ret[0].(*event.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddDecisionTaskFailedEvent indicates an expected call of AddDecisionTaskFailedEvent.
-func (mr *MockmutableStateMockRecorder) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID, cause, details, identity, reason, binChecksum, baseRunID, newRunID, forkEventVersion interface{}) *gomock.Call {
+func (mr *MockmutableStateMockRecorder) AddDecisionTaskFailedEvent(scheduleEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDecisionTaskFailedEvent", reflect.TypeOf((*MockmutableState)(nil).AddDecisionTaskFailedEvent), scheduleEventID, startedEventID, cause, details, identity, reason, binChecksum, baseRunID, newRunID, forkEventVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDecisionTaskFailedEvent", reflect.TypeOf((*MockmutableState)(nil).AddDecisionTaskFailedEvent), scheduleEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion)
 }
 
 // AddDecisionTaskScheduleToStartTimeoutEvent mocks base method.
@@ -803,18 +803,18 @@ func (mr *MockmutableStateMockRecorder) CopyToPersistence() *gomock.Call {
 }
 
 // RetryActivity mocks base method.
-func (m *MockmutableState) RetryActivity(ai *persistence.ActivityInfo, failureReason string, failureDetails *common.Payloads) (bool, error) {
+func (m *MockmutableState) RetryActivity(ai *persistence.ActivityInfo, failure *failure.Failure) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RetryActivity", ai, failureReason, failureDetails)
+	ret := m.ctrl.Call(m, "RetryActivity", ai, failure)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RetryActivity indicates an expected call of RetryActivity.
-func (mr *MockmutableStateMockRecorder) RetryActivity(ai, failureReason, failureDetails interface{}) *gomock.Call {
+func (mr *MockmutableStateMockRecorder) RetryActivity(ai, failure interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockmutableState)(nil).RetryActivity), ai, failureReason, failureDetails)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockmutableState)(nil).RetryActivity), ai, failure)
 }
 
 // CreateNewHistoryEvent mocks base method.
@@ -1302,17 +1302,17 @@ func (mr *MockmutableStateMockRecorder) GetRequestCancelInfo(arg0 interface{}) *
 }
 
 // GetRetryBackoffDuration mocks base method.
-func (m *MockmutableState) GetRetryBackoffDuration(errReason string) time.Duration {
+func (m *MockmutableState) GetRetryBackoffDuration(failure *failure.Failure) time.Duration {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRetryBackoffDuration", errReason)
+	ret := m.ctrl.Call(m, "GetRetryBackoffDuration", failure)
 	ret0, _ := ret[0].(time.Duration)
 	return ret0
 }
 
 // GetRetryBackoffDuration indicates an expected call of GetRetryBackoffDuration.
-func (mr *MockmutableStateMockRecorder) GetRetryBackoffDuration(errReason interface{}) *gomock.Call {
+func (mr *MockmutableStateMockRecorder) GetRetryBackoffDuration(failure interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetryBackoffDuration", reflect.TypeOf((*MockmutableState)(nil).GetRetryBackoffDuration), errReason)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetryBackoffDuration", reflect.TypeOf((*MockmutableState)(nil).GetRetryBackoffDuration), failure)
 }
 
 // GetCronBackoffDuration mocks base method.
@@ -1868,7 +1868,7 @@ func (mr *MockmutableStateMockRecorder) ReplicateDecisionTaskStartedEvent(arg0, 
 }
 
 // ReplicateDecisionTaskTimedOutEvent mocks base method.
-func (m *MockmutableState) ReplicateDecisionTaskTimedOutEvent(arg0 event.TimeoutType) error {
+func (m *MockmutableState) ReplicateDecisionTaskTimedOutEvent(arg0 common.TimeoutType) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateDecisionTaskTimedOutEvent", arg0)
 	ret0, _ := ret[0].(error)

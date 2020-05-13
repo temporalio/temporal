@@ -123,7 +123,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
 		URI:                  "some invalid URI without scheme",
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
-	s.Equal(errUploadNonRetriable.Error(), err.Error())
+	s.Equal(errUploadNonRetryable.Error(), err.Error())
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
@@ -151,13 +151,13 @@ func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
 		URI:                  testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
-	s.Equal(errUploadNonRetriable.Error(), err.Error())
+	s.Equal(errUploadNonRetryable.Error(), err.Error())
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetriableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverUploadHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
-	s.historyArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errUploadNonRetriable)
+	s.historyArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errUploadNonRetryable)
 	s.archiverProvider.On("GetHistoryArchiver", mock.Anything, common.WorkerServiceName).Return(s.historyArchiver, nil)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
@@ -180,7 +180,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetriableError() {
 		URI:                  testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
-	s.Equal(errUploadNonRetriable.Error(), err.Error())
+	s.Equal(errUploadNonRetryable.Error(), err.Error())
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetriableError() {
@@ -266,7 +266,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 		URI:                  testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
-	s.Equal(errDeleteNonRetriable.Error(), err.Error())
+	s.Equal(errDeleteNonRetryable.Error(), err.Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_InvalidURI() {
@@ -289,7 +289,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_InvalidURI() {
 		VisibilityURI: "some invalid URI without scheme",
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
-	s.Equal(errArchiveVisibilityNonRetriable.Error(), err.Error())
+	s.Equal(errArchiveVisibilityNonRetryable.Error(), err.Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() {
@@ -314,13 +314,13 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() 
 		VisibilityURI: testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
-	s.Equal(errArchiveVisibilityNonRetriable.Error(), err.Error())
+	s.Equal(errArchiveVisibilityNonRetryable.Error(), err.Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetriableError() {
 	s.metricsClient.On("Scope", metrics.ArchiverArchiveVisibilityActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
-	s.visibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errArchiveVisibilityNonRetriable)
+	s.visibilityArchiver.On("Archive", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errArchiveVisibilityNonRetryable)
 	s.archiverProvider.On("GetVisibilityArchiver", mock.Anything, common.WorkerServiceName).Return(s.visibilityArchiver, nil)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
@@ -340,7 +340,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetriable
 		VisibilityURI: testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
-	s.Equal(errArchiveVisibilityNonRetriable.Error(), err.Error())
+	s.Equal(errArchiveVisibilityNonRetryable.Error(), err.Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetriableError() {

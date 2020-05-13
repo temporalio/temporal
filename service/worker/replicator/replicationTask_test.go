@@ -43,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	messageMocks "github.com/temporalio/temporal/common/messaging/mocks"
@@ -265,9 +266,8 @@ func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 				LastHeartbeatTime:  replicationAttr.LastHeartbeatTime,
 				Details:            replicationAttr.Details,
 				Attempt:            replicationAttr.Attempt,
-				LastFailureReason:  replicationAttr.LastFailureReason,
+				LastFailure:        replicationAttr.LastFailure,
 				LastWorkerIdentity: replicationAttr.LastWorkerIdentity,
-				LastFailureDetails: replicationAttr.LastFailureDetails,
 			},
 			historyRereplicator: s.mockRereplicator,
 			nDCHistoryResender:  s.mockNDCResender,
@@ -794,9 +794,8 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication
 		LastHeartbeatTime:  time.Now().UnixNano(),
 		Details:            payloads.EncodeString("some random detail"),
 		Attempt:            59,
-		LastFailureReason:  "some random failure reason",
+		LastFailure:        failure.NewServerFailure("some random failure reason", false),
 		LastWorkerIdentity: "some random worker identity",
-		LastFailureDetails: payloads.EncodeString("some random failure details"),
 	}
 	replicationTask := &replicationgenpb.ReplicationTask{
 		TaskType:   replicationgenpb.ReplicationTaskType_SyncActivityTask,

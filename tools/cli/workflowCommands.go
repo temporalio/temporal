@@ -46,6 +46,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	filterpb "go.temporal.io/temporal-proto/filter"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
 	querypb "go.temporal.io/temporal-proto/query"
@@ -54,7 +55,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/client"
 
-	cliproto "github.com/temporalio/temporal/.gen/proto/cli"
+	cligenpb "github.com/temporalio/temporal/.gen/proto/cli"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/codec"
@@ -884,10 +885,10 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 }
 
 func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWorkflowExecutionResponse,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *cliproto.DescribeWorkflowExecutionResponse {
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *cligenpb.DescribeWorkflowExecutionResponse {
 
 	info := resp.WorkflowExecutionInfo
-	executionInfo := &cliproto.WorkflowExecutionInfo{
+	executionInfo := &cligenpb.WorkflowExecutionInfo{
 		Execution:         info.GetExecution(),
 		Type:              info.GetType(),
 		CloseTime:         convertTime(info.GetCloseTime().GetValue(), false),
@@ -901,10 +902,10 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 		AutoResetPoints:   info.GetAutoResetPoints(),
 	}
 
-	var pendingActs []*cliproto.PendingActivityInfo
-	var tmpAct *cliproto.PendingActivityInfo
+	var pendingActs []*cligenpb.PendingActivityInfo
+	var tmpAct *cligenpb.PendingActivityInfo
 	for _, pa := range resp.PendingActivities {
-		tmpAct = &cliproto.PendingActivityInfo{
+		tmpAct = &cligenpb.PendingActivityInfo{
 			ActivityId:             pa.GetActivityId(),
 			ActivityType:           pa.GetActivityType(),
 			State:                  pa.GetState(),
@@ -914,7 +915,7 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			Attempt:                pa.GetAttempt(),
 			MaximumAttempts:        pa.GetMaximumAttempts(),
 			ExpirationTimestamp:    convertTime(pa.GetExpirationTimestamp(), false),
-			LastFailureReason:      pa.GetLastFailureReason(),
+			LastFailure:            pa.GetLastFailure().String(),
 			LastWorkerIdentity:     pa.GetLastWorkerIdentity(),
 		}
 		if pa.HeartbeatDetails != nil {
@@ -923,16 +924,10 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 				ErrorAndExit("Unable to decode heartbeat details.", err)
 			}
 		}
-		if pa.LastFailureDetails != nil {
-			err := payloads.Decode(pa.LastFailureDetails, &tmpAct.LastFailureDetails)
-			if err != nil {
-				ErrorAndExit("Unable to decode last failure details.", err)
-			}
-		}
 		pendingActs = append(pendingActs, tmpAct)
 	}
 
-	return &cliproto.DescribeWorkflowExecutionResponse{
+	return &cligenpb.DescribeWorkflowExecutionResponse{
 		ExecutionConfiguration: resp.ExecutionConfiguration,
 		WorkflowExecutionInfo:  executionInfo,
 		PendingActivities:      pendingActs,
@@ -941,13 +936,13 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 }
 
 func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *cliproto.SearchAttributes {
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *cligenpb.SearchAttributes {
 
 	if searchAttributes == nil || len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil
 	}
 
-	result := &cliproto.SearchAttributes{
+	result := &cligenpb.SearchAttributes{
 		IndexedFields: map[string]string{},
 	}
 	ctx, cancel := newContext(c)
@@ -1100,13 +1095,7 @@ func printRunStatus(event *eventpb.HistoryEvent) {
 		fmt.Printf("  Output: %s\n", result)
 	case eventpb.EventType_WorkflowExecutionFailed:
 		fmt.Printf("  Status: %s\n", colorRed("FAILED"))
-		fmt.Printf("  Reason: %s\n", event.GetWorkflowExecutionFailedEventAttributes().GetReason())
-		var details string
-		err := payloads.Decode(event.GetWorkflowExecutionFailedEventAttributes().GetDetails(), &details)
-		if err != nil {
-			ErrorAndExit("Unable ot decode WorkflowExecutionFailedEventAttributes.Details.", err)
-		}
-		fmt.Printf("  Detail: %s\n", details)
+		fmt.Printf("  Failure: %s\n", event.GetWorkflowExecutionFailedEventAttributes().GetFailure().String())
 	case eventpb.EventType_WorkflowExecutionTimedOut:
 		fmt.Printf("  Status: %s\n", colorRed("TIMEOUT"))
 		fmt.Printf("  Timeout Type: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetTimeoutType())
@@ -1727,14 +1716,8 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namesp
 	if decisionFailed != nil {
 		attr := decisionFailed.GetDecisionTaskFailedEventAttributes()
 
-		var details string
-		err := payloads.Decode(attr.GetDetails(), &details)
-		if err != nil {
-			ErrorAndExit("Unable to decode details.", err)
-		}
-
 		if attr.GetCause() == eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure ||
-			strings.Contains(details, "nondeterministic") {
+			strings.Contains(attr.GetFailure().GetMessage(), "nondeterministic") {
 			fmt.Printf("found non determnistic workflow wid:%v, rid:%v, orignalStartTime:%v \n", wid, rid, time.Unix(0, firstEvent.GetTimestamp()))
 			return true, nil
 		}
@@ -1973,9 +1956,15 @@ func FailActivity(c *cli.Context) {
 		WorkflowId: wid,
 		RunId:      rid,
 		ActivityId: activityID,
-		Reason:     reason,
-		Details:    payloads.EncodeString(detail),
-		Identity:   identity,
+		Failure: &failurepb.Failure{
+			Message: reason,
+			Source:  "CLI",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				NonRetryable: true,
+				Details:      payloads.EncodeString(detail),
+			}},
+		},
+		Identity: identity,
 	})
 	if err != nil {
 		ErrorAndExit("Failing activity failed", err)

@@ -29,6 +29,11 @@ import (
 	"errors"
 	"time"
 
+	commonpb "go.temporal.io/temporal-proto/common"
+	eventpb "go.temporal.io/temporal-proto/event"
+	executionpb "go.temporal.io/temporal-proto/execution"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -43,10 +48,6 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/primitives"
-	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -644,9 +645,8 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 						LastHeartbeatTime:  heartbeatTime,
 						Details:            activityInfo.Details,
 						Attempt:            activityInfo.Attempt,
-						LastFailureReason:  activityInfo.LastFailureReason,
+						LastFailure:        activityInfo.LastFailure,
 						LastWorkerIdentity: activityInfo.LastWorkerIdentity,
-						LastFailureDetails: activityInfo.LastFailureDetails,
 						VersionHistory:     versionHistory,
 					},
 				},

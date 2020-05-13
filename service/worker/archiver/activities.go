@@ -26,7 +26,9 @@ package archiver
 
 import (
 	"context"
-	"errors"
+
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
 
 	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
@@ -35,8 +37,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/activity"
 )
 
 const (
@@ -46,12 +46,9 @@ const (
 )
 
 var (
-	errUploadNonRetriable            = errors.New("upload non-retriable error")
-	errDeleteNonRetriable            = errors.New("delete non-retriable error")
-	errArchiveVisibilityNonRetriable = errors.New("archive visibility non-retriable error")
-
-	uploadHistoryActivityNonRetryableErrors = []string{"temporalInternal:Panic", errUploadNonRetriable.Error()}
-	deleteHistoryActivityNonRetryableErrors = []string{"temporalInternal:Panic", errDeleteNonRetriable.Error()}
+	errUploadNonRetryable            = temporal.NewApplicationError("upload non-retryable error", true)
+	errDeleteNonRetryable            = temporal.NewApplicationError("delete non-retryable error", true)
+	errArchiveVisibilityNonRetryable = temporal.NewApplicationError("archive visibility non-retryable error", true)
 )
 
 func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
@@ -61,22 +58,22 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	defer func() {
 		sw.Stop()
 		if err != nil {
-			if err.Error() == errUploadNonRetriable.Error() {
+			if err.Error() == errUploadNonRetryable.Error() {
 				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 			}
-			err = temporal.NewCustomError(err.Error())
+			err = temporal.NewApplicationError(err.Error(), true)
 		}
 	}()
 	logger := tagLoggerWithHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
 	URI, err := carchiver.NewURI(request.URI)
 	if err != nil {
 		logger.Error(carchiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason("failed to get history archival uri"), tag.ArchivalURI(request.URI), tag.Error(err))
-		return errUploadNonRetriable
+		return errUploadNonRetryable
 	}
 	historyArchiver, err := container.ArchiverProvider.GetHistoryArchiver(URI.Scheme(), common.WorkerServiceName)
 	if err != nil {
 		logger.Error(carchiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason("failed to get history archiver"), tag.Error(err))
-		return errUploadNonRetriable
+		return errUploadNonRetryable
 	}
 	err = historyArchiver.Archive(ctx, URI, &carchiver.ArchiveHistoryRequest{
 		ShardID:              request.ShardID,
@@ -87,13 +84,13 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		BranchToken:          request.BranchToken,
 		NextEventID:          request.NextEventID,
 		CloseFailoverVersion: request.CloseFailoverVersion,
-	}, carchiver.GetHeartbeatArchiveOption(), carchiver.GetNonRetriableErrorOption(errUploadNonRetriable))
+	}, carchiver.GetHeartbeatArchiveOption(), carchiver.GetNonRetriableErrorOption(errUploadNonRetryable))
 	if err == nil {
 		return nil
 	}
-	if err.Error() == errUploadNonRetriable.Error() {
+	if err.Error() == errUploadNonRetryable.Error() {
 		logger.Error(carchiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason("got non-retryable error from history archiver"))
-		return errUploadNonRetriable
+		return errUploadNonRetryable
 	}
 	logger.Error(carchiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason("got retryable error from history archiver"), tag.Error(err))
 	return err
@@ -106,10 +103,10 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	defer func() {
 		sw.Stop()
 		if err != nil {
-			if err.Error() == errDeleteNonRetriable.Error() {
+			if err.Error() == errDeleteNonRetryable.Error() {
 				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 			}
-			err = temporal.NewCustomError(err.Error())
+			err = temporal.NewApplicationError(err.Error(), true)
 		}
 	}()
 	err = container.HistoryV2Manager.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
@@ -122,7 +119,7 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	logger := tagLoggerWithHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
 	logger.Error("failed to delete history events", tag.Error(err))
 	if !common.IsPersistenceTransientError(err) {
-		return errDeleteNonRetriable
+		return errDeleteNonRetryable
 	}
 	return err
 }
@@ -134,22 +131,22 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 	defer func() {
 		sw.Stop()
 		if err != nil {
-			if err.Error() == errArchiveVisibilityNonRetriable.Error() {
+			if err.Error() == errArchiveVisibilityNonRetryable.Error() {
 				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 			}
-			err = temporal.NewCustomError(err.Error())
+			err = temporal.NewApplicationError(err.Error(), true)
 		}
 	}()
 	logger := tagLoggerWithVisibilityRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
 	URI, err := carchiver.NewURI(request.VisibilityURI)
 	if err != nil {
 		logger.Error(carchiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason("failed to get visibility archival uri"), tag.ArchivalURI(request.VisibilityURI), tag.Error(err))
-		return errArchiveVisibilityNonRetriable
+		return errArchiveVisibilityNonRetryable
 	}
 	visibilityArchiver, err := container.ArchiverProvider.GetVisibilityArchiver(URI.Scheme(), common.WorkerServiceName)
 	if err != nil {
 		logger.Error(carchiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason("failed to get visibility archiver"), tag.Error(err))
-		return errArchiveVisibilityNonRetriable
+		return errArchiveVisibilityNonRetryable
 	}
 	err = visibilityArchiver.Archive(ctx, URI, &archiverproto.ArchiveVisibilityRequest{
 		NamespaceId:        request.NamespaceID,
@@ -165,13 +162,13 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		Memo:               request.Memo,
 		SearchAttributes:   convertSearchAttributesToString(request.SearchAttributes),
 		HistoryArchivalURI: request.URI,
-	}, carchiver.GetNonRetriableErrorOption(errArchiveVisibilityNonRetriable))
+	}, carchiver.GetNonRetriableErrorOption(errArchiveVisibilityNonRetryable))
 	if err == nil {
 		return nil
 	}
-	if err.Error() == errArchiveVisibilityNonRetriable.Error() {
+	if err.Error() == errArchiveVisibilityNonRetryable.Error() {
 		logger.Error(carchiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason("got non-retryable error from visibility archiver"))
-		return errArchiveVisibilityNonRetriable
+		return errArchiveVisibilityNonRetryable
 	}
 	logger.Error(carchiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason("got retryable error from visibility archiver"), tag.Error(err))
 	return err

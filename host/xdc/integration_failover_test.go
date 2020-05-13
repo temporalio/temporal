@@ -55,6 +55,7 @@ import (
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -1686,7 +1687,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(1, len(pendingActivities))
 	s.Equal(executionpb.PendingActivityState_Scheduled, pendingActivities[0].GetState())
 	s.Equal(heartbeatDetails, pendingActivities[0].GetHeartbeatDetails())
-	s.Equal("temporalInternal:Timeout Heartbeat", pendingActivities[0].GetLastFailureReason())
+	s.Equal(commonpb.TimeoutType_Heartbeat, pendingActivities[0].GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType())
 	s.Equal(identity1, pendingActivities[0].GetLastWorkerIdentity())
 
 	for i := 0; i < 10; i++ {
@@ -2003,8 +2004,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 			{
 				DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
-					Reason:  "retryable-error",
-					Details: nil,
+					Failure: failure.NewServerFailure("retryable-error", false),
 				}},
 			}}, nil
 	}

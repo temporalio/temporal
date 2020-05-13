@@ -36,7 +36,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/temporal-proto/common"
-	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -232,7 +231,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeUserTimer,
-		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             event.EventId,
 	}
@@ -304,7 +303,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Noop() {
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeUserTimer,
-		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             event.EventId,
 	}
@@ -380,7 +379,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeActivityTimeout,
-		TimeoutType:         int32(eventpb.TimeoutType_ScheduleToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_ScheduleToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -461,7 +460,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeActivityTimeout,
-		TimeoutType:         int32(eventpb.TimeoutType_ScheduleToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_ScheduleToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -548,7 +547,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeActivityTimeout,
-		TimeoutType:         int32(eventpb.TimeoutType_ScheduleToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_ScheduleToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -637,7 +636,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeActivityTimeout,
-		TimeoutType:         int32(eventpb.TimeoutType_ScheduleToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_ScheduleToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -725,7 +724,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeActivityTimeout,
-		TimeoutType:         int32(eventpb.TimeoutType_ScheduleToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_ScheduleToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             di.ScheduleID,
 	}
@@ -812,7 +811,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeActivityTimeout,
-		TimeoutType:         int32(eventpb.TimeoutType_Heartbeat),
+		TimeoutType:         int32(commonpb.TimeoutType_Heartbeat),
 		VisibilityTimestamp: protoTaskTime,
 		EventId:             scheduledEvent.GetEventId(),
 	}
@@ -860,7 +859,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestDecisionTimeout_Fire() {
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeDecisionTimeout,
-		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTime,
 		EventId:             di.ScheduleID,
 	}
@@ -916,7 +915,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestDecisionTimeout_Noop() {
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeDecisionTimeout,
-		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTime,
 		EventId:             di.ScheduleID - 1,
 	}
@@ -1236,7 +1235,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Fire() {
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeWorkflowRunTimeout,
-		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 	}
 
@@ -1298,7 +1297,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeWorkflowRunTimeout,
-		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 	}
 
@@ -1357,7 +1356,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cr
 		RunId:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskId:              int64(100),
 		TaskType:            persistence.TaskTypeWorkflowRunTimeout,
-		TimeoutType:         int32(eventpb.TimeoutType_StartToClose),
+		TimeoutType:         int32(commonpb.TimeoutType_StartToClose),
 		VisibilityTimestamp: protoTaskTime,
 	}
 

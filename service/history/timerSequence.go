@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	eventpb "go.temporal.io/temporal-proto/event"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -44,10 +44,10 @@ import (
 type timerType int32
 
 const (
-	timerTypeStartToClose    = timerType(eventpb.TimeoutType_StartToClose)
-	timerTypeScheduleToStart = timerType(eventpb.TimeoutType_ScheduleToStart)
-	timerTypeScheduleToClose = timerType(eventpb.TimeoutType_ScheduleToClose)
-	timerTypeHeartbeat       = timerType(eventpb.TimeoutType_Heartbeat)
+	timerTypeStartToClose    = timerType(commonpb.TimeoutType_StartToClose)
+	timerTypeScheduleToStart = timerType(commonpb.TimeoutType_ScheduleToStart)
+	timerTypeScheduleToClose = timerType(commonpb.TimeoutType_ScheduleToClose)
+	timerTypeHeartbeat       = timerType(commonpb.TimeoutType_Heartbeat)
 )
 
 const (
@@ -388,44 +388,38 @@ func timerTypeToTimerMask(
 
 func timerTypeToProto(
 	timerType timerType,
-) eventpb.TimeoutType {
+) commonpb.TimeoutType {
 
 	switch timerType {
 	case timerTypeStartToClose:
-		return eventpb.TimeoutType_StartToClose
+		return commonpb.TimeoutType_StartToClose
 	case timerTypeScheduleToStart:
-		return eventpb.TimeoutType_ScheduleToStart
+		return commonpb.TimeoutType_ScheduleToStart
 	case timerTypeScheduleToClose:
-		return eventpb.TimeoutType_ScheduleToClose
+		return commonpb.TimeoutType_ScheduleToClose
 	case timerTypeHeartbeat:
-		return eventpb.TimeoutType_Heartbeat
+		return commonpb.TimeoutType_Heartbeat
 	default:
 		panic(fmt.Sprintf("invalid timer type: %v", timerType))
 	}
 }
 
 func timerTypeFromProto(
-	timerType eventpb.TimeoutType,
+	timerType commonpb.TimeoutType,
 ) timerType {
 
 	switch timerType {
-	case eventpb.TimeoutType_StartToClose:
+	case commonpb.TimeoutType_StartToClose:
 		return timerTypeStartToClose
-	case eventpb.TimeoutType_ScheduleToStart:
+	case commonpb.TimeoutType_ScheduleToStart:
 		return timerTypeScheduleToStart
-	case eventpb.TimeoutType_ScheduleToClose:
+	case commonpb.TimeoutType_ScheduleToClose:
 		return timerTypeScheduleToClose
-	case eventpb.TimeoutType_Heartbeat:
+	case commonpb.TimeoutType_Heartbeat:
 		return timerTypeHeartbeat
 	default:
 		panic(fmt.Sprintf("invalid timeout type: %v", timerType))
 	}
-}
-
-func timerTypeToReason(
-	timerType timerType,
-) string {
-	return fmt.Sprintf("temporalInternal:Timeout %v", timerTypeToProto(timerType))
 }
 
 // Len implements sort.Interface

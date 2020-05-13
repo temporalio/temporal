@@ -28,28 +28,26 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
-
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/primitives/timestamp"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
 	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	failurepb "go.temporal.io/temporal-proto/failure"
+	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
+	"github.com/temporalio/temporal/common/primitives/timestamp"
 )
 
 type (
-	//////////////////////////////////////////////////////////////////////
+	// ////////////////////////////////////////////////////////////////////
 	// Persistence interface is a lower layer of dataInterface.
 	// The intention is to let different persistence implementation(SQL,Cassandra/etc) share some common logic
 	// Right now the only common part is serialization/deserialization, and only ExecutionManager/HistoryManager need it.
 	// ShardManager/TaskManager/MetadataManager are the same.
-	//////////////////////////////////////////////////////////////////////
+	// ////////////////////////////////////////////////////////////////////
 
 	// ShardStore is a lower level of ShardManager
 	ShardStore = ShardManager
@@ -88,7 +86,7 @@ type (
 		Closeable
 		GetName() string
 		GetShardID() int
-		//The below three APIs are related to serialization/deserialization
+		// The below three APIs are related to serialization/deserialization
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
 		ConflictResolveWorkflowExecution(request *InternalConflictResolveWorkflowExecutionRequest) error
@@ -315,9 +313,8 @@ type (
 		ExpirationTime     time.Time
 		MaximumAttempts    int32
 		NonRetriableErrors []string
-		LastFailureReason  string
+		LastFailure        *failurepb.Failure
 		LastWorkerIdentity string
-		LastFailureDetails *commonpb.Payloads
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds int64
 	}
@@ -934,9 +931,8 @@ func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityI
 		MaximumInterval:          decoded.GetRetryMaximumIntervalSeconds(),
 		MaximumAttempts:          decoded.GetRetryMaximumAttempts(),
 		NonRetriableErrors:       decoded.GetRetryNonRetryableErrors(),
-		LastFailureReason:        decoded.GetRetryLastFailureReason(),
+		LastFailure:              decoded.GetRetryLastFailure(),
 		LastWorkerIdentity:       decoded.GetRetryLastWorkerIdentity(),
-		LastFailureDetails:       decoded.GetRetryLastFailureDetails(),
 	}
 	if decoded.GetRetryExpirationTimeNanos() != 0 {
 		info.ExpirationTime = time.Unix(0, decoded.GetRetryExpirationTimeNanos())
@@ -983,9 +979,8 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 		RetryMaximumIntervalSeconds:   v.MaximumInterval,
 		RetryMaximumAttempts:          v.MaximumAttempts,
 		RetryNonRetryableErrors:       v.NonRetriableErrors,
-		RetryLastFailureReason:        v.LastFailureReason,
+		RetryLastFailure:              v.LastFailure,
 		RetryLastWorkerIdentity:       v.LastWorkerIdentity,
-		RetryLastFailureDetails:       v.LastFailureDetails,
 	}
 	if !v.ExpirationTime.IsZero() {
 		info.RetryExpirationTimeNanos = v.ExpirationTime.UnixNano()

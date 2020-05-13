@@ -35,6 +35,7 @@ import "execution/server_message.proto";
 import "namespace/server_message.proto";
 import "replication/server_message.proto";
 import "query/message.proto";
+import "failure/message.proto";
 
 // TODO: remove these dependencies
 import "workflowservice/request_response.proto";
@@ -47,10 +48,9 @@ message StartWorkflowExecutionRequest {
     int32 attempt = 4;
     int64 workflowExecutionExpirationTimestamp = 5;
     common.ContinueAsNewInitiator continueAsNewInitiator = 6;
-    string continuedFailureReason = 7;
-    common.Payloads continuedFailureDetails = 8;
-    common.Payloads lastCompletionResult = 9;
-    int32 firstDecisionTaskBackoffSeconds = 10;
+    failure.Failure continuedFailure = 7;
+    common.Payloads lastCompletionResult = 8;
+    int32 firstDecisionTaskBackoffSeconds = 9;
 }
 
 message StartWorkflowExecutionResponse {
@@ -386,10 +386,9 @@ message SyncActivityRequest {
     int64 lastHeartbeatTime = 9;
     common.Payloads details = 10;
     int32 attempt = 11;
-    string lastFailureReason = 12;
+    failure.Failure lastFailure = 12;
     string lastWorkerIdentity = 13;
-    common.Payloads lastFailureDetails = 14;
-    event.VersionHistory versionHistory = 15;
+    event.VersionHistory versionHistory = 14;
 }
 
 message SyncActivityResponse {

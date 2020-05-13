@@ -41,6 +41,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/payloads"
@@ -298,9 +299,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	activityHeartbeatTime := time.Time{}
 	activityAttempt := int32(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")
-	activityLastFailureReason := "some random reason"
+	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
-	activityLastFailureDetails := payloads.EncodeString("some random failure details")
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{
@@ -312,9 +312,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		LastHeartBeatUpdatedTime: activityHeartbeatTime,
 		Details:                  activityDetails,
 		Attempt:                  activityAttempt,
-		LastFailureReason:        activityLastFailureReason,
+		LastFailure:              activityLastFailure,
 		LastWorkerIdentity:       activityLastWorkerIdentity,
-		LastFailureDetails:       activityLastFailureDetails,
 	}, true).AnyTimes()
 	versionHistory := &persistence.VersionHistory{
 		BranchToken: []byte{},
@@ -361,9 +360,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
 				Details:            activityDetails,
 				Attempt:            activityAttempt,
-				LastFailureReason:  activityLastFailureReason,
+				LastFailure:        activityLastFailure,
 				LastWorkerIdentity: activityLastWorkerIdentity,
-				LastFailureDetails: activityLastFailureDetails,
 				VersionHistory:     versionHistory.ToProto(),
 			},
 		},
@@ -411,9 +409,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	activityHeartbeatTime := activityStartedTime.Add(time.Minute)
 	activityAttempt := int32(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")
-	activityLastFailureReason := "some random reason"
+	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
-	activityLastFailureDetails := payloads.EncodeString("some random failure details")
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{
@@ -425,9 +422,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		LastHeartBeatUpdatedTime: activityHeartbeatTime,
 		Details:                  activityDetails,
 		Attempt:                  activityAttempt,
-		LastFailureReason:        activityLastFailureReason,
+		LastFailure:              activityLastFailure,
 		LastWorkerIdentity:       activityLastWorkerIdentity,
-		LastFailureDetails:       activityLastFailureDetails,
 	}, true).AnyTimes()
 	versionHistory := &persistence.VersionHistory{
 		BranchToken: []byte{},
@@ -473,9 +469,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
 				Details:            activityDetails,
 				Attempt:            activityAttempt,
-				LastFailureReason:  activityLastFailureReason,
+				LastFailure:        activityLastFailure,
 				LastWorkerIdentity: activityLastWorkerIdentity,
-				LastFailureDetails: activityLastFailureDetails,
 				VersionHistory:     versionHistory.ToProto(),
 			},
 		},

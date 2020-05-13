@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal"
 
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
@@ -42,6 +43,7 @@ import (
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
@@ -286,7 +288,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	}
 
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.True(err == nil, err)
+	s.NoError(err, err)
 
 	for i := 0; i != 3; i++ {
 		err = poller.PollAndProcessActivityTask(false)
@@ -313,15 +315,12 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 			s.Equal(int32(i+1), pendingActivity.GetAttempt())
 			s.Equal(executionpb.PendingActivityState_Scheduled, pendingActivity.GetState())
 			if i == 0 {
-				s.Equal("temporalInternal:Timeout Heartbeat", pendingActivity.GetLastFailureReason())
-				s.Nil(pendingActivity.GetLastFailureDetails())
+				s.Equal(failure.NewTimeoutFailure(commonpb.TimeoutType_Heartbeat), pendingActivity.GetLastFailure())
 			} else { // i == 1
 				expectedErrString := "retryable-error"
-				s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
-				var d string
-				err = payloads.Decode(pendingActivity.GetLastFailureDetails(), &d)
-				s.NoError(err)
-				s.Equal(expectedErrString, d)
+				s.NotNil(pendingActivity.GetLastFailure().GetApplicationFailureInfo())
+				s.Equal(expectedErrString, pendingActivity.GetLastFailure().GetMessage())
+				s.False(pendingActivity.GetLastFailure().GetApplicationFailureInfo().GetNonRetryable())
 			}
 			s.Equal(identity, pendingActivity.GetLastWorkerIdentity())
 
@@ -465,7 +464,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		if activityExecutedCount == 0 {
 			err = errors.New("bad-luck-please-retry")
 		} else if activityExecutedCount == 1 {
-			err = errors.New("bad-bug")
+			err = temporal.NewApplicationError("bad-bug", true)
 		}
 		activityExecutedCount++
 		return nil, false, err
@@ -513,12 +512,10 @@ func (s *integrationSuite) TestActivityRetry() {
 	s.NoError(err)
 	for _, pendingActivity := range descResp.GetPendingActivities() {
 		if pendingActivity.GetActivityId() == "A" {
+			s.NotNil(pendingActivity.GetLastFailure().GetApplicationFailureInfo())
 			expectedErrString := "bad-luck-please-retry"
-			s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
-			var d string
-			err = payloads.Decode(pendingActivity.GetLastFailureDetails(), &d)
-			s.NoError(err)
-			s.Equal(expectedErrString, d)
+			s.Equal(expectedErrString, pendingActivity.GetLastFailure().GetMessage())
+			s.False(pendingActivity.GetLastFailure().GetApplicationFailureInfo().GetNonRetryable())
 			s.Equal(identity, pendingActivity.GetLastWorkerIdentity())
 		}
 	}
@@ -530,13 +527,10 @@ func (s *integrationSuite) TestActivityRetry() {
 	s.NoError(err)
 	for _, pendingActivity := range descResp.GetPendingActivities() {
 		if pendingActivity.GetActivityId() == "A" {
+			s.NotNil(pendingActivity.GetLastFailure().GetApplicationFailureInfo())
 			expectedErrString := "bad-bug"
-			s.Equal(expectedErrString, pendingActivity.GetLastFailureReason())
-
-			var d string
-			err = payloads.Decode(pendingActivity.GetLastFailureDetails(), &d)
-			s.NoError(err)
-			s.Equal(expectedErrString, d)
+			s.Equal(expectedErrString, pendingActivity.GetLastFailure().GetMessage())
+			s.True(pendingActivity.GetLastFailure().GetApplicationFailureInfo().GetNonRetryable())
 			s.Equal(identity2, pendingActivity.GetLastWorkerIdentity())
 		}
 	}
@@ -765,34 +759,34 @@ func (s *integrationSuite) TestActivityTimeouts() {
 						return []*decisionpb.Decision{{
 							DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 							Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
-								Reason: "ScheduledEvent not found",
+								Failure: failure.NewServerFailure("ScheduledEvent not found", false),
 							}},
 						}}, nil
 					}
 
 					switch timeoutEvent.GetTimeoutType() {
-					case eventpb.TimeoutType_ScheduleToStart:
+					case commonpb.TimeoutType_ScheduleToStart:
 						if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId() == "A" {
 							activityATimedout = true
 						} else {
 							failWorkflow = true
 							failReason = "ActivityID A is expected to timeout with ScheduleToStart"
 						}
-					case eventpb.TimeoutType_ScheduleToClose:
+					case commonpb.TimeoutType_ScheduleToClose:
 						if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId() == "B" {
 							activityBTimedout = true
 						} else {
 							failWorkflow = true
 							failReason = "ActivityID B is expected to timeout with ScheduleToClose"
 						}
-					case eventpb.TimeoutType_StartToClose:
+					case commonpb.TimeoutType_StartToClose:
 						if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId() == "C" {
 							activityCTimedout = true
 						} else {
 							failWorkflow = true
 							failReason = "ActivityID C is expected to timeout with StartToClose"
 						}
-					case eventpb.TimeoutType_Heartbeat:
+					case commonpb.TimeoutType_Heartbeat:
 						if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId() == "D" {
 							activityDTimedout = true
 						} else {
@@ -810,7 +804,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
-					Reason: failReason,
+					Failure: failure.NewServerFailure(failReason, false),
 				}},
 			}}, nil
 		}
@@ -982,11 +976,11 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 					}
 
 					switch timeoutEvent.GetTimeoutType() {
-					case eventpb.TimeoutType_Heartbeat:
+					case commonpb.TimeoutType_Heartbeat:
 						activitiesTimedout++
 						scheduleID := timeoutEvent.GetScheduledEventId()
 						var details string
-						err := payloads.Decode(timeoutEvent.GetDetails(), &details)
+						err := payloads.Decode(timeoutEvent.GetLastHeartbeatDetails(), &details)
 						s.NoError(err)
 						lastHeartbeat, _ := strconv.Atoi(details)
 						lastHeartbeatMap[scheduleID] = lastHeartbeat
@@ -1005,7 +999,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 			return []*decisionpb.Decision{{
 				DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 				Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
-					Reason: failReason,
+					Failure: failure.NewServerFailure(failReason, false),
 				}},
 			}}, nil
 		}

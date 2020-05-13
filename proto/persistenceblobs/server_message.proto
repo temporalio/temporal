@@ -33,6 +33,7 @@ import "execution/enum.proto";
 import "namespace/enum.proto";
 import "namespace/message.proto";
 import "tasklist/enum.proto";
+import "failure/message.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -69,13 +70,12 @@ message ActivityInfo {
     int64 retryExpirationTimeNanos = 26;
     double retryBackoffCoefficient = 27;
     repeated string retryNonRetryableErrors = 28;
-    string retryLastFailureReason = 29;
+    failure.Failure retryLastFailure = 29;
     string retryLastWorkerIdentity = 30;
-    common.Payloads retryLastFailureDetails = 31;
-    bytes namespaceId = 32;
-    int64 scheduleId = 33;
-    common.Payloads lastHeartbeatDetails = 34;
-    google.protobuf.Timestamp lastHeartbeatUpdatedTime = 35;
+    bytes namespaceId = 31;
+    int64 scheduleId = 32;
+    common.Payloads lastHeartbeatDetails = 33;
+    google.protobuf.Timestamp lastHeartbeatUpdatedTime = 34;
 }
 
 message ShardInfo {

@@ -177,7 +177,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		MaximumInterval:                    info.MaximumInterval,
 		WorkflowExpirationTime:             info.ExpirationTime,
 		MaximumAttempts:                    info.MaximumAttempts,
-		NonRetriableErrors:                 info.NonRetriableErrors,
+		NonRetryableErrors:                 info.NonRetriableErrors,
 		BranchToken:                        info.BranchToken,
 		CronSchedule:                       info.CronSchedule,
 		AutoResetPoints:                    autoResetPoints,
@@ -298,9 +298,8 @@ func (m *executionManagerImpl) DeserializeActivityInfos(
 			ExpirationTime:                          v.ExpirationTime,
 			MaximumAttempts:                         v.MaximumAttempts,
 			NonRetriableErrors:                      v.NonRetriableErrors,
-			LastFailureReason:                       v.LastFailureReason,
+			LastFailure:                             v.LastFailure,
 			LastWorkerIdentity:                      v.LastWorkerIdentity,
-			LastFailureDetails:                      v.LastFailureDetails,
 			LastHeartbeatTimeoutVisibilityInSeconds: v.LastHeartbeatTimeoutVisibilityInSeconds,
 		}
 		newInfos[k] = a
@@ -419,9 +418,8 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(
 			ExpirationTime:                          v.ExpirationTime,
 			MaximumAttempts:                         v.MaximumAttempts,
 			NonRetriableErrors:                      v.NonRetriableErrors,
-			LastFailureReason:                       v.LastFailureReason,
+			LastFailure:                             v.LastFailure,
 			LastWorkerIdentity:                      v.LastWorkerIdentity,
-			LastFailureDetails:                      v.LastFailureDetails,
 			LastHeartbeatTimeoutVisibilityInSeconds: v.LastHeartbeatTimeoutVisibilityInSeconds,
 		}
 		newInfos = append(newInfos, i)
@@ -497,7 +495,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		MaximumInterval:                    info.MaximumInterval,
 		ExpirationTime:                     info.WorkflowExpirationTime,
 		MaximumAttempts:                    info.MaximumAttempts,
-		NonRetriableErrors:                 info.NonRetriableErrors,
+		NonRetriableErrors:                 info.NonRetryableErrors,
 		BranchToken:                        info.BranchToken,
 		CronSchedule:                       info.CronSchedule,
 		Memo:                               info.Memo,

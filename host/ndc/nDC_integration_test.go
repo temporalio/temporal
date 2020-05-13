@@ -38,6 +38,7 @@ import (
 
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
@@ -563,7 +564,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Version:   31,
 				EventType: eventpb.EventType_WorkflowExecutionTimedOut,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-					TimeoutType: eventpb.TimeoutType_StartToClose,
+					TimeoutType: commonpb.TimeoutType_StartToClose,
 				}},
 			},
 		}},
@@ -578,7 +579,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &eventpb.DecisionTaskTimedOutEventAttributes{
 					ScheduledEventId: 13,
 					StartedEventId:   14,
-					TimeoutType:      eventpb.TimeoutType_StartToClose,
+					TimeoutType:      commonpb.TimeoutType_StartToClose,
 				}},
 			},
 			{
@@ -588,7 +589,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
 					ScheduledEventId: 6,
 					StartedEventId:   7,
-					TimeoutType:      eventpb.TimeoutType_StartToClose,
+					TimeoutType:      commonpb.TimeoutType_StartToClose,
 				}},
 			},
 			{
@@ -631,8 +632,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 				EventType: eventpb.EventType_WorkflowExecutionFailed,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &eventpb.WorkflowExecutionFailedEventAttributes{
 					DecisionTaskCompletedEventId: 19,
-					Reason:                       "some random reason",
-					Details:                      nil,
+					Failure:                      failure.NewServerFailure("some random reason", false),
 				}},
 			},
 		}},
@@ -1368,7 +1368,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Attributes: &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &eventpb.DecisionTaskTimedOutEventAttributes{
 					ScheduledEventId: 13,
 					StartedEventId:   14,
-					TimeoutType:      eventpb.TimeoutType_StartToClose,
+					TimeoutType:      commonpb.TimeoutType_StartToClose,
 				}},
 			},
 			{
@@ -1378,7 +1378,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Attributes: &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
 					ScheduledEventId: 6,
 					StartedEventId:   7,
-					TimeoutType:      eventpb.TimeoutType_StartToClose,
+					TimeoutType:      commonpb.TimeoutType_StartToClose,
 				}},
 			},
 			{
@@ -1421,8 +1421,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				EventType: eventpb.EventType_WorkflowExecutionFailed,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &eventpb.WorkflowExecutionFailedEventAttributes{
 					DecisionTaskCompletedEventId: 19,
-					Reason:                       "some random reason",
-					Details:                      nil,
+					Failure:                      failure.NewServerFailure("some random reason", false),
 				}},
 			},
 		}},
@@ -1435,7 +1434,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 				Version:   32,
 				EventType: eventpb.EventType_WorkflowExecutionTimedOut,
 				Attributes: &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-					TimeoutType: eventpb.TimeoutType_StartToClose,
+					TimeoutType: commonpb.TimeoutType_StartToClose,
 				}},
 			},
 		}},

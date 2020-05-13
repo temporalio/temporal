@@ -136,7 +136,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 		LastHeartbeatTime:  attr.LastHeartbeatTime,
 		Details:            attr.Details,
 		Attempt:            attr.Attempt,
-		LastFailureReason:  attr.LastFailureReason,
+		LastFailure:        attr.LastFailure,
 		LastWorkerIdentity: attr.LastWorkerIdentity,
 		VersionHistory:     attr.GetVersionHistory(),
 	}
@@ -145,7 +145,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 	err = e.historyEngine.SyncActivity(ctx, request)
 	// Handle resend error
 	retryV2Err, okV2 := e.convertRetryTaskV2Error(err)
-	//TODO: remove handling retry error v1 after 2DC deprecation
+	// TODO: remove handling retry error v1 after 2DC deprecation
 	retryV1Err, okV1 := e.convertRetryTaskError(err)
 
 	if !okV1 && !okV2 {
@@ -194,7 +194,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 	return e.historyEngine.SyncActivity(ctx, request)
 }
 
-//TODO: remove this part after 2DC deprecation
+// TODO: remove this part after 2DC deprecation
 func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	sourceCluster string,
 	task *replicationgenpb.ReplicationTask,
@@ -330,7 +330,7 @@ FilterLoop:
 	return shouldProcessTask, nil
 }
 
-//TODO: remove this code after 2DC deprecation
+// TODO: remove this code after 2DC deprecation
 func (e *replicationTaskExecutorImpl) convertRetryTaskError(
 	err error,
 ) (*serviceerror.RetryTask, bool) {

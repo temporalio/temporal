@@ -25,13 +25,17 @@
 package host
 
 import (
+	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/temporal"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	querypb "go.temporal.io/temporal-proto/query"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -246,7 +250,7 @@ Loop:
 			_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 				TaskToken: response.TaskToken,
 				Cause:     eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
-				Details:   payloads.EncodeString(err.Error()),
+				Failure:   newApplicationFailure(err, false, nil),
 				Identity:  p.Identity,
 			})
 			return isQueryTask, nil, err
@@ -314,7 +318,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 			TaskToken: response.TaskToken,
 			Cause:     eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
-			Details:   payloads.EncodeString(err.Error()),
+			Failure:   newApplicationFailure(err, false, nil),
 			Identity:  p.Identity,
 		})
 		return nil, err
@@ -386,8 +390,7 @@ retry:
 		if err2 != nil {
 			_, err := p.Engine.RespondActivityTaskFailed(NewContext(), &workflowservice.RespondActivityTaskFailedRequest{
 				TaskToken: response.TaskToken,
-				Reason:    err2.Error(),
-				Details:   payloads.EncodeString(err2.Error()),
+				Failure:   newApplicationFailure(err2, false, nil),
 				Identity:  p.Identity,
 			})
 			return err
@@ -460,8 +463,7 @@ retry:
 				WorkflowId: response.WorkflowExecution.GetWorkflowId(),
 				RunId:      response.WorkflowExecution.GetRunId(),
 				ActivityId: response.GetActivityId(),
-				Reason:     err2.Error(),
-				Details:    payloads.EncodeString(err2.Error()),
+				Failure:    newApplicationFailure(err2, false, nil),
 				Identity:   p.Identity,
 			})
 			return err
@@ -487,4 +489,31 @@ func getQueryResults(queries map[string]*querypb.WorkflowQuery, queryResult *que
 		result[k] = queryResult
 	}
 	return result
+}
+
+func newApplicationFailure(err error, nonRetryable bool, details *commonpb.Payloads) *failurepb.Failure {
+	var applicationErr *temporal.ApplicationError
+	if errors.As(err, &applicationErr) {
+		nonRetryable = applicationErr.NonRetryable()
+	}
+
+	f := &failurepb.Failure{
+		Message: err.Error(),
+		Source:  "IntegrationTests",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         getErrorType(err),
+			NonRetryable: nonRetryable,
+			Details:      details,
+		}},
+	}
+
+	return f
+}
+
+func getErrorType(err error) string {
+	var t reflect.Type
+	for t = reflect.TypeOf(err); t.Kind() == reflect.Ptr; t = t.Elem() {
+	}
+
+	return t.Name()
 }

@@ -247,7 +247,7 @@ GetHistoryLoop:
 		}
 
 		timeoutEventAttributes := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		s.Equal(eventpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
+		s.Equal(commonpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
 		workflowComplete = true
 		break GetHistoryLoop
 	}
@@ -346,7 +346,7 @@ GetHistoryLoop:
 
 		s.True(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeoutSeconds() < 5)
 		timeoutEventAttributes := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		s.Equal(eventpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
+		s.Equal(commonpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
 		workflowComplete = true
 		break GetHistoryLoop
 	}

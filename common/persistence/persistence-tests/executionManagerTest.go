@@ -50,6 +50,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -1257,7 +1258,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				MaximumInterval:        rand.Int31(),
 				WorkflowExpirationTime: time.Now(),
 				MaximumAttempts:        rand.Int31(),
-				NonRetriableErrors:     []string{"badRequestError", "accessDeniedError"},
+				NonRetryableErrors:     []string{"badRequestError", "accessDeniedError"},
 				CronSchedule:           "* * * * *",
 				AutoResetPoints:        &testResetPoints,
 				SearchAttributes:       testSearchAttr,
@@ -1322,7 +1323,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.MaximumInterval, info.MaximumInterval)
 	s.EqualTimes(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowExpirationTime, info.WorkflowExpirationTime)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.CronSchedule, info.CronSchedule)
-	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NonRetriableErrors, info.NonRetriableErrors)
+	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.NonRetryableErrors, info.NonRetryableErrors)
 	s.Equal(testResetPoints.String(), info.AutoResetPoints.String())
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionStats.HistorySize, state.ExecutionStats.HistorySize)
 	saVal, ok := info.SearchAttributes[testSearchAttrKey]
@@ -1416,7 +1417,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.MaximumInterval = math.MaxInt32
 	updatedInfo.MaximumAttempts = math.MaxInt32
 	updatedInfo.WorkflowExpirationTime = time.Now()
-	updatedInfo.NonRetriableErrors = []string{"accessDenied", "badRequest"}
+	updatedInfo.NonRetryableErrors = []string{"accessDenied", "badRequest"}
 	searchAttrKey := "env"
 	searchAttrVal := payload.EncodeBytes([]byte("test"))
 	updatedInfo.SearchAttributes = map[string]*commonpb.Payload{searchAttrKey: searchAttrVal}
@@ -1466,7 +1467,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.MaximumInterval, info1.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info1.MaximumAttempts)
 	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info1.WorkflowExpirationTime)
-	s.Equal(updatedInfo.NonRetriableErrors, info1.NonRetriableErrors)
+	s.Equal(updatedInfo.NonRetryableErrors, info1.NonRetryableErrors)
 	searchAttrVal1, ok := info1.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal1)
@@ -1515,7 +1516,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.MaximumInterval, info2.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info2.MaximumAttempts)
 	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info2.WorkflowExpirationTime)
-	s.Equal(updatedInfo.NonRetriableErrors, info2.NonRetriableErrors)
+	s.Equal(updatedInfo.NonRetryableErrors, info2.NonRetryableErrors)
 	searchAttrVal2, ok := info2.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal2)
@@ -1561,7 +1562,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.MaximumInterval, info3.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info3.MaximumAttempts)
 	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info3.WorkflowExpirationTime)
-	s.Equal(updatedInfo.NonRetriableErrors, info3.NonRetriableErrors)
+	s.Equal(updatedInfo.NonRetryableErrors, info3.NonRetryableErrors)
 	searchAttrVal3, ok := info3.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal3)
@@ -1572,7 +1573,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 
 	log.Infof("Workflow execution last updated: %v", info3.LastUpdatedTimestamp)
 
-	//update with incorrect rangeID and condition(next_event_id)
+	// update with incorrect rangeID and condition(next_event_id)
 	err7 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateStats, nil, []int64{int64(5)}, nil, int64(12345), int64(3), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
 	s.Error(err7, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err7)
@@ -1607,7 +1608,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.MaximumInterval, info4.MaximumInterval)
 	s.Equal(updatedInfo.MaximumAttempts, info4.MaximumAttempts)
 	s.EqualTimes(updatedInfo.WorkflowExpirationTime, info4.WorkflowExpirationTime)
-	s.Equal(updatedInfo.NonRetriableErrors, info4.NonRetriableErrors)
+	s.Equal(updatedInfo.NonRetryableErrors, info4.NonRetryableErrors)
 	searchAttrVal4, ok := info4.SearchAttributes[searchAttrKey]
 	s.True(ok)
 	s.Equal(searchAttrVal, searchAttrVal4)
@@ -1828,7 +1829,7 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 	info2.ExecutionInfo.LastUpdatedTimestamp = info1.ExecutionInfo.LastUpdatedTimestamp
 	s.Equal(info2, info1)
 
-	//delete the run
+	// delete the run
 	err8 := s.DeleteWorkflowExecution(info0.ExecutionInfo)
 	s.NoError(err8)
 
@@ -2442,7 +2443,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 	}
 
 	now := time.Now()
-	initialTasks := []p.Task{&p.DecisionTimeoutTask{now.Add(1 * time.Second), 1, 2, 3, int(eventpb.TimeoutType_StartToClose), 11}}
+	initialTasks := []p.Task{&p.DecisionTimeoutTask{now.Add(1 * time.Second), 1, 2, 3, int(commonpb.TimeoutType_StartToClose), 11}}
 
 	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "taskList", "wType", 20, 13, 3, 0, 2, initialTasks)
 	s.NoError(err0)
@@ -2460,7 +2461,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 	tasks := []p.Task{
 		&p.WorkflowTimeoutTask{now.Add(2 * time.Second), 2, 12},
 		&p.DeleteHistoryEventTask{now.Add(2 * time.Second), 3, 13},
-		&p.ActivityTimeoutTask{now.Add(3 * time.Second), 4, int(eventpb.TimeoutType_StartToClose), 7, 0, 14},
+		&p.ActivityTimeoutTask{now.Add(3 * time.Second), 4, int(commonpb.TimeoutType_StartToClose), 7, 0, 14},
 		&p.UserTimerTask{now.Add(3 * time.Second), 5, 7, 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil)
@@ -2516,10 +2517,10 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	tasks := []p.Task{
-		&p.DecisionTimeoutTask{time.Now(), 1, 2, 3, int(eventpb.TimeoutType_StartToClose), 11},
+		&p.DecisionTimeoutTask{time.Now(), 1, 2, 3, int(commonpb.TimeoutType_StartToClose), 11},
 		&p.WorkflowTimeoutTask{time.Now(), 2, 12},
 		&p.DeleteHistoryEventTask{time.Now(), 3, 13},
-		&p.ActivityTimeoutTask{time.Now(), 4, int(eventpb.TimeoutType_StartToClose), 7, 0, 14},
+		&p.ActivityTimeoutTask{time.Now(), 4, int(commonpb.TimeoutType_StartToClose), 7, 0, 14},
 		&p.UserTimerTask{time.Now(), 5, 7, 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil)
@@ -2617,9 +2618,8 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 		BackoffCoefficient:       5.55,
 		ExpirationTime:           currentTime,
 		NonRetriableErrors:       []string{"accessDenied", "badRequest"},
-		LastFailureReason:        "some random error",
 		LastWorkerIdentity:       uuid.New(),
-		LastFailureDetails:       payloads.EncodeString(uuid.New()),
+		LastFailure:              failure.NewServerFailure("some random error", false),
 	}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), nil, activityInfos, nil, nil, nil)
 	s.NoError(err2)
@@ -2662,9 +2662,8 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	s.Equal(activityInfos[0].BackoffCoefficient, ai.BackoffCoefficient)
 	s.EqualTimes(activityInfos[0].ExpirationTime, ai.ExpirationTime)
 	s.Equal(activityInfos[0].NonRetriableErrors, ai.NonRetriableErrors)
-	s.Equal(activityInfos[0].LastFailureReason, ai.LastFailureReason)
+	s.Equal(activityInfos[0].LastFailure, ai.LastFailure)
 	s.Equal(activityInfos[0].LastWorkerIdentity, ai.LastWorkerIdentity)
-	s.Equal(activityInfos[0].LastFailureDetails, ai.LastFailureDetails)
 
 	err2 = s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, nil, nil, int64(5), nil, nil, []int64{1}, nil, nil)
 	s.NoError(err2)

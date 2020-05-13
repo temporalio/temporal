@@ -46,6 +46,7 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
@@ -180,9 +181,9 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 		newDecisionScheduleEvent.GetEventId(),
 		newDecisionStartedEvent.GetEventId(),
 		eventpb.DecisionTaskFailedCause_WorkflowWorkerUnhandledFailure,
-		payloads.EncodeString("some random decision failure details"),
+		failure.NewServerFailure("some random decision failure details", false),
 		"some random decision failure identity",
-		"", "", "", "", 0,
+		"", "", "", 0,
 	))
 	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().transientHistory))
 	s.Equal(1, len(s.msBuilder.GetHistoryBuilder().history))

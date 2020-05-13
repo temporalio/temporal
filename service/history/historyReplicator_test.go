@@ -1707,7 +1707,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().GetInFlightDecision().Return(pendingDecisionInfo, true).Times(1)
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderIn.EXPECT().AddDecisionTaskFailedEvent(pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
-		eventpb.DecisionTaskFailedCause_FailoverCloseDecision, nil, identityHistoryService, "", "", "", "", int64(0),
+		eventpb.DecisionTaskFailedCause_FailoverCloseDecision, nil, identityHistoryService, "", "", "", int64(0),
 	).Return(&eventpb.HistoryEvent{}, nil).Times(1)
 	msBuilderIn.EXPECT().HasPendingDecision().Return(false).Times(1)
 	currentState := persistence.WorkflowStateRunning
@@ -2294,7 +2294,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		BackoffCoefficient:       retryPolicy.GetBackoffCoefficient(),
 		MaximumAttempts:          retryPolicy.GetMaximumAttempts(),
 		MaximumInterval:          retryPolicy.GetMaximumIntervalInSeconds(),
-		NonRetriableErrors:       retryPolicy.GetNonRetriableErrorReasons(),
+		NonRetryableErrors:       retryPolicy.GetNonRetriableErrorReasons(),
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
@@ -3548,7 +3548,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		BackoffCoefficient:       retryPolicy.GetBackoffCoefficient(),
 		MaximumInterval:          retryPolicy.GetMaximumIntervalInSeconds(),
 		MaximumAttempts:          retryPolicy.GetMaximumAttempts(),
-		NonRetriableErrors:       retryPolicy.GetNonRetriableErrorReasons(),
+		NonRetryableErrors:       retryPolicy.GetNonRetriableErrorReasons(),
 	}
 	msBuilder.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{

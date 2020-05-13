@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	common "go.temporal.io/temporal-proto/common"
 	event "go.temporal.io/temporal-proto/event"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice"
 )
@@ -133,7 +134,7 @@ func (mr *MockmutableStateDecisionTaskManagerMockRecorder) ReplicateDecisionTask
 }
 
 // ReplicateDecisionTaskTimedOutEvent mocks base method.
-func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskTimedOutEvent(timeoutType event.TimeoutType) error {
+func (m *MockmutableStateDecisionTaskManager) ReplicateDecisionTaskTimedOutEvent(timeoutType common.TimeoutType) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateDecisionTaskTimedOutEvent", timeoutType)
 	ret0, _ := ret[0].(error)

@@ -31,7 +31,6 @@ import (
 	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
-	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
@@ -40,6 +39,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -190,7 +190,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
-	isHeartBeatTask := task.TimeoutType == int32(eventpb.TimeoutType_Heartbeat)
+	isHeartBeatTask := task.TimeoutType == int32(commonpb.TimeoutType_Heartbeat)
 	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
 	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTimestamp)
 	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goVisibilityTS.Unix() {
@@ -225,8 +225,7 @@ Loop:
 			// customer should set larger schedule to start timeout if necessary
 			if ok, err := mutableState.RetryActivity(
 				activityInfo,
-				timerTypeToReason(timerSequenceID.timerType),
-				nil,
+				failure.NewTimeoutFailure(timerTypeToProto(timerSequenceID.timerType)),
 			); err != nil {
 				return err
 			} else if ok {
@@ -294,7 +293,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	}
 
 	scheduleDecision := false
-	switch timerTypeFromProto(eventpb.TimeoutType(task.TimeoutType)) {
+	switch timerTypeFromProto(commonpb.TimeoutType(task.TimeoutType)) {
 	case timerTypeStartToClose:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			mutableState.GetExecutionInfo().NamespaceID,
@@ -482,8 +481,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	eventBatchFirstEventID := mutableState.GetNextEventID()
 
-	timeoutReason := timerTypeToReason(timerTypeStartToClose)
-	backoffInterval := mutableState.GetRetryBackoffDuration(timeoutReason)
+	timeoutFailure := failure.NewTimeoutFailure(commonpb.TimeoutType_StartToClose)
+	backoffInterval := mutableState.GetRetryBackoffDuration(timeoutFailure)
 	continueAsNewInitiator := commonpb.ContinueAsNewInitiator_Retry
 	if backoffInterval == backoff.NoBackoff {
 		// check if a cron backoff is needed
@@ -519,7 +518,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		BackoffStartIntervalInSeconds: int32(backoffInterval.Seconds()),
 		RetryPolicy:                   startAttributes.RetryPolicy,
 		Initiator:                     continueAsNewInitiator,
-		FailureReason:                 timeoutReason,
+		Failure:                       timeoutFailure,
 		CronSchedule:                  mutableState.GetExecutionInfo().CronSchedule,
 		Header:                        startAttributes.Header,
 		Memo:                          startAttributes.Memo,

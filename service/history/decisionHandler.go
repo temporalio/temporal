@@ -41,6 +41,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -264,8 +265,8 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 				return serviceerror.NewNotFound("Decision task not found.")
 			}
 
-			_, err := mutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, request.GetCause(), request.Details,
-				request.GetIdentity(), "", request.GetBinaryChecksum(), "", "", 0)
+			_, err := mutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, request.GetCause(), request.GetFailure(),
+				request.GetIdentity(), request.GetBinaryChecksum(), "", "", 0)
 			return err
 		})
 }
@@ -453,7 +454,7 @@ Update_History_Loop:
 				tag.WorkflowID(token.GetWorkflowId()),
 				tag.WorkflowRunIDBytes(token.GetRunId()),
 				tag.WorkflowNamespaceIDBytes(namespaceID))
-			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, payloads.EncodeString(failDecision.message), request)
+			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, failure.NewServerFailure(failDecision.message, false), request)
 			if err != nil {
 				return nil, err
 			}

@@ -35,6 +35,7 @@ import (
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -1060,7 +1061,7 @@ func (e *mutableStateBuilder) GetRequestCancelInfo(
 }
 
 func (e *mutableStateBuilder) GetRetryBackoffDuration(
-	errReason string,
+	failure *failurepb.Failure,
 ) time.Duration {
 
 	info := e.executionInfo
@@ -1076,8 +1077,8 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 		info.InitialInterval,
 		info.MaximumInterval,
 		info.BackoffCoefficient,
-		errReason,
-		info.NonRetriableErrors,
+		failure,
+		info.NonRetryableErrors,
 	)
 }
 
@@ -1293,9 +1294,8 @@ func (e *mutableStateBuilder) ReplicateActivityInfo(
 	}
 	ai.Details = request.GetDetails()
 	ai.Attempt = request.GetAttempt()
-	ai.LastFailureReason = request.GetLastFailureReason()
 	ai.LastWorkerIdentity = request.GetLastWorkerIdentity()
-	ai.LastFailureDetails = request.GetLastFailureDetails()
+	ai.LastFailure = request.GetLastFailure()
 
 	if resetActivityTimerTaskStatus {
 		ai.TimerTaskStatus = timerTaskStatusNone
@@ -1433,7 +1433,7 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 	return nil
 }
 
-//nolint:unused
+// nolint:unused
 func (e *mutableStateBuilder) getDecisionInfo() *decisionInfo {
 
 	taskList := e.executionInfo.TaskList
@@ -1670,8 +1670,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		StartRequest:                    createRequest,
 		ParentExecutionInfo:             parentExecutionInfo,
 		LastCompletionResult:            attributes.LastCompletionResult,
-		ContinuedFailureReason:          attributes.FailureReason,
-		ContinuedFailureDetails:         attributes.FailureDetails,
+		ContinuedFailure:                attributes.GetFailure(),
 		ContinueAsNewInitiator:          attributes.Initiator,
 		FirstDecisionTaskBackoffSeconds: attributes.BackoffStartIntervalInSeconds,
 	}
@@ -1831,7 +1830,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		e.executionInfo.InitialInterval = event.RetryPolicy.GetInitialIntervalInSeconds()
 		e.executionInfo.MaximumAttempts = event.RetryPolicy.GetMaximumAttempts()
 		e.executionInfo.MaximumInterval = event.RetryPolicy.GetMaximumIntervalInSeconds()
-		e.executionInfo.NonRetriableErrors = event.RetryPolicy.NonRetriableErrorReasons
+		e.executionInfo.NonRetryableErrors = event.RetryPolicy.GetNonRetriableErrorReasons()
 	}
 
 	e.executionInfo.AutoResetPoints = rolloverAutoResetPointsWithExpiringTime(
@@ -2042,7 +2041,7 @@ func (e *mutableStateBuilder) AddDecisionTaskTimedOutEvent(
 }
 
 func (e *mutableStateBuilder) ReplicateDecisionTaskTimedOutEvent(
-	timeoutType eventpb.TimeoutType,
+	timeoutType commonpb.TimeoutType,
 ) error {
 	return e.decisionTaskManager.ReplicateDecisionTaskTimedOutEvent(timeoutType)
 }
@@ -2061,9 +2060,8 @@ func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
 	cause eventpb.DecisionTaskFailedCause,
-	details *commonpb.Payloads,
+	failure *failurepb.Failure,
 	identity string,
-	reason string,
 	binChecksum string,
 	baseRunID string,
 	newRunID string,
@@ -2077,9 +2075,8 @@ func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(
 		scheduleEventID,
 		startedEventID,
 		cause,
-		details,
+		failure,
 		identity,
-		reason,
 		binChecksum,
 		baseRunID,
 		newRunID,
@@ -2196,7 +2193,7 @@ func (e *mutableStateBuilder) addTransientActivityStartedEvent(
 
 	// activity task was started (as transient event), we need to add it now.
 	event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, ai.RequestID, ai.StartedIdentity,
-		ai.LastFailureReason, ai.LastFailureDetails)
+		ai.LastFailure)
 	if !ai.StartedTime.IsZero() {
 		// overwrite started event time to the one recorded in ActivityInfo
 		event.Timestamp = ai.StartedTime.UnixNano()
@@ -2217,8 +2214,7 @@ func (e *mutableStateBuilder) AddActivityTaskStartedEvent(
 	}
 
 	if !ai.HasRetryPolicy {
-		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, requestID, identity,
-			ai.LastFailureReason, ai.LastFailureDetails)
+		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, requestID, identity, ai.LastFailure)
 		if err := e.ReplicateActivityTaskStartedEvent(event); err != nil {
 			return nil, err
 		}
@@ -2351,7 +2347,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskFailedEvent(
 func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	scheduleEventID int64,
 	startedEventID int64,
-	timeoutType eventpb.TimeoutType,
+	timeoutType commonpb.TimeoutType,
 	lastHeartBeatDetails *commonpb.Payloads,
 ) (*eventpb.HistoryEvent, error) {
 
@@ -2361,8 +2357,8 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	}
 
 	ai, ok := e.GetActivityInfo(scheduleEventID)
-	if !ok || ai.StartedID != startedEventID || ((timeoutType == eventpb.TimeoutType_StartToClose ||
-		timeoutType == eventpb.TimeoutType_Heartbeat) && ai.StartedID == common.EmptyEventID) {
+	if !ok || ai.StartedID != startedEventID || ((timeoutType == commonpb.TimeoutType_StartToClose ||
+		timeoutType == commonpb.TimeoutType_Heartbeat) && ai.StartedID == common.EmptyEventID) {
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -2376,7 +2372,7 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(
 	if err := e.addTransientActivityStartedEvent(scheduleEventID); err != nil {
 		return nil, err
 	}
-	event := e.hBuilder.AddActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutType, lastHeartBeatDetails, ai.LastFailureReason, ai.LastFailureDetails)
+	event := e.hBuilder.AddActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutType, lastHeartBeatDetails, ai.LastFailure)
 	if err := e.ReplicateActivityTaskTimedOutEvent(event); err != nil {
 		return nil, err
 	}
@@ -3753,8 +3749,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTimedOutEvent(
 
 func (e *mutableStateBuilder) RetryActivity(
 	ai *persistence.ActivityInfo,
-	failureReason string,
-	failureDetails *commonpb.Payloads,
+	failure *failurepb.Failure,
 ) (bool, error) {
 
 	opTag := tag.WorkflowActionActivityTaskRetry
@@ -3776,7 +3771,7 @@ func (e *mutableStateBuilder) RetryActivity(
 		ai.InitialInterval,
 		ai.MaximumInterval,
 		ai.BackoffCoefficient,
-		failureReason,
+		failure,
 		ai.NonRetriableErrors,
 	)
 	if backoffInterval == backoff.NoBackoff {
@@ -3791,9 +3786,8 @@ func (e *mutableStateBuilder) RetryActivity(
 	ai.RequestID = ""
 	ai.StartedTime = time.Time{}
 	ai.TimerTaskStatus = timerTaskStatusNone
-	ai.LastFailureReason = failureReason
 	ai.LastWorkerIdentity = ai.StartedIdentity
-	ai.LastFailureDetails = failureDetails
+	ai.LastFailure = failure
 
 	if err := e.taskGenerator.generateActivityRetryTasks(
 		ai.ScheduleID,

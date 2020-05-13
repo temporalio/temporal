@@ -42,6 +42,7 @@ import (
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
 	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -60,6 +61,7 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -570,7 +572,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
 	di.StartedID = event.GetEventId()
 	event = addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, "some random identity")
-	addFailWorkflowEvent(msBuilder, event.GetEventId(), "failure reason", payloads.EncodeBytes([]byte{1, 2, 3}))
+	addFailWorkflowEvent(msBuilder, event.GetEventId(), failure.NewServerFailure("failure reason", false))
 	ms := createMutableState(msBuilder)
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
@@ -1362,7 +1364,6 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	activity2Input := payloads.EncodeString("input2")
 	activity2Result := payloads.EncodeString("activity2_result")
 	reason := "workflow fail reason"
-	details := payloads.EncodeString("workflow fail details")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
@@ -1393,8 +1394,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 		Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
-			Reason:  reason,
-			Details: details,
+			Failure: failure.NewServerFailure(reason, false),
 		}},
 	}}
 
@@ -1951,7 +1951,6 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	}
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
-	details := payloads.EncodeString("fail workflow details")
 	reason := "fail workflow reason"
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
@@ -1963,8 +1962,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	decisions := []*decisionpb.Decision{{
 		DecisionType: decisionpb.DecisionType_FailWorkflowExecution,
 		Attributes: &decisionpb.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &decisionpb.FailWorkflowExecutionDecisionAttributes{
-			Reason:  reason,
-			Details: details,
+			Failure: failure.NewServerFailure(reason, false),
 		}},
 	}}
 
@@ -3034,8 +3032,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
-	failReason := "fail reason"
-	details := payloads.EncodeString("fail details")
+	failure := failure.NewServerFailure("fail reason", false)
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
@@ -3046,8 +3043,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 1, 5)
 	activityStartedEvent := addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
-	addActivityTaskFailedEvent(msBuilder, activityScheduledEvent.EventId, activityStartedEvent.EventId,
-		failReason, details, identity)
+	addActivityTaskFailedEvent(msBuilder, activityScheduledEvent.EventId, activityStartedEvent.EventId, failure, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 
 	ms := createMutableState(msBuilder)
@@ -3059,8 +3055,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
-			Reason:    failReason,
-			Details:   details,
+			Failure:   failure,
 			Identity:  identity,
 		},
 	})
@@ -3128,8 +3123,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	activity1ID := "activity1"
 	activity1Type := "activity_type1"
 	activity1Input := payloads.EncodeString("input1")
-	failReason := "fail reason"
-	details := payloads.EncodeString("fail details.")
+	failure := failure.NewServerFailure("fail reason", false)
 	activity2ID := "activity2"
 	activity2Type := "activity_type2"
 	activity2Input := payloads.EncodeString("input2")
@@ -3170,8 +3164,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
-			Reason:    failReason,
-			Details:   details,
+			Failure:   failure,
 			Identity:  identity,
 		},
 	})
@@ -3253,8 +3246,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
-	failReason := "failed"
-	failDetails := payloads.EncodeString("fail details.")
+	failure := failure.NewServerFailure("failed", false)
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
 		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
@@ -3277,8 +3269,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
-			Reason:    failReason,
-			Details:   failDetails,
+			Failure:   failure,
 			Identity:  identity,
 		},
 	})
@@ -3308,8 +3299,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
-	failReason := "failed"
-	failDetails := payloads.EncodeString("fail details.")
+	failure := failure.NewServerFailure("failed", false)
 	tt := &tokengenpb.Task{
 		WorkflowId: we.WorkflowId,
 		ScheduleId: common.EmptyEventID,
@@ -3340,8 +3330,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 		NamespaceId: testNamespaceID,
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
-			Reason:    failReason,
-			Details:   failDetails,
+			Failure:   failure,
 			Identity:  identity,
 		},
 	})
@@ -4934,11 +4923,9 @@ func addActivityTaskCompletedEvent(builder mutableState, scheduleID, startedID i
 	return event
 }
 
-func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, reason string, details *commonpb.Payloads,
-	identity string) *eventpb.HistoryEvent {
+func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int64, failure *failurepb.Failure, identity string) *eventpb.HistoryEvent {
 	event, _ := builder.AddActivityTaskFailedEvent(scheduleID, startedID, &workflowservice.RespondActivityTaskFailedRequest{
-		Reason:   reason,
-		Details:  details,
+		Failure:  failure,
 		Identity: identity,
 	})
 
@@ -5051,12 +5038,10 @@ func addCompleteWorkflowEvent(builder mutableState, decisionCompletedEventID int
 func addFailWorkflowEvent(
 	builder mutableState,
 	decisionCompletedEventID int64,
-	reason string,
-	details *commonpb.Payloads,
+	failure *failurepb.Failure,
 ) *eventpb.HistoryEvent {
 	event, _ := builder.AddFailWorkflowEvent(decisionCompletedEventID, &decisionpb.FailWorkflowExecutionDecisionAttributes{
-		Reason:  reason,
-		Details: details,
+		Failure: failure,
 	})
 	return event
 }
@@ -5187,7 +5172,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		MaximumInterval:                    sourceInfo.MaximumInterval,
 		WorkflowExpirationTime:             sourceInfo.WorkflowExpirationTime,
 		MaximumAttempts:                    sourceInfo.MaximumAttempts,
-		NonRetriableErrors:                 sourceInfo.NonRetriableErrors,
+		NonRetryableErrors:                 sourceInfo.NonRetryableErrors,
 		BranchToken:                        sourceInfo.BranchToken,
 	}
 }
@@ -5242,9 +5227,8 @@ func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.Activit
 		ExpirationTime:           sourceInfo.ExpirationTime,
 		MaximumAttempts:          sourceInfo.MaximumAttempts,
 		NonRetriableErrors:       sourceInfo.NonRetriableErrors,
-		LastFailureReason:        sourceInfo.LastFailureReason,
+		LastFailure:              sourceInfo.LastFailure,
 		LastWorkerIdentity:       sourceInfo.LastWorkerIdentity,
-		LastFailureDetails:       sourceInfo.LastFailureDetails,
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibilityInSeconds: sourceInfo.LastHeartbeatTimeoutVisibilityInSeconds,
 	}

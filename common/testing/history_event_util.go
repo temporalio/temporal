@@ -192,7 +192,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &eventpb.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &eventpb.DecisionTaskTimedOutEventAttributes{
 			ScheduledEventId: lastEvent.GetDecisionTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
-			TimeoutType:      eventpb.TimeoutType_ScheduleToStart,
+			TimeoutType:      commonpb.TimeoutType_ScheduleToStart,
 		}}
 		return historyEvent
 	})
@@ -360,7 +360,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent := getDefaultHistoryEvent(eventID, version)
 		historyEvent.EventType = eventpb.EventType_WorkflowExecutionTimedOut
 		historyEvent.Attributes = &eventpb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &eventpb.WorkflowExecutionTimedOutEventAttributes{
-			TimeoutType: eventpb.TimeoutType_StartToClose,
+			TimeoutType: commonpb.TimeoutType_StartToClose,
 		}}
 		return historyEvent
 	})
@@ -462,7 +462,7 @@ func InitializeHistoryEventGenerator(
 		historyEvent.Attributes = &eventpb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &eventpb.ActivityTaskTimedOutEventAttributes{
 			ScheduledEventId: lastEvent.GetActivityTaskStartedEventAttributes().ScheduledEventId,
 			StartedEventId:   lastEvent.EventId,
-			TimeoutType:      eventpb.TimeoutType_ScheduleToClose,
+			TimeoutType:      commonpb.TimeoutType_ScheduleToClose,
 		}}
 		return historyEvent
 	})
@@ -767,7 +767,7 @@ func InitializeHistoryEventGenerator(
 				RunId:      lastEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution().RunId,
 			},
 			StartedEventId: lastEvent.EventId,
-			TimeoutType:    eventpb.TimeoutType_ScheduleToClose,
+			TimeoutType:    commonpb.TimeoutType_ScheduleToClose,
 		}}
 		return historyEvent
 	})

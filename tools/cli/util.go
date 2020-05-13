@@ -109,7 +109,10 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 					fieldValue = trimText(fieldValue, maxFieldLength)
 				}
 			}
-			if fieldName == "Reason" || fieldName == "Details" || fieldName == "Cause" {
+			if fieldName == "Reason" ||
+				fieldName == "Cause" ||
+				strings.HasSuffix(fieldName, "Details") ||
+				strings.HasSuffix(fieldName, "Failure") {
 				buf.WriteString(fmt.Sprintf("%s:%s", color.RedString(fieldName), color.MagentaString(fieldValue)))
 			} else {
 				buf.WriteString(fmt.Sprintf("%s:%s", fieldName, fieldValue))

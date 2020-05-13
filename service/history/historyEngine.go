@@ -39,6 +39,7 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
+	failurepb "go.temporal.io/temporal-proto/failure"
 	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
@@ -1333,9 +1334,8 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				if ai.MaximumAttempts != 0 {
 					p.MaximumAttempts = ai.MaximumAttempts
 				}
-				if ai.LastFailureReason != "" {
-					p.LastFailureReason = ai.LastFailureReason
-					p.LastFailureDetails = ai.LastFailureDetails
+				if ai.LastFailure != nil {
+					p.LastFailure = ai.LastFailure
 				}
 				if ai.LastWorkerIdentity != "" {
 					p.LastWorkerIdentity = ai.LastWorkerIdentity
@@ -1612,7 +1612,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			}
 
 			postActions := &updateWorkflowAction{}
-			ok, err := mutableState.RetryActivity(ai, req.FailedRequest.GetReason(), req.FailedRequest.GetDetails())
+			ok, err := mutableState.RetryActivity(ai, req.FailedRequest.GetFailure())
 			if err != nil {
 				return nil, err
 			}
@@ -1779,8 +1779,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 
 			cancelRequested = ai.CancelRequested
 
-			e.logger.Debug("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, CancelRequested: %v",
-				tag.WorkflowScheduleID(scheduleID), tag.ActivityInfo(ai), tag.Bool(cancelRequested))
+			e.logger.Debug("Activity heartbeat", tag.WorkflowScheduleID(scheduleID), tag.ActivityInfo(ai), tag.Bool(cancelRequested))
 
 			// Save progress and last HB reported time.
 			mutableState.UpdateActivityProgress(ai, request)
@@ -2571,7 +2570,7 @@ func (e *historyEngineImpl) failDecision(
 	scheduleID int64,
 	startedID int64,
 	cause eventpb.DecisionTaskFailedCause,
-	details *commonpb.Payloads,
+	failure *failurepb.Failure,
 	request *workflowservice.RespondDecisionTaskCompletedRequest,
 ) (mutableState, error) {
 
@@ -2585,7 +2584,7 @@ func (e *historyEngineImpl) failDecision(
 	}
 
 	if _, err = mutableState.AddDecisionTaskFailedEvent(
-		scheduleID, startedID, cause, details, request.GetIdentity(), "", request.GetBinaryChecksum(), "", "", 0,
+		scheduleID, startedID, cause, failure, request.GetIdentity(), request.GetBinaryChecksum(), "", "", 0,
 	); err != nil {
 		return nil, err
 	}

@@ -32,13 +32,14 @@ import (
 
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/failure"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
 func Test_NextRetry(t *testing.T) {
 	a := assert.New(t)
 	now, _ := time.Parse(time.RFC3339, "2018-04-13T16:08:08+00:00")
-	reason := "good-reason"
+	reason := failure.NewServerFailure("good-reason", false)
 	identity := "some-worker-identity"
 
 	// no retry without retry policy
@@ -149,7 +150,7 @@ func Test_NextRetry(t *testing.T) {
 	ai.Attempt++
 
 	// test non-retriable error
-	reason = "bad-reason"
+	reason = failure.NewServerFailure("bad-reason", true)
 	a.Equal(backoff.NoBackoff, getBackoffInterval(
 		now,
 		ai.ExpirationTime,
@@ -162,7 +163,7 @@ func Test_NextRetry(t *testing.T) {
 		ai.NonRetriableErrors,
 	))
 
-	reason = "good-reason"
+	reason = failure.NewServerFailure("good-reason", false)
 
 	a.Equal(time.Second*8, getBackoffInterval(
 		now,

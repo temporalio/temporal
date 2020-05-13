@@ -48,7 +48,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/rpc"
 )
 
@@ -293,10 +292,8 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 		}
 		if event.GetEventType() == eventpb.EventType_ActivityTaskFailed {
 			failedAct++
-			var message string
-			err = payloads.Decode(event.GetActivityTaskFailedEventAttributes().GetDetails(), &message)
-			s.NoError(err)
-			s.True(strings.HasPrefix(message, "unable to decode the activity function input payload with error"))
+			s.NotNil(event.GetActivityTaskFailedEventAttributes().GetFailure().GetApplicationFailureInfo())
+			s.True(strings.HasPrefix(event.GetActivityTaskFailedEventAttributes().GetFailure().GetMessage(), "unable to decode the activity function input payload with error"))
 		}
 	}
 	s.Equal(1, completedAct)
