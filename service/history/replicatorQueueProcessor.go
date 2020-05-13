@@ -29,6 +29,7 @@ import (
 	"errors"
 	"time"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	eventgenpb "github.com/temporalio/temporal/.gen/proto/event"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
@@ -172,13 +173,13 @@ func (p *replicatorQueueProcessorImpl) process(
 	// so should not do anything to shouldProcessTask variable
 
 	switch task.TaskType {
-	case persistence.ReplicationTaskTypeSyncActivity:
+	case commongenpb.TaskType_ReplicationSyncActivity:
 		err := p.processSyncActivityTask(task.ReplicationTaskInfo)
 		if err == nil {
 			err = p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{TaskID: task.GetTaskId()})
 		}
 		return metrics.ReplicatorTaskSyncActivityScope, err
-	case persistence.ReplicationTaskTypeHistory:
+	case commongenpb.TaskType_ReplicationHistory:
 		err := p.processHistoryReplicationTask(task.ReplicationTaskInfo)
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			err = errHistoryNotFoundTask
@@ -574,13 +575,13 @@ func (p *replicatorQueueProcessorImpl) toReplicationTask(
 
 	task := t.ReplicationTaskInfo
 	switch task.TaskType {
-	case persistence.ReplicationTaskTypeSyncActivity:
+	case commongenpb.TaskType_ReplicationSyncActivity:
 		task, err := p.generateSyncActivityTask(ctx, task)
 		if task != nil {
 			task.SourceTaskId = qTask.GetTaskId()
 		}
 		return task, err
-	case persistence.ReplicationTaskTypeHistory:
+	case commongenpb.TaskType_ReplicationHistory:
 		task, err := p.generateHistoryReplicationTask(ctx, task)
 		if task != nil {
 			task.SourceTaskId = qTask.GetTaskId()

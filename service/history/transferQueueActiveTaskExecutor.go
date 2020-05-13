@@ -38,6 +38,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -101,23 +102,23 @@ func (t *transferQueueActiveTaskExecutor) execute(
 	}
 
 	switch task.TaskType {
-	case persistence.TransferTaskTypeActivityTask:
+	case commongenpb.TaskType_TransferActivityTask:
 		return t.processActivityTask(task)
-	case persistence.TransferTaskTypeDecisionTask:
+	case commongenpb.TaskType_TransferDecisionTask:
 		return t.processDecisionTask(task)
-	case persistence.TransferTaskTypeCloseExecution:
+	case commongenpb.TaskType_TransferCloseExecution:
 		return t.processCloseExecution(task)
-	case persistence.TransferTaskTypeCancelExecution:
+	case commongenpb.TaskType_TransferCancelExecution:
 		return t.processCancelExecution(task)
-	case persistence.TransferTaskTypeSignalExecution:
+	case commongenpb.TaskType_TransferSignalExecution:
 		return t.processSignalExecution(task)
-	case persistence.TransferTaskTypeStartChildExecution:
+	case commongenpb.TaskType_TransferStartChildExecution:
 		return t.processStartChildExecution(task)
-	case persistence.TransferTaskTypeRecordWorkflowStarted:
+	case commongenpb.TaskType_TransferRecordWorkflowStarted:
 		return t.processRecordWorkflowStarted(task)
-	case persistence.TransferTaskTypeResetWorkflow:
+	case commongenpb.TaskType_TransferResetWorkflow:
 		return t.processResetWorkflow(task)
-	case persistence.TransferTaskTypeUpsertWorkflowSearchAttributes:
+	case commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes:
 		return t.processUpsertWorkflowSearchAttributes(task)
 	default:
 		return errUnknownTransferTask
@@ -146,7 +147,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	ai, ok := mutableState.GetActivityInfo(task.GetScheduleId())
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(persistence.TransferTaskTypeActivityTask))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TaskType_TransferActivityTask))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), ai.Version, task.Version, task)
@@ -183,7 +184,7 @@ func (t *transferQueueActiveTaskExecutor) processDecisionTask(
 
 	decision, found := mutableState.GetDecisionInfo(task.GetScheduleId())
 	if !found {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(persistence.TransferTaskTypeDecisionTask))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(task.GetScheduleId()), tag.TaskType(commongenpb.TaskType_TransferDecisionTask))
 		return nil
 	}
 	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)

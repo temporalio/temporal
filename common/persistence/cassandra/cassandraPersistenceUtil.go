@@ -34,6 +34,7 @@ import (
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	replicationgenpb "github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -712,18 +713,18 @@ func createTransferTasks(
 		recordVisibility := false
 
 		switch task.GetType() {
-		case p.TransferTaskTypeActivityTask:
+		case commongenpb.TaskType_TransferActivityTask:
 			targetNamespaceID = task.(*p.ActivityTask).NamespaceID
 			taskList = task.(*p.ActivityTask).TaskList
 			scheduleID = task.(*p.ActivityTask).ScheduleID
 
-		case p.TransferTaskTypeDecisionTask:
+		case commongenpb.TaskType_TransferDecisionTask:
 			targetNamespaceID = task.(*p.DecisionTask).NamespaceID
 			taskList = task.(*p.DecisionTask).TaskList
 			scheduleID = task.(*p.DecisionTask).ScheduleID
 			recordVisibility = task.(*p.DecisionTask).RecordVisibility
 
-		case p.TransferTaskTypeCancelExecution:
+		case commongenpb.TaskType_TransferCancelExecution:
 			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.CancelExecutionTask).TargetRunID
@@ -731,7 +732,7 @@ func createTransferTasks(
 			targetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.CancelExecutionTask).InitiatedID
 
-		case p.TransferTaskTypeSignalExecution:
+		case commongenpb.TaskType_TransferSignalExecution:
 			targetNamespaceID = task.(*p.SignalExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.SignalExecutionTask).TargetRunID
@@ -739,15 +740,15 @@ func createTransferTasks(
 			targetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.SignalExecutionTask).InitiatedID
 
-		case p.TransferTaskTypeStartChildExecution:
+		case commongenpb.TaskType_TransferStartChildExecution:
 			targetNamespaceID = task.(*p.StartChildExecutionTask).TargetNamespaceID
 			targetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
 			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
 
-		case p.TransferTaskTypeCloseExecution,
-			p.TransferTaskTypeRecordWorkflowStarted,
-			p.TransferTaskTypeResetWorkflow,
-			p.TransferTaskTypeUpsertWorkflowSearchAttributes:
+		case commongenpb.TaskType_TransferCloseExecution,
+			commongenpb.TaskType_TransferRecordWorkflowStarted,
+			commongenpb.TaskType_TransferResetWorkflow,
+			commongenpb.TaskType_TransferUpsertWorkflowSearchAttributes:
 			// No explicit property needs to be set
 
 		default:
@@ -765,7 +766,7 @@ func createTransferTasks(
 			NamespaceId:             primitives.MustParseUUID(namespaceID),
 			WorkflowId:              workflowID,
 			RunId:                   primitives.MustParseUUID(runID),
-			TaskType:                int32(task.GetType()),
+			TaskType:                task.GetType(),
 			TargetNamespaceId:       primitives.MustParseUUID(targetNamespaceID),
 			TargetWorkflowId:        targetWorkflowID,
 			TargetRunId:             primitives.MustParseUUID(targetRunID),
@@ -817,7 +818,7 @@ func createReplicationTasks(
 		resetWorkflow := false
 
 		switch task.GetType() {
-		case p.ReplicationTaskTypeHistory:
+		case commongenpb.TaskType_ReplicationHistory:
 			histTask := task.(*p.HistoryReplicationTask)
 			branchToken = histTask.BranchToken
 			newRunBranchToken = histTask.NewRunBranchToken
@@ -830,7 +831,7 @@ func createReplicationTasks(
 			}
 			resetWorkflow = histTask.ResetWorkflow
 
-		case p.ReplicationTaskTypeSyncActivity:
+		case commongenpb.TaskType_ReplicationSyncActivity:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 			// cassandra does not like null
@@ -845,7 +846,7 @@ func createReplicationTasks(
 			WorkflowId:              workflowID,
 			RunId:                   primitives.MustParseUUID(runID),
 			TaskId:                  task.GetTaskID(),
-			TaskType:                int32(task.GetType()),
+			TaskType:                task.GetType(),
 			Version:                 version,
 			FirstEventId:            firstEventID,
 			NextEventId:             nextEventID,
@@ -937,7 +938,7 @@ func createTimerTasks(
 			NamespaceId:         primitives.MustParseUUID(namespaceID),
 			WorkflowId:          workflowID,
 			RunId:               primitives.MustParseUUID(runID),
-			TaskType:            int32(task.GetType()),
+			TaskType:            task.GetType(),
 			TimeoutType:         int32(timeoutType),
 			Version:             task.GetVersion(),
 			ScheduleAttempt:     attempt,
