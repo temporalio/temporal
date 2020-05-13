@@ -114,7 +114,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 	request := &persistence.CreateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{
-				Id:          primitives.MustParseUUID(task.GetId()),
+				Id:          task.GetId(),
 				Name:        task.Info.GetName(),
 				Status:      task.Info.Status,
 				Description: task.Info.GetDescription(),
@@ -226,7 +226,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 	if resp.Namespace.ConfigVersion < task.GetConfigVersion() {
 		recordUpdated = true
 		request.Namespace.Info = &persistenceblobs.NamespaceInfo{
-			Id:          primitives.MustParseUUID(task.GetId()),
+			Id:          task.GetId(),
 			Name:        task.Info.GetName(),
 			Status:      task.Info.Status,
 			Description: task.Info.GetDescription(),

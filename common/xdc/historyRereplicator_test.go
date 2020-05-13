@@ -102,7 +102,7 @@ func (s *historyRereplicatorSuite) SetupTest() {
 	s.namespace = "some random namespace name"
 	s.targetClusterName = "some random target cluster name"
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(s.namespaceID), Name: s.namespace},
+		&persistenceblobs.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,

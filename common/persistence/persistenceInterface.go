@@ -737,11 +737,11 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		CreateRequestId: executionInfo.CreateRequestID,
 		State:           executionInfo.State,
 		Status:          executionInfo.Status,
-		RunId:           primitives.MustParseUUID(executionInfo.RunID),
+		RunId:           executionInfo.RunID,
 	}
 
 	info := &persistenceblobs.WorkflowExecutionInfo{
-		NamespaceId:                             primitives.MustParseUUID(executionInfo.NamespaceID),
+		NamespaceId:                             executionInfo.NamespaceID,
 		WorkflowId:                              executionInfo.WorkflowID,
 		TaskList:                                executionInfo.TaskList,
 		WorkflowTypeName:                        executionInfo.WorkflowTypeName,
@@ -811,9 +811,9 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 	}
 
 	if executionInfo.ParentNamespaceID != "" {
-		info.ParentNamespaceId = primitives.MustParseUUID(executionInfo.ParentNamespaceID)
+		info.ParentNamespaceId = executionInfo.ParentNamespaceID
 		info.ParentWorkflowId = executionInfo.ParentWorkflowID
-		info.ParentRunId = primitives.MustParseUUID(executionInfo.ParentRunID)
+		info.ParentRunId = executionInfo.ParentRunID
 		info.InitiatedId = executionInfo.InitiatedID
 		info.CompletionEvent = nil
 	}
@@ -1009,7 +1009,7 @@ func (v *InternalChildExecutionInfo) ToProto() *persistenceblobs.ChildExecutionI
 		StartedEventEncoding:   startEncoding,
 		StartedId:              v.StartedID,
 		StartedWorkflowId:      v.StartedWorkflowID,
-		StartedRunId:           primitives.MustParseUUID(v.StartedRunID),
+		StartedRunId:           v.StartedRunID,
 		CreateRequestId:        v.CreateRequestID,
 		Namespace:              v.Namespace,
 		WorkflowTypeName:       v.WorkflowTypeName,

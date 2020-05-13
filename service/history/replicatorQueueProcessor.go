@@ -531,9 +531,9 @@ func (p *replicatorQueueProcessorImpl) getTask(
 ) (*replicationgenpb.ReplicationTask, error) {
 
 	task := &persistenceblobs.ReplicationTaskInfo{
-		NamespaceId:  primitives.MustParseUUID(taskInfo.GetNamespaceId()),
+		NamespaceId:  taskInfo.GetNamespaceId(),
 		WorkflowId:   taskInfo.GetWorkflowId(),
-		RunId:        primitives.MustParseUUID(taskInfo.GetRunId()),
+		RunId:        taskInfo.GetRunId(),
 		TaskId:       taskInfo.GetTaskId(),
 		TaskType:     taskInfo.GetTaskType(),
 		FirstEventId: taskInfo.GetFirstEventId(),

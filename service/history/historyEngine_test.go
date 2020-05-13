@@ -1638,7 +1638,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(namespaceID), Name: testNamespace},
+		&persistenceblobs.NamespaceInfo{Id: namespaceID, Name: testNamespace},
 		&persistenceblobs.NamespaceConfig{
 			RetentionDays: 2,
 			BadBinaries: &namespacepb.BadBinaries{

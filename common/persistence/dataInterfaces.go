@@ -2125,8 +2125,8 @@ func UnixNanoToDBTimestamp(timestamp int64) int64 {
 }
 
 // NewHistoryBranchToken return a new branch token
-func NewHistoryBranchToken(treeID []byte) ([]byte, error) {
-	branchID := uuid.NewRandom()
+func NewHistoryBranchToken(treeID string) ([]byte, error) {
+	branchID := primitives.NewUUID().String()
 	bi := &persistenceblobs.HistoryBranch{
 		TreeId:    treeID,
 		BranchId:  branchID,
@@ -2141,7 +2141,7 @@ func NewHistoryBranchToken(treeID []byte) ([]byte, error) {
 }
 
 // NewHistoryBranchTokenByBranchID return a new branch token with treeID/branchID
-func NewHistoryBranchTokenByBranchID(treeID, branchID []byte) ([]byte, error) {
+func NewHistoryBranchTokenByBranchID(treeID, branchID string) ([]byte, error) {
 	bi := &persistenceblobs.HistoryBranch{
 		TreeId:    treeID,
 		BranchId:  branchID,
