@@ -133,7 +133,7 @@ type (
 		hasBufferedEventsInDB bool
 		// indicates the workflow state in DB, can be used to calculate
 		// whether this workflow is pointed by current workflow record
-		stateInDB int
+		stateInDB executiongenpb.WorkflowExecutionState
 		// indicates the next event ID in DB, for conditional update
 		nextEventIDInDB int64
 		// namespace entry contains a snapshot of namespace
@@ -205,7 +205,7 @@ func newMutableStateBuilder(
 
 		currentVersion:        namespaceEntry.GetFailoverVersion(),
 		hasBufferedEventsInDB: false,
-		stateInDB:             persistence.WorkflowStateVoid,
+		stateInDB:             executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Void,
 		nextEventIDInDB:       0,
 		namespaceEntry:        namespaceEntry,
 		appliedEvents:         make(map[string]struct{}),
@@ -228,7 +228,7 @@ func newMutableStateBuilder(
 		DecisionTimeout:    0,
 
 		NextEventID:        common.FirstEventID,
-		State:              persistence.WorkflowStateCreated,
+		State:              executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 		Status:             executionpb.WorkflowExecutionStatus_Running,
 		LastProcessedEvent: common.EmptyEventID,
 	}
@@ -486,7 +486,7 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if state, _ := e.GetWorkflowStateStatus(); state == persistence.WorkflowStateCompleted {
+	if state, _ := e.GetWorkflowStateStatus(); state == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 		// do not update current version only when workflow is completed
 		return nil
 	}
@@ -865,17 +865,17 @@ func (e *mutableStateBuilder) IsCurrentWorkflowGuaranteed() bool {
 	// 4. stateInDB cannot be void, void is only possible when mutable state is just initialized
 
 	switch e.stateInDB {
-	case persistence.WorkflowStateVoid:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Void:
 		return false
-	case persistence.WorkflowStateCreated:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:
 		return true
-	case persistence.WorkflowStateRunning:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:
 		return true
-	case persistence.WorkflowStateCompleted:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed:
 		return false
-	case persistence.WorkflowStateZombie:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:
 		return false
-	case persistence.WorkflowStateCorrupted:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Corrupted:
 		return false
 	default:
 		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
@@ -1156,7 +1156,7 @@ func (e *mutableStateBuilder) GetSignalInfo(
 
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (e *mutableStateBuilder) GetCompletionEvent() (*eventpb.HistoryEvent, error) {
-	if e.executionInfo.State != persistence.WorkflowStateCompleted {
+	if e.executionInfo.State != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
 
@@ -1604,15 +1604,15 @@ func (e *mutableStateBuilder) GetPreviousStartedEventID() int64 {
 
 func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
 	switch e.executionInfo.State {
-	case persistence.WorkflowStateCreated:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created:
 		return true
-	case persistence.WorkflowStateRunning:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:
 		return true
-	case persistence.WorkflowStateCompleted:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed:
 		return false
-	case persistence.WorkflowStateZombie:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Zombie:
 		return false
-	case persistence.WorkflowStateCorrupted:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Corrupted:
 		return false
 	default:
 		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
@@ -1838,7 +1838,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTaskTimeout = event.GetWorkflowTaskTimeoutSeconds()
 
 	if err := e.UpdateWorkflowStateStatus(
-		persistence.WorkflowStateCreated,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
 		executionpb.WorkflowExecutionStatus_Running,
 	); err != nil {
 		return err
@@ -2597,7 +2597,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCompletedEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		persistence.WorkflowStateCompleted,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
 		executionpb.WorkflowExecutionStatus_Completed,
 	); err != nil {
 		return err
@@ -2637,7 +2637,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionFailedEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		persistence.WorkflowStateCompleted,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
 		executionpb.WorkflowExecutionStatus_Failed,
 	); err != nil {
 		return err
@@ -2676,7 +2676,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTimedoutEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		persistence.WorkflowStateCompleted,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
 		executionpb.WorkflowExecutionStatus_TimedOut,
 	); err != nil {
 		return err
@@ -2754,7 +2754,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionCanceledEvent(
 	event *eventpb.HistoryEvent,
 ) error {
 	if err := e.UpdateWorkflowStateStatus(
-		persistence.WorkflowStateCompleted,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
 		executionpb.WorkflowExecutionStatus_Canceled,
 	); err != nil {
 		return err
@@ -3270,7 +3270,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTerminatedEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		persistence.WorkflowStateCompleted,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
 		executionpb.WorkflowExecutionStatus_Terminated,
 	); err != nil {
 		return err
@@ -3432,7 +3432,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(
 ) error {
 
 	if err := e.UpdateWorkflowStateStatus(
-		persistence.WorkflowStateCompleted,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed,
 		executionpb.WorkflowExecutionStatus_ContinuedAsNew,
 	); err != nil {
 		return err
@@ -3882,14 +3882,14 @@ func (e *mutableStateBuilder) GetUpdateCondition() int64 {
 	return e.nextEventIDInDB
 }
 
-func (e *mutableStateBuilder) GetWorkflowStateStatus() (int, executionpb.WorkflowExecutionStatus) {
+func (e *mutableStateBuilder) GetWorkflowStateStatus() (executiongenpb.WorkflowExecutionState, executionpb.WorkflowExecutionStatus) {
 
 	executionInfo := e.executionInfo
 	return executionInfo.State, executionInfo.Status
 }
 
 func (e *mutableStateBuilder) UpdateWorkflowStateStatus(
-	state int,
+	state executiongenpb.WorkflowExecutionState,
 	status executionpb.WorkflowExecutionStatus,
 ) error {
 
@@ -4355,7 +4355,7 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 	}
 
 	// only do check if workflow is finished
-	if e.GetExecutionInfo().State != persistence.WorkflowStateCompleted {
+	if e.GetExecutionInfo().State != executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 		return nil
 	}
 

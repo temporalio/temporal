@@ -20,36 +20,15 @@
 
 syntax = "proto3";
 
-package indexer;
-option go_package = "github.com/temporalio/temporal/.gen/proto/checksum";
+package execution;
 
-import "event/server_message.proto";
-import "execution/server_enum.proto";
-import "execution/enum.proto";
+option go_package = "github.com/temporalio/temporal/.gen/proto/execution";
 
-message MutableStateChecksumPayload {
-    bool cancelRequested = 1;
-    execution.WorkflowExecutionState state = 2;
-    execution.WorkflowExecutionStatus status = 3;
-
-    int64 lastWriteVersion = 4;
-    int64 lastWriteEventId = 5;
-    int64 lastFirstEventId = 6;
-    int64 nextEventId = 7;
-    int64 lastProcessedEventId = 8;
-    int64 signalCount = 9;
-
-    int32 decisionAttempt = 10;
-    int64 decisionVersion = 11;
-    int64 decisionScheduledId = 12;
-    int64 decisionStartedId = 13;
-
-    repeated int64 pendingTimerStartedIds = 14;
-    repeated int64 pendingActivityScheduledIds = 15;
-    repeated int64 pendingSignalInitiatedIds = 16;
-    repeated int64 pendingReqCancelInitiatedIds = 17;
-    repeated int64 pendingChildInitiatedIds = 18;
-
-    string stickyTaskListName = 19;
-    event.VersionHistories versionHistories = 20;
+enum WorkflowExecutionState {
+    WorkflowExecutionState_Created = 0;
+    WorkflowExecutionState_Running = 1;
+    WorkflowExecutionState_Completed = 2;
+    WorkflowExecutionState_Zombie = 3;
+    WorkflowExecutionState_Void = 4;
+    WorkflowExecutionState_Corrupted = 5;
 }

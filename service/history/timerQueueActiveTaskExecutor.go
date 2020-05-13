@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -89,19 +90,19 @@ func (t *timerQueueActiveTaskExecutor) execute(
 	}
 
 	switch timerTask.TaskType {
-	case persistence.TaskTypeUserTimer:
+	case commongenpb.TaskType_UserTimer:
 		return t.executeUserTimerTimeoutTask(timerTask)
-	case persistence.TaskTypeActivityTimeout:
+	case commongenpb.TaskType_ActivityTimeout:
 		return t.executeActivityTimeoutTask(timerTask)
-	case persistence.TaskTypeDecisionTimeout:
+	case commongenpb.TaskType_DecisionTimeout:
 		return t.executeDecisionTimeoutTask(timerTask)
-	case persistence.TaskTypeWorkflowRunTimeout:
+	case commongenpb.TaskType_WorkflowRunTimeout:
 		return t.executeWorkflowTimeoutTask(timerTask)
-	case persistence.TaskTypeActivityRetryTimer:
+	case commongenpb.TaskType_ActivityRetryTimer:
 		return t.executeActivityRetryTimerTask(timerTask)
-	case persistence.TaskTypeWorkflowBackoffTimer:
+	case commongenpb.TaskType_WorkflowBackoffTimer:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
-	case persistence.TaskTypeDeleteHistoryEvent:
+	case commongenpb.TaskType_DeleteHistoryEvent:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
 		return errUnknownTimerTask
@@ -281,7 +282,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	scheduleID := task.GetEventId()
 	decision, ok := mutableState.GetDecisionInfo(scheduleID)
 	if !ok {
-		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TaskTypeDecisionTimeout))
+		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TaskType_DecisionTimeout))
 		return nil
 	}
 	ok, err = verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), decision.Version, task.Version, task)

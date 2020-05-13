@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	sdkclient "go.temporal.io/temporal/client"
 
+	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -797,7 +798,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 				response.NextEventId = event.nextEventID
 				response.IsWorkflowRunning = event.workflowStatus == executionpb.WorkflowExecutionStatus_Running
 				response.PreviousStartedEventId = event.previousStartedEventID
-				response.WorkflowState = int32(event.workflowState)
+				response.WorkflowState = event.workflowState
 				response.WorkflowStatus = event.workflowStatus
 				if !bytes.Equal(request.CurrentBranchToken, event.currentBranchToken) {
 					return nil, serviceerror.NewCurrentBranchChanged("Current branch token and request branch token doesn't match.", event.currentBranchToken)
@@ -1117,7 +1118,7 @@ func (e *historyEngineImpl) getMutableState(
 		IsWorkflowRunning:                    mutableState.IsWorkflowExecutionRunning(),
 		StickyTaskListScheduleToStartTimeout: executionInfo.StickyScheduleToStartTimeout,
 		CurrentBranchToken:                   currentBranchToken,
-		WorkflowState:                        int32(workflowState),
+		WorkflowState:                        workflowState,
 		WorkflowStatus:                       workflowStatus,
 		IsStickyTaskListEnabled:              mutableState.IsStickyTaskListEnabled(),
 	}
@@ -1289,7 +1290,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		}
 		result.WorkflowExecutionInfo.ParentNamespaceId = executionInfo.ParentNamespaceID
 	}
-	if executionInfo.State == persistence.WorkflowStateCompleted {
+	if executionInfo.State == executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed {
 		// for closed workflow
 		result.WorkflowExecutionInfo.Status = executionInfo.Status
 		completionEvent, err := mutableState.GetCompletionEvent()
@@ -1404,7 +1405,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			if !isRunning {
 				// Looks like ActivityTask already completed as a result of another call.
 				// It is OK to drop the task at this point.
-				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TransferTaskTypeActivityTask))
+				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TaskType_TransferActivityTask))
 				return ErrActivityTaskNotFound
 			}
 
@@ -1425,7 +1426,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 
 				// Looks like ActivityTask already started as a result of another call.
 				// It is OK to drop the task at this point.
-				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TransferTaskTypeActivityTask))
+				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(commongenpb.TaskType_TransferActivityTask))
 				return serviceerror.NewEventAlreadyStarted("Activity task already started.")
 			}
 
@@ -2849,7 +2850,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	prevStartRequestID,
 	prevRunID string,
-	prevState int,
+	prevState executiongenpb.WorkflowExecutionState,
 	prevStatus executionpb.WorkflowExecutionStatus,
 	namespaceID string,
 	execution executionpb.WorkflowExecution,
@@ -2859,11 +2860,11 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	// here we know there is some information about the prev workflow, i.e. either running right now
 	// or has history check if the this workflow is finished
 	switch prevState {
-	case persistence.WorkflowStateCreated,
-		persistence.WorkflowStateRunning:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Created,
+		executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Running:
 		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
 		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
-	case persistence.WorkflowStateCompleted:
+	case executiongenpb.WorkflowExecutionState_WorkflowExecutionState_Completed:
 		// previous workflow completed, proceed
 	default:
 		// persistence.WorkflowStateZombie or unknown type

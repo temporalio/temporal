@@ -27,9 +27,12 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
 import "common/message.proto";
+import "common/server_enum.proto";
+
 import "persistenceblobs/server_enum.proto";
 import "replication/server_message.proto";
 import "execution/enum.proto";
+import "execution/server_enum.proto";
 import "namespace/enum.proto";
 import "namespace/message.proto";
 import "tasklist/enum.proto";
@@ -94,11 +97,12 @@ message ShardInfo {
     map<string, int64> replicationDLQAckLevel = 13;
 }
 
+
 message ReplicationTaskInfo {
     bytes namespaceId = 1;
     string workflowId = 2;
     bytes runId = 3;
-    int32 taskType = 4;
+    common.TaskType taskType = 4;
     int64 version = 5;
     int64 firstEventId = 6;
     int64 nextEventId = 7;
@@ -116,7 +120,7 @@ message TimerTaskInfo {
     bytes namespaceId = 1;
     string workflowId = 2;
     bytes runId = 3;
-    int32 taskType = 4;
+    common.TaskType taskType = 4;
     int32 timeoutType = 5;
     int64 version = 6;
     int64 scheduleAttempt = 7;
@@ -129,7 +133,7 @@ message TransferTaskInfo {
     bytes namespaceId = 1;
     string workflowId = 2;
     bytes runId = 3;
-    int32 taskType = 4;
+    common.TaskType taskType = 4;
     bytes targetNamespaceId = 5;
     string targetWorkflowId = 6;
     bytes targetRunId = 7;
@@ -220,7 +224,7 @@ message RequestCancelInfo {
 message WorkflowExecutionState {
     string createRequestId = 1;
     bytes runId = 2;
-    int32 state = 3;
+    execution.WorkflowExecutionState state = 3;
     execution.WorkflowExecutionStatus status = 4;
 }
 
@@ -336,7 +340,6 @@ message NamespaceConfig {
     int32 retentionDays = 1;
     bool emitMetric = 2;
     string archivalBucket = 3;
-    int32 archivalStatus = 4;
     namespace.BadBinaries badBinaries = 16;
     namespace.ArchivalStatus historyArchivalStatus = 18;
     string historyArchivalURI = 19;
