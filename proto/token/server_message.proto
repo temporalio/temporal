@@ -51,9 +51,9 @@ message RawHistoryContinuation{
 }
 
 message Task {
-    bytes namespaceId = 1;
+    string namespaceId = 1;
     string workflowId  = 2;
-    bytes runId = 3;
+    string runId = 3;
     int64 scheduleId = 4;
     int64 scheduleAttempt = 5;
     string activityId = 6;
