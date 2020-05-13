@@ -26,6 +26,7 @@ package cassandra
 
 import (
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -107,7 +108,7 @@ func (s *TestCluster) SetupTestDatabase() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		schemaDir = cadencePackageDir + schemaDir
+		schemaDir = path.Join(cadencePackageDir, schemaDir)
 	}
 
 	s.LoadSchema([]string{"schema.cql"}, schemaDir)
@@ -158,7 +159,7 @@ func (s *TestCluster) DropDatabase() {
 
 // LoadSchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := schemaDir + "/temporal"
+	workflowSchemaDir := path.Join(schemaDir, "temporal")
 	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), true, nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
@@ -167,7 +168,7 @@ func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 
 // LoadVisibilitySchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := schemaDir + "visibility"
+	workflowSchemaDir := path.Join(schemaDir, "visibility")
 	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), false, nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
@@ -175,14 +176,21 @@ func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string)
 }
 
 func getCadencePackageDir() (string, error) {
-	cadencePackageDir, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	cadenceIndex := strings.LastIndex(cadencePackageDir, "/temporal/")
-	cadencePackageDir = cadencePackageDir[:cadenceIndex+len("/temporal/")]
-	if err != nil {
-		panic(err)
+	var err error
+	cadencePackageDir := os.Getenv("TEMPORAL_ROOT")
+	if cadencePackageDir == "" {
+		cadencePackageDir, err = os.Getwd()
+		if err != nil {
+			panic(err)
+		}
+		cadenceIndex := strings.LastIndex(cadencePackageDir, "/temporal/")
+		if cadenceIndex == -1 {
+			panic("Unable to find repo path. Use env var TEMPORAL_ROOT or clone the repo into folder named 'temporal'")
+		}
+		cadencePackageDir = cadencePackageDir[:cadenceIndex+len("/temporal/")]
+		if err != nil {
+			panic(err)
+		}
 	}
 	return cadencePackageDir, err
 }
