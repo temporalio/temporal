@@ -31,6 +31,7 @@ var (
 	errActiveClusterNotInClusters          = &workflow.BadRequestError{Message: "Active cluster is not contained in all clusters."}
 	errCannotDoDomainFailoverAndUpdate     = &workflow.BadRequestError{Message: "Cannot set active cluster to current cluster when other parameters are set."}
 	errCannotDoGracefulFailoverFromCluster = &workflow.BadRequestError{Message: "Cannot start the graceful failover from a to-be-passive cluster."}
+	errGracefulFailoverInActiveCluster     = &workflow.BadRequestError{Message: "Cannot start the graceful failover from an active cluster to an active cluster."}
 	errOngoingGracefulFailover             = &workflow.BadRequestError{Message: "Cannot start concurrent graceful failover."}
 	errInvalidGracefulFailover             = &workflow.BadRequestError{Message: "Cannot start graceful failover without updating active cluster or in local domain."}
 

@@ -172,9 +172,17 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 		replicationConfig := &shared.DomainReplicationConfiguration{
 			ActiveClusterName: common.StringPtr(activeCluster),
 		}
+
+		var failoverTimeout *int32
+		if c.String(FlagFailoverType) == gracefulFailoverType {
+			timeout := int32(c.Int(FlagFailoverTimeout))
+			failoverTimeout = &timeout
+		}
+
 		updateRequest = &shared.UpdateDomainRequest{
 			Name:                     common.StringPtr(domainName),
 			ReplicationConfiguration: replicationConfig,
+			FailoverTimeoutInSeconds: failoverTimeout,
 		}
 	} else {
 		resp, err := d.describeDomain(ctx, &shared.DescribeDomainRequest{
@@ -247,12 +255,6 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 			badBinaryToDelete = common.StringPtr(c.String(FlagRemoveBadBinary))
 		}
 
-		var failoverTimeout *int32
-		if c.String(FlagFailoverType) == gracefulFailoverType {
-			timeout := int32(c.Int(FlagFailoverTimeout))
-			failoverTimeout = &timeout
-		}
-
 		updateInfo := &shared.UpdateDomainInfo{
 			Description: common.StringPtr(description),
 			OwnerEmail:  common.StringPtr(ownerEmail),
@@ -276,7 +278,6 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 			Configuration:            updateConfig,
 			ReplicationConfiguration: replicationConfig,
 			DeleteBadBinary:          badBinaryToDelete,
-			FailoverTimeoutInSeconds: failoverTimeout,
 		}
 	}
 

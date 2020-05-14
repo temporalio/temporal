@@ -436,6 +436,10 @@ func (s *domainHandlerCommonSuite) TestUpdateDomain_GracefulFailover_Success() {
 	}
 	err := s.handler.RegisterDomain(context.Background(), registerRequest)
 	s.NoError(err)
+	resp1, _ := s.metadataMgr.GetDomain(&persistence.GetDomainRequest{
+		Name: domain,
+	})
+	s.Equal(resp1.ReplicationConfig.ActiveClusterName, "standby")
 
 	updateRequest := &workflow.UpdateDomainRequest{
 		Name: common.StringPtr(domain),
