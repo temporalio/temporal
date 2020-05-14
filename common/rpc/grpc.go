@@ -48,11 +48,10 @@ const (
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // e.g. to use dns resolver, a "dns:///" prefix should be applied to the target.
 func Dial(hostName string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
-	var grpcSecureOpt grpc.DialOption
+	// Default to insecure
+	grpcSecureOpt := grpc.WithInsecure()
 	if tlsConfig != nil {
 		grpcSecureOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
-	} else {
-		grpcSecureOpt = grpc.WithInsecure()
 	}
 
 	return grpc.Dial(hostName,
