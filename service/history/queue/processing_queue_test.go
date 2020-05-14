@@ -70,7 +70,7 @@ func (s *processingQueueSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *processingQueueSuite) TestAddTasks() {
+func (s *processingQueueSuite) TestAddTasks_WithMoreTasks() {
 	ackLevel := &testKey{ID: 1}
 	maxLevel := &testKey{ID: 10}
 
@@ -78,7 +78,7 @@ func (s *processingQueueSuite) TestAddTasks() {
 		&testKey{ID: 2},
 		&testKey{ID: 3},
 		&testKey{ID: 5},
-		&testKey{ID: 10},
+		&testKey{ID: 9},
 	}
 	tasks := make(map[task.Key]task.Task)
 	for _, key := range taskKeys {
@@ -99,17 +99,51 @@ func (s *processingQueueSuite) TestAddTasks() {
 		make(map[task.Key]task.Task),
 	)
 
-	queue.AddTasks(tasks)
+	queue.AddTasks(tasks, true)
 	s.Len(queue.outstandingTasks, len(taskKeys))
-	s.Equal(&testKey{ID: 10}, queue.state.readLevel)
+	s.Equal(taskKeys[len(taskKeys)-1], queue.state.readLevel)
 
 	// add the same set of tasks again, should have no effect
-	queue.AddTasks(tasks)
+	queue.AddTasks(tasks, true)
 	s.Len(queue.outstandingTasks, len(taskKeys))
-	s.Equal(&testKey{ID: 10}, queue.state.readLevel)
+	s.Equal(taskKeys[len(taskKeys)-1], queue.state.readLevel)
 }
 
-func (s *processingQueueSuite) TestUpdateAckLevel() {
+func (s *processingQueueSuite) TestAddTasks_NoMoreTasks() {
+	ackLevel := &testKey{ID: 1}
+	maxLevel := &testKey{ID: 10}
+
+	taskKeys := []task.Key{
+		&testKey{ID: 2},
+		&testKey{ID: 3},
+		&testKey{ID: 5},
+		&testKey{ID: 9},
+	}
+	tasks := make(map[task.Key]task.Task)
+	for _, key := range taskKeys {
+		mockTask := task.NewMockTask(s.controller)
+		mockTask.EXPECT().GetDomainID().Return("some random domainID").AnyTimes()
+		mockTask.EXPECT().GetWorkflowID().Return("some random workflowID").AnyTimes()
+		mockTask.EXPECT().GetRunID().Return("some random runID").AnyTimes()
+		mockTask.EXPECT().GetTaskType().Return(0).AnyTimes()
+		tasks[key] = mockTask
+	}
+
+	queue := s.newTestProcessingQueue(
+		0,
+		ackLevel,
+		ackLevel,
+		maxLevel,
+		NewDomainFilter(nil, true),
+		make(map[task.Key]task.Task),
+	)
+
+	queue.AddTasks(tasks, false)
+	s.Len(queue.outstandingTasks, len(taskKeys))
+	s.Equal(maxLevel, queue.state.readLevel)
+}
+
+func (s *processingQueueSuite) TestUpdateAckLevel_WithMoreTasks() {
 	ackLevel := &testKey{ID: 1}
 	maxLevel := &testKey{ID: 10}
 
@@ -137,7 +171,7 @@ func (s *processingQueueSuite) TestUpdateAckLevel() {
 	queue := s.newTestProcessingQueue(
 		0,
 		ackLevel,
-		ackLevel,
+		taskKeys[len(taskKeys)-1],
 		maxLevel,
 		NewDomainFilter(nil, true),
 		tasks,
@@ -145,6 +179,42 @@ func (s *processingQueueSuite) TestUpdateAckLevel() {
 
 	queue.UpdateAckLevel()
 	s.Equal(&testKey{ID: 3}, queue.state.ackLevel)
+}
+
+func (s *processingQueueSuite) TestUpdateAckLevel_NoMoreTasks() {
+	ackLevel := &testKey{ID: 1}
+	maxLevel := &testKey{ID: 10}
+
+	taskKeys := []task.Key{
+		&testKey{ID: 2},
+		&testKey{ID: 3},
+		&testKey{ID: 5},
+		&testKey{ID: 8},
+	}
+	taskStates := []t.State{
+		t.TaskStateAcked,
+		t.TaskStateAcked,
+		t.TaskStateAcked,
+		t.TaskStateAcked,
+	}
+	tasks := make(map[task.Key]task.Task)
+	for i, key := range taskKeys {
+		task := task.NewMockTask(s.controller)
+		task.EXPECT().State().Return(taskStates[i]).MaxTimes(1)
+		tasks[key] = task
+	}
+
+	queue := s.newTestProcessingQueue(
+		0,
+		ackLevel,
+		maxLevel,
+		maxLevel,
+		NewDomainFilter(nil, true),
+		tasks,
+	)
+
+	queue.UpdateAckLevel()
+	s.Equal(maxLevel, queue.state.ackLevel)
 }
 
 func (s *processingQueueSuite) TestSplit() {
@@ -704,15 +774,15 @@ func (s *processingQueueSuite) TestMerge() {
 			queue1: s.newTestProcessingQueue(
 				0,
 				&testKey{ID: 0},
-				&testKey{ID: 10},
+				&testKey{ID: 3},
 				&testKey{ID: 15},
 				DomainFilter{
 					DomainIDs:    map[string]struct{}{"testDomain1": {}},
 					ReverseMatch: false,
 				},
 				s.newMockTasksForDomain(
-					[]task.Key{&testKey{ID: 1}, &testKey{ID: 4}, &testKey{ID: 7}, &testKey{ID: 10}},
-					[]string{"testDomain1", "testDomain1", "testDomain1", "testDomain1"},
+					[]task.Key{&testKey{ID: 1}, &testKey{ID: 3}},
+					[]string{"testDomain1", "testDomain1"},
 				),
 			),
 			queue2: s.newTestProcessingQueue(
@@ -733,7 +803,7 @@ func (s *processingQueueSuite) TestMerge() {
 				s.newTestProcessingQueue(
 					0,
 					&testKey{ID: 0},
-					&testKey{ID: 5},
+					&testKey{ID: 3},
 					&testKey{ID: 5},
 					DomainFilter{
 						DomainIDs:    map[string]struct{}{"testDomain1": {}},
@@ -741,24 +811,22 @@ func (s *processingQueueSuite) TestMerge() {
 					},
 					map[task.Key]task.Task{
 						&testKey{ID: 1}: task.NewMockTask(s.controller),
-						&testKey{ID: 4}: task.NewMockTask(s.controller),
+						&testKey{ID: 3}: task.NewMockTask(s.controller),
 					},
 				),
 				s.newTestProcessingQueue(
 					0,
 					&testKey{ID: 5},
-					&testKey{ID: 10},
+					&testKey{ID: 5},
 					&testKey{ID: 15},
 					DomainFilter{
 						DomainIDs:    map[string]struct{}{"testDomain1": {}, "testDomain2": {}},
 						ReverseMatch: false,
 					},
 					map[task.Key]task.Task{
-						&testKey{ID: 6}:  task.NewMockTask(s.controller),
-						&testKey{ID: 7}:  task.NewMockTask(s.controller),
-						&testKey{ID: 8}:  task.NewMockTask(s.controller),
-						&testKey{ID: 9}:  task.NewMockTask(s.controller),
-						&testKey{ID: 10}: task.NewMockTask(s.controller),
+						&testKey{ID: 6}: task.NewMockTask(s.controller),
+						&testKey{ID: 8}: task.NewMockTask(s.controller),
+						&testKey{ID: 9}: task.NewMockTask(s.controller),
 					},
 				),
 				s.newTestProcessingQueue(

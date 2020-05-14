@@ -55,7 +55,7 @@ type (
 		State() ProcessingQueueState
 		Split(ProcessingQueueSplitPolicy) []ProcessingQueue
 		Merge(ProcessingQueue) []ProcessingQueue
-		AddTasks(map[task.Key]task.Task)
+		AddTasks(map[task.Key]task.Task, bool)
 		UpdateAckLevel()
 		// TODO: add Offload() method
 	}
@@ -69,11 +69,13 @@ type (
 	// ProcessingQueueCollection manages a list of non-overlapping ProcessingQueues
 	// and keep track of the current active ProcessingQueue
 	ProcessingQueueCollection interface {
+		Level() int
 		Queues() []ProcessingQueue
+		ActiveQueue() ProcessingQueue
+		AddTasks(map[task.Key]task.Task, bool)
+		UpdateAckLevels()
 		Split(ProcessingQueueSplitPolicy) []ProcessingQueue
 		Merge([]ProcessingQueue)
-		AddTasks(map[task.Key]task.Task)
-		ActiveQueue() ProcessingQueue
 		// TODO: add Offload() method
 	}
 

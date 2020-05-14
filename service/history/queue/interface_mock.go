@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -195,15 +195,15 @@ func (mr *MockProcessingQueueMockRecorder) Merge(arg0 interface{}) *gomock.Call 
 }
 
 // AddTasks mocks base method
-func (m *MockProcessingQueue) AddTasks(arg0 map[task.Key]task.Task) {
+func (m *MockProcessingQueue) AddTasks(arg0 map[task.Key]task.Task, arg1 bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddTasks", arg0)
+	m.ctrl.Call(m, "AddTasks", arg0, arg1)
 }
 
 // AddTasks indicates an expected call of AddTasks
-func (mr *MockProcessingQueueMockRecorder) AddTasks(arg0 interface{}) *gomock.Call {
+func (mr *MockProcessingQueueMockRecorder) AddTasks(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockProcessingQueue)(nil).AddTasks), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockProcessingQueue)(nil).AddTasks), arg0, arg1)
 }
 
 // UpdateAckLevel mocks base method
@@ -278,6 +278,20 @@ func (m *MockProcessingQueueCollection) EXPECT() *MockProcessingQueueCollectionM
 	return m.recorder
 }
 
+// Level mocks base method
+func (m *MockProcessingQueueCollection) Level() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Level")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// Level indicates an expected call of Level
+func (mr *MockProcessingQueueCollectionMockRecorder) Level() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Level", reflect.TypeOf((*MockProcessingQueueCollection)(nil).Level))
+}
+
 // Queues mocks base method
 func (m *MockProcessingQueueCollection) Queues() []ProcessingQueue {
 	m.ctrl.T.Helper()
@@ -319,15 +333,15 @@ func (mr *MockProcessingQueueCollectionMockRecorder) Merge(arg0 interface{}) *go
 }
 
 // AddTasks mocks base method
-func (m *MockProcessingQueueCollection) AddTasks(arg0 map[task.Key]task.Task) {
+func (m *MockProcessingQueueCollection) AddTasks(arg0 map[task.Key]task.Task, arg1 bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddTasks", arg0)
+	m.ctrl.Call(m, "AddTasks", arg0, arg1)
 }
 
 // AddTasks indicates an expected call of AddTasks
-func (mr *MockProcessingQueueCollectionMockRecorder) AddTasks(arg0 interface{}) *gomock.Call {
+func (mr *MockProcessingQueueCollectionMockRecorder) AddTasks(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockProcessingQueueCollection)(nil).AddTasks), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockProcessingQueueCollection)(nil).AddTasks), arg0, arg1)
 }
 
 // ActiveQueue mocks base method
