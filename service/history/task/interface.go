@@ -48,6 +48,7 @@ type (
 		Info
 		GetQueueType() QueueType
 		GetShard() shard.Context
+		GetAttempt() int
 	}
 
 	// Key identifies a Task and defines a total order among tasks

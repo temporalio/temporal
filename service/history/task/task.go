@@ -250,6 +250,9 @@ func (t *taskBase) HandleErr(
 ) (retErr error) {
 	defer func() {
 		if retErr != nil {
+			t.Lock()
+			defer t.Unlock()
+
 			t.attempt++
 			if t.attempt > t.maxRetryCount() {
 				t.logger.Error("Critical error processing task, retrying.",
@@ -350,4 +353,11 @@ func (t *taskBase) SetPriority(
 
 func (t *taskBase) GetShard() shard.Context {
 	return t.shard
+}
+
+func (t *taskBase) GetAttempt() int {
+	t.Lock()
+	defer t.Unlock()
+
+	return t.attempt
 }
