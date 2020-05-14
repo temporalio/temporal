@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
+	`github.com/temporalio/temporal/common/log/loggerimpl`
 	"github.com/temporalio/temporal/common/rpc/encryption"
 	"github.com/temporalio/temporal/common/service/config"
 )
@@ -53,6 +53,8 @@ type localStoreRPCSuite struct {
 
 	internodeCertDir string
 	frontendCertDir  string
+	frontendChain    CertChain
+	internodeChain   CertChain
 }
 
 type CertChain struct {
@@ -62,39 +64,33 @@ type CertChain struct {
 }
 
 func TestLocalStoreTLSSuite(t *testing.T) {
-	suite.Run(t, new(localStoreRPCSuite))
+	suite.Run(t, &localStoreRPCSuite{})
 }
 
 func (s *localStoreRPCSuite) TearDownSuite() {
 	os.RemoveAll(s.internodeCertDir)
 	os.RemoveAll(s.frontendCertDir)
 }
-
-func (s *localStoreRPCSuite) SetupTest() {
+func (s *localStoreRPCSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 
-	// Insecure config
-	insecureFactory, err := NewFactory(rpcTestCfgDefault, "worker", s.logger, serverCfgInsecure)
+	insecureFactory, err := NewFactory(rpcTestCfgDefault, "tester", s.logger, serverCfgInsecure)
 	s.NoError(err)
 	s.NotNil(insecureFactory)
-	s.insecureRPCFactory = i(insecureFactory)
+	s.insecureRPCFactory = newInternodeTestFactory(insecureFactory)
 
-	frontDir, err := ioutil.TempDir("", "localStoreRPCSuiteFrontend")
+	s.frontendCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontend")
 	s.NoError(err)
-	s.frontendCertDir = frontDir
-	// Internode
-	frontendChain := s.GenerateTestChain(frontDir)
+	s.frontendChain = s.GenerateTestChain(s.frontendCertDir)
 
-	tempDir, err := ioutil.TempDir("", "localStoreRPCSuiteInternode")
+	s.internodeCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteInternode")
 	s.NoError(err)
-	s.internodeCertDir = tempDir
-
-	// Internode
-	internodeChain := s.GenerateTestChain(tempDir)
-
-	s.setupInternode(internodeChain, frontendChain)
-	s.setupFrontend(internodeChain, frontendChain)
+	s.internodeChain = s.GenerateTestChain(s.internodeCertDir)
+}
+func (s *localStoreRPCSuite) SetupTest() {
+	s.setupInternode(s.internodeChain, s.frontendChain)
+	s.setupFrontend(s.internodeChain, s.frontendChain)
 }
 
 func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendChain CertChain) {
@@ -136,16 +132,16 @@ func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendCha
 		},
 	}
 
-	frontendMutualTLSFactory, err := NewFactory(rpcTestCfgDefault, "worker", s.logger, localStoreMutualTLS)
+	frontendMutualTLSFactory, err := NewFactory(rpcTestCfgDefault, "tester", s.logger, localStoreMutualTLS)
 	s.NoError(err)
 	s.NotNil(frontendMutualTLSFactory)
 
-	frontendServerTLSFactory, err := NewFactory(rpcTestCfgDefault, "worker", s.logger, localStoreServerTLS)
+	frontendServerTLSFactory, err := NewFactory(rpcTestCfgDefault, "tester", s.logger, localStoreServerTLS)
 	s.NoError(err)
 	s.NotNil(frontendServerTLSFactory)
 
-	s.frontendMutualTLSRPCFactory = f(frontendMutualTLSFactory)
-	s.frontendServerTLSRPCFactory = f(frontendServerTLSFactory)
+	s.frontendMutualTLSRPCFactory = newFrontendTestFactory(frontendMutualTLSFactory)
+	s.frontendServerTLSRPCFactory = newFrontendTestFactory(frontendServerTLSFactory)
 }
 
 func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendChain CertChain) {
@@ -210,8 +206,8 @@ func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendCh
 	s.NoError(err)
 	s.NotNil(internodeServerTLSFactory)
 
-	s.internodeMutualTLSRPCFactory = i(internodeMutualTLSFactory)
-	s.internodeServerTLSRPCFactory = i(internodeServerTLSFactory)
+	s.internodeMutualTLSRPCFactory = newInternodeTestFactory(internodeMutualTLSFactory)
+	s.internodeServerTLSRPCFactory = newInternodeTestFactory(internodeServerTLSFactory)
 }
 
 func (s *localStoreRPCSuite) GenerateTestChain(tempDir string) CertChain {
@@ -250,11 +246,11 @@ func (s *localStoreRPCSuite) EncodePemToFile(file string, block *pem.Block) {
 	s.NoError(err)
 }
 
-func f(r *RPCFactory) *TestFactory {
+func newFrontendTestFactory(r *RPCFactory) *TestFactory {
 	return &TestFactory{serverUsage: Frontend, RPCFactory: r}
 }
 
-func i(r *RPCFactory) *TestFactory {
+func newInternodeTestFactory(r *RPCFactory) *TestFactory {
 	return &TestFactory{serverUsage: Internode, RPCFactory: r}
 }
 
