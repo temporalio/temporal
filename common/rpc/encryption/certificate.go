@@ -37,12 +37,12 @@ import (
 )
 
 // GenerateSelfSignedUseEverywhereX509 generates a TLS serverCert that is self-signed
-func GenerateSelfSignedUseEverywhereX509(commonName string) (*tls.Certificate, error) {
-	return GenerateSelfSignedX509CA(commonName, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
+func GenerateSelfSignedUseEverywhereX509(commonName string, keyLengthBits int) (*tls.Certificate, error) {
+	return GenerateSelfSignedX509CA(commonName, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}, keyLengthBits)
 }
 
 // GenerateSelfSignedX509CA generates a TLS serverCert that is self-signed
-func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage) (*tls.Certificate, error) {
+func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage, keyLengthBits int) (*tls.Certificate, error) {
 	now := time.Now().UTC()
 
 	template := &x509.Certificate{
@@ -65,7 +65,7 @@ func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage) (*
 		template.IPAddresses = []net.IP{ip}
 	}
 
-	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	privateKey, err := rsa.GenerateKey(rand.Reader, keyLengthBits)
 	if err != nil {
 		return &tls.Certificate{}, err
 	}

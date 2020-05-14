@@ -215,7 +215,7 @@ func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendCh
 }
 
 func (s *localStoreRPCSuite) GenerateTestChain(tempDir string) CertChain {
-	caCert, err := encryption.GenerateSelfSignedX509CA("undefined", nil)
+	caCert, err := encryption.GenerateSelfSignedX509CA("undefined", nil, 512)
 	s.NoError(err)
 
 	serverCert, privKey, err := encryption.GenerateServerX509UsingCA("127.0.0.1", caCert)
