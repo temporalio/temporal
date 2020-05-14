@@ -68,8 +68,8 @@ func TestLocalStoreTLSSuite(t *testing.T) {
 }
 
 func (s *localStoreRPCSuite) TearDownSuite() {
-	os.RemoveAll(s.internodeCertDir)
-	os.RemoveAll(s.frontendCertDir)
+	_ = os.RemoveAll(s.internodeCertDir)
+	_ = os.RemoveAll(s.frontendCertDir)
 }
 func (s *localStoreRPCSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
