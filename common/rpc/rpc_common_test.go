@@ -2,6 +2,8 @@
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -57,7 +59,7 @@ func (s *HelloServer) SayHello(ctx context.Context, in *helloworld.HelloRequest)
 
 var (
 	rpcTestCfgDefault = &config.RPC{
-		GRPCPort:       7500,
+		GRPCPort:       0,
 		MembershipPort: 7600,
 		BindOnIP:       "127.0.0.1",
 	}
@@ -70,7 +72,7 @@ var (
 	}
 )
 
-func startHelloWorldServer(s suite.Suite, factory *TestFactory) *grpc.Server {
+func startHelloWorldServer(s suite.Suite, factory *TestFactory) (*grpc.Server, string) {
 	var opts []grpc.ServerOption
 	var err error
 	if factory.serverUsage == Internode {
@@ -86,17 +88,19 @@ func startHelloWorldServer(s suite.Suite, factory *TestFactory) *grpc.Server {
 
 	listener := factory.GetGRPCListener()
 
+	port := strings.Split(listener.Addr().String(), ":")[1]
+	s.NoError(err)
 	go func() {
 		err := server.Serve(listener)
 		s.NoError(err)
 	}()
-	return server
+	return server, port
 }
 
 func runHelloWorldTest(s suite.Suite, serverFactory *TestFactory, clientFactory *TestFactory, isValid bool) {
-	server := startHelloWorldServer(s, serverFactory)
+	server, port := startHelloWorldServer(s, serverFactory)
 	defer server.Stop()
-	err := dialHello(s, "127.0.0.1:7500", clientFactory, serverFactory.serverUsage)
+	err := dialHello(s, "127.0.0.1:"+port, clientFactory, serverFactory.serverUsage)
 
 	if isValid {
 		s.NoError(err)

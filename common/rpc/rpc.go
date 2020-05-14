@@ -49,13 +49,13 @@ type RPCFactory struct {
 	sync.Mutex
 	grpcListener   net.Listener
 	ringpopChannel *tchannel.Channel
-	tlsFactory     encryption.TLSFactory
+	tlsFactory     encryption.TLSConfigProvider
 }
 
 // NewFactory builds a new RPCFactory
 // conforming to the underlying configuration
 func NewFactory(cfg *config.RPC, sName string, logger log.Logger, serverCfg *config.Global) (*RPCFactory, error) {
-	tlsFactory, err := encryption.NewTLSFactoryFromConfig(
+	tlsFactory, err := encryption.NewTLSConfigProviderFromConfig(
 		&serverCfg.TLS,
 		getBroadcastAddressFromConfig(serverCfg, cfg, logger))
 
@@ -65,7 +65,7 @@ func NewFactory(cfg *config.RPC, sName string, logger log.Logger, serverCfg *con
 	return newFactory(cfg, sName, logger, tlsFactory)
 }
 
-func newFactory(cfg *config.RPC, sName string, logger log.Logger, frontendTls encryption.TLSFactory) (*RPCFactory, error) {
+func newFactory(cfg *config.RPC, sName string, logger log.Logger, frontendTls encryption.TLSConfigProvider) (*RPCFactory, error) {
 	factory := &RPCFactory{config: cfg, serviceName: sName, logger: logger, tlsFactory: frontendTls}
 	return factory, nil
 }
@@ -166,7 +166,7 @@ func (d *RPCFactory) GetRingpopChannel() *tchannel.Channel {
 	return d.ringpopChannel
 }
 
-func (d *RPCFactory) getTLSFactory() encryption.TLSFactory {
+func (d *RPCFactory) getTLSFactory() encryption.TLSConfigProvider {
 	return d.tlsFactory
 }
 

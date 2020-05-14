@@ -2,6 +2,8 @@
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -53,6 +55,7 @@ type localStoreRPCSuite struct {
 
 	internodeCertDir string
 	frontendCertDir  string
+
 	frontendChain    CertChain
 	internodeChain   CertChain
 }
@@ -78,7 +81,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	insecureFactory, err := NewFactory(rpcTestCfgDefault, "tester", s.logger, serverCfgInsecure)
 	s.NoError(err)
 	s.NotNil(insecureFactory)
-	s.insecureRPCFactory = newInternodeTestFactory(insecureFactory)
+	s.insecureRPCFactory = i(insecureFactory)
 
 	s.frontendCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontend")
 	s.NoError(err)
@@ -88,6 +91,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	s.NoError(err)
 	s.internodeChain = s.GenerateTestChain(s.internodeCertDir)
 }
+
 func (s *localStoreRPCSuite) SetupTest() {
 	s.setupInternode(s.internodeChain, s.frontendChain)
 	s.setupFrontend(s.internodeChain, s.frontendChain)
@@ -140,8 +144,8 @@ func (s *localStoreRPCSuite) setupFrontend(internodeChain CertChain, frontendCha
 	s.NoError(err)
 	s.NotNil(frontendServerTLSFactory)
 
-	s.frontendMutualTLSRPCFactory = newFrontendTestFactory(frontendMutualTLSFactory)
-	s.frontendServerTLSRPCFactory = newFrontendTestFactory(frontendServerTLSFactory)
+	s.frontendMutualTLSRPCFactory = f(frontendMutualTLSFactory)
+	s.frontendServerTLSRPCFactory = f(frontendServerTLSFactory)
 }
 
 func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendChain CertChain) {
@@ -206,8 +210,8 @@ func (s *localStoreRPCSuite) setupInternode(internodeChain CertChain, frontendCh
 	s.NoError(err)
 	s.NotNil(internodeServerTLSFactory)
 
-	s.internodeMutualTLSRPCFactory = newInternodeTestFactory(internodeMutualTLSFactory)
-	s.internodeServerTLSRPCFactory = newInternodeTestFactory(internodeServerTLSFactory)
+	s.internodeMutualTLSRPCFactory = i(internodeMutualTLSFactory)
+	s.internodeServerTLSRPCFactory = i(internodeServerTLSFactory)
 }
 
 func (s *localStoreRPCSuite) GenerateTestChain(tempDir string) CertChain {
@@ -221,24 +225,25 @@ func (s *localStoreRPCSuite) GenerateTestChain(tempDir string) CertChain {
 	certPubFile := tempDir + "/cert_pub.pem"
 	certPrivFile := tempDir + "/cert_priv.pem"
 
-	s.EncodePemToFile(caPubFile, &pem.Block{
+	s.pemEncodeToFile(caPubFile, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caCert.Certificate[0],
 	})
 
-	s.EncodePemToFile(certPubFile, &pem.Block{
+	s.pemEncodeToFile(certPubFile, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: serverCert.Certificate[0],
 	})
 
-	s.EncodePemToFile(certPrivFile, &pem.Block{
+	s.pemEncodeToFile(certPrivFile, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(privKey),
 	})
+
 	return CertChain{CaPubFile: caPubFile, CertPubFile: certPubFile, CertKeyFile: certPrivFile}
 }
 
-func (s *localStoreRPCSuite) EncodePemToFile(file string, block *pem.Block) {
+func (s *localStoreRPCSuite) pemEncodeToFile(file string, block *pem.Block) {
 	pemBuffer := new(bytes.Buffer)
 	err := pem.Encode(pemBuffer, block)
 	s.NoError(err)
@@ -246,11 +251,11 @@ func (s *localStoreRPCSuite) EncodePemToFile(file string, block *pem.Block) {
 	s.NoError(err)
 }
 
-func newFrontendTestFactory(r *RPCFactory) *TestFactory {
+func f(r *RPCFactory) *TestFactory {
 	return &TestFactory{serverUsage: Frontend, RPCFactory: r}
 }
 
-func newInternodeTestFactory(r *RPCFactory) *TestFactory {
+func i(r *RPCFactory) *TestFactory {
 	return &TestFactory{serverUsage: Internode, RPCFactory: r}
 }
 

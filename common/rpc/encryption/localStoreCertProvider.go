@@ -2,6 +2,8 @@
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -134,11 +136,4 @@ func buildCAPool(caFiles []string) (*x509.CertPool, error) {
 		}
 	}
 	return caPool, nil
-}
-
-func NewLocalStoreCertProvider(settings *config.GroupTLS) *localStoreCertProvider {
-	return &localStoreCertProvider{
-		RWMutex:     sync.RWMutex{},
-		tlsSettings: settings,
-	}
 }

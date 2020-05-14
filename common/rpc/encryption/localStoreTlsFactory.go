@@ -2,6 +2,8 @@
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -45,7 +47,7 @@ type localStoreTlsFactory struct {
 	frontendClientConfig  *tls.Config
 }
 
-func NewLocalStoreTlsFactory(tlsConfig *config.RootTLS) (TLSFactory, error) {
+func NewLocalStoreTlsFactory(tlsConfig *config.RootTLS) (TLSConfigProvider, error) {
 	return &localStoreTlsFactory{
 		internodeCertProvider: &localStoreCertProvider{tlsSettings: &tlsConfig.Internode},
 		frontendCertProvider:  &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},

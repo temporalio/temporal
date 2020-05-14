@@ -2,6 +2,8 @@
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -30,14 +32,15 @@ import (
 )
 
 type (
-	// TLSFactory creates certificates based on encryption internode settings.
-	TLSFactory interface {
+	// TLSConfigProvider serves as a common interface to read server and client configuration for TLS.
+	TLSConfigProvider interface {
 		GetInternodeServerConfig() (*tls.Config, error)
 		GetInternodeClientConfig() (*tls.Config, error)
 		GetFrontendServerConfig() (*tls.Config, error)
 		GetFrontendClientConfig() (*tls.Config, error)
 	}
 
+	// CertProvider is a common interface to load raw TLS/X509 primitives.
 	CertProvider interface {
 		FetchServerCertificate() (*tls.Certificate, error)
 		FetchClientCAs() (*x509.CertPool, error)
@@ -47,23 +50,24 @@ type (
 
 	tlsConfigConstructor func(localProvider CertProvider, settingsProvider CertProvider) (*tls.Config, error)
 
-	ProviderType string
+	providerType string
 )
 
 const (
-	ProviderTypeLocalStore ProviderType = "localstore"
-	ProviderTypeSelfSigned ProviderType = "selfsigned"
+	providerTypeLocalStore providerType = "localstore"
+	providerTypeSelfSigned providerType = "selfsigned"
 )
 
-func NewTLSFactoryFromConfig(encryptionSettings *config.RootTLS, hostname string) (TLSFactory, error) {
+// NewTLSConfigProviderFromConfig creates a new TLS Configuration provider from RootTLS config
+func NewTLSConfigProviderFromConfig(encryptionSettings *config.RootTLS, hostname string) (TLSConfigProvider, error) {
 	if encryptionSettings == nil /*|| encryptionSettings.Provider == "" */ {
 		return nil, nil
 	}
 
-	/*switch ProviderType(encryptionSettings.Provider) {
-	case ProviderTypeSelfSigned:
+	/*switch providerType(encryptionSettings.Provider) {
+	case providerTypeSelfSigned:
 		return NewSelfSignedTlsFactory(encryptionSettings, hostname)
-	case ProviderTypeLocalStore:*/
+	case providerTypeLocalStore:*/
 	return NewLocalStoreTlsFactory(encryptionSettings)
 	//}
 
