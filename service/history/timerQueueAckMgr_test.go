@@ -84,7 +84,7 @@ type (
 )
 
 var (
-	TestNamespaceId = primitives.MustParseUUID("deadbeef-c001-face-0000-000000000000")
+	TestNamespaceId = primitives.MustValidateUUID("deadbeef-c001-face-0000-000000000000")
 )
 
 func TestTimerQueueAckMgrSuite(t *testing.T) {
@@ -188,7 +188,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 			{
 				NamespaceId:         TestNamespaceId,
 				WorkflowId:          "some random workflow ID",
-				RunId:               uuid.NewRandom(),
+				RunId:               uuid.New(),
 				VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 				TaskId:              int64(59),
 				TaskType:            1,
@@ -225,7 +225,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 			{
 				NamespaceId:         TestNamespaceId,
 				WorkflowId:          "some random workflow ID",
-				RunId:               uuid.NewRandom(),
+				RunId:               uuid.New(),
 				VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 				TaskId:              int64(59),
 				TaskType:            1,
@@ -260,7 +260,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	timer := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(59),
 		TaskType:            1,
@@ -303,7 +303,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	timer := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(59),
 		TaskType:            1,
@@ -349,7 +349,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	timer := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
 		TaskId:              int64(59),
 		TaskType:            1,
@@ -396,7 +396,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	timer := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
 		TaskId:              int64(59),
 		TaskType:            1,
@@ -430,7 +430,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	timer1 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(59),
 		TaskType:            1,
@@ -441,7 +441,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	timer2 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: timer1.VisibilityTimestamp,
 		TaskId:              timer1.GetTaskId() + 1,
 		TaskType:            1,
@@ -452,7 +452,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	timer3 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: &types.Timestamp{Seconds: timer1.VisibilityTimestamp.Seconds + 1, Nanos: timer1.VisibilityTimestamp.Nanos},
 		TaskId:              timer2.GetTaskId() + 1,
 		TaskType:            1,
@@ -509,7 +509,7 @@ func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	timer := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: protoLevel,
 		TaskId:              int64(59),
 		TaskType:            1,
@@ -634,7 +634,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	timer1 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(59),
 		TaskType:            1,
@@ -646,7 +646,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	timer2 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(60),
 		TaskType:            1,
@@ -738,7 +738,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	timer1 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskId:              int64(59),
 		TaskType:            1,
@@ -749,7 +749,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	timer2 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: timer1.VisibilityTimestamp,
 		TaskId:              timer1.GetTaskId() + 1,
 		TaskType:            1,
@@ -760,7 +760,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	timer3 := &persistenceblobs.TimerTaskInfo{
 		NamespaceId:         TestNamespaceId,
 		WorkflowId:          "some random workflow ID",
-		RunId:               uuid.NewRandom(),
+		RunId:               uuid.New(),
 		VisibilityTimestamp: &types.Timestamp{Seconds: timer1.VisibilityTimestamp.Seconds + 1, Nanos: timer1.VisibilityTimestamp.Nanos},
 		TaskId:              timer2.GetTaskId() + 1,
 		TaskType:            1,

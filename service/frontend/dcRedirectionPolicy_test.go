@@ -39,7 +39,6 @@ import (
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -338,7 +337,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {
 	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(s.namespaceID), Name: s.namespace},
+		&persistenceblobs.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 		cluster.TestCurrentClusterName,
 		nil,
@@ -350,7 +349,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithOneReplicationCluster() {
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(s.namespaceID), Name: s.namespace},
+		&persistenceblobs.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -373,7 +372,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithT
 		activeCluster = s.currentClusterName
 	}
 	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(s.namespaceID), Name: s.namespace},
+		&persistenceblobs.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistenceblobs.NamespaceConfig{RetentionDays: 1},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: activeCluster,

@@ -39,7 +39,6 @@ import (
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
 	persistencetests "github.com/temporalio/temporal/common/persistence/persistence-tests"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -206,10 +205,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	err = s.namespaceReplicator.Execute(task)
 	s.Nil(err)
 
-	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{ID: primitives.MustParseUUID(id)})
+	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{ID: id})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
 	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)
@@ -295,7 +294,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
 	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)
@@ -428,7 +427,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
 	s.Equal(namespacepb.NamespaceStatus_Deprecated, resp.Namespace.Info.Status)
 	s.Equal(updateDescription, resp.Namespace.Info.Description)
@@ -561,7 +560,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
 	s.Equal(namespacepb.NamespaceStatus_Deprecated, resp.Namespace.Info.Status)
 	s.Equal(updateDescription, resp.Namespace.Info.Description)
@@ -690,7 +689,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
 	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)
@@ -818,7 +817,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
-	s.EqualValues(primitives.MustParseUUID(id), resp.Namespace.Info.Id)
+	s.EqualValues(id, resp.Namespace.Info.Id)
 	s.Equal(name, resp.Namespace.Info.Name)
 	s.Equal(namespacepb.NamespaceStatus_Registered, resp.Namespace.Info.Status)
 	s.Equal(description, resp.Namespace.Info.Description)

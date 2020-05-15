@@ -55,7 +55,6 @@ import (
 	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 // Implements matching.Engine
@@ -251,8 +250,8 @@ func (e *matchingEngineImpl) AddDecisionTask(
 	expiry := types.TimestampNow()
 	expiry.Seconds += int64(addRequest.ScheduleToStartTimeoutSeconds)
 	taskInfo := &persistenceblobs.TaskInfo{
-		NamespaceId: primitives.MustParseUUID(namespaceID),
-		RunId:       primitives.MustParseUUID(addRequest.Execution.GetRunId()),
+		NamespaceId: namespaceID,
+		RunId:       addRequest.Execution.GetRunId(),
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
 		Expiry:      expiry,
@@ -273,8 +272,8 @@ func (e *matchingEngineImpl) AddActivityTask(
 	addRequest *matchingservice.AddActivityTaskRequest,
 ) (bool, error) {
 	namespaceID := addRequest.GetNamespaceId()
-	sourceNamespaceID := primitives.MustParseUUID(addRequest.GetSourceNamespaceId())
-	runID := primitives.MustParseUUID(addRequest.Execution.GetRunId())
+	sourceNamespaceID := addRequest.GetSourceNamespaceId()
+	runID := addRequest.Execution.GetRunId()
 	taskListName := addRequest.TaskList.GetName()
 	taskListKind := addRequest.TaskList.GetKind()
 
@@ -799,7 +798,7 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 	task *internalTask,
 ) (*historyservice.RecordDecisionTaskStartedResponse, error) {
 	request := &historyservice.RecordDecisionTaskStartedRequest{
-		NamespaceId:       primitives.UUIDString(task.event.Data.GetNamespaceId()),
+		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
 		ScheduleId:        task.event.Data.GetScheduleId(),
 		TaskId:            task.event.GetTaskId(),
@@ -828,7 +827,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 	request := &historyservice.RecordActivityTaskStartedRequest{
-		NamespaceId:       primitives.UUIDString(task.event.Data.GetNamespaceId()),
+		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
 		ScheduleId:        task.event.Data.GetScheduleId(),
 		TaskId:            task.event.GetTaskId(),

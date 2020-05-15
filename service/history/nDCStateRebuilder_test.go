@@ -48,7 +48,6 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -307,7 +306,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	}, nil).Once()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: primitives.MustParseUUID(targetNamespaceID), Name: targetNamespace},
+		&persistenceblobs.NamespaceInfo{Id: targetNamespaceID, Name: targetNamespace},
 		&persistenceblobs.NamespaceConfig{},
 		&persistenceblobs.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,

@@ -128,7 +128,7 @@ func (s *Scavenger) tryDeleteTaskList(key *p.TaskListKey, state *taskListState) 
 		return
 	}
 	atomic.AddInt64(&s.stats.tasklist.nDeleted, 1)
-	s.logger.Info("tasklist deleted", tag.WorkflowNamespaceIDBytes(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.WorkflowTaskListType(key.TaskType))
+	s.logger.Info("tasklist deleted", tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.WorkflowTaskListType(key.TaskType))
 }
 
 func (s *Scavenger) deleteHandlerLog(key *p.TaskListKey, state *taskListState, nProcessed int, nDeleted int, err error) {
@@ -136,12 +136,12 @@ func (s *Scavenger) deleteHandlerLog(key *p.TaskListKey, state *taskListState, n
 	atomic.AddInt64(&s.stats.task.nProcessed, int64(nProcessed))
 	if err != nil {
 		s.logger.Error("scavenger.deleteHandler processed.",
-			tag.Error(err), tag.WorkflowNamespaceIDBytes(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.WorkflowTaskListType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
+			tag.Error(err), tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.WorkflowTaskListType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 		return
 	}
 	if nProcessed > 0 {
 		s.logger.Info("scavenger.deleteHandler processed.",
-			tag.WorkflowNamespaceIDBytes(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.WorkflowTaskListType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
+			tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskListName(key.Name), tag.WorkflowTaskListType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 	}
 }
 

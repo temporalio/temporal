@@ -97,7 +97,7 @@ type (
 	}
 )
 
-var testNamespaceID = primitives.MustParseUUID("deadbeef-c001-4567-890a-bcdef0123456")
+var testNamespaceID = primitives.MustValidateUUID("deadbeef-c001-4567-890a-bcdef0123456")
 
 func TestWorkflowHandlerSuite(t *testing.T) {
 	s := new(workflowHandlerSuite)
