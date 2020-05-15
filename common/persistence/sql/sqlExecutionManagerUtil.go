@@ -60,7 +60,7 @@ func applyWorkflowMutationTx(
 	runID := executionInfo.RunID
 
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
-	if err != nil{
+	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("uuid parse failed. Error: %v", err))
 	}
 

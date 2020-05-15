@@ -87,8 +87,6 @@ func ValidateUUID(s string) (string, error) {
 	return s, nil
 }
 
-
-
 // NewUUID generates a new random UUID
 func NewUUID() UUID {
 	return UUID(uuid.NewRandom())

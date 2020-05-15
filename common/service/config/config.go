@@ -127,14 +127,14 @@ type (
 	}
 
 	ServerTLS struct {
-		CertFile          string    `yaml:"certFile"`
-		KeyFile           string    `yaml:"keyFile"`
-		ClientCAFiles     []string  `yaml:"clientCaFiles"`
-		RequireClientAuth bool      `yaml:"requireClientAuth"`
+		CertFile          string   `yaml:"certFile"`
+		KeyFile           string   `yaml:"keyFile"`
+		ClientCAFiles     []string `yaml:"clientCaFiles"`
+		RequireClientAuth bool     `yaml:"requireClientAuth"`
 	}
 
-//Server ServerTLS `yaml:"server"`
-//		Client ClientTLS `yaml:"client"
+	//Server ServerTLS `yaml:"server"`
+	//		Client ClientTLS `yaml:"client"
 
 	ClientTLS struct {
 		RootCAFiles []string `yaml:"rootCaFiles"`

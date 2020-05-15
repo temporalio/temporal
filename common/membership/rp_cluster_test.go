@@ -163,7 +163,7 @@ func (c *TestRingpopCluster) GetSeedNode() string {
 // KillHost kills the given host within the cluster
 func (c *TestRingpopCluster) KillHost(uuid string) {
 	for i := 0; i < len(c.hostUUIDs); i++ {
-		if 0 == strings.Compare(c.hostUUIDs[i], uuid) {
+		if c.hostUUIDs[i] == uuid {
 			c.rings[i].Stop()
 			c.channels[i].Close()
 			c.rings[i] = nil
@@ -196,7 +196,7 @@ func (c *TestRingpopCluster) GetHostAddrs() []string {
 // the given addr, if it exists
 func (c *TestRingpopCluster) FindHostByAddr(addr string) (HostInfo, bool) {
 	for _, hi := range c.hostInfoList {
-		if strings.Compare(hi.addr, addr) == 0 {
+		if hi.addr == addr {
 			return hi, true
 		}
 	}

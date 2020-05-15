@@ -168,7 +168,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 
 	resp2, err2 := m.CreateNamespace(
 		&persistenceblobs.NamespaceInfo{
-		Id:          uuid.New(),
+			Id:          uuid.New(),
 			Name:        name,
 			Status:      status,
 			Description: "fail",
@@ -944,7 +944,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 		{
 			Namespace: &persistenceblobs.NamespaceDetail{
 				Info: &persistenceblobs.NamespaceInfo{
-		Id:          uuid.New(),
+					Id:          uuid.New(),
 					Name:        "list-namespace-test-name-1",
 					Status:      namespacepb.NamespaceStatus_Registered,
 					Description: "list-namespace-test-description-1",
@@ -973,7 +973,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 		{
 			Namespace: &persistenceblobs.NamespaceDetail{
 				Info: &persistenceblobs.NamespaceInfo{
-		Id:          uuid.New(),
+					Id:          uuid.New(),
 					Name:        "list-namespace-test-name-2",
 					Status:      namespacepb.NamespaceStatus_Registered,
 					Description: "list-namespace-test-description-2",

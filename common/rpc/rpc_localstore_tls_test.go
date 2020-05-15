@@ -36,7 +36,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/temporalio/temporal/common/log"
-	`github.com/temporalio/temporal/common/log/loggerimpl`
+	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/rpc/encryption"
 	"github.com/temporalio/temporal/common/service/config"
 )
@@ -56,8 +56,8 @@ type localStoreRPCSuite struct {
 	internodeCertDir string
 	frontendCertDir  string
 
-	frontendChain    CertChain
-	internodeChain   CertChain
+	frontendChain  CertChain
+	internodeChain CertChain
 }
 
 type CertChain struct {

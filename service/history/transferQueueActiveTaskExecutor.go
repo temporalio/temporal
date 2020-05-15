@@ -364,7 +364,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	targetNamespace := targetNamespaceEntry.GetInfo().Name
 
 	// handle workflow cancel itself
-	if strings.Compare(task.GetNamespaceId(), task.GetTargetNamespaceId()) == 0 && task.GetWorkflowId() == task.GetTargetWorkflowId() {
+	if task.GetNamespaceId() == task.GetTargetNamespaceId() && task.GetWorkflowId() == task.GetTargetWorkflowId() {
 		// it does not matter if the run ID is a mismatch
 		err = t.requestCancelExternalExecutionFailed(task, context, targetNamespace, task.GetTargetWorkflowId(), task.GetTargetRunId())
 		if _, ok := err.(*serviceerror.NotFound); ok {
@@ -451,7 +451,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	targetNamespace := targetNamespaceEntry.GetInfo().Name
 
 	// handle workflow signal itself
-	if strings.Compare(task.GetNamespaceId(), task.GetTargetNamespaceId()) == 0 && task.GetWorkflowId() == task.GetTargetWorkflowId() {
+	if task.GetNamespaceId() == task.GetTargetNamespaceId() && task.GetWorkflowId() == task.GetTargetWorkflowId() {
 		// it does not matter if the run ID is a mismatch
 		return t.signalExternalExecutionFailed(
 			task,
