@@ -114,28 +114,36 @@ type (
 		TLS RootTLS `yaml:"tls"`
 	}
 
+	// RootTLS contains all TLS settings for the Temporal server
 	RootTLS struct {
-		//// Provider specifies the Encryption mode, supported values are 'SelfSignedOnebox' and 'localstore'
-		//Provider string `yaml:"provider"`
+		// Internode controls backend service communication TLS settings.
 		Internode GroupTLS `yaml:"internode"`
+		// Frontend controls SDK Client to Frontend communication TLS settings.
 		Frontend  GroupTLS `yaml:"frontend"`
 	}
 
+	// GroupTLS contains an instance client and server TLS settings
 	GroupTLS struct {
+		// Client handles client TLS settings
 		Client ClientTLS `yaml:"client"`
+		// Server handles the server (listener) TLS settings
 		Server ServerTLS `yaml:"server"`
 	}
 
+	// ServerTLS contains items to load server TLS configuration
 	ServerTLS struct {
-		CertFile          string   `yaml:"certFile"`
-		KeyFile           string   `yaml:"keyFile"`
-		ClientCAFiles     []string `yaml:"clientCaFiles"`
-		RequireClientAuth bool     `yaml:"requireClientAuth"`
+		// The path to the file containing the PEM-encoded public key of the certificate to use.
+		CertFile          string    `yaml:"certFile"`
+		// The path to the file containing the PEM-encoded private key of the certificate to use.
+		KeyFile           string    `yaml:"keyFile"`
+  	// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
+		// This value is ignored if `requireClientAuth` is not enabled.
+		ClientCAFiles     []string  `yaml:"clientCaFiles"`
+		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
+		RequireClientAuth bool      `yaml:"requireClientAuth"`
 	}
 
-	//Server ServerTLS `yaml:"server"`
-	//		Client ClientTLS `yaml:"client"
-
+	// ClientTLS contains TLS configuration for clients.
 	ClientTLS struct {
 		RootCAFiles []string `yaml:"rootCaFiles"`
 	}

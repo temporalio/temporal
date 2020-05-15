@@ -78,6 +78,9 @@ func (d *RPCFactory) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error)
 		if err != nil {
 			return nil, err
 		}
+		if serverConfig == nil {
+			return opts, nil
+		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(serverConfig)))
 	}
 
@@ -99,6 +102,9 @@ func (d *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error
 		serverConfig, err := d.tlsFactory.GetInternodeServerConfig()
 		if err != nil {
 			return nil, err
+		}
+		if serverConfig == nil {
+			return opts, nil
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(serverConfig)))
 	}
