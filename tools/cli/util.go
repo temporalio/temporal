@@ -94,14 +94,14 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 			if f.Kind() == reflect.Invalid {
 				continue
 			}
+			fieldName := t.Field(i).Name
 			fieldValue := valueToString(f, printFully, maxFieldLength)
-			if len(fieldValue) == 0 {
+			if fieldValue == "" {
 				continue
 			}
 			if buf.Len() > 1 {
 				buf.WriteString(", ")
 			}
-			fieldName := t.Field(i).Name
 			if !isAttributeName(fieldName) {
 				if !printFully {
 					fieldValue = trimTextAndBreakWords(fieldValue, maxFieldLength)
@@ -125,6 +125,9 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string {
 	switch v.Kind() {
 	case reflect.Ptr:
+		if payloads, isPayloads := v.Interface().(*commonpb.Payloads); isPayloads {
+			return payloadsToString(payloads)
+		}
 		return valueToString(v.Elem(), printFully, maxFieldLength)
 	case reflect.Struct:
 		return anyToString(v.Interface(), printFully, maxFieldLength)
@@ -148,13 +151,7 @@ func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string 
 			case []byte:
 				str += string(typedV)
 			case *commonpb.Payload:
-				var data string
-				err := payload.Decode(typedV, &data)
-				if err == nil {
-					str += data
-				} else {
-					str += anyToString(*typedV, printFully, maxFieldLength)
-				}
+				str += payloadToString(typedV)
 			default:
 				str += val.String()
 			}
@@ -472,12 +469,12 @@ func getEventAttributes(e *eventpb.HistoryEvent) interface{} {
 }
 
 func isAttributeName(name string) bool {
-	for _, eventTypeName := range eventpb.EventType_name {
-		if name == eventTypeName+"EventAttributes" {
-			return true
-		}
+	eventType := strings.TrimSuffix(name, "EventAttributes")
 
+	if _, ok := eventpb.EventType_value[eventType]; ok {
+		return true
 	}
+
 	return false
 }
 
@@ -907,5 +904,33 @@ func prompt(msg string, autoConfirm bool) {
 	textLower := strings.ToLower(strings.TrimRight(text, "\n"))
 	if textLower != "y" && textLower != "yes" {
 		os.Exit(0)
+	}
+}
+func payloadsToString(ps *commonpb.Payloads) string {
+	if ps == nil {
+		return ""
+	}
+	var buf bytes.Buffer
+	buf.WriteString("{")
+	for _, payload := range ps.Payloads {
+		buf.WriteString("\"")
+		buf.WriteString(payloadToString(payload))
+		buf.WriteString("\",")
+	}
+	buf.Truncate(buf.Len() - 1) // cut last comma
+	buf.WriteString("}")
+	return buf.String()
+}
+
+func payloadToString(p *commonpb.Payload) string {
+	if p == nil {
+		return "<nil>"
+	}
+	var data string
+	err := payload.Decode(p, &data)
+	if err == nil {
+		return data
+	} else {
+		return string(p.GetData())
 	}
 }

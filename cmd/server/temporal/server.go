@@ -47,6 +47,7 @@ import (
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/resource"
+	"github.com/temporalio/temporal/common/rpc"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/config/ringpop"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -118,9 +119,18 @@ func (s *server) startService() common.Daemon {
 	}
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
 
+	err = ringpop.ValidateRingpopConfig(&s.cfg.Global.Membership)
+	if err != nil {
+		log.Fatalf("Ringpop config validation error - %v", err)
+	}
+
 	svcCfg := s.cfg.Services[s.name]
 	params.MetricScope = svcCfg.Metrics.NewScope(params.Logger)
-	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.Logger)
+	params.RPCFactory, err = rpc.NewFactory(&svcCfg.RPC, params.Name, params.Logger, &s.cfg.Global)
+
+	if err != nil {
+		log.Fatalf("error constructing RPC factory: %v", err)
+	}
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
 	// services to correct addresses used by clients through ServiceResolver lookup API
