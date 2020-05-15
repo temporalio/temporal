@@ -37,6 +37,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
 )
 
@@ -149,12 +150,12 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
 
-	treeID, err := gocql.UUIDFromBytes(request.TreeID)
+	treeID, err := primitives.ValidateUUID(request.TreeID)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
 
-	branchID, err := gocql.UUIDFromBytes(request.BranchID)
+	branchID, err := primitives.ValidateUUID(request.BranchID)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql BranchId UUID cast failed. Error: %v", err))
 	}
@@ -308,12 +309,12 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 		return nil, err
 	}
 
-	cqlTreeID, err := gocql.UUIDFromBytes(forkB.TreeId)
+	cqlTreeID, err := primitives.ValidateUUID(forkB.TreeId)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
 
-	cqlNewBranchID, err := gocql.UUIDFromBytes(request.NewBranchID)
+	cqlNewBranchID, err := primitives.ValidateUUID(request.NewBranchID)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err))
 	}
@@ -334,10 +335,8 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 ) error {
 
 	branch := request.BranchInfo
-	treeID, err := gocql.UUIDFromBytes(branch.TreeId)
-	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
-	}
+	treeID := branch.TreeId
+
 	brsToDelete := branch.Ancestors
 	beginNodeID := p.GetBeginNodeID(branch)
 	brsToDelete = append(brsToDelete, &persistenceblobs.HistoryBranchRange{
@@ -346,7 +345,7 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	})
 
 	rsp, err := h.GetHistoryTree(&p.GetHistoryTreeRequest{
-		TreeID: treeID[:],
+		TreeID: treeID,
 	})
 	if err != nil {
 		return err
@@ -373,11 +372,11 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 		maxReferredEndNodeID, ok := validBRsMaxEndNode[string(br.GetBranchId())]
 		if ok {
 			// we can only delete from the maxEndNode and stop here
-			h.deleteBranchRangeNodes(batch, treeID[:], br.GetBranchId(), maxReferredEndNodeID)
+			h.deleteBranchRangeNodes(batch, treeID, br.GetBranchId(), maxReferredEndNodeID)
 			break
 		} else {
 			// No any branch is using this range, we can delete all of it
-			h.deleteBranchRangeNodes(batch, treeID[:], br.GetBranchId(), br.GetBeginNodeId())
+			h.deleteBranchRangeNodes(batch, treeID, br.GetBranchId(), br.GetBeginNodeId())
 		}
 	}
 
@@ -390,8 +389,8 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 
 func (h *cassandraHistoryV2Persistence) deleteBranchRangeNodes(
 	batch *gocql.Batch,
-	treeID []byte,
-	branchID []byte,
+	treeID string,
+	branchID string,
 	beginNodeID int64,
 ) {
 
@@ -456,7 +455,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 	request *p.GetHistoryTreeRequest,
 ) (*p.GetHistoryTreeResponse, error) {
 
-	treeID, err := gocql.UUIDFromBytes(request.TreeID)
+	treeID, err := primitives.ValidateUUID(request.TreeID)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err))
 	}

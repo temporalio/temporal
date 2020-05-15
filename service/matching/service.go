@@ -50,7 +50,7 @@ type Service struct {
 	status  int32
 	handler *Handler
 	config  *Config
-	params *resource.BootstrapParams
+	params  *resource.BootstrapParams
 
 	server *grpc.Server
 }
@@ -82,7 +82,7 @@ func NewService(
 		Resource: serviceResource,
 		status:   common.DaemonStatusInitialized,
 		config:   serviceConfig,
-		params:	  params,
+		params:   params,
 	}, nil
 }
 

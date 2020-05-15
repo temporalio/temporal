@@ -2204,7 +2204,7 @@ func (mr *MockmutableStateMockRecorder) SetHistoryBuilder(hBuilder interface{}) 
 }
 
 // SetHistoryTree mocks base method.
-func (m *MockmutableState) SetHistoryTree(treeID []byte) error {
+func (m *MockmutableState) SetHistoryTree(treeID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetHistoryTree", treeID)
 	ret0, _ := ret[0].(error)

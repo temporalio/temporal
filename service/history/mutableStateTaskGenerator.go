@@ -38,7 +38,6 @@ import (
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -532,7 +531,7 @@ func (r *mutableStateTaskGeneratorImpl) getTargetNamespaceID(
 		if err != nil {
 			return "", err
 		}
-		targetNamespaceID = primitives.UUIDString(targetNamespaceEntry.GetInfo().Id)
+		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
 
 	return targetNamespaceID, nil

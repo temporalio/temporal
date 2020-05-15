@@ -219,7 +219,7 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 	namespaceRequest := &persistence.CreateNamespaceRequest{
 		Namespace: &persistenceblobs.NamespaceDetail{
 			Info: &persistenceblobs.NamespaceInfo{
-				Id:     uuid.NewRandom(),
+				Id:     uuid.New(),
 				Name:   s.archivalNamespace,
 				Status: namespacepb.NamespaceStatus_Registered,
 			},
@@ -246,7 +246,7 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 
 	s.Logger.Info("Register namespace succeeded",
 		tag.WorkflowNamespace(s.archivalNamespace),
-		tag.WorkflowNamespaceIDBytes(response.ID),
+		tag.WorkflowNamespaceID(response.ID),
 	)
 	return err
 }

@@ -131,7 +131,7 @@ func (m *cassandraMetadataPersistenceV2) Close() {
 // delete the orphaned entry from namespaces table.  There is a chance delete entry could fail and we never delete the
 // orphaned entry from namespaces table.  We might need a background job to delete those orphaned record.
 func (m *cassandraMetadataPersistenceV2) CreateNamespace(request *p.InternalCreateNamespaceRequest) (*p.CreateNamespaceResponse, error) {
-	query := m.session.Query(templateCreateNamespaceQuery, request.ID.Downcast(), request.Name)
+	query := m.session.Query(templateCreateNamespaceQuery, request.ID, request.Name)
 	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
@@ -153,7 +153,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
 		constNamespacePartition,
-		request.ID.Downcast(),
+		request.ID,
 		request.Name,
 		request.Namespace.Data,
 		request.Namespace.Encoding,
@@ -176,7 +176,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 
 	if !applied {
 		// Namespace already exist.  Delete orphan namespace record before returning back to user
-		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.ID.Downcast()).Exec(); errDelete != nil {
+		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.ID).Exec(); errDelete != nil {
 			m.logger.Warn("Unable to delete orphan namespace record. Error", tag.Error(errDelete))
 		}
 
@@ -234,11 +234,11 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name are empty.")
 	}
 
-	handleError := func(name string, ID primitives.UUID, err error) error {
+	handleError := func(name string, ID string, err error) error {
 		identity := name
 		if err == gocql.ErrNotFound {
 			if len(ID) > 0 {
-				identity = ID.String()
+				identity = ID
 			}
 			return serviceerror.NewNotFound(fmt.Sprintf("Namespace %s does not exist.", identity))
 		}
@@ -247,8 +247,8 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 
 	namespace := request.Name
 	if len(request.ID) > 0 {
-		query = m.session.Query(templateGetNamespaceQuery, request.ID.Downcast())
-		query = m.session.Query(templateGetNamespaceQuery, request.ID.Downcast())
+		query = m.session.Query(templateGetNamespaceQuery, request.ID)
+		query = m.session.Query(templateGetNamespaceQuery, request.ID)
 		err = query.Scan(&namespace)
 		if err != nil {
 			return nil, handleError(request.Name, request.ID, err)
@@ -321,7 +321,7 @@ func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespace
 
 func (m *cassandraMetadataPersistenceV2) DeleteNamespace(request *p.DeleteNamespaceRequest) error {
 	var name string
-	query := m.session.Query(templateGetNamespaceQuery, request.ID.Downcast())
+	query := m.session.Query(templateGetNamespaceQuery, request.ID)
 	err := query.Scan(&name)
 	if err != nil {
 		if err == gocql.ErrNotFound {
@@ -330,7 +330,11 @@ func (m *cassandraMetadataPersistenceV2) DeleteNamespace(request *p.DeleteNamesp
 		return err
 	}
 
-	return m.deleteNamespace(name, request.ID)
+	parsedID, err := primitives.ParseUUID(request.ID)
+	if err != nil {
+		return err
+	}
+	return m.deleteNamespace(name, parsedID)
 }
 
 func (m *cassandraMetadataPersistenceV2) DeleteNamespaceByName(request *p.DeleteNamespaceByNameRequest) error {
@@ -376,13 +380,13 @@ func (m *cassandraMetadataPersistenceV2) updateMetadataBatch(batch *gocql.Batch,
 	)
 }
 
-func (m *cassandraMetadataPersistenceV2) deleteNamespace(name string, ID primitives.UUID) error {
+func (m *cassandraMetadataPersistenceV2) deleteNamespace(name string, ID []byte) error {
 	query := m.session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteNamespaceByName operation failed. Error %v", err))
 	}
 
-	query = m.session.Query(templateDeleteNamespaceQuery, ID.Downcast())
+	query = m.session.Query(templateDeleteNamespaceQuery, ID)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteNamespace operation failed. Error %v", err))
 	}

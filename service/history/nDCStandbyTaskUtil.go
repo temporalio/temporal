@@ -70,8 +70,8 @@ func standbyTransferTaskPostActionTaskDiscarded(
 	transferTask := taskInfo.(*persistenceblobs.TransferTaskInfo)
 	logger.Error("Discarding standby transfer task due to task being pending for too long.",
 		tag.WorkflowID(transferTask.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(transferTask.GetRunId()),
-		tag.WorkflowNamespaceIDBytes(transferTask.GetNamespaceId()),
+		tag.WorkflowRunID(transferTask.GetRunId()),
+		tag.WorkflowNamespaceID(transferTask.GetNamespaceId()),
 		tag.TaskID(transferTask.GetTaskId()),
 		tag.TaskType(transferTask.TaskType),
 		tag.FailoverVersion(transferTask.GetVersion()),
@@ -93,8 +93,8 @@ func standbyTimerTaskPostActionTaskDiscarded(
 	timerTask := taskInfo.(*persistenceblobs.TimerTaskInfo)
 	logger.Error("Discarding standby timer task due to task being pending for too long.",
 		tag.WorkflowID(timerTask.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(timerTask.GetRunId()),
-		tag.WorkflowNamespaceIDBytes(timerTask.GetNamespaceId()),
+		tag.WorkflowRunID(timerTask.GetRunId()),
+		tag.WorkflowNamespaceID(timerTask.GetNamespaceId()),
 		tag.TaskID(timerTask.GetTaskId()),
 		tag.TaskType(timerTask.TaskType),
 		tag.WorkflowTimeoutType(int64(timerTask.TimeoutType)),
