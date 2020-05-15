@@ -110,6 +110,34 @@ type (
 		Membership Membership `yaml:"membership"`
 		// PProf is the PProf configuration
 		PProf PProf `yaml:"pprof"`
+		// TLS controls the communication encryption configuration
+		TLS RootTLS `yaml:"tls"`
+	}
+
+	RootTLS struct {
+		//// Provider specifies the Encryption mode, supported values are 'SelfSignedOnebox' and 'localstore'
+		//Provider string `yaml:"provider"`
+		Internode GroupTLS `yaml:"internode"`
+		Frontend  GroupTLS `yaml:"frontend"`
+	}
+
+	GroupTLS struct {
+		Client ClientTLS `yaml:"client"`
+		Server ServerTLS `yaml:"server"`
+	}
+
+	ServerTLS struct {
+		CertFile          string    `yaml:"certFile"`
+		KeyFile           string    `yaml:"keyFile"`
+		ClientCAFiles     []string  `yaml:"clientCaFiles"`
+		RequireClientAuth bool      `yaml:"requireClientAuth"`
+	}
+
+//Server ServerTLS `yaml:"server"`
+//		Client ClientTLS `yaml:"client"
+
+	ClientTLS struct {
+		RootCAFiles []string `yaml:"rootCaFiles"`
 	}
 
 	// Membership contains config items related to the membership layer of temporal

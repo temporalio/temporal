@@ -51,7 +51,7 @@ func NewCanaryRunner(cfg *Config) (Runnable, error) {
 		cfg.Cadence.HostNameAndPort = ServiceHostPort
 	}
 
-	connection, err := rpc.Dial(cfg.Cadence.HostNameAndPort)
+	connection, err := rpc.Dial(cfg.Cadence.HostNameAndPort, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection: %v", err)
 	}

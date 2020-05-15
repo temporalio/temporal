@@ -419,7 +419,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	}
 
 	c.frontendService = frontendService
-	connection := params.RPCFactory.CreateGRPCConnection(c.FrontendGRPCAddress())
+	connection := params.RPCFactory.CreateFrontendGRPCConnection(c.FrontendGRPCAddress())
 	c.frontendClient = NewFrontendClient(connection)
 	c.adminClient = NewAdminClient(connection)
 	go frontendService.Start()
@@ -497,7 +497,7 @@ func (c *cadenceImpl) startHistory(
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
-		historyConnection, err := rpc.Dial(c.HistoryServiceAddress(3)[0])
+		historyConnection, err := rpc.Dial(c.HistoryServiceAddress(3)[0], nil)
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -772,6 +772,23 @@ type rpcFactoryImpl struct {
 	sync.Mutex
 	listener       net.Listener
 	ringpopChannel *tchannel.Channel
+	serverCfg      config.GroupTLS
+}
+
+func (c *rpcFactoryImpl) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {
+	return nil, nil
+}
+
+func (c *rpcFactoryImpl) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error) {
+	return nil, nil
+}
+
+func (c *rpcFactoryImpl) CreateFrontendGRPCConnection(hostName string) *grpc.ClientConn {
+	return c.CreateGRPCConnection(hostName)
+}
+
+func (c *rpcFactoryImpl) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
+	return c.CreateGRPCConnection(hostName)
 }
 
 func newRPCFactoryImpl(sName, grpcHostPort, ringpopHostPort string, logger log.Logger) common.RPCFactory {
@@ -832,7 +849,7 @@ func (c *rpcFactoryImpl) GetRingpopChannel() *tchannel.Channel {
 
 // CreateGRPCConnection creates connection for gRPC calls
 func (c *rpcFactoryImpl) CreateGRPCConnection(hostName string) *grpc.ClientConn {
-	connection, err := rpc.Dial(hostName)
+	connection, err := rpc.Dial(hostName, nil)
 	if err != nil {
 		c.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 	}
