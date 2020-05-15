@@ -53,6 +53,7 @@ import (
 
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/rpc"
 )
 
@@ -741,12 +742,27 @@ func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Conte
 }
 
 // process and validate input provided through cmd or file
-func processJSONInput(c *cli.Context) string {
-	return processJSONInputHelper(c, jsonTypeInput)
+func processJSONInput(c *cli.Context) *commonpb.Payloads {
+	rawJson := processJSONInputHelper(c, jsonTypeInput)
+	if len(rawJson) == 0 {
+		return nil
+	}
+
+	var v interface{}
+	if err := json.Unmarshal(rawJson, &v); err != nil {
+		ErrorAndExit("Input is not a valid JSON.", err)
+	}
+
+	p, err := payloads.Encode(v)
+	if err != nil {
+		ErrorAndExit("Unable to encode Input.", err)
+	}
+
+	return p
 }
 
 // process and validate json
-func processJSONInputHelper(c *cli.Context, jType jsonType) string {
+func processJSONInputHelper(c *cli.Context, jType jsonType) []byte {
 	var flagNameOfRawInput string
 	var flagNameOfInputFileName string
 
@@ -758,12 +774,11 @@ func processJSONInputHelper(c *cli.Context, jType jsonType) string {
 		flagNameOfRawInput = FlagMemo
 		flagNameOfInputFileName = FlagMemoFile
 	default:
-		return ""
+		return nil
 	}
 
-	var input string
 	if c.IsSet(flagNameOfRawInput) {
-		input = c.String(flagNameOfRawInput)
+		return []byte(c.String(flagNameOfRawInput))
 	} else if c.IsSet(flagNameOfInputFileName) {
 		inputFile := c.String(flagNameOfInputFileName)
 		// This method is purely used to parse input from the CLI. The input comes from a trusted user
@@ -772,14 +787,9 @@ func processJSONInputHelper(c *cli.Context, jType jsonType) string {
 		if err != nil {
 			ErrorAndExit("Error reading input file", err)
 		}
-		input = string(data)
+		return data
 	}
-	if input != "" {
-		if err := validateJSONs(input); err != nil {
-			ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
-		}
-	}
-	return input
+	return nil
 }
 
 // validate whether str is a valid json or multi valid json concatenated with spaces/newlines
