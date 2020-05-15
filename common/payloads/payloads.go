@@ -58,16 +58,15 @@ func Decode(ps *commonpb.Payloads, valuePtr ...interface{}) error {
 }
 
 func ToString(ps *commonpb.Payloads) string {
-	if ps == nil {
-		return ""
-	}
 	var buf bytes.Buffer
 	buf.WriteString("{")
-	for _, p := range ps.Payloads {
+	for _, p := range ps.GetPayloads() {
 		buf.WriteString(payload.ToString(p))
 		buf.WriteString(",")
 	}
-	buf.Truncate(buf.Len() - 1) // cut the last comma
+	if buf.Len() > 1 {
+		buf.Truncate(buf.Len() - 1) // cut the last comma
+	}
 	buf.WriteString("}")
 	return buf.String()
 }
