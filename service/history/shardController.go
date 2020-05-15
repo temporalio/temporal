@@ -337,7 +337,7 @@ func (c *shardController) acquireShards() {
 		}()
 	}
 	// Submit tasks to the channel.
-	for shardID := 0; shardID < c.config.NumberOfShards; shardID++ {
+	for shardID := 1; shardID <= c.config.NumberOfShards; shardID++ {
 		shardActionCh <- shardID
 		if c.isShuttingDown() {
 			return

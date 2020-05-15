@@ -116,7 +116,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardId: 0,
+				ShardId: 1,
 				RangeId: 1,
 				ClusterTimerAckLevel: map[string]*types.Timestamp{
 					cluster.TestCurrentClusterName:     gogoProtoTimestampNowAddDuration(-8),
@@ -555,7 +555,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardId: 0,
+				ShardId: 1,
 				RangeId: 1,
 				ClusterTimerAckLevel: map[string]*types.Timestamp{
 					cluster.TestCurrentClusterName:     types.TimestampNow(),

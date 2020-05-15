@@ -27,6 +27,7 @@
 package history
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -253,7 +254,12 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 	f.logger.Debug("Successfully fetched replication tasks.", tag.Counter(len(messagesByShard)))
 
 	for shardID, tasks := range messagesByShard {
-		request := requestByShard[shardID]
+		request, ok := requestByShard[shardID]
+
+		if !ok {
+			return fmt.Errorf("request by shard empty for shardId: %v", err)
+		}
+
 		request.respChan <- tasks
 		close(request.respChan)
 		delete(requestByShard, shardID)
