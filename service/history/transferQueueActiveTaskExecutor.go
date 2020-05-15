@@ -27,7 +27,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/serviceerror"
