@@ -50,8 +50,10 @@ func MustParseUUID(s string) UUID {
 }
 
 // ParseUUID returns a UUID parsed from the given string representation
-// returns nil if the input is empty string
-// panics if the given input is malformed
+// returns:
+//  - nil if the input is empty string
+//  - error if input is malformed
+//  - UUID object if input can be parsed and is valid
 func ParseUUID(s string) (UUID, error) {
 	if s == "" {
 		return nil, nil
@@ -73,8 +75,10 @@ func MustValidateUUID(s string) string {
 }
 
 // ValidateUUID parses and validates UUID contents from the given string representation
-// returns empty string if the input is empty string
-// otherwise returns error if the given input is malformed
+// returns:
+//  - nil if the input is empty string
+//  - error if input is malformed
+//  - input if input can be parsed and is valid
 func ValidateUUID(s string) (string, error) {
 	if s == "" {
 		return "", nil
