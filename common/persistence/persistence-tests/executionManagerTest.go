@@ -55,7 +55,6 @@ import (
 	"github.com/temporalio/temporal/common/payload"
 	"github.com/temporalio/temporal/common/payloads"
 	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -1905,7 +1904,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	s.validateTransferTaskHighLevel(task1, commongenpb.TaskType_TransferDecisionTask, namespaceID, workflowExecution)
 	s.Equal("queue1", task1.TaskList)
 	s.Equal(int64(2), task1.GetScheduleId())
-	s.EqualValues(primitives.MustParseUUID(""), task1.GetTargetRunId())
+	s.EqualValues("", task1.GetTargetRunId())
 
 	err3 := s.CompleteTransferTask(task1.GetTaskId())
 	s.NoError(err3)
@@ -1928,7 +1927,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	s.validateTransferTaskHighLevel(task2, commongenpb.TaskType_TransferActivityTask, namespaceID, workflowExecution)
 	s.Equal("queue1", task2.TaskList)
 	s.Equal(int64(4), task2.GetScheduleId())
-	s.EqualValues(primitives.MustParseUUID(""), task2.GetTargetRunId())
+	s.EqualValues("", task2.GetTargetRunId())
 
 	err4 := s.CompleteTransferTask(task2.GetTaskId())
 	s.NoError(err4)
@@ -1956,7 +1955,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	s.Equal(1, len(tasks3), "Expected 1 decision task.")
 	task3 := tasks3[0]
 	s.validateTransferTaskHighLevel(task3, commongenpb.TaskType_TransferCloseExecution, namespaceID, workflowExecution)
-	s.EqualValues(primitives.MustParseUUID(""), task3.GetTargetRunId())
+	s.EqualValues("", task3.GetTargetRunId())
 
 	err8 := s.CompleteTransferTask(task3.GetTaskId())
 	s.NoError(err8)
@@ -2060,15 +2059,15 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 
 func (s *ExecutionManagerSuite) validateTransferTaskHighLevel(task1 *persistenceblobs.TransferTaskInfo, taskType commongenpb.TaskType, namespaceID string, workflowExecution executionpb.WorkflowExecution) {
 	s.EqualValues(taskType, task1.TaskType)
-	s.Equal(namespaceID, primitives.UUID(task1.GetNamespaceId()).String())
+	s.Equal(namespaceID, task1.GetNamespaceId())
 	s.Equal(workflowExecution.GetWorkflowId(), task1.GetWorkflowId())
-	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task1.GetRunId()).String())
+	s.Equal(workflowExecution.GetRunId(), task1.GetRunId())
 }
 
 func (s *ExecutionManagerSuite) validateTransferTaskTargetInfo(task2 *persistenceblobs.TransferTaskInfo, targetNamespaceID string, targetWorkflowID string, targetRunID string) {
-	s.Equal(targetNamespaceID, primitives.UUID(task2.GetTargetNamespaceId()).String())
+	s.Equal(targetNamespaceID, task2.GetTargetNamespaceId())
 	s.Equal(targetWorkflowID, task2.GetTargetWorkflowId())
-	s.Equal(targetRunID, primitives.UUID(task2.GetTargetRunId()).String())
+	s.Equal(targetRunID, task2.GetTargetRunId())
 }
 
 // TestSignalTransferTaskTasks test
@@ -2270,7 +2269,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	targetWorkflowId := p.TransferTaskTransferTargetWorkflowID
 	targetRunId := ""
 	s.validateTransferTaskHighLevel(task1, taskType, namespaceID, workflowExecution)
-	s.validateTransferTaskTargetInfo(task1, primitives.UUID(task1.GetTargetNamespaceId()).String(), targetWorkflowId, targetRunId)
+	s.validateTransferTaskTargetInfo(task1, task1.GetTargetNamespaceId(), targetWorkflowId, targetRunId)
 	s.Equal(tasklist, task1.TaskList)
 	s.Equal(scheduleId, task1.GetScheduleId())
 	err3 := s.CompleteTransferTask(task1.GetTaskId())
@@ -2366,7 +2365,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.Equal(1, len(tasks1), "Expected 1 decision task.")
 	task1 := tasks1[0]
 	s.validateTransferTaskHighLevel(task1, commongenpb.TaskType_TransferDecisionTask, namespaceID, workflowExecution)
-	s.validateTransferTaskTargetInfo(task1, primitives.UUID(task1.GetNamespaceId()).String(), p.TransferTaskTransferTargetWorkflowID, "")
+	s.validateTransferTaskTargetInfo(task1, task1.GetNamespaceId(), p.TransferTaskTransferTargetWorkflowID, "")
 	s.Equal(tasklist, task1.TaskList)
 	s.Equal(int64(2), task1.GetScheduleId())
 
@@ -3091,9 +3090,9 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 	s.Equal(1, len(tasks1), "Expected 1 replication task.")
 	task1 := tasks1[0]
 	s.Equal(commongenpb.TaskType_ReplicationHistory, task1.TaskType)
-	s.Equal(namespaceID, primitives.UUID(task1.GetNamespaceId()).String())
+	s.Equal(namespaceID, task1.GetNamespaceId())
 	s.Equal(workflowExecution.GetWorkflowId(), task1.GetWorkflowId())
-	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task1.GetRunId()).String())
+	s.Equal(workflowExecution.GetRunId(), task1.GetRunId())
 	s.Equal(int64(1), task1.GetFirstEventId())
 	s.Equal(int64(3), task1.GetNextEventId())
 	s.Equal(int64(9), task1.Version)
@@ -3194,9 +3193,9 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	s.Equal(1, len(tasks1), "Expected 1 replication task.")
 	task1 := tasks1[0]
 	s.Equal(commongenpb.TaskType_ReplicationHistory, task1.TaskType)
-	s.Equal(namespaceID, primitives.UUID(task1.GetNamespaceId()).String())
+	s.Equal(namespaceID, task1.GetNamespaceId())
 	s.Equal(workflowExecution.GetWorkflowId(), task1.GetWorkflowId())
-	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task1.GetRunId()).String())
+	s.Equal(workflowExecution.GetRunId(), task1.GetRunId())
 	s.Equal(int64(1), task1.GetFirstEventId())
 	s.Equal(int64(3), task1.GetNextEventId())
 	s.Equal(int64(9), task1.Version)
@@ -3209,9 +3208,9 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	task2 := tasks2[0]
 	s.Equal(commongenpb.TaskType_ReplicationHistory, task2.TaskType)
-	s.Equal(namespaceID, primitives.UUID(task2.GetNamespaceId()).String())
+	s.Equal(namespaceID, task2.GetNamespaceId())
 	s.Equal(workflowExecution.GetWorkflowId(), task2.GetWorkflowId())
-	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task2.GetRunId()).String())
+	s.Equal(workflowExecution.GetRunId(), task2.GetRunId())
 	s.Equal(int64(4), task2.GetFirstEventId())
 	s.Equal(int64(5), task2.GetNextEventId())
 	s.Equal(int64(9), task2.Version)
@@ -3279,9 +3278,9 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
 	tsk := taskR[0]
 	s.Equal(commongenpb.TaskType_ReplicationHistory, tsk.TaskType)
-	s.Equal(namespaceID, primitives.UUID(tsk.GetNamespaceId()).String())
+	s.Equal(namespaceID, tsk.GetNamespaceId())
 	s.Equal(workflowExecution.GetWorkflowId(), tsk.GetWorkflowId())
-	s.Equal(workflowExecution.GetRunId(), primitives.UUID(tsk.GetRunId()).String())
+	s.Equal(workflowExecution.GetRunId(), tsk.GetRunId())
 	s.Equal(int64(1), tsk.GetFirstEventId())
 	s.Equal(int64(3), tsk.GetNextEventId())
 	s.Equal(int64(9), tsk.Version)
@@ -3370,9 +3369,9 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	s.Equal(1, len(taskR1), "Expected 1 replication task.")
 	tsk1 := taskR1[0]
 	s.Equal(commongenpb.TaskType_ReplicationHistory, tsk1.TaskType)
-	s.Equal(namespaceID, primitives.UUID(tsk1.GetNamespaceId()).String())
+	s.Equal(namespaceID, tsk1.GetNamespaceId())
 	s.Equal(workflowExecution.GetWorkflowId(), tsk1.GetWorkflowId())
-	s.Equal(workflowExecution.GetRunId(), primitives.UUID(tsk1.GetRunId()).String())
+	s.Equal(workflowExecution.GetRunId(), tsk1.GetRunId())
 	s.Equal(int64(3), tsk1.GetFirstEventId())
 	s.Equal(int64(5), tsk1.GetNextEventId())
 	s.Equal(int64(10), tsk1.Version)
@@ -5250,9 +5249,9 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 func (s *ExecutionManagerSuite) TestReplicationDLQ() {
 	sourceCluster := "test"
 	taskInfo := &persistenceblobs.ReplicationTaskInfo{
-		NamespaceId: primitives.MustParseUUID(uuid.New()),
+		NamespaceId: uuid.New(),
 		WorkflowId:  uuid.New(),
-		RunId:       primitives.MustParseUUID(uuid.New()),
+		RunId:       uuid.New(),
 		TaskId:      0,
 		TaskType:    0,
 	}
@@ -5268,16 +5267,16 @@ func (s *ExecutionManagerSuite) TestReplicationDLQ() {
 	s.Len(resp.Tasks, 0)
 
 	taskInfo1 := &persistenceblobs.ReplicationTaskInfo{
-		NamespaceId: primitives.MustParseUUID(uuid.New()),
+		NamespaceId: uuid.New(),
 		WorkflowId:  uuid.New(),
-		RunId:       primitives.MustParseUUID(uuid.New()),
+		RunId:       uuid.New(),
 		TaskId:      1,
 		TaskType:    0,
 	}
 	taskInfo2 := &persistenceblobs.ReplicationTaskInfo{
-		NamespaceId: primitives.MustParseUUID(uuid.New()),
+		NamespaceId: uuid.New(),
 		WorkflowId:  uuid.New(),
-		RunId:       primitives.MustParseUUID(uuid.New()),
+		RunId:       uuid.New(),
 		TaskId:      2,
 		TaskType:    0,
 	}

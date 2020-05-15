@@ -31,6 +31,8 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cassandra"
@@ -39,9 +41,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
-	"go.temporal.io/temporal-proto/serviceerror"
 
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
@@ -992,13 +992,13 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 					lastWriteVersion := protoReplVersions.LastWriteVersion.GetValue()
 
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
-						executionInfo.WorkflowID, primitives.UUIDString(protoState.RunId), request.RangeID, strings.Join(columns, ","))
+						executionInfo.WorkflowID, protoState.RunId, request.RangeID, strings.Join(columns, ","))
 					if request.Mode == p.CreateWorkflowModeBrandNew {
 						// todo: Look at moving these errors upstream to manager
 						return nil, &p.WorkflowExecutionAlreadyStartedError{
 							Msg:              msg,
 							StartRequestID:   protoState.CreateRequestId,
-							RunID:            primitives.UUIDString(protoState.RunId),
+							RunID:            protoState.RunId,
 							State:            protoState.State,
 							Status:           protoState.Status,
 							LastWriteVersion: lastWriteVersion,
@@ -1263,7 +1263,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			lastWriteVersion := updateWorkflow.LastWriteVersion
 
 			executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
-				RunId:           primitives.MustParseUUID(runID),
+				RunId:           runID,
 				CreateRequestId: executionInfo.CreateRequestID,
 				State:           executionInfo.State,
 				Status:          executionInfo.Status,
@@ -1382,7 +1382,7 @@ func (d *cassandraPersistence) ResetWorkflowExecution(request *p.InternalResetWo
 		CreateRequestId: newExecutionInfo.CreateRequestID,
 		State:           newExecutionInfo.State,
 		Status:          newExecutionInfo.Status,
-		RunId:           primitives.MustParseUUID(newRunID),
+		RunId:           newRunID,
 	})
 	if err != nil {
 		return err
@@ -1541,7 +1541,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		status := executionInfo.Status
 
 		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistenceblobs.WorkflowExecutionState{
-			RunId:           primitives.MustParseUUID(runID),
+			RunId:           runID,
 			CreateRequestId: createRequestID,
 			State:           state,
 			Status:          status,
@@ -2148,7 +2148,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 	}
 	now := types.TimestampNow()
 	query := d.session.Query(templateGetTaskList,
-		request.NamespaceID.Downcast(),
+		request.NamespaceID,
 		request.TaskList,
 		request.TaskType,
 		rowTypeTaskList,
@@ -2180,7 +2180,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 			}
 
 			query = d.session.Query(templateInsertTaskListQuery,
-				request.NamespaceID.Downcast(),
+				request.NamespaceID,
 				request.TaskList,
 				request.TaskType,
 				rowTypeTaskList,
@@ -2225,7 +2225,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 			rangeID+1,
 			datablob.Data,
 			datablob.Encoding,
-			request.NamespaceID.Downcast(),
+			request.NamespaceID,
 			&request.TaskList,
 			request.TaskType,
 			rowTypeTaskList,
@@ -2332,7 +2332,7 @@ func (d *cassandraPersistence) ListTaskList(request *p.ListTaskListRequest) (*p.
 
 func (d *cassandraPersistence) DeleteTaskList(request *p.DeleteTaskListRequest) error {
 	query := d.session.Query(templateDeleteTaskListQuery,
-		request.TaskList.NamespaceID.Downcast(), request.TaskList.Name, request.TaskList.TaskType, rowTypeTaskList, taskListTaskID, request.RangeID)
+		request.TaskList.NamespaceID, request.TaskList.Name, request.TaskList.TaskType, rowTypeTaskList, taskListTaskID, request.RangeID)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
@@ -2459,7 +2459,7 @@ func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasks
 
 	// Reading tasklist tasks need to be quorum level consistent, otherwise we could loose task
 	query := d.session.Query(templateGetTasksQuery,
-		request.NamespaceID.Downcast(),
+		request.NamespaceID,
 		request.TaskList,
 		request.TaskType,
 		rowTypeTask,
@@ -2525,7 +2525,7 @@ PopulateTasks:
 func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) error {
 	tli := request.TaskList
 	query := d.session.Query(templateCompleteTaskQuery,
-		tli.NamespaceID.Downcast(),
+		tli.NamespaceID,
 		tli.Name,
 		tli.TaskType,
 		rowTypeTask,
@@ -2547,7 +2547,7 @@ func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) erro
 // be returned to the caller
 func (d *cassandraPersistence) CompleteTasksLessThan(request *p.CompleteTasksLessThanRequest) (int, error) {
 	query := d.session.Query(templateCompleteTasksLessThanQuery,
-		request.NamespaceID.Downcast(), request.TaskListName, request.TaskType, rowTypeTask, request.TaskID)
+		request.NamespaceID, request.TaskListName, request.TaskType, rowTypeTask, request.TaskID)
 	err := query.Exec()
 	if err != nil {
 		if isThrottlingError(err) {

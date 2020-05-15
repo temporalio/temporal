@@ -38,7 +38,6 @@ import (
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -147,7 +146,7 @@ func (b *stateBuilderImpl) applyEvents(
 				if err != nil {
 					return nil, err
 				}
-				parentNamespaceID = primitives.UUIDString(parentNamespaceEntry.GetInfo().Id)
+				parentNamespaceID = parentNamespaceEntry.GetInfo().Id
 			}
 
 			if err := b.mutableState.ReplicateWorkflowExecutionStartedEvent(
@@ -183,7 +182,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := b.mutableState.SetHistoryTree(
-				primitives.MustParseUUID(execution.GetRunId()),
+				execution.GetRunId(),
 			); err != nil {
 				return nil, err
 			}

@@ -39,7 +39,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/xdc"
 )
 
@@ -458,9 +457,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			primitives.UUIDString(timerTask.GetNamespaceId()),
+			timerTask.GetNamespaceId(),
 			timerTask.GetWorkflowId(),
-			primitives.UUIDString(timerTask.GetRunId()),
+			timerTask.GetRunId(),
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
 			common.EmptyEventID,
@@ -468,11 +467,11 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			primitives.UUIDString(timerTask.GetNamespaceId()),
+			timerTask.GetNamespaceId(),
 			timerTask.GetWorkflowId(),
-			primitives.UUIDString(timerTask.GetRunId()),
+			timerTask.GetRunId(),
 			*resendInfo.nextEventID,
-			primitives.UUIDString(timerTask.GetRunId()),
+			timerTask.GetRunId(),
 			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
@@ -482,9 +481,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowNamespaceIDBytes(timerTask.GetNamespaceId()),
+			tag.WorkflowNamespaceID(timerTask.GetNamespaceId()),
 			tag.WorkflowID(timerTask.GetWorkflowId()),
-			tag.WorkflowRunIDBytes(timerTask.GetRunId()),
+			tag.WorkflowRunID(timerTask.GetRunId()),
 			tag.ClusterName(t.clusterName))
 	}
 

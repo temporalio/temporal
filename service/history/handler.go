@@ -50,7 +50,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/task"
@@ -535,9 +534,9 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskCompleted",
-		tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()),
+		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(token.GetRunId()),
+		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
 	err0 = validateTaskToken(token)
@@ -586,14 +585,14 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskFailed",
-		tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()),
+		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(token.GetRunId()),
+		tag.WorkflowRunID(token.GetRunId()),
 		tag.WorkflowScheduleID(token.GetScheduleId()))
 
 	if failedRequest != nil && failedRequest.GetCause() == eventpb.DecisionTaskFailedCause_UnhandledDecision {
-		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceIDBytes(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunIDBytes(token.GetRunId()))
-		namespace, err := h.GetNamespaceCache().GetNamespaceName(primitives.UUIDString(token.GetNamespaceId()))
+		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowNamespaceID(token.GetNamespaceId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()))
+		namespace, err := h.GetNamespaceCache().GetNamespaceName(token.GetNamespaceId())
 		var namespaceTag metrics.Tag
 
 		if err == nil {

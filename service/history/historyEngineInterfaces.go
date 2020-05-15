@@ -78,8 +78,8 @@ type (
 		GetTaskType() commongenpb.TaskType
 		GetVisibilityTimestamp() *types.Timestamp
 		GetWorkflowId() string
-		GetRunId() []byte
-		GetNamespaceId() []byte
+		GetRunId() string
+		GetNamespaceId() string
 	}
 
 	queueTask interface {

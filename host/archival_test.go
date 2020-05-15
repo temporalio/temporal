@@ -45,7 +45,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 const (
@@ -186,7 +185,7 @@ func (s *integrationSuite) isHistoryArchived(namespace string, execution *execut
 func (s *integrationSuite) isHistoryDeleted(execution *executionpb.WorkflowExecution) bool {
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
-		TreeID:  primitives.MustParseUUID(execution.GetRunId()),
+		TreeID:  execution.GetRunId(),
 		ShardID: convert.IntPtr(shardID),
 	}
 	for i := 0; i < retryLimit; i++ {

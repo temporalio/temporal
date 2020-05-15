@@ -137,7 +137,7 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID1,
 			TaskList:    "some random tasklist",
 			TaskType:    1,
@@ -159,7 +159,7 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID2,
 			TaskList:    "some random tasklist",
 			TaskType:    1,
@@ -187,7 +187,7 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID,
 			TaskList:    "some random tasklist",
 			TaskType:    1,
@@ -220,7 +220,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID1,
 			TaskList:    "some random tasklist",
 			TaskType:    1,
@@ -229,7 +229,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID2,
 			TaskList:    "some random tasklist",
 			TaskType:    1,
@@ -238,7 +238,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID3,
 			TaskList:    "some random tasklist",
 			TaskType:    1,
@@ -326,7 +326,7 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID1,
 			TaskList:    "some random tasklist",
 			TaskType:    1,
@@ -349,7 +349,7 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID2,
 			TaskList:    "some random tasklist",
 			TaskType:    1,
@@ -379,7 +379,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID1,
 			TaskList:    "some random tasklist",
 			TaskType:    1,
@@ -388,7 +388,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 		&persistenceblobs.TransferTaskInfo{
 			NamespaceId: TestNamespaceId,
 			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.NewRandom(),
+			RunId:       uuid.New(),
 			TaskId:      taskID2,
 			TaskList:    "some random tasklist",
 			TaskType:    2,
