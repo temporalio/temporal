@@ -53,6 +53,7 @@ import (
 
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/payload"
+	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/rpc"
 )
 
@@ -125,8 +126,8 @@ func anyToString(d interface{}, printFully bool, maxFieldLength int) string {
 func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string {
 	switch v.Kind() {
 	case reflect.Ptr:
-		if payloads, isPayloads := v.Interface().(*commonpb.Payloads); isPayloads {
-			return payloadsToString(payloads)
+		if ps, isPayloads := v.Interface().(*commonpb.Payloads); isPayloads {
+			return payloads.ToString(ps)
 		}
 		return valueToString(v.Elem(), printFully, maxFieldLength)
 	case reflect.Struct:
@@ -151,7 +152,7 @@ func valueToString(v reflect.Value, printFully bool, maxFieldLength int) string 
 			case []byte:
 				str += string(typedV)
 			case *commonpb.Payload:
-				str += payloadToString(typedV)
+				str += payload.ToString(typedV)
 			default:
 				str += val.String()
 			}
@@ -904,33 +905,5 @@ func prompt(msg string, autoConfirm bool) {
 	textLower := strings.ToLower(strings.TrimRight(text, "\n"))
 	if textLower != "y" && textLower != "yes" {
 		os.Exit(0)
-	}
-}
-func payloadsToString(ps *commonpb.Payloads) string {
-	if ps == nil {
-		return ""
-	}
-	var buf bytes.Buffer
-	buf.WriteString("{")
-	for _, payload := range ps.Payloads {
-		buf.WriteString("\"")
-		buf.WriteString(payloadToString(payload))
-		buf.WriteString("\",")
-	}
-	buf.Truncate(buf.Len() - 1) // cut last comma
-	buf.WriteString("}")
-	return buf.String()
-}
-
-func payloadToString(p *commonpb.Payload) string {
-	if p == nil {
-		return "<nil>"
-	}
-	var data string
-	err := payload.Decode(p, &data)
-	if err == nil {
-		return data
-	} else {
-		return string(p.GetData())
 	}
 }

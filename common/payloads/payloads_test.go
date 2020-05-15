@@ -25,48 +25,44 @@
 package payloads
 
 import (
-	"bytes"
+	"testing"
 
-	commonpb "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal/encoded"
-
-	"github.com/temporalio/temporal/common/payload"
+	"github.com/stretchr/testify/assert"
 )
 
-var (
-	dataConverter = encoded.GetDefaultDataConverter()
-)
-
-func EncodeString(str string) *commonpb.Payloads {
-	// Error can be safely ignored here becase string always can be converted to JSON
-	ps, _ := dataConverter.ToData(str)
-	return ps
+type testStruct struct {
+	Int    int
+	String string
+	Bytes  []byte
 }
 
-func EncodeBytes(bytes []byte) *commonpb.Payloads {
-	// Error can be safely ignored here becase []byte always can be raw encoded
-	ps, _ := dataConverter.ToData(bytes)
-	return ps
-}
+func TestToString(t *testing.T) {
+	assert := assert.New(t)
+	var result string
 
-func Encode(value ...interface{}) (*commonpb.Payloads, error) {
-	return dataConverter.ToData(value...)
-}
+	p := EncodeString("str")
+	result = ToString(p)
+	assert.Equal("{\"str\"}", result)
 
-func Decode(ps *commonpb.Payloads, valuePtr ...interface{}) error {
-	return dataConverter.FromData(ps, valuePtr...)
-}
+	p, err := Encode(10, "str")
+	assert.NoError(err)
+	result = ToString(p)
+	assert.Equal("{10,\"str\"}", result)
 
-func ToString(ps *commonpb.Payloads) string {
-	var buf bytes.Buffer
-	buf.WriteString("{")
-	for _, p := range ps.GetPayloads() {
-		buf.WriteString(payload.ToString(p))
-		buf.WriteString(",")
-	}
-	if buf.Len() > 1 {
-		buf.Truncate(buf.Len() - 1) // cut the last comma
-	}
-	buf.WriteString("}")
-	return buf.String()
+	p, err = Encode([]byte{41, 42, 43}, 10, "str")
+	assert.NoError(err)
+	result = ToString(p)
+	assert.Equal("{)*+,10,\"str\"}", result)
+
+	p, err = Encode(&testStruct{
+		Int:    10,
+		String: "str",
+		Bytes:  []byte{51, 52, 53},
+	}, 10, "str")
+	assert.NoError(err)
+	result = ToString(p)
+	assert.Equal(`{{"Int":10,"String":"str","Bytes":"MzQ1"},10,"str"}`, result)
+
+	result = ToString(nil)
+	assert.Equal("{}", result)
 }
