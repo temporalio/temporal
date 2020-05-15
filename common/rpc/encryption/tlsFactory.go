@@ -69,7 +69,7 @@ func NewTLSConfigProviderFromConfig(encryptionSettings config.RootTLS, hostname 
 	case providerTypeSelfSigned:
 		return NewSelfSignedTlsFactory(encryptionSettings, hostname)
 	case providerTypeLocalStore:*/
-	return NewLocalStoreTlsFactory(&encryptionSettings)
+	return NewLocalStoreTlsProvider(&encryptionSettings)
 	//}
 
 	//return nil, fmt.Errorf("unknown provider: %v", encryptionSettings.Provider)
