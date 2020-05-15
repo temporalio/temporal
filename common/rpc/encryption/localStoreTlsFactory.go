@@ -111,6 +111,11 @@ func newServerTLSConfig(certProvider CertProvider, settingsProvider CertProvider
 		return nil, fmt.Errorf("loading server tls certificate failed: %v", err)
 	}
 
+	// tls disabled, responsibility of cert provider above to error otherwise
+	if serverCert == nil {
+		return nil, nil
+	}
+
 	// Default to NoClientAuth
 	clientAuthType := tls.NoClientCert
 	var clientCaPool *x509.CertPool
@@ -149,7 +154,16 @@ func newClientTLSConfig(localProvider CertProvider, remoteProvider CertProvider)
 		if err != nil {
 			return nil, err
 		}
+
+		if cert == nil {
+			return nil, fmt.Errorf("client auth required, but no certificate provided")
+		}
 		clientCerts = []tls.Certificate{*cert}
+	}
+
+	// No client settings
+	if clientCerts == nil && serverCa == nil {
+		return nil, nil
 	}
 
 	return &tls.Config{

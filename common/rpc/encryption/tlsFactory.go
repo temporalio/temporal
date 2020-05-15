@@ -59,16 +59,17 @@ const (
 )
 
 // NewTLSConfigProviderFromConfig creates a new TLS Configuration provider from RootTLS config
-func NewTLSConfigProviderFromConfig(encryptionSettings *config.RootTLS, hostname string) (TLSConfigProvider, error) {
-	if encryptionSettings == nil /*|| encryptionSettings.Provider == "" */ {
+func NewTLSConfigProviderFromConfig(encryptionSettings config.RootTLS, hostname string) (TLSConfigProvider, error) {
+	/* if || encryptionSettings.Provider == ""  {
 		return nil, nil
 	}
+	*/
 
 	/*switch providerType(encryptionSettings.Provider) {
 	case providerTypeSelfSigned:
 		return NewSelfSignedTlsFactory(encryptionSettings, hostname)
 	case providerTypeLocalStore:*/
-	return NewLocalStoreTlsFactory(encryptionSettings)
+	return NewLocalStoreTlsFactory(&encryptionSettings)
 	//}
 
 	//return nil, fmt.Errorf("unknown provider: %v", encryptionSettings.Provider)
