@@ -56,7 +56,7 @@ type RPCFactory struct {
 // conforming to the underlying configuration
 func NewFactory(cfg *config.RPC, sName string, logger log.Logger, serverCfg *config.Global) (*RPCFactory, error) {
 	tlsFactory, err := encryption.NewTLSConfigProviderFromConfig(
-		&serverCfg.TLS,
+		serverCfg.TLS,
 		getBroadcastAddressFromConfig(serverCfg, cfg, logger))
 
 	if err != nil {
@@ -65,8 +65,8 @@ func NewFactory(cfg *config.RPC, sName string, logger log.Logger, serverCfg *con
 	return newFactory(cfg, sName, logger, tlsFactory)
 }
 
-func newFactory(cfg *config.RPC, sName string, logger log.Logger, frontendTls encryption.TLSConfigProvider) (*RPCFactory, error) {
-	factory := &RPCFactory{config: cfg, serviceName: sName, logger: logger, tlsFactory: frontendTls}
+func newFactory(cfg *config.RPC, sName string, logger log.Logger, tlsProvider encryption.TLSConfigProvider) (*RPCFactory, error) {
+	factory := &RPCFactory{config: cfg, serviceName: sName, logger: logger, tlsFactory: tlsProvider}
 	return factory, nil
 }
 
@@ -77,6 +77,9 @@ func (d *RPCFactory) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error)
 		serverConfig, err := d.tlsFactory.GetFrontendServerConfig()
 		if err != nil {
 			return nil, err
+		}
+		if serverConfig == nil {
+			return opts, nil
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(serverConfig)))
 	}
@@ -99,6 +102,9 @@ func (d *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error
 		serverConfig, err := d.tlsFactory.GetInternodeServerConfig()
 		if err != nil {
 			return nil, err
+		}
+		if serverConfig == nil {
+			return opts, nil
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(serverConfig)))
 	}
