@@ -50,6 +50,7 @@ type Service struct {
 	status  int32
 	handler *Handler
 	config  *Config
+	params *resource.BootstrapParams
 
 	server *grpc.Server
 }
@@ -81,6 +82,7 @@ func NewService(
 		Resource: serviceResource,
 		status:   common.DaemonStatusInitialized,
 		config:   serviceConfig,
+		params:	  params,
 	}, nil
 }
 
@@ -99,7 +101,12 @@ func (s *Service) Start() {
 	s.Resource.Start()
 	s.handler.Start()
 
-	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+	opts, err := s.params.RPCFactory.GetInternodeGRPCServerOptions()
+	if err != nil {
+		logger.Fatal("creating grpc server options failed", tag.Error(err))
+	}
+	opts = append(opts, grpc.UnaryInterceptor(interceptor))
+	s.server = grpc.NewServer(opts...)
 	nilCheckHandler := NewNilCheckHandler(s.handler)
 	matchingservice.RegisterMatchingServiceServer(s.server, nilCheckHandler)
 	healthpb.RegisterHealthServer(s.server, s.handler)

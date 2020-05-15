@@ -95,7 +95,7 @@ func (b *clientFactory) createGRPCConnection(hostPort string) *grpc.ClientConn {
 		hostPort = localHostPort
 	}
 
-	connection, err := rpc.Dial(hostPort)
+	connection, err := rpc.Dial(hostPort, nil)
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", zap.Error(err))
 		return nil
