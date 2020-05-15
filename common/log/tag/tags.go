@@ -121,12 +121,6 @@ func WorkflowRunID(runID string) Tag {
 	return newStringTag("wf-run-id", runID)
 }
 
-// WorkflowRunID returns tag for WorkflowRunID
-func WorkflowRunIDBytes(runID []byte) Tag {
-	// Todo, we want these to print as hex-encoded (uuid format), binary tag gives us b64
-	return newBinaryTag("wf-run-id", runID)
-}
-
 // WorkflowResetBaseRunID returns tag for WorkflowResetBaseRunID
 func WorkflowResetBaseRunID(runID string) Tag {
 	return newStringTag("wf-reset-base-run-id", runID)
@@ -182,12 +176,6 @@ func BlobSizeViolationOperation(operation string) Tag {
 // WorkflowNamespaceID returns tag for WorkflowNamespaceID
 func WorkflowNamespaceID(namespaceID string) Tag {
 	return newStringTag("wf-namespace-id", namespaceID)
-}
-
-// WorkflowRunID returns tag for WorkflowRunID
-func WorkflowNamespaceIDBytes(namespaceID []byte) Tag {
-	// Todo, we want these to print as hex-encoded (uuid format), binary tag gives us b64
-	return newBinaryTag("wf-namespace-id", namespaceID)
 }
 
 // WorkflowNamespace returns tag for WorkflowNamespace
@@ -257,16 +245,6 @@ func WorkflowTreeID(treeID string) Tag {
 // WorkflowBranchID returns tag for WorkflowBranchID
 func WorkflowBranchID(branchID string) Tag {
 	return newStringTag("wf-branch-id", branchID)
-}
-
-// WorkflowTreeIDBytes returns tag for WorkflowTreeIDBytes
-func WorkflowTreeIDBytes(treeIDBytes []byte) Tag {
-	return newBinaryTag("wf-tree-id", treeIDBytes)
-}
-
-// WorkflowBranchIDBytes returns tag for WorkflowBranchIDBytes
-func WorkflowBranchIDBytes(branchIDBytes []byte) Tag {
-	return newBinaryTag("wf-branch-id", branchIDBytes)
 }
 
 // workflow task

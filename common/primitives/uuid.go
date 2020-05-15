@@ -49,6 +49,48 @@ func MustParseUUID(s string) UUID {
 	return u[:]
 }
 
+// ParseUUID returns a UUID parsed from the given string representation
+// returns:
+//  - nil if the input is empty string
+//  - error if input is malformed
+//  - UUID object if input can be parsed and is valid
+func ParseUUID(s string) (UUID, error) {
+	if s == "" {
+		return nil, nil
+	}
+	u, err := guuid.Parse(s)
+
+	if err != nil {
+		return nil, err
+	}
+	return u[:], nil
+}
+
+// MustValidateUUID parses and validates UUID contents from the given string representation
+// returns empty string if the input is empty string
+// panics if the given input is malformed
+func MustValidateUUID(s string) string {
+	MustParseUUID(s)
+	return s
+}
+
+// ValidateUUID parses and validates UUID contents from the given string representation
+// returns:
+//  - nil if the input is empty string
+//  - error if input is malformed
+//  - input if input can be parsed and is valid
+func ValidateUUID(s string) (string, error) {
+	if s == "" {
+		return "", nil
+	}
+	_, err := guuid.Parse(s)
+	if err != nil {
+		return "", err
+	}
+
+	return s, nil
+}
+
 // NewUUID generates a new random UUID
 func NewUUID() UUID {
 	return UUID(uuid.NewRandom())

@@ -136,11 +136,11 @@ type (
 		CertFile          string    `yaml:"certFile"`
 		// The path to the file containing the PEM-encoded private key of the certificate to use.
 		KeyFile           string    `yaml:"keyFile"`
-		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
-		RequireClientAuth bool      `yaml:"requireClientAuth"`
-		// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
+  	// A list of paths to files containing the PEM-encoded public key of the Certificate Authorities you wish to trust for client authentication.
 		// This value is ignored if `requireClientAuth` is not enabled.
 		ClientCAFiles     []string  `yaml:"clientCaFiles"`
+		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
+		RequireClientAuth bool      `yaml:"requireClientAuth"`
 	}
 
 	// ClientTLS contains TLS configuration for clients.

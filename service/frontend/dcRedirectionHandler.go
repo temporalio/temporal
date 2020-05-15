@@ -35,7 +35,6 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/config"
 )
@@ -599,7 +598,7 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeat(
 		return nil, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -754,7 +753,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceled(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -819,7 +818,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompleted(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -884,7 +883,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailed(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -949,7 +948,7 @@ func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskCompleted(
 		return nil, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -984,7 +983,7 @@ func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskFailed(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, primitives.UUIDString(token.GetNamespaceId()), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:

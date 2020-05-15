@@ -37,14 +37,13 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 // verifyTaskVersion, will return true if failover version check is successful
 func verifyTaskVersion(
 	shard ShardContext,
 	logger log.Logger,
-	namespaceID []byte,
+	namespaceID string,
 	version int64,
 	taskVersion int64,
 	task interface{},
@@ -55,19 +54,19 @@ func verifyTaskVersion(
 	}
 
 	// the first return value is whether this task is valid for further processing
-	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(primitives.UUIDString(namespaceID))
+	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
-		logger.Debug("Cannot find namespaceID", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Error(err))
+		logger.Debug("Cannot find namespaceID", tag.WorkflowNamespaceID(namespaceID), tag.Error(err))
 		return false, err
 	}
 	if !namespaceEntry.IsGlobalNamespace() {
-		logger.Debug("NamespaceID is not active, task version check pass", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Task(task))
+		logger.Debug("NamespaceID is not active, task version check pass", tag.WorkflowNamespaceID(namespaceID), tag.Task(task))
 		return true, nil
 	} else if version != taskVersion {
-		logger.Debug("NamespaceID is active, task version != target version", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Task(task), tag.TaskVersion(version))
+		logger.Debug("NamespaceID is active, task version != target version", tag.WorkflowNamespaceID(namespaceID), tag.Task(task), tag.TaskVersion(version))
 		return false, nil
 	}
-	logger.Debug("NamespaceID is active, task version == target version", tag.WorkflowNamespaceIDBytes(namespaceID), tag.Task(task), tag.TaskVersion(version))
+	logger.Debug("NamespaceID is active, task version == target version", tag.WorkflowNamespaceID(namespaceID), tag.Task(task), tag.TaskVersion(version))
 	return true, nil
 }
 
@@ -174,9 +173,9 @@ func initializeLoggerForTask(
 		tag.TaskVisibilityTimestamp(t.UnixNano()),
 		tag.FailoverVersion(task.GetVersion()),
 		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowNamespaceIDBytes(task.GetNamespaceId()),
+		tag.WorkflowNamespaceID(task.GetNamespaceId()),
 		tag.WorkflowID(task.GetWorkflowId()),
-		tag.WorkflowRunIDBytes(task.GetRunId()),
+		tag.WorkflowRunID(task.GetRunId()),
 	)
 
 	switch task := task.(type) {

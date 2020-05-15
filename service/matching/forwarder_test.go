@@ -34,15 +34,15 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	tasklistpb "go.temporal.io/temporal-proto/tasklist"
+
 	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
-	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
 type ForwarderTestSuite struct {
@@ -100,9 +100,9 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 	t.NotNil(request)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
 	t.Equal(tasklistpb.TaskListKind(t.fwdr.taskListKind), request.TaskList.GetKind())
-	t.Equal(primitives.UUIDString(taskInfo.Data.GetNamespaceId()), request.GetNamespaceId())
+	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetNamespaceId())
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
-	t.Equal(primitives.UUIDString(taskInfo.Data.GetRunId()), request.GetExecution().GetRunId())
+	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
 
 	schedToStart := request.GetScheduleToStartTimeoutSeconds()
@@ -128,9 +128,9 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
 	t.Equal(tasklistpb.TaskListKind(t.fwdr.taskListKind), request.TaskList.GetKind())
 	t.Equal(t.taskList.namespaceID, request.GetNamespaceId())
-	t.Equal(primitives.UUIDString(taskInfo.Data.GetNamespaceId()), request.GetSourceNamespaceId())
+	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetSourceNamespaceId())
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
-	t.Equal(primitives.UUIDString(taskInfo.Data.GetRunId()), request.GetExecution().GetRunId())
+	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduleId(), request.GetScheduleId())
 	t.EqualValues(convert.Int32Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.Data.Expiry).ToTime()).Seconds()),
 		request.GetScheduleToStartTimeoutSeconds())

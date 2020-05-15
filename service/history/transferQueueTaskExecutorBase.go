@@ -46,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/service/worker/archiver"
 )
 
@@ -90,9 +89,9 @@ func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TransferTaskInfo,
 ) (string, executionpb.WorkflowExecution) {
 
-	return primitives.UUIDString(task.GetNamespaceId()), executionpb.WorkflowExecution{
+	return task.GetNamespaceId(), executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUIDString(task.GetRunId()),
+		RunId:      task.GetRunId(),
 	}
 }
 
@@ -109,11 +108,11 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	}
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
-		NamespaceId:       primitives.UUIDString(task.GetTargetNamespaceId()),
-		SourceNamespaceId: primitives.UUIDString(task.GetNamespaceId()),
+		NamespaceId:       task.GetTargetNamespaceId(),
+		SourceNamespaceId: task.GetNamespaceId(),
 		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
-			RunId:      primitives.UUIDString(task.GetRunId()),
+			RunId:      task.GetRunId(),
 		},
 		TaskList:                      &tasklistpb.TaskList{Name: task.TaskList},
 		ScheduleId:                    task.GetScheduleId(),
@@ -137,10 +136,10 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 	}
 
 	_, err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
-		NamespaceId: primitives.UUIDString(task.GetNamespaceId()),
+		NamespaceId: task.GetNamespaceId(),
 		Execution: &executionpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
-			RunId:      primitives.UUIDString(task.GetRunId()),
+			RunId:      task.GetRunId(),
 		},
 		TaskList:                      tasklist,
 		ScheduleId:                    task.GetScheduleId(),

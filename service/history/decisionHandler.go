@@ -47,7 +47,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/payloads"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -122,7 +121,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 		RunId:      req.WorkflowExecution.RunId,
 	}
 
-	return handler.historyEngine.updateWorkflowExecutionWithAction(ctx, primitives.UUIDString(namespaceID), execution,
+	return handler.historyEngine.updateWorkflowExecutionWithAction(ctx, namespaceID, execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -168,7 +167,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	requestID := req.GetRequestId()
 
 	var resp *historyservice.RecordDecisionTaskStartedResponse
-	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, primitives.UUIDString(namespaceID), execution,
+	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, namespaceID, execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -198,7 +197,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			if decision.StartedID != common.EmptyEventID {
 				// If decision is started as part of the current request scope then return a positive response
 				if decision.RequestID == requestID {
-					resp, err = handler.createRecordDecisionTaskStartedResponse(primitives.UUIDString(namespaceID), mutableState, decision, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
 					if err != nil {
 						return nil, err
 					}
@@ -217,7 +216,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 				return nil, serviceerror.NewInternal("Unable to add DecisionTaskStarted event to history.")
 			}
 
-			resp, err = handler.createRecordDecisionTaskStartedResponse(primitives.UUIDString(namespaceID), mutableState, decision, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, mutableState, decision, req.PollRequest.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -249,10 +248,10 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 
 	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
-		RunId:      primitives.UUIDString(token.GetRunId()),
+		RunId:      token.GetRunId(),
 	}
 
-	return handler.historyEngine.updateWorkflowExecution(ctx, primitives.UUIDString(namespaceID), workflowExecution, true,
+	return handler.historyEngine.updateWorkflowExecution(ctx, namespaceID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -289,7 +288,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 
 	workflowExecution := executionpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
-		RunId:      primitives.UUIDString(token.GetRunId()),
+		RunId:      token.GetRunId(),
 	}
 
 	clientHeaders := headers.GetValues(ctx, headers.ClientVersionHeaderName, headers.ClientFeatureVersionHeaderName, headers.ClientImplHeaderName)
@@ -297,7 +296,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	clientFeatureVersion := clientHeaders[1]
 	clientImpl := clientHeaders[2]
 
-	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, primitives.UUIDString(namespaceID), workflowExecution)
+	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, workflowExecution)
 	if err != nil {
 		return nil, err
 	}
@@ -451,8 +450,8 @@ Update_History_Loop:
 			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.FailedDecisionsCounter)
 			handler.logger.Info("Failing the decision.", tag.WorkflowDecisionFailCause(int64(failDecision.cause)),
 				tag.WorkflowID(token.GetWorkflowId()),
-				tag.WorkflowRunIDBytes(token.GetRunId()),
-				tag.WorkflowNamespaceIDBytes(namespaceID))
+				tag.WorkflowRunID(token.GetRunId()),
+				tag.WorkflowNamespaceID(namespaceID))
 			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, payloads.EncodeString(failDecision.message), request)
 			if err != nil {
 				return nil, err
@@ -564,7 +563,7 @@ Update_History_Loop:
 		resp = &historyservice.RespondDecisionTaskCompletedResponse{}
 		if request.GetReturnNewDecisionTask() && createNewDecisionTask {
 			decision, _ := msBuilder.GetDecisionInfo(newDecisionTaskScheduledID)
-			resp.StartedResponse, err = handler.createRecordDecisionTaskStartedResponse(primitives.UUIDString(namespaceID), msBuilder, decision, request.GetIdentity())
+			resp.StartedResponse, err = handler.createRecordDecisionTaskStartedResponse(namespaceID, msBuilder, decision, request.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -665,7 +664,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState
 			result.GetAnswer().Size(),
 			sizeLimitWarn,
 			sizeLimitError,
-			primitives.UUIDString(namespaceID),
+			namespaceID,
 			workflowID,
 			runID,
 			scope,

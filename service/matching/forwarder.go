@@ -31,14 +31,14 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common/convert"
-	"github.com/temporalio/temporal/common/primitives"
-	"github.com/temporalio/temporal/common/quotas"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
+
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common/convert"
+	"github.com/temporalio/temporal/common/quotas"
 )
 
 type (
@@ -150,7 +150,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	switch fwdr.taskListID.taskType {
 	case tasklistpb.TaskListType_Decision:
 		_, err = fwdr.client.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
-			NamespaceId: primitives.UUIDString(task.event.Data.GetNamespaceId()),
+			NamespaceId: task.event.Data.GetNamespaceId(),
 			Execution:   task.workflowExecution(),
 			TaskList: &tasklistpb.TaskList{
 				Name: name,
@@ -164,7 +164,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	case tasklistpb.TaskListType_Activity:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 			NamespaceId:       fwdr.taskListID.namespaceID,
-			SourceNamespaceId: primitives.UUIDString(task.event.Data.GetNamespaceId()),
+			SourceNamespaceId: task.event.Data.GetNamespaceId(),
 			Execution:         task.workflowExecution(),
 			TaskList: &tasklistpb.TaskList{
 				Name: name,

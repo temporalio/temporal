@@ -45,7 +45,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -408,7 +407,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return err
 	}
 
-	namespaceID := primitives.UUIDString(task.GetNamespaceId())
+	namespaceID := task.GetNamespaceId()
 	targetNamespaceID := namespaceID
 	if activityInfo.NamespaceID != "" {
 		targetNamespaceID = activityInfo.NamespaceID
@@ -426,13 +425,13 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 			if err != nil {
 				return serviceerror.NewInternal("unable to re-schedule activity across namespace.")
 			}
-			targetNamespaceID = primitives.UUIDString(namespaceEntry.GetInfo().Id)
+			targetNamespaceID = namespaceEntry.GetInfo().Id
 		}
 	}
 
 	execution := &executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUIDString(task.GetRunId())}
+		RunId:      task.GetRunId()}
 	taskList := &tasklistpb.TaskList{
 		Name: activityInfo.TaskList,
 	}

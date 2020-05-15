@@ -60,7 +60,6 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/payloads"
 	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -127,7 +126,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.mockEventsCache
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
-		&persistenceblobs.NamespaceInfo{Id: testNamespaceUUID}, &persistenceblobs.NamespaceConfig{}, "", nil,
+		&persistenceblobs.NamespaceInfo{Id: testNamespaceID}, &persistenceblobs.NamespaceConfig{}, "", nil,
 	), nil).AnyTimes()
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -834,7 +833,7 @@ func (s *engine2Suite) createExecutionStartedState(we executionpb.WorkflowExecut
 	if startDecision {
 		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	}
-	_ = msBuilder.SetHistoryTree(primitives.MustParseUUID(we.GetRunId()))
+	_ = msBuilder.SetHistoryTree(we.GetRunId())
 
 	return msBuilder
 }
@@ -852,7 +851,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	tl := "testTaskList"
 	taskToken := &tokengenpb.Task{
 		WorkflowId: "wId",
-		RunId:      primitives.MustParseUUID(we.GetRunId()),
+		RunId:      we.GetRunId(),
 		ScheduleId: 2,
 	}
 	serializedTaskToken, _ := taskToken.Marshal()

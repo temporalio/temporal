@@ -41,7 +41,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/service/worker/archiver"
 )
 
@@ -134,9 +133,9 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 	}
 	executionInfo := executionpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
-		RunId:      primitives.UUIDString(task.GetRunId()),
+		RunId:      task.GetRunId(),
 	}
-	ctx := newWorkflowExecutionContext(primitives.UUIDString(task.GetNamespaceId()), executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
+	ctx := newWorkflowExecutionContext(task.GetNamespaceId(), executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()

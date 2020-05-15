@@ -35,7 +35,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/primitives"
 )
 
 // NOTE: the counterpart of namespace replication receiving logic is in service/worker package
@@ -68,7 +67,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 	configVersion int64, failoverVersion int64, isGlobalNamespaceEnabled bool) error {
 
 	if !isGlobalNamespaceEnabled {
-		namespaceReplicator.logger.Warn("Should not replicate non global namespace", tag.WorkflowNamespaceIDBytes(info.Id))
+		namespaceReplicator.logger.Warn("Should not replicate non global namespace", tag.WorkflowNamespaceID(info.Id))
 		return nil
 	}
 
@@ -76,7 +75,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(names
 	task := &replicationgenpb.ReplicationTask_NamespaceTaskAttributes{
 		NamespaceTaskAttributes: &replicationgenpb.NamespaceTaskAttributes{
 			NamespaceOperation: namespaceOperation,
-			Id:                 primitives.UUIDString(info.Id),
+			Id:                 info.Id,
 			Info: &namespacepb.NamespaceInfo{
 				Name:        info.Name,
 				Status:      info.Status,

@@ -164,15 +164,15 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
 }
 
 func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivityReplicationTask() {
-	namespaceID := uuid.NewRandom()
+	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
-	runID := uuid.NewRandom()
+	runID := uuid.NewRandom().String()
 	task := &replicationgenpb.ReplicationTask{
 		TaskType: replicationgenpb.ReplicationTaskType_SyncActivityTask,
 		Attributes: &replicationgenpb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &replicationgenpb.SyncActivityTaskAttributes{
-			NamespaceId: namespaceID.String(),
+			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
-			RunId:       runID.String(),
+			RunId:       runID,
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
@@ -190,15 +190,15 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 }
 
 func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryReplicationTask() {
-	namespaceID := uuid.NewRandom()
+	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
-	runID := uuid.NewRandom()
+	runID := uuid.NewRandom().String()
 	task := &replicationgenpb.ReplicationTask{
 		TaskType: replicationgenpb.ReplicationTaskType_HistoryTask,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &replicationgenpb.HistoryTaskAttributes{
-			NamespaceId: namespaceID.String(),
+			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
-			RunId:       runID.String(),
+			RunId:       runID,
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
@@ -216,9 +216,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 }
 
 func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2ReplicationTask() {
-	namespaceID := uuid.NewRandom()
+	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
-	runID := uuid.NewRandom()
+	runID := uuid.NewRandom().String()
 	events := []*eventpb.HistoryEvent{
 		{
 			EventId: 1,
@@ -231,9 +231,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	task := &replicationgenpb.ReplicationTask{
 		TaskType: replicationgenpb.ReplicationTaskType_HistoryV2Task,
 		Attributes: &replicationgenpb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationgenpb.HistoryTaskV2Attributes{
-			NamespaceId: namespaceID.String(),
+			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
-			RunId:       runID.String(),
+			RunId:       runID,
 			Events: &commonpb.DataBlob{
 				EncodingType: commonpb.EncodingType_Proto3,
 				Data:         data.Data,
