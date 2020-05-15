@@ -25,7 +25,6 @@
 package membership
 
 import (
-	"strings"
 	"testing"
 	"time"
 
