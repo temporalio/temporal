@@ -33,7 +33,7 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 )
 
-type localStoreTlsFactory struct {
+type localStoreTlsProvider struct {
 	sync.RWMutex
 
 	settings *config.RootTLS
@@ -47,8 +47,8 @@ type localStoreTlsFactory struct {
 	frontendClientConfig  *tls.Config
 }
 
-func NewLocalStoreTlsFactory(tlsConfig *config.RootTLS) (TLSConfigProvider, error) {
-	return &localStoreTlsFactory{
+func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS) (TLSConfigProvider, error) {
+	return &localStoreTlsProvider{
 		internodeCertProvider: &localStoreCertProvider{tlsSettings: &tlsConfig.Internode},
 		frontendCertProvider:  &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
 		RWMutex:               sync.RWMutex{},
@@ -56,23 +56,23 @@ func NewLocalStoreTlsFactory(tlsConfig *config.RootTLS) (TLSConfigProvider, erro
 	}, nil
 }
 
-func (s *localStoreTlsFactory) GetInternodeClientConfig() (*tls.Config, error) {
+func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(&s.internodeClientConfig, newClientTLSConfig, s.internodeCertProvider, s.internodeCertProvider)
 }
 
-func (s *localStoreTlsFactory) GetFrontendClientConfig() (*tls.Config, error) {
+func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(&s.frontendClientConfig, newClientTLSConfig, s.internodeCertProvider, s.frontendCertProvider)
 }
 
-func (s *localStoreTlsFactory) GetFrontendServerConfig() (*tls.Config, error) {
+func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(&s.frontendServerConfig, newServerTLSConfig, s.frontendCertProvider, s.frontendCertProvider)
 }
 
-func (s *localStoreTlsFactory) GetInternodeServerConfig() (*tls.Config, error) {
+func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(&s.internodeServerConfig, newServerTLSConfig, s.internodeCertProvider, s.internodeCertProvider)
 }
 
-func (s *localStoreTlsFactory) getOrCreateConfig(
+func (s *localStoreTlsProvider) getOrCreateConfig(
 	cachedConfig **tls.Config,
 	configConstructor tlsConfigConstructor,
 	localCertProvider CertProvider,
@@ -109,6 +109,11 @@ func newServerTLSConfig(certProvider CertProvider, settingsProvider CertProvider
 	serverCert, err := certProvider.FetchServerCertificate()
 	if err != nil {
 		return nil, fmt.Errorf("loading server tls certificate failed: %v", err)
+	}
+
+	// tls disabled, responsibility of cert provider above to error otherwise
+	if serverCert == nil {
+		return nil, nil
 	}
 
 	// Default to NoClientAuth
@@ -149,7 +154,16 @@ func newClientTLSConfig(localProvider CertProvider, remoteProvider CertProvider)
 		if err != nil {
 			return nil, err
 		}
+
+		if cert == nil {
+			return nil, fmt.Errorf("client auth required, but no certificate provided")
+		}
 		clientCerts = []tls.Certificate{*cert}
+	}
+
+	// No client settings
+	if clientCerts == nil && serverCa == nil {
+		return nil, nil
 	}
 
 	return &tls.Config{

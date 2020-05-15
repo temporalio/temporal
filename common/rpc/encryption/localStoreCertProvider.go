@@ -52,6 +52,10 @@ func (s *localStoreCertProvider) GetSettings() *config.GroupTLS {
 }
 
 func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, error) {
+	if s.tlsSettings.Server.CertFile == "" {
+		return nil, nil
+	}
+
 	// Check under a read lock first
 	s.RLock()
 	if s.serverCert != nil {
@@ -74,6 +78,10 @@ func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, err
 }
 
 func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
+	if s.tlsSettings.Server.ClientCAFiles == nil {
+		return nil, nil
+	}
+
 	// Check under a read lock first
 	s.RLock()
 	if s.clientCAs != nil {
@@ -99,6 +107,9 @@ func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
 }
 
 func (s *localStoreCertProvider) FetchServerRootCAsForClient() (*x509.CertPool, error) {
+	if s.tlsSettings.Client.RootCAFiles == nil {
+		return nil, nil
+	}
 	// Check under a read lock first
 	s.RLock()
 	if s.serverCAs != nil {
