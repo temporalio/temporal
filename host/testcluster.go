@@ -57,7 +57,7 @@ type (
 	TestCluster struct {
 		testBase     persistencetests.TestBase
 		archiverBase *ArchiverBase
-		host         Cadence
+		host         Temporal
 	}
 
 	// ArchiverBase is a base struct for archiver provider being used in integration tests
@@ -174,7 +174,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
-	cadenceParams := &CadenceParams{
+	cadenceParams := &TemporalParams{
 		ClusterMetadata:                  clusterMetadata,
 		PersistenceConfig:                pConfig,
 		MessagingClient:                  messagingClient,
@@ -203,7 +203,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}
 
-	cluster := NewCadence(cadenceParams)
+	cluster := NewTemporal(cadenceParams)
 	if err := cluster.Start(); err != nil {
 		return nil, err
 	}
