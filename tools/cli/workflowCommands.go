@@ -207,7 +207,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		TaskList: &tasklistpb.TaskList{
 			Name: taskList,
 		},
-		Input:                           payloads.EncodeString(input),
+		Input:                           input,
 		WorkflowExecutionTimeoutSeconds: int32(et),
 		WorkflowTaskTimeoutSeconds:      int32(dt),
 		Identity:                        getCliIdentity(),
@@ -257,7 +257,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 			{"Type", workflowType},
 			{"Namespace", namespace},
 			{"Task List", taskList},
-			{"Args", truncate(input)}, // in case of large input
+			{"Args", truncate(payloads.ToString(input))}, // in case of large input
 		}
 		table.SetBorder(false)
 		table.SetColumnSeparator(":")
@@ -314,7 +314,15 @@ func processMemo(c *cli.Context) map[string]*commonpb.Payload {
 		memoKeys = strings.Split(rawMemoKey, " ")
 	}
 
-	rawMemoValue := processJSONInputHelper(c, jsonTypeMemo)
+	rawMemoValue := string(processJSONInputHelper(c, jsonTypeMemo))
+	if rawMemoValue == "" {
+		return nil
+	}
+
+	if err := validateJSONs(rawMemoValue); err != nil {
+		ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
+	}
+
 	var memoValues []string
 
 	var sc fastjson.Scanner
@@ -475,7 +483,7 @@ func SignalWorkflow(c *cli.Context) {
 			RunId:      rid,
 		},
 		SignalName: name,
-		Input:      payloads.EncodeString(input),
+		Input:      input,
 		Identity:   getCliIdentity(),
 	})
 
@@ -520,8 +528,8 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 			QueryType: queryType,
 		},
 	}
-	if input != "" {
-		queryRequest.Query.QueryArgs = payloads.EncodeString(input)
+	if input != nil {
+		queryRequest.Query.QueryArgs = input
 	}
 	if c.IsSet(FlagQueryRejectCondition) {
 		var rejectCondition querypb.QueryRejectCondition
