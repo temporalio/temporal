@@ -120,7 +120,6 @@ func (c *canaryImpl) Run() error {
 
 func (c *canaryImpl) startWorker() error {
 	options := worker.Options{
-		Logger:                             c.runtime.logger,
 		BackgroundActivityContext:          c.newActivityContext(),
 		MaxConcurrentActivityExecutionSize: activityWorkerMaxExecutors,
 	}
