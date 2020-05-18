@@ -1540,7 +1540,7 @@ func (d *DecisionTask) SetTaskID(id int64) {
 }
 
 // GetVisibilityTimestamp get the visibility timestamp
-func (d ReplicationTaskInfoWrapper) GetVisibilityTimestamp() *types.Timestamp {
+func (d *ReplicationTaskInfoWrapper) GetVisibilityTimestamp() *types.Timestamp {
 	return &types.Timestamp{}
 }
 

@@ -213,7 +213,7 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(
 func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
 	task *persistenceblobs.ReplicationTaskInfo,
 ) error {
-	replicationTask, err := p.toReplicationTask(context.Background(), persistence.ReplicationTaskInfoWrapper{task})
+	replicationTask, err := p.toReplicationTask(context.Background(), &persistence.ReplicationTaskInfoWrapper{task})
 	if err != nil || replicationTask == nil {
 		return err
 	}
