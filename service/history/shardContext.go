@@ -877,6 +877,8 @@ func (s *shardContextImpl) closeShard() {
 		return
 	}
 
+	s.logger.Info("Close shard")
+
 	go func() {
 		s.closeCallback(s.shardID, s.shardItem)
 	}()
@@ -916,32 +918,34 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.RangeID})
 	if err != nil {
+		// Failure in updating shard to grab new RangeID
+		s.logger.Error("Persistent store operation failure",
+			tag.StoreOperationUpdateShard,
+			tag.Error(err),
+			tag.ShardRangeID(updatedShardInfo.RangeID),
+			tag.PreviousShardRangeID(s.shardInfo.RangeID),
+		)
 		// Shard is stolen, trigger history engine shutdown
 		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
 			s.closeShard()
-		} else {
-			// Failure in updating shard to grab new RangeID
-			s.logger.Error("Persistent store operation failure",
-				tag.StoreOperationUpdateShard,
-				tag.Error(err),
-				tag.ShardRangeID(updatedShardInfo.RangeID),
-				tag.PreviousShardRangeID(s.shardInfo.RangeID))
 		}
 		return err
 	}
 
 	// Range is successfully updated in cassandra now update shard context to reflect new range
+	s.logger.Info("Range updated for shardID",
+		tag.ShardRangeID(updatedShardInfo.RangeID),
+		tag.PreviousShardRangeID(s.shardInfo.RangeID),
+		tag.Number(s.transferSequenceNumber),
+		tag.NextNumber(s.maxTransferSequenceNumber),
+	)
+
 	s.transferSequenceNumber = updatedShardInfo.RangeID << s.config.RangeSizeBits
 	s.maxTransferSequenceNumber = (updatedShardInfo.RangeID + 1) << s.config.RangeSizeBits
 	s.transferMaxReadLevel = s.transferSequenceNumber - 1
 	atomic.StoreInt64(&s.rangeID, updatedShardInfo.RangeID)
 	s.shardInfo = updatedShardInfo
 
-	s.logger.Info("Range updated for shardID",
-		tag.ShardID(s.shardInfo.ShardID),
-		tag.ShardRangeID(s.shardInfo.RangeID),
-		tag.Number(s.transferSequenceNumber),
-		tag.NextNumber(s.maxTransferSequenceNumber))
 	return nil
 }
 
@@ -1253,6 +1257,8 @@ func acquireShard(
 	if err1 != nil {
 		return nil, err1
 	}
+
+	shardItem.logger.Info("Acquired shard")
 
 	return context, nil
 }

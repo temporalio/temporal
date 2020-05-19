@@ -418,6 +418,11 @@ func ShardID(shardID int) Tag {
 	return newInt("shard-id", shardID)
 }
 
+// ShardItem returns tag for ShardItem
+func ShardItem(shardItem interface{}) Tag {
+	return newObjectTag("shard-item", shardItem)
+}
+
 // ShardTime returns tag for ShardTime
 func ShardTime(shardTime interface{}) Tag {
 	return newObjectTag("shard-time", shardTime)

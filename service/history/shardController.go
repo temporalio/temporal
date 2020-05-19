@@ -109,7 +109,7 @@ func newHistoryShardsItem(
 ) (*historyShardsItem, error) {
 
 	hostIdentity := resource.GetHostInfo().Identity()
-	return &historyShardsItem{
+	shardItem := &historyShardsItem{
 		Resource:        resource,
 		shardID:         shardID,
 		status:          historyShardsItemStatusInitialized,
@@ -117,7 +117,11 @@ func newHistoryShardsItem(
 		config:          config,
 		logger:          resource.GetLogger().WithTags(tag.ShardID(shardID), tag.Address(hostIdentity)),
 		throttledLogger: resource.GetThrottledLogger().WithTags(tag.ShardID(shardID), tag.Address(hostIdentity)),
-	}, nil
+	}
+	shardItem.logger = shardItem.logger.WithTags(tag.ShardItem(shardItem))
+	shardItem.throttledLogger = shardItem.throttledLogger.WithTags(tag.ShardItem(shardItem))
+
+	return shardItem, nil
 }
 
 func (c *shardController) Start() {
@@ -195,7 +199,7 @@ func (c *shardController) removeEngineForShard(shardID int, shardItem *historySh
 
 func (c *shardController) shardClosedCallback(shardID int, shardItem *historyShardsItem) {
 	c.metricsScope.IncCounter(metrics.ShardClosedCounter)
-	c.logger.Info("", tag.LifeCycleStopping, tag.ComponentShard, tag.ShardID(shardID))
+	c.logger.Info("", tag.LifeCycleStopping, tag.ComponentShardItem, tag.ShardID(shardID), tag.ShardItem(shardItem))
 	c.removeEngineForShard(shardID, shardItem)
 }
 
@@ -451,6 +455,11 @@ func (i *historyShardsItem) logInvalidStatus() string {
 		i.GetHostInfo().Identity(), i.status, i.shardID)
 	i.logger.Error(msg)
 	return msg
+}
+
+func (i *historyShardsItem) String() string {
+	// use memory address as shard item's identity
+	return fmt.Sprintf("%p", i)
 }
 
 func isShardOwnershiptLostError(err error) bool {
