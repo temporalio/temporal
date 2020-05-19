@@ -33,7 +33,6 @@ import (
 	sdkclient "go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/worker"
 	"go.temporal.io/temporal/workflow"
-	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cluster"
@@ -85,8 +84,7 @@ type (
 	// passed around within the scanner workflows / activities
 	scannerContext struct {
 		resource.Resource
-		cfg       Config
-		zapLogger *zap.Logger
+		cfg Config
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -108,15 +106,10 @@ func New(
 ) *Scanner {
 
 	cfg := params.Config
-	zapLogger, err := zap.NewProduction()
-	if err != nil {
-		resource.GetLogger().Fatal("failed to initialize zap logger", tag.Error(err))
-	}
 	return &Scanner{
 		context: scannerContext{
-			Resource:  resource,
-			cfg:       cfg,
-			zapLogger: zapLogger,
+			Resource: resource,
+			cfg:      cfg,
 		},
 	}
 }
@@ -124,7 +117,6 @@ func New(
 // Start starts the scanner
 func (s *Scanner) Start() error {
 	workerOpts := worker.Options{
-		Logger:                                 s.context.zapLogger,
 		MaxConcurrentActivityExecutionSize:     maxConcurrentActivityExecutionSize,
 		MaxConcurrentDecisionTaskExecutionSize: maxConcurrentDecisionTaskExecutionSize,
 		BackgroundActivityContext:              context.WithValue(context.Background(), scannerContextKey, s.context),
