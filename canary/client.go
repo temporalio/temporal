@@ -86,6 +86,7 @@ func newCadenceClient(namespace string, runtime *RuntimeContext) (cadenceClient,
 			Namespace:    namespace,
 			MetricsScope: runtime.metrics,
 			Tracer:       tracer,
+			Logger:       runtime.logger,
 		},
 	)
 
@@ -98,6 +99,7 @@ func newCadenceClient(namespace string, runtime *RuntimeContext) (cadenceClient,
 			HostPort:     runtime.hostPort,
 			MetricsScope: runtime.metrics,
 			Tracer:       tracer,
+			Logger:       runtime.logger,
 		},
 	)
 	if err != nil {

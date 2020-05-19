@@ -174,13 +174,17 @@ func (s *server) startService() common.Daemon {
 	)
 
 	if s.cfg.PublicClient.HostPort == "" {
-		log.Fatalf("need to provide an endpoint config for PublicClient")
+		log.Fatal("need to provide an endpoint config for PublicClient")
 	} else {
-		var err error
+		zapLogger, err := zap.NewProduction()
+		if err != nil {
+			log.Fatalf("failed to initialize zap logger: %v", err)
+		}
 		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
 			HostPort:     s.cfg.PublicClient.HostPort,
 			Namespace:    common.SystemLocalNamespace,
 			MetricsScope: params.MetricScope,
+			Logger:       zapLogger,
 		})
 		if err != nil {
 			log.Fatalf("failed to create public client: %v", err)
