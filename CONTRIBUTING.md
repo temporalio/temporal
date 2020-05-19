@@ -18,14 +18,6 @@ git clone https://github.com/uber/cadence.git src/github.com/uber/cadence
 cd $GOPATH/src/github.com/uber/cadence
 ```
 
-## Dependency management
-
-Dependencies are recorded in `Gopkg.toml` and managed by dep. If you're not 
-familiar with dep, read the [docs](https://golang.github.io/dep/). The Makefile 
-will call `install-dep.sh` to install dep on Mac or Linux. You can use this 
-script directly, but it will be run automatically with  `make` commands. To 
-check dependencies, run `dep ensure`. 
-
 ## Licence headers
 
 This project is Open Source Software, and requires a header at the beginning of
@@ -67,17 +59,25 @@ make bins
 
 ## Testing
 
-Before running the tests you must have `cassandra` and `kafka` running locally:
+Before running the tests you must have `cassandra`, `kafka`, and its `zookeeper` dependency:
 
 ```bash
-# for OS X
+# install cassandra
+# you can reduce memory used by cassandra (by default 4GB), by following instructions here: http://codefoundries.com/developer/cassandra/cassandra-installation-mac.html
 brew install cassandra
 
-# start cassandra
-/usr/local/bin/cassandra
-```
+# install zookeeper compatible with jdk@8 that OSX has
+brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/6d8197bbb5f77e62d51041a3ae552ce2f8ff1344/Formula/zookeeper.rb
 
-To run kafka, follow kafka quickstart guide [here](https://kafka.apache.org/quickstart)
+# install kafka compatible with zookeeper 3.4.14
+brew install --ignore-dependencies https://raw.githubusercontent.com/Homebrew/homebrew-core/6d8197bbb5f77e62d51041a3ae552ce2f8ff1344/Formula/kafka.rb
+
+# start services
+brew services start cassandra
+brew services start zookeeper
+brew services start kafka
+
+```
 
 Run all the tests:
 
@@ -93,5 +93,5 @@ go test -v
 # run single test
 go test -v <path> -run <TestSuite> -testify.m <TestSpercificTaskName>
 # example:
-go test -v github.com/uber/cadence/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
+go test -v github.com/uber/cadence/common/persistence/persistence-tests -run TestVisibilitySamplingSuite -testify.m TestListClosedWorkflowExecutions
 ```
