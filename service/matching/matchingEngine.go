@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -600,7 +600,10 @@ func (e *matchingEngineImpl) ListTaskListPartitions(
 	return &resp, nil
 }
 
-func (e *matchingEngineImpl) listTaskListPartitions(request *m.ListTaskListPartitionsRequest, taskListType int) ([]*workflow.TaskListPartitionMetadata, error) {
+func (e *matchingEngineImpl) listTaskListPartitions(
+	request *m.ListTaskListPartitionsRequest,
+	taskListType int,
+) ([]*workflow.TaskListPartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
 		request.GetDomain(),
 		*request.TaskList,
@@ -609,11 +612,8 @@ func (e *matchingEngineImpl) listTaskListPartitions(request *m.ListTaskListParti
 	if err != nil {
 		return nil, err
 	}
-	partitionHostInfo := make([]*workflow.TaskListPartitionMetadata, len(partitions))
 
-	if err != nil {
-		return nil, err
-	}
+	var partitionHostInfo []*workflow.TaskListPartitionMetadata
 	for _, partition := range partitions {
 		if host, err := e.getHostInfo(partition); err != nil {
 			partitionHostInfo = append(partitionHostInfo,

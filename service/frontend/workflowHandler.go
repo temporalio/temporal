@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -3228,7 +3228,10 @@ func (wh *WorkflowHandler) DescribeTaskList(
 }
 
 // ListTaskListPartitions returns all the partition and host for a taskList
-func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *gen.ListTaskListPartitionsRequest) (resp *gen.ListTaskListPartitionsResponse, retError error) {
+func (wh *WorkflowHandler) ListTaskListPartitions(
+	ctx context.Context,
+	request *gen.ListTaskListPartitionsRequest,
+) (resp *gen.ListTaskListPartitionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListTaskListPartitionsScope, request)
