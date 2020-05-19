@@ -306,7 +306,8 @@ func (s *Service) Stop() {
 	s.GetLogger().Info("ShutdownHandler: Draining traffic")
 	time.Sleep(requestDrainTime)
 
-	s.server.GracefulStop()
+	// TODO: Change this to GracefulStop when integration tests are refactored.
+	s.server.Stop()
 	s.Resource.Stop()
 	s.params.Logger.Info("frontend stopped")
 }

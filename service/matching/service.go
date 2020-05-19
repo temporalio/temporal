@@ -130,7 +130,8 @@ func (s *Service) Stop() {
 	s.GetLogger().Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(s.config.ShutdownDrainDuration())
 
-	s.server.GracefulStop()
+	// TODO: Change this to GracefulStop when integration tests are refactored.
+	s.server.Stop()
 
 	s.handler.Stop()
 	s.Resource.Stop()
