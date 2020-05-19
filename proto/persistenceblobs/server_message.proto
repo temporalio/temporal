@@ -43,6 +43,10 @@ message ImmutableClusterMetadata {
     int32 historyShardCount = 2;
 }
 
+enum TimerTaskStatus2 {
+  Chicken = 0;
+}
+
 message ActivityInfo {
     int64 version = 1;
     int64 scheduledEventBatchId = 2;
@@ -61,7 +65,7 @@ message ActivityInfo {
     int32 heartbeatTimeoutSeconds = 15;
     bool cancelRequested = 16;
     int64 cancelRequestId = 17;
-    int32 timerTaskStatus = 18;
+    TimerTaskStatus2 timerTaskStatus = 18;
     int32 attempt = 19;
     string taskList = 20;
     string startedIdentity = 21;

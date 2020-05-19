@@ -31,6 +31,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/temporalio/temporal/.gen/proto/common"
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 )
 
@@ -531,8 +532,8 @@ func NumberDeleted(n int) Tag {
 }
 
 // TimerTaskStatus returns tag for TimerTaskStatus
-func TimerTaskStatus(timerTaskStatus int32) Tag {
-	return newInt32("timer-task-status", timerTaskStatus)
+func TimerTaskStatus(timerTaskStatus persistenceblobs.TimerTaskStatus2) Tag {
+	return newInt32("timer-task-status", int32(timerTaskStatus))
 }
 
 // retry

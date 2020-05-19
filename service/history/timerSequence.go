@@ -166,6 +166,7 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load activity info %v", firstTimerTask.eventID))
 	}
 	// mark timer task mask as indication that timer task is generated
+	// TODO: markmark this int32 is used as a mask flag.
 	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.timerType)
 	if firstTimerTask.timerType == timerTypeHeartbeat {
 		activityInfo.LastHeartbeatTimeoutVisibilityInSeconds = firstTimerTask.timestamp.Unix()
