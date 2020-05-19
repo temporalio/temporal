@@ -330,6 +330,15 @@ func (p *replicatorQueueProcessorImpl) readTasks(readLevel int64) ([]task.Info, 
 func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 	err := p.shard.UpdateReplicatorAckLevel(ackLevel)
 
+	// TODO: Remove this after enabled the rpc replication
+	clusterMetadata := p.shard.GetClusterMetadata()
+	for name, cluster := range clusterMetadata.GetAllClusterInfo() {
+		if !cluster.Enabled || clusterMetadata.GetCurrentClusterName() == name{
+			continue
+		}
+		p.shard.UpdateClusterReplicationLevel(name, ackLevel)
+	}
+
 	// this is a hack, since there is not dedicated ticker on the queue processor
 	// to periodically send out sync shard message, put it here
 	now := clock.NewRealTimeSource().Now()
