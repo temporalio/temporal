@@ -301,12 +301,12 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		defer cancel()
 		_, err = t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
 			NamespaceId: parentNamespaceID,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: parentWorkflowID,
 				RunId:      parentRunID,
 			},
 			InitiatedId: initiatedID,
-			CompletedExecution: &executionpb.WorkflowExecution{
+			CompletedExecution: &commonpb.WorkflowExecution{
 				WorkflowId: task.GetWorkflowId(),
 				RunId:      task.GetRunId(),
 			},
@@ -510,7 +510,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	defer cancel()
 	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
 		NamespaceId: task.GetTargetNamespaceId(),
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetTargetWorkflowId(),
 			RunId:      task.GetTargetRunId(),
 		},
@@ -580,7 +580,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 
 	// ChildExecution already started, just create DecisionTask and complete transfer task
 	if childInfo.StartedID != common.EmptyEventID {
-		childExecution := &executionpb.WorkflowExecution{
+		childExecution := &commonpb.WorkflowExecution{
 			WorkflowId: childInfo.StartedWorkflowID,
 			RunId:      childInfo.StartedRunID,
 		}
@@ -617,7 +617,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return err
 	}
 	// Finally create first decision task for Child execution so it is really started
-	return t.createFirstDecisionTask(task.GetTargetNamespaceId(), &executionpb.WorkflowExecution{
+	return t.createFirstDecisionTask(task.GetTargetNamespaceId(), &commonpb.WorkflowExecution{
 		WorkflowId: task.GetTargetWorkflowId(),
 		RunId:      childRunID,
 	})
@@ -799,7 +799,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		baseMutableState = currentMutableState
 		baseRelease = currentRelease
 	} else {
-		baseExecution := &executionpb.WorkflowExecution{
+		baseExecution := &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      resetPoint.GetRunId(),
 		}
@@ -855,7 +855,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 
 			_, err := mutableState.AddChildWorkflowExecutionStartedEvent(
 				namespace,
-				&executionpb.WorkflowExecution{
+				&commonpb.WorkflowExecution{
 					WorkflowId: task.GetTargetWorkflowId(),
 					RunId:      runID,
 				},
@@ -897,7 +897,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 // child execution.
 func (t *transferQueueActiveTaskExecutor) createFirstDecisionTask(
 	namespaceID string,
-	execution *executionpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
@@ -1111,7 +1111,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 		NamespaceId: task.GetTargetNamespaceId(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			Namespace: targetNamespace,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: task.GetTargetWorkflowId(),
 				RunId:      task.GetTargetRunId(),
 			},
@@ -1120,7 +1120,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 			RequestId: requestCancelInfo.GetCancelRequestId(),
 		},
 		ExternalInitiatedEventId: task.GetScheduleId(),
-		ExternalWorkflowExecution: &executionpb.WorkflowExecution{
+		ExternalWorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
@@ -1155,7 +1155,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 		NamespaceId: task.GetTargetNamespaceId(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: targetNamespace,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: task.GetTargetWorkflowId(),
 				RunId:      task.GetTargetRunId(),
 			},
@@ -1166,7 +1166,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 			RequestId: signalInfo.GetRequestId(),
 			Control:   signalInfo.Control,
 		},
-		ExternalWorkflowExecution: &executionpb.WorkflowExecution{
+		ExternalWorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
@@ -1215,7 +1215,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 		ParentExecutionInfo: &executiongenpb.ParentExecutionInfo{
 			NamespaceId: task.GetNamespaceId(),
 			Namespace:   namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: task.GetWorkflowId(),
 				RunId:      task.GetRunId(),
 			},
@@ -1270,7 +1270,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 			ctx,
 			&workflowservice.ResetWorkflowExecutionRequest{
 				Namespace: namespace,
-				WorkflowExecution: &executionpb.WorkflowExecution{
+				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: workflowID,
 					RunId:      baseRunID,
 				},
@@ -1416,7 +1416,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 			NamespaceId: namespaceID,
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: namespace,
-				WorkflowExecution: &executionpb.WorkflowExecution{
+				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: childInfo.StartedWorkflowID,
 					RunId:      childInfo.StartedRunID,
 				},
@@ -1431,7 +1431,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 			NamespaceId: namespaceID,
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				Namespace: namespace,
-				WorkflowExecution: &executionpb.WorkflowExecution{
+				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: childInfo.StartedWorkflowID,
 					RunId:      childInfo.StartedRunID,
 				},

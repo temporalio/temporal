@@ -632,7 +632,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 			newExecutionInfo := newMutableState.GetExecutionInfo()
 			newContext = newWorkflowExecutionContext(
 				newExecutionInfo.NamespaceID,
-				executionpb.WorkflowExecution{
+				commonpb.WorkflowExecution{
 					WorkflowId: newExecutionInfo.WorkflowID,
 					RunId:      newExecutionInfo.RunID,
 				},
@@ -663,7 +663,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 
 	executionInfo := msBuilder.GetExecutionInfo()
 	namespaceID := executionInfo.NamespaceID
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: executionInfo.WorkflowID,
 		RunId:      executionInfo.RunID,
 	}
@@ -898,7 +898,7 @@ func (r *historyReplicator) getCurrentWorkflowMutableState(
 	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx,
 		namespaceID,
 		// only use the workflow ID, to get the current running one
-		executionpb.WorkflowExecution{WorkflowId: workflowID},
+		commonpb.WorkflowExecution{WorkflowId: workflowID},
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -934,7 +934,7 @@ func (r *historyReplicator) terminateWorkflow(
 ) (int64, error) {
 
 	// same workflow ID, same shard
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -1255,7 +1255,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 		return err
 	}
 
-	resetNewExecution := executionpb.WorkflowExecution{
+	resetNewExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      resp.GetRunId(),
 	}

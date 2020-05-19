@@ -34,7 +34,6 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -74,7 +73,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
-	we := &executionpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      resp0.RunId,
 	}
@@ -180,7 +179,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
-	we := &executionpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      resp0.RunId,
 	}
@@ -316,7 +315,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
-	we := &executionpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      resp0.RunId,
 	}
@@ -389,7 +388,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
-	we := &executionpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      resp0.RunId,
 	}
@@ -462,7 +461,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
-	we := &executionpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      resp0.RunId,
 	}
@@ -547,7 +546,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
-	we := &executionpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      resp0.RunId,
 	}
@@ -650,7 +649,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
-	we := &executionpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      resp0.RunId,
 	}
@@ -750,7 +749,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
-	we := &executionpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      resp0.RunId,
 	}
@@ -835,7 +834,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) assertHistory(we *executionpb.WorkflowExecution, expectedHistory []eventpb.EventType) {
+func (s *integrationSuite) assertHistory(we *commonpb.WorkflowExecution, expectedHistory []eventpb.EventType) {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
 		Execution: we,
@@ -851,7 +850,7 @@ func (s *integrationSuite) assertHistory(we *executionpb.WorkflowExecution, expe
 	}
 }
 
-func (s *integrationSuite) assertLastHistoryEvent(we *executionpb.WorkflowExecution, count int, eventType eventpb.EventType) {
+func (s *integrationSuite) assertLastHistoryEvent(we *commonpb.WorkflowExecution, count int, eventType eventpb.EventType) {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
 		Execution: we,

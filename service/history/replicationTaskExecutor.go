@@ -29,7 +29,7 @@ package history
 import (
 	"context"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -210,7 +210,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	request := &historyservice.ReplicateEventsRequest{
 		SourceCluster: sourceCluster,
 		NamespaceId:   attr.NamespaceId,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: attr.WorkflowId,
 			RunId:      attr.RunId,
 		},
@@ -267,7 +267,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: attr.NamespaceId,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: attr.WorkflowId,
 			RunId:      attr.RunId,
 		},

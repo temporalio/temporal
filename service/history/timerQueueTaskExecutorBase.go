@@ -27,7 +27,7 @@ package history
 import (
 	"context"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -274,9 +274,9 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 
 func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TimerTaskInfo,
-) (string, executionpb.WorkflowExecution) {
+) (string, commonpb.WorkflowExecution) {
 
-	return task.GetNamespaceId(), executionpb.WorkflowExecution{
+	return task.GetNamespaceId(), commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      task.GetRunId(),
 	}

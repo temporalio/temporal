@@ -34,8 +34,8 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 )
 
@@ -198,7 +198,7 @@ func (r *conflictResolverImpl) reset(
 	return r.context.loadWorkflowExecution()
 }
 
-func (r *conflictResolverImpl) getHistory(namespaceID string, execution executionpb.WorkflowExecution, firstEventID,
+func (r *conflictResolverImpl) getHistory(namespaceID string, execution commonpb.WorkflowExecution, firstEventID,
 	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*eventpb.HistoryEvent, int, int64, []byte, error) {
 
 	response, err := r.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{

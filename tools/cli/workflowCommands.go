@@ -478,7 +478,7 @@ func SignalWorkflow(c *cli.Context) {
 	defer cancel()
 	_, err := serviceClient.SignalWorkflowExecution(tcCtx, &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -520,7 +520,7 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 	defer cancel()
 	queryRequest := &workflowservice.QueryWorkflowRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -848,7 +848,7 @@ func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 
 	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -1415,7 +1415,7 @@ func ResetWorkflow(c *cli.Context) {
 	}
 	resp, err := frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      resetBaseRunID,
 		},
@@ -1429,7 +1429,7 @@ func ResetWorkflow(c *cli.Context) {
 	prettyPrintJSONObject(resp)
 }
 
-func processResets(c *cli.Context, namespace string, wes chan executionpb.WorkflowExecution, done chan bool, wg *sync.WaitGroup, params batchResetParamsType) {
+func processResets(c *cli.Context, namespace string, wes chan commonpb.WorkflowExecution, done chan bool, wg *sync.WaitGroup, params batchResetParamsType) {
 	for {
 		select {
 		case we := <-wes:
@@ -1501,7 +1501,7 @@ func ResetInBatch(c *cli.Context) {
 
 	wg := &sync.WaitGroup{}
 
-	wes := make(chan executionpb.WorkflowExecution)
+	wes := make(chan commonpb.WorkflowExecution)
 	done := make(chan bool)
 	for i := 0; i < parallel; i++ {
 		wg.Add(1)
@@ -1570,7 +1570,7 @@ func ResetInBatch(c *cli.Context) {
 				continue
 			}
 
-			wes <- executionpb.WorkflowExecution{
+			wes <- commonpb.WorkflowExecution{
 				WorkflowId: wid,
 				RunId:      rid,
 			}
@@ -1591,7 +1591,7 @@ func ResetInBatch(c *cli.Context) {
 					continue
 				}
 
-				wes <- executionpb.WorkflowExecution{
+				wes <- commonpb.WorkflowExecution{
 					WorkflowId: wid,
 					RunId:      rid,
 				}
@@ -1633,7 +1633,7 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 	frontendClient := cFactory.FrontendClient(c)
 	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 		},
 	})
@@ -1680,7 +1680,7 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 	} else {
 		resp2, err := frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 			Namespace: namespace,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: wid,
 				RunId:      resetBaseRunID,
 			},
@@ -1701,7 +1701,7 @@ func doReset(c *cli.Context, namespace, wid, rid string, params batchResetParams
 func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, namespace, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (bool, error) {
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -1785,7 +1785,7 @@ func getLastDecisionCompletedID(ctx context.Context, namespace, wid, rid string,
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -1819,7 +1819,7 @@ func getBadDecisionCompletedID(ctx context.Context, namespace, wid, rid, binChec
 	resetBaseRunID = rid
 	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -1847,7 +1847,7 @@ func getFirstDecisionCompletedID(ctx context.Context, namespace, wid, rid string
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -1882,7 +1882,7 @@ func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, fro
 	// get first event
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -1901,7 +1901,7 @@ func getLastContinueAsNewID(ctx context.Context, namespace, wid, rid string, fro
 
 	req = &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      resetBaseRunID,
 		},

@@ -33,6 +33,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common"
@@ -44,7 +45,7 @@ func TestCRC32OverThrift(t *testing.T) {
 	// so, each call to thrift encode will result in
 	// different set of serialized bytes
 	obj := &executionpb.WorkflowExecutionInfo{
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: uuid.New(),
 			RunId:      uuid.New(),
 		},

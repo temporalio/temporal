@@ -35,7 +35,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -146,7 +145,7 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 	mockStateBuilder.EXPECT().applyEvents(
 		s.namespaceID,
 		requestID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},

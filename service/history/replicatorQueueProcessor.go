@@ -31,7 +31,6 @@ import (
 
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
@@ -837,7 +836,7 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 	action func(mutableState) (*replicationgenpb.ReplicationTask, error),
 ) (retReplicationTask *replicationgenpb.ReplicationTask, retError error) {
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -873,7 +872,7 @@ func (p *replicatorQueueProcessorImpl) isNewRunNDCEnabled(
 	context, release, err := p.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
