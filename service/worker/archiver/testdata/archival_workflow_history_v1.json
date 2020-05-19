@@ -126,7 +126,7 @@
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
-          "nonRetriableErrorReasons": [
+          "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retriable error"
           ]
@@ -286,7 +286,7 @@
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
-          "nonRetriableErrorReasons": [
+          "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retriable error"
           ]
@@ -470,7 +470,7 @@
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
-          "nonRetriableErrorReasons": [
+          "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retriable error"
           ]
@@ -503,7 +503,7 @@
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
-          "nonRetriableErrorReasons": [
+          "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retriable error"
           ]
@@ -536,7 +536,7 @@
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
-          "nonRetriableErrorReasons": [
+          "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retriable error"
           ]
@@ -770,7 +770,7 @@
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
-          "nonRetriableErrorReasons": [
+          "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retriable error"
           ]
@@ -930,7 +930,7 @@
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
-          "nonRetriableErrorReasons": [
+          "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retriable error"
           ]
@@ -1090,7 +1090,7 @@
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
-          "nonRetriableErrorReasons": [
+          "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retriable error"
           ]
@@ -1250,7 +1250,7 @@
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
-          "nonRetriableErrorReasons": [
+          "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retriable error"
           ]
@@ -1410,7 +1410,7 @@
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
-          "nonRetriableErrorReasons": [
+          "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retriable error"
           ]
@@ -1570,7 +1570,7 @@
           "backoffCoefficient": 2,
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
-          "nonRetriableErrorReasons": [
+          "nonRetryableErrorTypes": [
             "temporalInternal:Panic",
             "upload non-retriable error"
           ]
