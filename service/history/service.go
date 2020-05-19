@@ -549,7 +549,8 @@ func (s *Service) Stop() {
 	s.handler.PrepareToStop()
 	remainingTime = s.sleep(gracePeriod, remainingTime)
 
-	s.server.GracefulStop()
+	// TODO: Change this to GracefulStop when integration tests are refactored.
+	s.server.Stop()
 
 	s.handler.Stop()
 	s.Resource.Stop()
