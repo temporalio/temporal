@@ -15,16 +15,9 @@ services:
       - "8125:8125"
       - "8126:8126"
   temporal:
-    image: temporalio/auto-setup:0.21.1
+    image: temporalio/auto-setup:0.23.0
     ports:
      - "7233:7233"
-     - "7234:7234"
-     - "7235:7235"
-     - "7239:7239"
-     - "6933:6933"
-     - "6934:6934"
-     - "6935:6935"
-     - "6939:6939"
     environment:
       - "DB=postgres"
       - "DB_PORT=5432"
@@ -36,7 +29,7 @@ services:
     depends_on:
       - postgres
   temporal-web:
-    image: temporalio/web:0.21.1
+    image: temporalio/web:0.23.0
     environment:
       - "TEMPORAL_GRPC_ENDPOINT=temporal:7233"
     ports:
