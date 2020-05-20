@@ -59,9 +59,12 @@ type Config struct {
 
 	// EventsCache settings
 	// Change of these configs require shard restart
-	EventsCacheInitialSize dynamicconfig.IntPropertyFn
-	EventsCacheMaxSize     dynamicconfig.IntPropertyFn
-	EventsCacheTTL         dynamicconfig.DurationPropertyFn
+	EventsCacheInitialSize       dynamicconfig.IntPropertyFn
+	EventsCacheMaxSize           dynamicconfig.IntPropertyFn
+	EventsCacheTTL               dynamicconfig.DurationPropertyFn
+	EventsCacheGlobalEnable      dynamicconfig.BoolPropertyFn
+	EventsCacheGlobalInitialSize dynamicconfig.IntPropertyFn
+	EventsCacheGlobalMaxSize     dynamicconfig.IntPropertyFn
 
 	// ShardController settings
 	RangeSizeBits           uint
@@ -260,6 +263,9 @@ func New(dc *dynamicconfig.Collection, numberOfShards int, storeType string, isA
 		EventsCacheInitialSize:               dc.GetIntProperty(dynamicconfig.EventsCacheInitialSize, 128),
 		EventsCacheMaxSize:                   dc.GetIntProperty(dynamicconfig.EventsCacheMaxSize, 512),
 		EventsCacheTTL:                       dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+		EventsCacheGlobalEnable:              dc.GetBoolProperty(dynamicconfig.EventsCacheGlobalEnable, false),
+		EventsCacheGlobalInitialSize:         dc.GetIntProperty(dynamicconfig.EventsCacheInitialSize, 4096),
+		EventsCacheGlobalMaxSize:             dc.GetIntProperty(dynamicconfig.EventsCacheMaxSize, 65536),
 		RangeSizeBits:                        20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:                 dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
 		AcquireShardConcurrency:              dc.GetIntProperty(dynamicconfig.AcquireShardConcurrency, 1),

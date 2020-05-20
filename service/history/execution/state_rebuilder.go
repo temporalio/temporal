@@ -90,6 +90,7 @@ func NewStateRebuilder(
 			shard.GetDomainCache(),
 			shard.GetEventsCache(),
 			logger,
+			shard.GetShardID(),
 		),
 		rebuiltHistorySize: 0,
 		logger:             logger,

@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2017-2020 Uber Technologies Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,10 +28,10 @@
 package reset
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	context "golang.org/x/net/context"
 
 	shared "github.com/uber/cadence/.gen/go/shared"
 	execution "github.com/uber/cadence/service/history/execution"

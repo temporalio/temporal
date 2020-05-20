@@ -38,10 +38,10 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/engine"
 	"github.com/uber/cadence/service/history/events"
+	"github.com/uber/cadence/service/history/resource"
 )
 
 type (
@@ -863,6 +863,10 @@ func (s *contextImpl) PreviousShardOwnerWasDifferent() bool {
 }
 
 func (s *contextImpl) GetEventsCache() events.Cache {
+	// the shard needs to be restarted to release the shard cache once global mode is on.
+	if s.config.EventsCacheGlobalEnable() {
+		return s.GetEventCache()
+	}
 	return s.eventsCache
 }
 
@@ -1257,6 +1261,8 @@ func acquireShard(
 		throttledLogger:                shardItem.throttledLogger,
 		previousShardOwnerWasDifferent: ownershipChanged,
 	}
+
+	// TODO remove once migrated to global event cache
 	context.eventsCache = events.NewCache(
 		context.shardID,
 		context.Resource.GetHistoryManager(),
@@ -1264,6 +1270,8 @@ func acquireShard(
 		context.logger,
 		context.Resource.GetMetricsClient(),
 	)
+
+	context.logger.Debug(fmt.Sprintf("Global event cache mode: %v", context.config.EventsCacheGlobalEnable()))
 
 	err1 := context.renewRangeLocked(true)
 	if err1 != nil {

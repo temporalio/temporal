@@ -1005,6 +1005,7 @@ func (e *mutableStateBuilder) GetActivityScheduledEvent(
 		return nil, err
 	}
 	scheduledEvent, err := e.eventsCache.GetEvent(
+		e.shard.GetShardID(),
 		e.executionInfo.DomainID,
 		e.executionInfo.WorkflowID,
 		e.executionInfo.RunID,
@@ -1072,6 +1073,7 @@ func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(
 		return nil, err
 	}
 	initiatedEvent, err := e.eventsCache.GetEvent(
+		e.shard.GetShardID(),
 		e.executionInfo.DomainID,
 		e.executionInfo.WorkflowID,
 		e.executionInfo.RunID,
@@ -1172,6 +1174,7 @@ func (e *mutableStateBuilder) GetCompletionEvent() (*workflow.HistoryEvent, erro
 	completionEventID := e.executionInfo.NextEventID - 1
 	firstEventID := e.executionInfo.CompletionEventBatchID
 	completionEvent, err := e.eventsCache.GetEvent(
+		e.shard.GetShardID(),
 		e.executionInfo.DomainID,
 		e.executionInfo.WorkflowID,
 		e.executionInfo.RunID,
@@ -1198,6 +1201,7 @@ func (e *mutableStateBuilder) GetStartEvent() (*workflow.HistoryEvent, error) {
 	}
 
 	startEvent, err := e.eventsCache.GetEvent(
+		e.shard.GetShardID(),
 		e.executionInfo.DomainID,
 		e.executionInfo.WorkflowID,
 		e.executionInfo.RunID,

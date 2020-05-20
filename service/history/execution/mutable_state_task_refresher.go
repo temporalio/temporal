@@ -48,6 +48,7 @@ type (
 		domainCache cache.DomainCache
 		eventsCache events.Cache
 		logger      log.Logger
+		shardID     int
 	}
 )
 
@@ -57,6 +58,7 @@ func NewMutableStateTaskRefresher(
 	domainCache cache.DomainCache,
 	eventsCache events.Cache,
 	logger log.Logger,
+	shardID int,
 ) MutableStateTaskRefresher {
 
 	return &mutableStateTaskRefresherImpl{
@@ -64,6 +66,7 @@ func NewMutableStateTaskRefresher(
 		domainCache: domainCache,
 		eventsCache: eventsCache,
 		logger:      logger,
+		shardID:     shardID,
 	}
 }
 
@@ -296,6 +299,7 @@ Loop:
 		}
 
 		scheduleEvent, err := r.eventsCache.GetEvent(
+			r.shardID,
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
@@ -376,6 +380,7 @@ Loop:
 		}
 
 		scheduleEvent, err := r.eventsCache.GetEvent(
+			r.shardID,
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
@@ -414,6 +419,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForRequestCancelExternalWork
 
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
 		initiateEvent, err := r.eventsCache.GetEvent(
+			r.shardID,
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
@@ -452,6 +458,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 
 	for _, signalInfo := range pendingSignalInfos {
 		initiateEvent, err := r.eventsCache.GetEvent(
+			r.shardID,
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,

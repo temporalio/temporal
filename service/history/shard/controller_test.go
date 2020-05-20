@@ -38,10 +38,10 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history/config"
 	"github.com/uber/cadence/service/history/engine"
+	"github.com/uber/cadence/service/history/resource"
 )
 
 type (

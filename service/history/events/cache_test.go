@@ -94,7 +94,7 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	}
 
 	s.cache.PutEvent(domainID, workflowID, runID, eventID, event)
-	actualEvent, err := s.cache.GetEvent(domainID, workflowID, runID, eventID, eventID, nil)
+	actualEvent, err := s.cache.GetEvent(0, domainID, workflowID, runID, eventID, eventID, nil)
 	s.Nil(err)
 	s.Equal(event, actualEvent)
 }
@@ -134,13 +134,14 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{},
 	}
 
+	shardID := common.IntPtr(10)
 	s.mockHistoryManager.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event1.GetEventId(),
 		MaxEventID:    event6.GetEventId() + 1,
 		PageSize:      1,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(10),
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents:    []*shared.HistoryEvent{event1, event2, event3, event4, event5, event6},
 		NextPageToken:    nil,
@@ -148,8 +149,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	}, nil)
 
 	s.cache.PutEvent(domainID, workflowID, runID, event2.GetEventId(), event2)
-	actualEvent, err := s.cache.GetEvent(domainID, workflowID, runID, event1.GetEventId(), event6.GetEventId(),
-		[]byte("store_token"))
+	actualEvent, err := s.cache.GetEvent(*shardID, domainID, workflowID, runID, event1.GetEventId(), event6.GetEventId(), []byte("store_token"))
 	s.Nil(err)
 	s.Equal(event6, actualEvent)
 }
@@ -158,6 +158,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 	domainID := "events-cache-miss-failure-domain"
 	workflowID := "events-cache-miss-failure-workflow-id"
 	runID := "events-cache-miss-failure-run-id"
+	shardID := common.IntPtr(10)
 
 	expectedErr := errors.New("persistence call failed")
 	s.mockHistoryManager.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
@@ -166,11 +167,10 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 		MaxEventID:    int64(15),
 		PageSize:      1,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(10),
+		ShardID:       shardID,
 	}).Return(nil, expectedErr)
 
-	actualEvent, err := s.cache.GetEvent(domainID, workflowID, runID, int64(11), int64(14),
-		[]byte("store_token"))
+	actualEvent, err := s.cache.GetEvent(*shardID, domainID, workflowID, runID, int64(11), int64(14), []byte("store_token"))
 	s.Nil(actualEvent)
 	s.Equal(expectedErr, err)
 }
@@ -179,6 +179,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	domainID := "events-cache-disable-success-domain"
 	workflowID := "events-cache-disable-success-workflow-id"
 	runID := "events-cache-disable-success-run-id"
+	shardID := common.IntPtr(10)
 	event1 := &shared.HistoryEvent{
 		EventId:                            common.Int64Ptr(23),
 		EventType:                          shared.EventTypeActivityTaskStarted.Ptr(),
@@ -196,7 +197,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		MaxEventID:    event2.GetEventId() + 1,
 		PageSize:      1,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(10),
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents:    []*shared.HistoryEvent{event2},
 		NextPageToken:    nil,
@@ -206,8 +207,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	s.cache.PutEvent(domainID, workflowID, runID, event1.GetEventId(), event1)
 	s.cache.PutEvent(domainID, workflowID, runID, event2.GetEventId(), event2)
 	s.cache.disabled = true
-	actualEvent, err := s.cache.GetEvent(domainID, workflowID, runID, event2.GetEventId(), event2.GetEventId(),
-		[]byte("store_token"))
+	actualEvent, err := s.cache.GetEvent(*shardID, domainID, workflowID, runID, event2.GetEventId(), event2.GetEventId(), []byte("store_token"))
 	s.Nil(err)
 	s.Equal(event2, actualEvent)
 }

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -38,6 +39,7 @@ type (
 	// Cache caches workflow history event
 	Cache interface {
 		GetEvent(
+			shardID int,
 			domainID string,
 			workflowID string,
 			runID string,
@@ -83,6 +85,27 @@ var (
 
 var _ Cache = (*cacheImpl)(nil)
 
+// NewGlobalCache creates a new global events cache
+func NewGlobalCache(
+	initialSize int,
+	maxSize int,
+	ttl time.Duration,
+	historyManager persistence.HistoryManager,
+	logger log.Logger,
+	metricsClient metrics.Client,
+) Cache {
+	return newCacheWithOption(
+		initialSize,
+		maxSize,
+		ttl,
+		historyManager,
+		false,
+		logger,
+		metricsClient,
+		nil,
+	)
+}
+
 // NewCache creates a new events cache
 func NewCache(
 	shardID int,
@@ -127,7 +150,12 @@ func newCacheWithOption(
 	}
 }
 
-func newEventKey(domainID, workflowID, runID string, eventID int64) eventKey {
+func newEventKey(
+	domainID,
+	workflowID,
+	runID string,
+	eventID int64,
+) eventKey {
 	return eventKey{
 		domainID:   domainID,
 		workflowID: workflowID,
@@ -137,8 +165,11 @@ func newEventKey(domainID, workflowID, runID string, eventID int64) eventKey {
 }
 
 func (e *cacheImpl) GetEvent(
-	domainID, workflowID, runID string,
-	firstEventID, eventID int64,
+	shardID int,
+	domainID string,
+	workflowID string,
+	runID string, firstEventID int64,
+	eventID int64,
 	branchToken []byte,
 ) (*shared.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
@@ -155,7 +186,11 @@ func (e *cacheImpl) GetEvent(
 	}
 
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheMissCounter)
-	event, err := e.getHistoryEventFromStore(firstEventID, eventID, branchToken)
+	// use local id to preserve old logic before full migration to global event cache
+	if e.shardID != nil {
+		shardID = *e.shardID
+	}
+	event, err := e.getHistoryEventFromStore(firstEventID, eventID, branchToken, shardID)
 	if err != nil {
 		e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheFailures)
 		e.logger.Error("EventsCache unable to retrieve event from store",
@@ -171,7 +206,12 @@ func (e *cacheImpl) GetEvent(
 	return event, nil
 }
 
-func (e *cacheImpl) PutEvent(domainID, workflowID, runID string, eventID int64, event *shared.HistoryEvent) {
+func (e *cacheImpl) PutEvent(
+	domainID, workflowID,
+	runID string,
+	eventID int64,
+	event *shared.HistoryEvent,
+) {
 	e.metricsClient.IncCounter(metrics.EventsCachePutEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCachePutEventScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -180,7 +220,11 @@ func (e *cacheImpl) PutEvent(domainID, workflowID, runID string, eventID int64, 
 	e.Put(key, event)
 }
 
-func (e *cacheImpl) DeleteEvent(domainID, workflowID, runID string, eventID int64) {
+func (e *cacheImpl) DeleteEvent(
+	domainID, workflowID,
+	runID string,
+	eventID int64,
+) {
 	e.metricsClient.IncCounter(metrics.EventsCacheDeleteEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheDeleteEventScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -189,7 +233,12 @@ func (e *cacheImpl) DeleteEvent(domainID, workflowID, runID string, eventID int6
 	e.Delete(key)
 }
 
-func (e *cacheImpl) getHistoryEventFromStore(firstEventID, eventID int64, branchToken []byte) (*shared.HistoryEvent, error) {
+func (e *cacheImpl) getHistoryEventFromStore(
+	firstEventID,
+	eventID int64,
+	branchToken []byte,
+	shardID int,
+) (*shared.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetFromStoreScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -202,7 +251,7 @@ func (e *cacheImpl) getHistoryEventFromStore(firstEventID, eventID int64, branch
 		MaxEventID:    eventID + 1,
 		PageSize:      1,
 		NextPageToken: nil,
-		ShardID:       e.shardID,
+		ShardID:       common.IntPtr(shardID),
 	})
 
 	if err != nil {

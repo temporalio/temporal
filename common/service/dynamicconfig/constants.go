@@ -147,6 +147,9 @@ var keys = map[Key]string{
 	EventsCacheInitialSize:                                 "history.eventsCacheInitialSize",
 	EventsCacheMaxSize:                                     "history.eventsCacheMaxSize",
 	EventsCacheTTL:                                         "history.eventsCacheTTL",
+	EventsCacheGlobalEnable:                                "history.eventsCacheGlobalEnable",
+	EventsCacheGlobalInitialSize:                           "history.eventsCacheGlobalInitialSize",
+	EventsCacheGlobalMaxSize:                               "history.eventsCacheGlobalMaxSize",
 	AcquireShardInterval:                                   "history.acquireShardInterval",
 	AcquireShardConcurrency:                                "history.acquireShardConcurrency",
 	StandbyClusterDelay:                                    "history.standbyClusterDelay",
@@ -481,6 +484,12 @@ const (
 	EventsCacheMaxSize
 	// EventsCacheTTL is TTL of events cache
 	EventsCacheTTL
+	// EventsCacheGlobalEnable enables global cache over all history shards
+	EventsCacheGlobalEnable
+	// EventsCacheGlobalInitialSize is initial size of global events cache
+	EventsCacheGlobalInitialSize
+	// EventsCacheGlobalMaxSize is max size of global events cache
+	EventsCacheGlobalMaxSize
 	// AcquireShardInterval is interval that timer used to acquire shard
 	AcquireShardInterval
 	// AcquireShardConcurrency is number of goroutines that can be used to acquire shards in the shard controller.
