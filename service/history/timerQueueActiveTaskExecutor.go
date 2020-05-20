@@ -31,8 +31,6 @@ import (
 	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
-	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
@@ -190,7 +188,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
-	isHeartBeatTask := task.TimeoutType == int32(eventpb.TimeoutType_Heartbeat)
+	isHeartBeatTask := task.TimeoutType == int32(commonpb.TimeoutType_Heartbeat)
 	activityInfo, ok := mutableState.GetActivityInfo(task.GetEventId())
 	goVisibilityTS, _ := types.TimestampFromProto(task.VisibilityTimestamp)
 	if isHeartBeatTask && ok && activityInfo.LastHeartbeatTimeoutVisibilityInSeconds <= goVisibilityTS.Unix() {
@@ -294,7 +292,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 	}
 
 	scheduleDecision := false
-	switch timerTypeFromProto(eventpb.TimeoutType(task.TimeoutType)) {
+	switch timerTypeFromProto(commonpb.TimeoutType(task.TimeoutType)) {
 	case timerTypeStartToClose:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			mutableState.GetExecutionInfo().NamespaceID,
@@ -429,7 +427,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		}
 	}
 
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      task.GetRunId()}
 	taskList := &tasklistpb.TaskList{
@@ -540,7 +538,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		t.shard.GetTimeSource().Now(),
 		newWorkflowExecutionContext(
 			newExecutionInfo.NamespaceID,
-			executionpb.WorkflowExecution{
+			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowID,
 				RunId:      newExecutionInfo.RunID,
 			},

@@ -37,7 +37,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -282,7 +281,7 @@ func GenerateRandomString(n int) string {
 }
 
 // CreateMatchingPollForDecisionTaskResponse create response for matching's PollForDecisionTask
-func CreateMatchingPollForDecisionTaskResponse(historyResponse *historyservice.RecordDecisionTaskStartedResponse, workflowExecution *executionpb.WorkflowExecution, token []byte) *matchingservice.PollForDecisionTaskResponse {
+func CreateMatchingPollForDecisionTaskResponse(historyResponse *historyservice.RecordDecisionTaskStartedResponse, workflowExecution *commonpb.WorkflowExecution, token []byte) *matchingservice.PollForDecisionTaskResponse {
 	matchingResp := &matchingservice.PollForDecisionTaskResponse{
 		TaskToken:                 token,
 		WorkflowExecution:         workflowExecution,

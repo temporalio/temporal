@@ -29,8 +29,8 @@ import (
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	querypb "go.temporal.io/temporal-proto/query"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
@@ -116,7 +116,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 	}
 	namespaceID := namespaceEntry.GetInfo().Id
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
 		RunId:      req.WorkflowExecution.RunId,
 	}
@@ -158,7 +158,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	}
 	namespaceID := namespaceEntry.GetInfo().Id
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
 		RunId:      req.WorkflowExecution.RunId,
 	}
@@ -246,7 +246,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 		return ErrDeserializingToken
 	}
 
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
 		RunId:      token.GetRunId(),
 	}
@@ -286,7 +286,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 		return nil, ErrDeserializingToken
 	}
 
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
 		RunId:      token.GetRunId(),
 	}
@@ -503,7 +503,7 @@ Update_History_Loop:
 				handler.shard.GetTimeSource().Now(),
 				newWorkflowExecutionContext(
 					continueAsNewExecutionInfo.NamespaceID,
-					executionpb.WorkflowExecution{
+					commonpb.WorkflowExecution{
 						WorkflowId: continueAsNewExecutionInfo.WorkflowID,
 						RunId:      continueAsNewExecutionInfo.RunID,
 					},

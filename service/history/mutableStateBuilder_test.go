@@ -267,7 +267,7 @@ OtherEventsLoop:
 
 func (s *mutableStateSuite) TestReorderEvents() {
 	namespaceID := testNamespaceID
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}
@@ -557,7 +557,7 @@ func (s *mutableStateSuite) TestEventReapplied() {
 
 func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicated(version int64, runID string) (*eventpb.HistoryEvent, *eventpb.HistoryEvent) {
 	namespaceID := testNamespaceID
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      runID,
 	}
@@ -726,7 +726,7 @@ func (s *mutableStateSuite) newNamespaceCacheEntry() *cache.NamespaceCacheEntry 
 
 func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMutableState {
 	namespaceID := testNamespaceID
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      testRunID,
 	}

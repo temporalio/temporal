@@ -28,7 +28,7 @@ import (
 	"context"
 	"time"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal/activity"
 	"golang.org/x/time/rate"
@@ -238,7 +238,7 @@ func (s *Scavenger) startTaskProcessor(
 			// if not then the history branch is garbage, we need to delete the history branch
 			_, err = s.client.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 				NamespaceId: task.namespaceID,
-				Execution: &executionpb.WorkflowExecution{
+				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: task.workflowID,
 					RunId:      task.runID,
 				},

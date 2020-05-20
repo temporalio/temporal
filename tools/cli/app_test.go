@@ -404,7 +404,7 @@ var (
 	listClosedWorkflowExecutionsResponse = &workflowservice.ListClosedWorkflowExecutionsResponse{
 		Executions: []*executionpb.WorkflowExecutionInfo{
 			{
-				Execution: &executionpb.WorkflowExecution{
+				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "test-list-workflow-id",
 					RunId:      uuid.New(),
 				},
@@ -422,7 +422,7 @@ var (
 	listOpenWorkflowExecutionsResponse = &workflowservice.ListOpenWorkflowExecutionsResponse{
 		Executions: []*executionpb.WorkflowExecutionInfo{
 			{
-				Execution: &executionpb.WorkflowExecution{
+				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "test-list-open-workflow-id",
 					RunId:      uuid.New(),
 				},

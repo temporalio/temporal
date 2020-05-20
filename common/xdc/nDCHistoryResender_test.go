@@ -35,7 +35,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -167,7 +166,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		gomock.Any(),
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -189,7 +188,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		gomock.Any(),
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -211,7 +210,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		gomock.Any(),
 		&historyservice.ReplicateEventsV2Request{
 			NamespaceId: s.namespaceID,
-			WorkflowExecution: &executionpb.WorkflowExecution{
+			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -248,7 +247,7 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 
 	s.Equal(&historyservice.ReplicateEventsV2Request{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -271,7 +270,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 	}
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -296,7 +295,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 	}
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: s.namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -342,7 +341,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 	}
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

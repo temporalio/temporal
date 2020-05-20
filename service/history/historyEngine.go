@@ -117,7 +117,7 @@ type (
 		ReadDLQMessages(ctx context.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error)
 		PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error
 		MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
-		RefreshWorkflowTasks(ctx context.Context, namespaceUUID string, execution executionpb.WorkflowExecution) error
+		RefreshWorkflowTasks(ctx context.Context, namespaceUUID string, execution commonpb.WorkflowExecution) error
 
 		NotifyNewHistoryEvent(event *historyEventNotification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
@@ -571,7 +571,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	}
 	defer func() { currentRelease(retError) }()
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
@@ -740,7 +740,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 	if err != nil {
 		return nil, err
 	}
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.Execution.WorkflowId,
 		RunId:      request.Execution.RunId,
 	}
@@ -1081,7 +1081,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 func (e *historyEngineImpl) getMutableState(
 	ctx context.Context,
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 ) (retResp *historyservice.GetMutableStateResponse, retError error) {
 
 	context, release, retError := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
@@ -1148,7 +1148,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 		return nil, err
 	}
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.Execution.WorkflowId,
 		RunId:      request.Execution.RunId,
 	}
@@ -1258,7 +1258,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			WorkflowTaskTimeoutSeconds:      executionInfo.WorkflowTaskTimeout,
 		},
 		WorkflowExecutionInfo: &executionpb.WorkflowExecutionInfo{
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: executionInfo.WorkflowID,
 				RunId:      executionInfo.RunID,
 			},
@@ -1283,7 +1283,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	result.WorkflowExecutionInfo.ExecutionTime = result.WorkflowExecutionInfo.GetStartTime().GetValue() + backoffDuration.Nanoseconds()
 
 	if executionInfo.ParentRunID != "" {
-		result.WorkflowExecutionInfo.ParentExecution = &executionpb.WorkflowExecution{
+		result.WorkflowExecutionInfo.ParentExecution = &commonpb.WorkflowExecution{
 			WorkflowId: executionInfo.ParentWorkflowID,
 			RunId:      executionInfo.ParentRunID,
 		}
@@ -1376,7 +1376,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	namespaceID := namespaceInfo.Id
 	namespace := namespaceInfo.Name
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 		RunId:      request.WorkflowExecution.RunId,
 	}
@@ -1503,7 +1503,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 		return ErrDeserializingToken
 	}
 
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
 		RunId:      token.GetRunId(),
 	}
@@ -1577,7 +1577,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 		return ErrDeserializingToken
 	}
 
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
 		RunId:      token.GetRunId(),
 	}
@@ -1661,7 +1661,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 		return ErrDeserializingToken
 	}
 
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
 		RunId:      token.GetRunId(),
 	}
@@ -1743,7 +1743,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 		return nil, ErrDeserializingToken
 	}
 
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
 		RunId:      token.GetRunId(),
 	}
@@ -1810,7 +1810,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	request := req.CancelRequest
 	parentExecution := req.ExternalWorkflowExecution
 	childWorkflowOnly := req.GetChildWorkflowOnly()
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 		RunId:      request.WorkflowExecution.RunId,
 	}
@@ -1867,7 +1867,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 	request := signalRequest.SignalRequest
 	parentExecution := signalRequest.ExternalWorkflowExecution
 	childWorkflowOnly := signalRequest.GetChildWorkflowOnly()
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 		RunId:      request.WorkflowExecution.RunId,
 	}
@@ -1940,7 +1940,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	namespaceID := namespaceEntry.GetInfo().Id
 
 	sRequest := signalWithStartRequest.SignalWithStartRequest
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: sRequest.WorkflowId,
 	}
 
@@ -2033,7 +2033,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 	defer func() { currentRelease(retError) }()
 
-	execution = executionpb.WorkflowExecution{
+	execution = commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
@@ -2149,7 +2149,7 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 	}
 	namespaceID := namespaceEntry.GetInfo().Id
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 		RunId:      request.WorkflowExecution.RunId,
 	}
@@ -2178,7 +2178,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	namespaceID := namespaceEntry.GetInfo().Id
 
 	request := terminateRequest.TerminateRequest
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 		RunId:      request.WorkflowExecution.RunId,
 	}
@@ -2215,7 +2215,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	}
 	namespaceID := namespaceEntry.GetInfo().Id
 
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: completionRequest.WorkflowExecution.WorkflowId,
 		RunId:      completionRequest.WorkflowExecution.RunId,
 	}
@@ -2321,7 +2321,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	baseContext, baseReleaseFn, err := e.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      baseRunID,
 		},
@@ -2360,7 +2360,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		currentContext, currentReleaseFn, err = e.historyCache.getOrCreateWorkflowExecution(
 			ctx,
 			namespaceID,
-			executionpb.WorkflowExecution{
+			commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      currentRunID,
 			},
@@ -2445,7 +2445,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 func (e *historyEngineImpl) updateWorkflow(
 	ctx context.Context,
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	action updateWorkflowActionFunc,
 ) (retError error) {
 
@@ -2461,7 +2461,7 @@ func (e *historyEngineImpl) updateWorkflow(
 func (e *historyEngineImpl) updateWorkflowExecutionWithAction(
 	ctx context.Context,
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	action updateWorkflowActionFunc,
 ) (retError error) {
 
@@ -2536,7 +2536,7 @@ UpdateHistoryLoop:
 func (e *historyEngineImpl) updateWorkflowExecution(
 	ctx context.Context,
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	createDecisionTask bool,
 	action func(context workflowExecutionContext, mutableState mutableState) error,
 ) error {
@@ -2825,7 +2825,7 @@ func setTaskInfo(
 func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigWithStart(
 	prevExecutionInfo *persistence.WorkflowExecutionInfo,
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	wfIDReusePolicy commonpb.WorkflowIdReusePolicy,
 ) error {
 
@@ -2852,7 +2852,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	prevState executiongenpb.WorkflowExecutionState,
 	prevStatus executionpb.WorkflowExecutionStatus,
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	wfIDReusePolicy commonpb.WorkflowIdReusePolicy,
 ) error {
 
@@ -2960,7 +2960,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 	}
 	namespaceID := namespaceEntry.GetInfo().Id
 	// remove run id from the execution so that reapply events to the current run
-	currentExecution := executionpb.WorkflowExecution{
+	currentExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 	}
 
@@ -3134,7 +3134,7 @@ func (e *historyEngineImpl) MergeDLQMessages(
 func (e *historyEngineImpl) RefreshWorkflowTasks(
 	ctx context.Context,
 	namespaceUUID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 ) (retError error) {
 
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespaceUUID)
@@ -3189,7 +3189,7 @@ func (e *historyEngineImpl) loadWorkflowOnce(
 	context, release, err := e.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

@@ -329,7 +329,7 @@ func matchQuery(record *archiverproto.ArchiveVisibilityRequest, query *parsedQue
 
 func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *executionpb.WorkflowExecutionInfo {
 	return &executionpb.WorkflowExecutionInfo{
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: record.GetWorkflowId(),
 			RunId:      record.GetRunId(),
 		},

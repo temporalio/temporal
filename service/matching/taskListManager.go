@@ -33,7 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 
 	commongenpb "github.com/temporalio/temporal/.gen/proto/common"
@@ -60,7 +60,7 @@ const (
 
 type (
 	addTaskParams struct {
-		execution     *executionpb.WorkflowExecution
+		execution     *commonpb.WorkflowExecution
 		taskInfo      *persistenceblobs.TaskInfo
 		source        commongenpb.TaskSource
 		forwardedFrom string
@@ -409,7 +409,7 @@ func (c *taskListManagerImpl) completeTask(task *persistenceblobs.AllocatedTaskI
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
 		_, err = c.executeWithRetry(func() (interface{}, error) {
-			wf := &executionpb.WorkflowExecution{WorkflowId: task.Data.GetWorkflowId(), RunId: task.Data.GetRunId()}
+			wf := &commonpb.WorkflowExecution{WorkflowId: task.Data.GetWorkflowId(), RunId: task.Data.GetRunId()}
 			return c.taskWriter.appendTask(wf, task.Data)
 		})
 

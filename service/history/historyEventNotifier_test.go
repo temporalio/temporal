@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	executiongenpb "github.com/temporalio/temporal/.gen/proto/execution"
 	"github.com/uber-go/tally"
+	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
 	"github.com/temporalio/temporal/common/clock"
@@ -81,7 +82,7 @@ func (s *historyEventNotifierSuite) TearDownTest() {
 
 func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	namespaceID := "namespace ID"
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "workflow ID",
 		RunId:      "run ID",
 	}
@@ -113,7 +114,7 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 
 func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	namespaceID := "namespace ID"
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "workflow ID",
 		RunId:      "run ID",
 	}

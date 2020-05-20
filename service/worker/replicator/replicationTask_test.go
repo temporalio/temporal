@@ -32,8 +32,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
@@ -503,7 +503,7 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 			req: &historyservice.ReplicateEventsRequest{
 				SourceCluster: s.sourceCluster,
 				NamespaceId:   replicationAttr.NamespaceId,
-				WorkflowExecution: &executionpb.WorkflowExecution{
+				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: replicationAttr.WorkflowId,
 					RunId:      replicationAttr.RunId,
 				},

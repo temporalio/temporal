@@ -39,7 +39,6 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -92,7 +91,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	continueAsNewCounter := int32(0)
 	var previousRunID string
 	var lastRunStartedEvent *eventpb.HistoryEvent
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			previousRunID = execution.GetRunId()
@@ -181,7 +180,7 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 	workflowComplete := false
 	continueAsNewCount := int32(1)
 	continueAsNewCounter := int32(0)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			continueAsNewCounter++
@@ -232,7 +231,7 @@ GetHistoryLoop:
 	for i := 0; i < 20; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 			},
 		})
@@ -247,7 +246,7 @@ GetHistoryLoop:
 		}
 
 		timeoutEventAttributes := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		s.Equal(eventpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
+		s.Equal(commonpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
 		workflowComplete = true
 		break GetHistoryLoop
 	}
@@ -282,7 +281,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 
 	workflowComplete := false
 	continueAsNewCounter := int32(0)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		continueAsNewCounter++
 		buf := new(bytes.Buffer)
@@ -320,7 +319,7 @@ GetHistoryLoop:
 	for i := 0; i < 200; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 			},
 		})
@@ -346,7 +345,7 @@ GetHistoryLoop:
 
 		s.True(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeoutSeconds() < 5)
 		timeoutEventAttributes := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		s.Equal(eventpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
+		s.Equal(commonpb.TimeoutType_StartToClose, timeoutEventAttributes.TimeoutType)
 		workflowComplete = true
 		break GetHistoryLoop
 	}
@@ -381,10 +380,10 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	var executions []*executionpb.WorkflowExecution
+	var executions []*commonpb.WorkflowExecution
 
 	continueAsNewed := false
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		executions = append(executions, execution)
@@ -482,7 +481,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	continueAsNewCounter := int32(0)
 	var startedEvent *eventpb.HistoryEvent
 	var completedEvent *eventpb.HistoryEvent
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		s.Logger.Info("Processing decision task for WorkflowId:", tag.WorkflowID(execution.GetWorkflowId()))
 

@@ -25,7 +25,6 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/matchingservice";
 
 import "common/server_enum.proto";
 import "common/message.proto";
-import "execution/message.proto";
 import "event/server_message.proto";
 import "tasklist/enum.proto";
 import "tasklist/message.proto";
@@ -43,7 +42,7 @@ message PollForDecisionTaskRequest {
 
 message PollForDecisionTaskResponse {
     bytes taskToken = 1;
-    execution.WorkflowExecution workflowExecution = 2;
+    common.WorkflowExecution workflowExecution = 2;
     common.WorkflowType workflowType = 3;
     int64 previousStartedEventId = 4;
     int64 startedEventId = 5;
@@ -70,7 +69,7 @@ message PollForActivityTaskRequest {
 
 message PollForActivityTaskResponse {
     bytes taskToken = 1;
-    execution.WorkflowExecution workflowExecution = 2;
+    common.WorkflowExecution workflowExecution = 2;
     string activityId = 3;
     common.ActivityType activityType = 4;
     common.Payloads input = 5;
@@ -89,7 +88,7 @@ message PollForActivityTaskResponse {
 
 message AddDecisionTaskRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution execution = 2;
+    common.WorkflowExecution execution = 2;
     tasklist.TaskList taskList = 3;
     int64 scheduleId = 4;
     int32 scheduleToStartTimeoutSeconds = 5;
@@ -102,7 +101,7 @@ message AddDecisionTaskResponse {
 
 message AddActivityTaskRequest {
     string namespaceId = 1;
-    execution.WorkflowExecution execution = 2;
+    common.WorkflowExecution execution = 2;
     string sourceNamespaceId = 3;
     tasklist.TaskList taskList = 4;
     int64 scheduleId = 5;

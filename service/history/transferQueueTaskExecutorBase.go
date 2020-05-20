@@ -87,9 +87,9 @@ func newTransferQueueTaskExecutorBase(
 
 func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task *persistenceblobs.TransferTaskInfo,
-) (string, executionpb.WorkflowExecution) {
+) (string, commonpb.WorkflowExecution) {
 
-	return task.GetNamespaceId(), executionpb.WorkflowExecution{
+	return task.GetNamespaceId(), commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      task.GetRunId(),
 	}
@@ -110,7 +110,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	_, err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
 		NamespaceId:       task.GetTargetNamespaceId(),
 		SourceNamespaceId: task.GetNamespaceId(),
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
@@ -137,7 +137,7 @@ func (t *transferQueueTaskExecutorBase) pushDecision(
 
 	_, err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
 		NamespaceId: task.GetNamespaceId(),
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
@@ -180,7 +180,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -224,7 +224,7 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 	request := &persistence.UpsertWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -287,7 +287,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			NamespaceID: namespaceID,
 			Namespace:   namespace,
-			Execution: executionpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},

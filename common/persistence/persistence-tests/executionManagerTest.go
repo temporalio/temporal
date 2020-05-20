@@ -114,7 +114,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 	namespaceID := uuid.New()
 	workflowID := "create-workflow-test-dedup"
 	runID := "3969fae6-6b75-4c2a-b74b-4054edd296a6"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -217,7 +217,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 		Mode:    p.CreateWorkflowModeBrandNew,
 	}
 
-	workflowExecutionStatusCreated := executionpb.WorkflowExecution{
+	workflowExecutionStatusCreated := commonpb.WorkflowExecution{
 		WorkflowId: "create-workflow-test-state-created",
 		RunId:      uuid.New(),
 	}
@@ -238,7 +238,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 	s.Equal(executionpb.WorkflowExecutionStatus_Running, info.ExecutionInfo.Status)
 	s.assertChecksumsEqual(csum, info.Checksum)
 
-	workflowExecutionStatusRunning := executionpb.WorkflowExecution{
+	workflowExecutionStatusRunning := commonpb.WorkflowExecution{
 		WorkflowId: "create-workflow-test-state-running",
 		RunId:      uuid.New(),
 	}
@@ -259,7 +259,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 	s.Equal(executionpb.WorkflowExecutionStatus_Running, info.ExecutionInfo.Status)
 	s.assertChecksumsEqual(csum, info.Checksum)
 
-	workflowExecutionStatusCompleted := executionpb.WorkflowExecution{
+	workflowExecutionStatusCompleted := commonpb.WorkflowExecution{
 		WorkflowId: "create-workflow-test-state-completed",
 		RunId:      uuid.New(),
 	}
@@ -277,7 +277,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 
 	// for zombie workflow creation, we must use existing workflow ID which got created
 	// since we do not allow creation of zombie workflow without current record
-	workflowExecutionStatusZombie := executionpb.WorkflowExecution{
+	workflowExecutionStatusZombie := commonpb.WorkflowExecution{
 		WorkflowId: workflowExecutionStatusRunning.WorkflowId,
 		RunId:      uuid.New(),
 	}
@@ -304,7 +304,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 	namespaceID := uuid.New()
 	workflowID := "create-workflow-test-with-zombie-state"
-	workflowExecutionZombie1 := executionpb.WorkflowExecution{
+	workflowExecutionZombie1 := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
@@ -343,7 +343,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 	_, err = s.GetCurrentWorkflowRunID(namespaceID, workflowID)
 	s.IsType(&serviceerror.NotFound{}, err) // no current workflow
 
-	workflowExecutionRunning := executionpb.WorkflowExecution{
+	workflowExecutionRunning := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
@@ -357,7 +357,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 	s.Nil(err)
 	s.Equal(workflowExecutionRunning.GetRunId(), currentRunID)
 
-	workflowExecutionZombie := executionpb.WorkflowExecution{
+	workflowExecutionZombie := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
@@ -381,7 +381,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 // TestUpdateWorkflowExecutionStateStatus test
 func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "update-workflow-test-state",
 		RunId:      uuid.New(),
 	}
@@ -507,7 +507,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 
 	// create a new workflow with same namespace ID & workflow ID
 	// to enable update workflow with zombie status
-	workflowExecutionRunning := executionpb.WorkflowExecution{
+	workflowExecutionRunning := commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      uuid.New(),
 	}
@@ -562,7 +562,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	namespaceID := uuid.New()
 	workflowID := "create-workflow-test-with-zombie-state"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
@@ -640,7 +640,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	s.NoError(err)
 
 	// create a new workflow with same namespace ID & workflow ID
-	workflowExecutionRunning := executionpb.WorkflowExecution{
+	workflowExecutionRunning := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
@@ -692,7 +692,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 // TestCreateWorkflowExecutionBrandNew test
 func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "create-workflow-test-brand-new",
 		RunId:      uuid.New(),
 	}
@@ -741,7 +741,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 // TestCreateWorkflowExecutionRunIDReuseWithReplication test
 func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplication() {
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "create-workflow-test-run-id-reuse-with-replication",
 		RunId:      uuid.New(),
 	}
@@ -766,7 +766,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
-	newExecution := executionpb.WorkflowExecution{
+	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.GetWorkflowId(),
 		RunId:      uuid.New(),
 	}
@@ -945,7 +945,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 // TestCreateWorkflowExecutionRunIDReuseWithoutReplication test
 func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutReplication() {
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "create-workflow-test-run-id-reuse-without-replication",
 		RunId:      uuid.New(),
 	}
@@ -975,7 +975,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 		nil, nil, nil, nil, nil)
 	s.NoError(err2)
 
-	newExecution := executionpb.WorkflowExecution{
+	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.GetWorkflowId(),
 		RunId:      uuid.New(),
 	}
@@ -1011,7 +1011,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 // TestCreateWorkflowExecutionConcurrentCreate test
 func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionConcurrentCreate() {
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "create-workflow-test-concurrent-create",
 		RunId:      uuid.New(),
 	}
@@ -1034,7 +1034,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionConcurrentCreate() {
 	var lastError error
 	for i := 0; i < times; i++ {
 		go func() {
-			newExecution := executionpb.WorkflowExecution{
+			newExecution := commonpb.WorkflowExecution{
 				WorkflowId: workflowExecution.GetWorkflowId(),
 				RunId:      uuid.New(),
 			}
@@ -1067,7 +1067,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionConcurrentCreate() {
 // TestPersistenceStartWorkflow test
 func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 	namespaceID := "2d7994bf-9de8-459d-9c81-e723daedb246"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "start-workflow-test",
 		RunId:      "7f9fe8a0-9237-11e6-ae22-56b6b6499611",
 	}
@@ -1130,7 +1130,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 // TestPersistenceStartWorkflowWithReplicationState test
 func (s *ExecutionManagerSuite) TestPersistenceStartWorkflowWithReplicationState() {
 	namespaceID := "2d7994bf-9de8-459d-9c81-e723daedb246"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "start-workflow-test-replication-state",
 		RunId:      "7f9fe8a0-9237-11e6-ae22-56b6b6499611",
 	}
@@ -1286,7 +1286,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.NotNil(createResp, "Expected non empty task identifier.")
 
 	state, err := s.GetWorkflowExecutionInfo(createReq.NewWorkflowSnapshot.ExecutionInfo.NamespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowID,
 			RunId:      createReq.NewWorkflowSnapshot.ExecutionInfo.RunID,
 		})
@@ -1350,7 +1350,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 // TestUpdateWorkflow test
 func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	namespaceID := "b0a8571c-0257-40ea-afcd-3a14eae181c0"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "update-workflow-test",
 		RunId:      "5ba5e531-e46b-48d9-b4b3-859919839553",
 	}
@@ -1623,7 +1623,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 // TestDeleteWorkflow test
 func (s *ExecutionManagerSuite) TestDeleteWorkflow() {
 	namespaceID := "1d4abb23-b87b-457b-96ef-43aba0b9c44f"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "delete-workflow-test",
 		RunId:      "4e0917f2-9361-4a14-b16f-1fafe09b287a",
 	}
@@ -1670,7 +1670,7 @@ func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 		s.T().Skip("this test is only applicable for cassandra (uses TTL based deletes)")
 	}
 	namespaceID := "54d15308-e20e-4b91-a00f-a518a3892790"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "delete-current-workflow-test",
 		RunId:      "6cae4054-6ba7-46d3-8755-e3c2db6f74ea",
 	}
@@ -1728,7 +1728,7 @@ func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 func (s *ExecutionManagerSuite) TestUpdateDeleteWorkflow() {
 	finishedCurrentExecutionRetentionTTL := int32(2)
 	namespaceID := "54d15308-e20e-4b91-a00f-a518a3892790"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "update-delete-workflow-test",
 		RunId:      "6cae4054-6ba7-46d3-8755-e3c2db6f74ea",
 	}
@@ -1777,7 +1777,7 @@ func (s *ExecutionManagerSuite) TestUpdateDeleteWorkflow() {
 // TestCleanupCorruptedWorkflow test
 func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 	namespaceID := "54d15308-e20e-4b91-a00f-a518a3892790"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "cleanup-corrupted-workflow-test",
 		RunId:      "6cae4054-6ba7-46d3-8755-e3c2db6f74ea",
 	}
@@ -1843,7 +1843,7 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 // TestGetCurrentWorkflow test
 func (s *ExecutionManagerSuite) TestGetCurrentWorkflow() {
 	namespaceID := "54d15308-e20e-4b91-a00f-a518a3892790"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "get-current-workflow-test",
 		RunId:      "6cae4054-6ba7-46d3-8755-e3c2db6f74ea",
 	}
@@ -1874,7 +1874,7 @@ func (s *ExecutionManagerSuite) TestGetCurrentWorkflow() {
 	s.NoError(err4)
 	s.Equal(workflowExecution.GetRunId(), runID4)
 
-	workflowExecution2 := executionpb.WorkflowExecution{
+	workflowExecution2 := commonpb.WorkflowExecution{
 		WorkflowId: "get-current-workflow-test",
 		RunId:      "c3ff4bc6-de18-4643-83b2-037a33f45322",
 	}
@@ -1887,7 +1887,7 @@ func (s *ExecutionManagerSuite) TestGetCurrentWorkflow() {
 // TestTransferTasksThroughUpdate test
 func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	namespaceID := "b785a8ba-bd7d-4760-bb05-41b115f3e10a"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "get-transfer-tasks-through-update-test",
 		RunId:      "30a9fa1f-0db1-4d7a-8c34-aa82c5dad3aa",
 	}
@@ -1941,7 +1941,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	err5 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, updatedStats1, int64(5))
 	s.NoError(err5)
 
-	newExecution := executionpb.WorkflowExecution{
+	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.GetWorkflowId(),
 		RunId:      "2a038c8f-b575-4151-8d2c-d443e999ab5a",
 	}
@@ -1970,7 +1970,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 // TestCancelTransferTaskTasks test
 func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	namespaceID := "aeac8287-527b-4b35-80a9-667cb47e7c6d"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "cancel-workflow-test",
 		RunId:      "db20f7e2-1a1e-40d9-9278-d8b886738e05",
 	}
@@ -2057,7 +2057,7 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	s.NoError(err)
 }
 
-func (s *ExecutionManagerSuite) validateTransferTaskHighLevel(task1 *persistenceblobs.TransferTaskInfo, taskType commongenpb.TaskType, namespaceID string, workflowExecution executionpb.WorkflowExecution) {
+func (s *ExecutionManagerSuite) validateTransferTaskHighLevel(task1 *persistenceblobs.TransferTaskInfo, taskType commongenpb.TaskType, namespaceID string, workflowExecution commonpb.WorkflowExecution) {
 	s.EqualValues(taskType, task1.TaskType)
 	s.Equal(namespaceID, task1.GetNamespaceId())
 	s.Equal(workflowExecution.GetWorkflowId(), task1.GetWorkflowId())
@@ -2073,7 +2073,7 @@ func (s *ExecutionManagerSuite) validateTransferTaskTargetInfo(task2 *persistenc
 // TestSignalTransferTaskTasks test
 func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 	namespaceID := "aeac8287-527b-4b35-80a9-667cb47e7c6d"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "signal-workflow-test",
 		RunId:      "db20f7e2-1a1e-40d9-9278-d8b886738e05",
 	}
@@ -2160,7 +2160,7 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 // TestReplicationTasks test
 func (s *ExecutionManagerSuite) TestReplicationTasks() {
 	namespaceID := "2466d7de-6602-4ad8-b939-fb8f8c36c711"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "get-replication-tasks-test",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -2249,7 +2249,7 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 // TestTransferTasksComplete test
 func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	namespaceID := "8bfb47be-5b57-4d55-9109-5fb35e20b1d7"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "get-transfer-tasks-test-complete",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -2349,7 +2349,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 // TestTransferTasksRangeComplete test
 func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	namespaceID := "8bfb47be-5b57-4d55-9109-5fb35e20b1d8"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "get-transfer-tasks-test-range-complete",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -2437,13 +2437,13 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 // TestTimerTasksComplete test
 func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 	namespaceID := "8bfb47be-5b57-4d66-9109-5fb35e20b1d7"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "get-timer-tasks-test-complete",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
 
 	now := time.Now()
-	initialTasks := []p.Task{&p.DecisionTimeoutTask{now.Add(1 * time.Second), 1, 2, 3, int(eventpb.TimeoutType_StartToClose), 11}}
+	initialTasks := []p.Task{&p.DecisionTimeoutTask{now.Add(1 * time.Second), 1, 2, 3, int(commonpb.TimeoutType_StartToClose), 11}}
 
 	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "taskList", "wType", 20, 13, 3, 0, 2, initialTasks)
 	s.NoError(err0)
@@ -2461,7 +2461,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 	tasks := []p.Task{
 		&p.WorkflowTimeoutTask{now.Add(2 * time.Second), 2, 12},
 		&p.DeleteHistoryEventTask{now.Add(2 * time.Second), 3, 13},
-		&p.ActivityTimeoutTask{now.Add(3 * time.Second), 4, int(eventpb.TimeoutType_StartToClose), 7, 0, 14},
+		&p.ActivityTimeoutTask{now.Add(3 * time.Second), 4, int(commonpb.TimeoutType_StartToClose), 7, 0, 14},
 		&p.UserTimerTask{now.Add(3 * time.Second), 5, 7, 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil)
@@ -2498,7 +2498,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 // TestTimerTasksRangeComplete test
 func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 	namespaceID := "8bfb47be-5b57-4d66-9109-5fb35e20b1d7"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "get-timer-tasks-test-range-complete",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -2517,10 +2517,10 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	tasks := []p.Task{
-		&p.DecisionTimeoutTask{time.Now(), 1, 2, 3, int(eventpb.TimeoutType_StartToClose), 11},
+		&p.DecisionTimeoutTask{time.Now(), 1, 2, 3, int(commonpb.TimeoutType_StartToClose), 11},
 		&p.WorkflowTimeoutTask{time.Now(), 2, 12},
 		&p.DeleteHistoryEventTask{time.Now(), 3, 13},
-		&p.ActivityTimeoutTask{time.Now(), 4, int(eventpb.TimeoutType_StartToClose), 7, 0, 14},
+		&p.ActivityTimeoutTask{time.Now(), 4, int(commonpb.TimeoutType_StartToClose), 7, 0, 14},
 		&p.UserTimerTask{time.Now(), 5, 7, 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil)
@@ -2567,7 +2567,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 // TestWorkflowMutableStateActivities test
 func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	namespaceID := "7fcf0aa9-e121-4292-bdad-0a75181b4aa3"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-mutable-test",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -2679,7 +2679,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 // TestWorkflowMutableStateTimers test
 func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 	namespaceID := "025d178a-709b-4c07-8dd7-86dbf9bd2e06"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-mutable-timers-test",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -2732,13 +2732,13 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 // TestWorkflowMutableStateChildExecutions test
 func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 	namespaceID := "88236cd2-c439-4cec-9957-2748ce3be074"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-mutable-child-executions-parent-test",
 		RunId:      "c63dba1e-929c-4fbf-8ec5-4533b16269a9",
 	}
 
 	parentNamespaceID := "6036ded3-e541-42c9-8f69-3d9354dad081"
-	parentExecution := executionpb.WorkflowExecution{
+	parentExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-mutable-child-executions-child-test",
 		RunId:      "73e89362-25ec-4305-bcb8-d9448b90856c",
 	}
@@ -2800,7 +2800,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 // TestWorkflowMutableStateRequestCancel test
 func (s *ExecutionManagerSuite) TestWorkflowMutableStateRequestCancel() {
 	namespaceID := "568b8d19-cf64-4aac-be1b-f8a3edbc1fa9"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-mutable-request-cancel-test",
 		RunId:      "87f96253-b925-426e-90db-aa4ee89b5aca",
 	}
@@ -2849,7 +2849,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateRequestCancel() {
 func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-mutable-signal-info-test",
 		RunId:      runID,
 	}
@@ -2901,7 +2901,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalRequested() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-mutable-signal-requested-test",
 		RunId:      runID,
 	}
@@ -2944,7 +2944,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalRequested() {
 // TestWorkflowMutableStateInfo test
 func (s *ExecutionManagerSuite) TestWorkflowMutableStateInfo() {
 	namespaceID := "9ed8818b-3090-4160-9f21-c6b70e64d2dd"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-mutable-state-test",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -2977,7 +2977,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateInfo() {
 // TestContinueAsNew test
 func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	namespaceID := "c1c0bb55-04e6-4a9c-89d0-1be7b96459f8"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "continue-as-new-workflow-test",
 		RunId:      "551c88d2-d9e6-404f-8131-9eec14f36643",
 	}
@@ -2995,7 +2995,7 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	continueAsNewInfo.NextEventID = int64(5)
 	continueAsNewInfo.LastProcessedEvent = int64(2)
 
-	newWorkflowExecution := executionpb.WorkflowExecution{
+	newWorkflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "continue-as-new-workflow-test",
 		RunId:      "64c7e15a-3fd7-4182-9c6f-6f25a4fa2614",
 	}
@@ -3044,7 +3044,7 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 	s.ClearReplicationQueue()
 	namespaceID := "2466d7de-6602-4ad8-b939-fb8f8c36c711"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "replication-transfer-task-test",
 		RunId:      "dcde9d85-5d7a-43c7-8b18-cb2cae0e29e0",
 	}
@@ -3122,7 +3122,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	s.ClearReplicationQueue()
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "replication-transfer-task--range-complete-test",
 		RunId:      uuid.New(),
 	}
@@ -3226,7 +3226,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-replication-state-test",
 		RunId:      runID,
 	}
@@ -3428,7 +3428,7 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 // TestUpdateAndClearBufferedEvents test
 func (s *ExecutionManagerSuite) TestUpdateAndClearBufferedEvents() {
 	namespaceID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-update-and-clear-buffered-events",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -3547,7 +3547,7 @@ func (s *ExecutionManagerSuite) TestUpdateAndClearBufferedEvents() {
 // TestConflictResolveWorkflowExecutionCurrentIsSelf test
 func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSelf() {
 	namespaceID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-reset-mutable-state-test-current-is-self",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -4042,7 +4042,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASCurre
 	workflowID := "test-reset-mutable-state-test-current-is-not-self"
 
 	// first create a workflow and continue as new it
-	workflowExecutionReset := executionpb.WorkflowExecution{
+	workflowExecutionReset := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0",
 	}
@@ -4068,7 +4068,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASCurre
 	continueAsNewInfo.NextEventID = int64(5)
 	continueAsNewInfo.LastProcessedEvent = int64(2)
 
-	workflowExecutionCurrent := executionpb.WorkflowExecution{
+	workflowExecutionCurrent := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
 	}
@@ -4134,7 +4134,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASCurre
 	continueAsNewInfo.NextEventID += 3
 	continueAsNewInfo.LastProcessedEvent += 2
 
-	workflowExecutionCurrent2 := executionpb.WorkflowExecution{
+	workflowExecutionCurrent2 := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2",
 	}
@@ -4166,7 +4166,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASMisma
 	workflowID := "test-reset-mutable-state-test-mismatch"
 
 	// first create a workflow and continue as new it
-	workflowExecutionReset := executionpb.WorkflowExecution{
+	workflowExecutionReset := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0",
 	}
@@ -4192,7 +4192,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASMisma
 	continueAsNewInfo.NextEventID = int64(5)
 	continueAsNewInfo.LastProcessedEvent = int64(2)
 
-	workflowExecutionCurrent := executionpb.WorkflowExecution{
+	workflowExecutionCurrent := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
 	}
@@ -4280,7 +4280,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	workflowID := "test-reset-mutable-state-test-with-transaction-current-is-not-self"
 
 	// first create a workflow and continue as new it
-	workflowExecutionReset := executionpb.WorkflowExecution{
+	workflowExecutionReset := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0",
 	}
@@ -4306,7 +4306,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	continueAsNewInfo.NextEventID = int64(5)
 	continueAsNewInfo.LastProcessedEvent = int64(2)
 
-	workflowExecutionCurrent := executionpb.WorkflowExecution{
+	workflowExecutionCurrent := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
 	}
@@ -4426,7 +4426,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	workflowID := "test-reset-mutable-state-test-with-transaction-current-is-not-self-with-continue-as-new"
 
 	// first create a workflow and continue as new it
-	workflowExecutionReset := executionpb.WorkflowExecution{
+	workflowExecutionReset := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0",
 	}
@@ -4452,7 +4452,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	continueAsNewInfo.NextEventID = int64(5)
 	continueAsNewInfo.LastProcessedEvent = int64(2)
 
-	workflowExecutionCurrent := executionpb.WorkflowExecution{
+	workflowExecutionCurrent := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
 	}
@@ -4588,7 +4588,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.Equal(resetReq.CurrentWorkflowMutation.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.CurrentWorkflowMutation.ReplicationState, state.ReplicationState)
 
-	state, err = s.GetWorkflowExecutionInfo(namespaceID, executionpb.WorkflowExecution{
+	state, err = s.GetWorkflowExecutionInfo(namespaceID, commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID,
 	})
@@ -4606,7 +4606,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	workflowID := "test-reset-mutable-state-test-with-transaction-current-is-self"
 
 	// first create a workflow and continue as new it
-	workflowExecutionReset := executionpb.WorkflowExecution{
+	workflowExecutionReset := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0",
 	}
@@ -4709,7 +4709,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	workflowID := "test-reset-mutable-state-test-with-transaction-current-is-self-with-continue-as-new"
 
 	// first create a workflow and continue as new it
-	workflowExecutionReset := executionpb.WorkflowExecution{
+	workflowExecutionReset := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0",
 	}
@@ -4827,7 +4827,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.Equal(resetReq.ResetWorkflowSnapshot.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.ResetWorkflowSnapshot.ReplicationState, state.ReplicationState)
 
-	state, err = s.GetWorkflowExecutionInfo(namespaceID, executionpb.WorkflowExecution{
+	state, err = s.GetWorkflowExecutionInfo(namespaceID, commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID,
 	})
@@ -4845,7 +4845,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	workflowID := "test-reset-mutable-state-test-with-transaction-current-is-zombie"
 
 	// first create a workflow and continue as new it
-	workflowExecutionReset := executionpb.WorkflowExecution{
+	workflowExecutionReset := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0",
 	}
@@ -4871,7 +4871,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	continueAsNewInfo.NextEventID = int64(5)
 	continueAsNewInfo.LastProcessedEvent = int64(2)
 
-	workflowExecutionCurrent := executionpb.WorkflowExecution{
+	workflowExecutionCurrent := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
 	}
@@ -4961,7 +4961,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	workflowID := "test-reset-mutable-state-test-with-transaction-current-is-zombie-with-continue-as-new"
 
 	// first create a workflow and continue as new it
-	workflowExecutionReset := executionpb.WorkflowExecution{
+	workflowExecutionReset := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0",
 	}
@@ -4987,7 +4987,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	continueAsNewInfo.NextEventID = int64(5)
 	continueAsNewInfo.LastProcessedEvent = int64(2)
 
-	workflowExecutionCurrent := executionpb.WorkflowExecution{
+	workflowExecutionCurrent := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
 	}
@@ -5092,7 +5092,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.Equal(resetReq.ResetWorkflowSnapshot.ExecutionInfo, state.ExecutionInfo)
 	s.Equal(resetReq.ResetWorkflowSnapshot.ReplicationState, state.ReplicationState)
 
-	state, err = s.GetWorkflowExecutionInfo(namespaceID, executionpb.WorkflowExecution{
+	state, err = s.GetWorkflowExecutionInfo(namespaceID, commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      resetReq.NewWorkflowSnapshot.ExecutionInfo.RunID,
 	})

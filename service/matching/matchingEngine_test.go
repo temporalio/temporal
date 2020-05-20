@@ -44,7 +44,6 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -258,7 +257,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 	workflowType := &commonpb.WorkflowType{
 		Name: "workflow",
 	}
-	execution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 	scheduleID := int64(0)
 
 	// History service is using mock
@@ -410,7 +409,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType tasklistpb.TaskListType, isF
 
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
-	execution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	for i := int64(0); i < taskCount; i++ {
 		scheduleID := i * 3
@@ -468,7 +467,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
-	execution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	tlID := newTestTaskListID(namespaceID, tl, tasklistpb.TaskListType_Activity)
 	tlKind := tasklistpb.TaskListKind_Normal
@@ -505,7 +504,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
-	workflowExecution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	const taskCount = 1000
 	const initialRangeID = 102
@@ -617,7 +616,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
-	workflowExecution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	const taskCount = 10
 	const initialRangeID = 102
@@ -819,7 +818,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.matchingEngine.metricsClient = metrics.NewClient(scope, metrics.Matching)
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
-	workflowExecution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	const initialRangeID = 0
 	const rangeSize = 3
@@ -966,7 +965,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
-	workflowExecution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	const workerCount = 20
 	const taskCount = 100
@@ -1111,7 +1110,7 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
-	workflowExecution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	const engineCount = 2
 	const taskCount = 400
@@ -1260,7 +1259,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
-	workflowExecution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	const engineCount = 2
 	const taskCount = 400
@@ -1396,7 +1395,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
-	workflowExecution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
@@ -1439,7 +1438,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
-	workflowExecution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
@@ -1568,7 +1567,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch_ReadBatchDone() {
 func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	runID := uuid.NewRandom().String()
 	workflowID := uuid.New()
-	workflowExecution := &executionpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	namespaceID := uuid.NewRandom().String()
 	tl := "task-expiry-completion-tl0"

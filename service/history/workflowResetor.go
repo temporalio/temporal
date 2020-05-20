@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	namespacepb "go.temporal.io/temporal-proto/namespace"
@@ -486,7 +487,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 		if continueRunID == currMutableState.GetExecutionInfo().RunID {
 			continueMutableState = currMutableState
 		} else {
-			continueExe := executionpb.WorkflowExecution{
+			continueExe := commonpb.WorkflowExecution{
 				WorkflowId: newMutableState.GetExecutionInfo().WorkflowID,
 				RunId:      continueRunID,
 			}
@@ -619,7 +620,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 	newRunID string,
 ) (forkEventVersion, runTimeoutSecs int64, receivedSignalsAfterReset []*eventpb.HistoryEvent, continueRunID string, sBuilder stateBuilder, newHistorySize int64, retError error) {
 
-	prevExecution := executionpb.WorkflowExecution{
+	prevExecution := commonpb.WorkflowExecution{
 		WorkflowId: prevMutableState.GetExecutionInfo().WorkflowID,
 		RunId:      prevMutableState.GetExecutionInfo().RunID,
 	}
@@ -784,7 +785,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 	if retError != nil {
 		return retError
 	}
-	baseExecution := executionpb.WorkflowExecution{
+	baseExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      resetAttr.GetBaseRunId(),
 	}
@@ -808,7 +809,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 		currContext = baseContext
 	} else {
 		var currRelease releaseWorkflowExecutionFunc
-		currExecution := executionpb.WorkflowExecution{
+		currExecution := commonpb.WorkflowExecution{
 			WorkflowId: baseExecution.WorkflowId,
 			RunId:      currentRunID,
 		}
@@ -879,7 +880,7 @@ func (w *workflowResetorImpl) ApplyResetEvent(
 // TODO: @shreyassrivatsan reduce number of return parameters from this method
 func (w *workflowResetorImpl) replicateResetEvent(
 	baseMutableState mutableState,
-	baseExecution *executionpb.WorkflowExecution,
+	baseExecution *commonpb.WorkflowExecution,
 	newRunHistory []*eventpb.HistoryEvent,
 	forkEventVersion int64,
 ) (newMsBuilder mutableState, newHistorySize int64, transferTasks, timerTasks []persistence.Task, retError error) {

@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -58,7 +59,7 @@ type (
 	workflowExecutionContext interface {
 		getNamespace() string
 		getNamespaceID() string
-		getExecution() *executionpb.WorkflowExecution
+		getExecution() *commonpb.WorkflowExecution
 
 		loadWorkflowExecution() (mutableState, error)
 		loadWorkflowExecutionForReplication(incomingVersion int64) (mutableState, error)
@@ -146,7 +147,7 @@ type (
 type (
 	workflowExecutionContextImpl struct {
 		namespaceID       string
-		workflowExecution executionpb.WorkflowExecution
+		workflowExecution commonpb.WorkflowExecution
 		shard             ShardContext
 		engine            Engine
 		executionManager  persistence.ExecutionManager
@@ -169,7 +170,7 @@ var (
 
 func newWorkflowExecutionContext(
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	shard ShardContext,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
@@ -210,7 +211,7 @@ func (c *workflowExecutionContextImpl) getNamespaceID() string {
 	return c.namespaceID
 }
 
-func (c *workflowExecutionContextImpl) getExecution() *executionpb.WorkflowExecution {
+func (c *workflowExecutionContextImpl) getExecution() *commonpb.WorkflowExecution {
 	return &c.workflowExecution
 }
 
@@ -862,7 +863,7 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 	namespaceID := workflowEvents.NamespaceID
 	workflowID := workflowEvents.WorkflowID
 	runID := workflowEvents.RunID
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
 	}
@@ -892,7 +893,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 	}
 
 	namespaceID := workflowEvents.NamespaceID
-	execution := executionpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
 	}
@@ -914,7 +915,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 
 func (c *workflowExecutionContextImpl) appendHistoryV2EventsWithRetry(
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
 ) (int64, error) {
 
@@ -1280,7 +1281,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 
 	// Reapply events only reapply to the current run.
 	// The run id is only used for reapply event de-duplication
-	execution := &executionpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
