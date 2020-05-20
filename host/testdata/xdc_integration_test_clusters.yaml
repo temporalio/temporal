@@ -3,7 +3,7 @@
   clustermetadata:
     enableGlobalNamespace: true
     replicationConsumer:
-      type: rpc
+      type: kafka
       fetcher:
         rpcParallelism: 1
         aggregationIntervalSecs: 2
@@ -65,7 +65,7 @@
   clustermetadata:
     enableGlobalNamespace: true
     replicationConsumer:
-      type: rpc
+      type: kafka
       fetcher:
         rpcParallelism: 1
         aggregationIntervalSecs: 2
