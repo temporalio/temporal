@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -83,7 +84,7 @@ func (s *TestCluster) SetupTestDatabase() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		schemaDir = temporalPackageDir + schemaDir
+		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
 	s.LoadSchema([]string{"schema.sql"}, schemaDir)
 	s.LoadVisibilitySchema([]string{"schema.sql"}, schemaDir)
@@ -151,7 +152,7 @@ func (s *TestCluster) DropDatabase() {
 
 // LoadSchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := schemaDir + "/temporal"
+	workflowSchemaDir := path.Join(schemaDir, "temporal")
 	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames, true)
 	if err != nil {
 		log.Fatal(err)
@@ -160,7 +161,7 @@ func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 
 // LoadVisibilitySchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := schemaDir + "/visibility"
+	workflowSchemaDir := path.Join(schemaDir, "visibility")
 	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames, true)
 	if err != nil {
 		log.Fatal(err)
@@ -168,12 +169,19 @@ func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string)
 }
 
 func getTemporalPackageDir() (string, error) {
-	temporalPackageDir, err := os.Getwd()
-	if err != nil {
-		panic(err)
+	var err error
+	temporalPackageDir := os.Getenv("TEMPORAL_ROOT")
+	if temporalPackageDir == "" {
+		temporalPackageDir, err = os.Getwd()
+		if err != nil {
+			panic(err)
+		}
+		temporalIndex := strings.LastIndex(temporalPackageDir, "/temporal/")
+		if temporalIndex == -1 {
+			panic("Unable to find repo path. Use env var TEMPORAL_ROOT or clone the repo into folder named 'temporal'")
+		}
+		temporalPackageDir = temporalPackageDir[:temporalIndex+len("/temporal/")]
 	}
-	temporalIndex := strings.LastIndex(temporalPackageDir, "/temporal/")
-	temporalPackageDir = temporalPackageDir[:temporalIndex+len("/temporal/")]
 	return temporalPackageDir, err
 }
 
