@@ -59,7 +59,7 @@ const (
 )
 
 // NewTLSConfigProviderFromConfig creates a new TLS Configuration provider from RootTLS config
-func NewTLSConfigProviderFromConfig(encryptionSettings config.RootTLS, hostname string) (TLSConfigProvider, error) {
+func NewTLSConfigProviderFromConfig(encryptionSettings config.RootTLS) (TLSConfigProvider, error) {
 	/* if || encryptionSettings.Provider == ""  {
 		return nil, nil
 	}

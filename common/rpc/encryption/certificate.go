@@ -33,6 +33,7 @@ import (
 	"math/big"
 	mathrand "math/rand"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -63,6 +64,15 @@ func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage, ke
 
 	if ip := net.ParseIP(commonName).To4(); ip != nil {
 		template.IPAddresses = []net.IP{ip}
+
+		if ip.IsLoopback() {
+			template.DNSNames = []string{"localhost"}
+		}
+	}
+
+	if strings.ToLower(commonName) == "localhost" {
+		template.IPAddresses = []net.IP{net.IPv6loopback, net.IPv4(127,0 ,0, 1)}
+		template.DNSNames = []string{"localhost"}
 	}
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, keyLengthBits)
@@ -103,6 +113,15 @@ func GenerateServerX509UsingCA(commonName string, ca *tls.Certificate) (*tls.Cer
 
 	if ip := net.ParseIP(commonName).To4(); ip != nil {
 		template.IPAddresses = []net.IP{ip}
+
+		if ip.IsLoopback() {
+			template.DNSNames = []string{"localhost"}
+		}
+	}
+
+	if strings.ToLower(commonName) == "localhost" {
+		template.IPAddresses = []net.IP{net.IPv6loopback, net.IPv4(127,0 ,0, 1)}
+		template.DNSNames = []string{"localhost"}
 	}
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)

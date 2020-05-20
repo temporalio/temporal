@@ -54,20 +54,13 @@ type RPCFactory struct {
 
 // NewFactory builds a new RPCFactory
 // conforming to the underlying configuration
-func NewFactory(cfg *config.RPC, sName string, logger log.Logger, serverCfg *config.Global) (*RPCFactory, error) {
-	tlsFactory, err := encryption.NewTLSConfigProviderFromConfig(
-		serverCfg.TLS,
-		getBroadcastAddressFromConfig(serverCfg, cfg, logger))
-
-	if err != nil {
-		return nil, err
-	}
-	return newFactory(cfg, sName, logger, tlsFactory)
+func NewFactory(cfg *config.RPC, sName string, logger log.Logger, tlsProvider encryption.TLSConfigProvider) (*RPCFactory) {
+	return newFactory(cfg, sName, logger, tlsProvider)
 }
 
-func newFactory(cfg *config.RPC, sName string, logger log.Logger, tlsProvider encryption.TLSConfigProvider) (*RPCFactory, error) {
+func newFactory(cfg *config.RPC, sName string, logger log.Logger, tlsProvider encryption.TLSConfigProvider) (*RPCFactory) {
 	factory := &RPCFactory{config: cfg, serviceName: sName, logger: logger, tlsFactory: tlsProvider}
-	return factory, nil
+	return factory
 }
 
 func (d *RPCFactory) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {
