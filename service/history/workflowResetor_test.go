@@ -179,7 +179,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      forkRunID,
 	}
@@ -193,7 +193,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -232,7 +232,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
@@ -858,7 +858,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      forkRunID,
 	}
@@ -872,7 +872,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -889,7 +889,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	actIDStartedNoRetry := "actID4"
 	signalName1 := "sig1"
 	signalName2 := "sig2"
-	cancelWE := &executionpb.WorkflowExecution{
+	cancelWE := &commonpb.WorkflowExecution{
 		WorkflowId: "cancel-wfid",
 		RunId:      uuid.New().String(),
 	}
@@ -914,7 +914,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
@@ -1443,7 +1443,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      forkRunID,
 	}
@@ -1457,7 +1457,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -1507,7 +1507,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
@@ -2146,7 +2146,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      forkRunID,
 	}
@@ -2160,7 +2160,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -2210,7 +2210,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
@@ -2743,7 +2743,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      forkRunID,
 	}
@@ -2757,7 +2757,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -2807,7 +2807,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},
@@ -3429,14 +3429,14 @@ func (s *resetorSuite) TestApplyReset() {
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
 	newRunID := uuid.New().String()
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: wid,
 		RunId:      newRunID,
 	}
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
 		},
@@ -3485,7 +3485,7 @@ func (s *resetorSuite) TestApplyReset() {
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		Execution: executionpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
 		},

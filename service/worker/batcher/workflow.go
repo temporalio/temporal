@@ -37,7 +37,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"go.temporal.io/temporal"
 	commonpb "go.temporal.io/temporal-proto/common"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
@@ -147,7 +146,7 @@ type (
 	}
 
 	taskDetail struct {
-		execution executionpb.WorkflowExecution
+		execution commonpb.WorkflowExecution
 		attempts  int
 		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
 		hbd HeartBeatDetails
@@ -351,7 +350,7 @@ func startTaskProcessor(
 					func(workflowID, runID string) error {
 						_, err := client.TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,
-							WorkflowExecution: &executionpb.WorkflowExecution{
+							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
@@ -366,7 +365,7 @@ func startTaskProcessor(
 					func(workflowID, runID string) error {
 						_, err := client.RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,
-							WorkflowExecution: &executionpb.WorkflowExecution{
+							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
@@ -380,7 +379,7 @@ func startTaskProcessor(
 					func(workflowID, runID string) error {
 						_, err := client.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,
-							WorkflowExecution: &executionpb.WorkflowExecution{
+							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
@@ -421,7 +420,7 @@ func processTask(
 	applyOnChild *bool,
 	procFn func(string, string) error,
 ) error {
-	wfs := []executionpb.WorkflowExecution{task.execution}
+	wfs := []commonpb.WorkflowExecution{task.execution}
 	for len(wfs) > 0 {
 		wf := wfs[0]
 
@@ -441,7 +440,7 @@ func processTask(
 		wfs = wfs[1:]
 		resp, err := client.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: batchParams.Namespace,
-			Execution: &executionpb.WorkflowExecution{
+			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: wf.GetWorkflowId(),
 				RunId:      wf.GetRunId(),
 			},
@@ -459,7 +458,7 @@ func processTask(
 		if applyOnChild != nil && *applyOnChild && len(resp.PendingChildren) > 0 {
 			getActivityLogger(ctx).Info("Found more child workflows to process", tag.Number(int64(len(resp.PendingChildren))))
 			for _, ch := range resp.PendingChildren {
-				wfs = append(wfs, executionpb.WorkflowExecution{
+				wfs = append(wfs, commonpb.WorkflowExecution{
 					WorkflowId: ch.GetWorkflowId(),
 					RunId:      ch.GetRunId(),
 				})

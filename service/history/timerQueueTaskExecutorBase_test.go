@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -131,7 +131,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 		TaskId:              12345,
 		VisibilityTimestamp: types.TimestampNow(),
 	}
-	executionInfo := executionpb.WorkflowExecution{
+	executionInfo := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      task.GetRunId(),
 	}

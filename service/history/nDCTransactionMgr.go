@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	executionpb "go.temporal.io/temporal-proto/execution"
+	commonpb "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
@@ -386,7 +386,7 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 	_, err := r.shard.GetExecutionManager().GetWorkflowExecution(
 		&persistence.GetWorkflowExecutionRequest{
 			NamespaceID: namespaceID,
-			Execution: executionpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
@@ -437,7 +437,7 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 	weContext, release, err := r.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
-		executionpb.WorkflowExecution{
+		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

@@ -562,7 +562,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	// 5. error if any
 	queryHistory := func(
 		namespaceUUID string,
-		execution *executionpb.WorkflowExecution,
+		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
 	) ([]byte, string, int64, int64, bool, error) {
@@ -923,7 +923,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 			ScheduleAttempt: histResp.StartedResponse.GetAttempt(),
 		}
 		token, _ := wh.tokenSerializer.Serialize(taskToken)
-		workflowExecution := &executionpb.WorkflowExecution{
+		workflowExecution := &commonpb.WorkflowExecution{
 			WorkflowId: taskToken.GetWorkflowId(),
 			RunId:      taskToken.GetRunId(),
 		}
@@ -3161,7 +3161,7 @@ func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *
 func (wh *WorkflowHandler) getRawHistory(
 	scope metrics.Scope,
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	firstEventID int64,
 	nextEventID int64,
 	pageSize int32,
@@ -3235,7 +3235,7 @@ func (wh *WorkflowHandler) getRawHistory(
 func (wh *WorkflowHandler) getHistory(
 	scope metrics.Scope,
 	namespaceID string,
-	execution executionpb.WorkflowExecution,
+	execution commonpb.WorkflowExecution,
 	firstEventID, nextEventID int64,
 	pageSize int32,
 	nextPageToken []byte,
@@ -3396,7 +3396,7 @@ func (wh *WorkflowHandler) validateTaskList(t *tasklistpb.TaskList, scope metric
 	return nil
 }
 
-func (wh *WorkflowHandler) validateExecutionAndEmitMetrics(w *executionpb.WorkflowExecution, scope metrics.Scope) error {
+func (wh *WorkflowHandler) validateExecutionAndEmitMetrics(w *commonpb.WorkflowExecution, scope metrics.Scope) error {
 	err := validateExecution(w)
 	if err != nil {
 		return wh.error(err, scope)

@@ -73,7 +73,7 @@ func (s *VisibilityPersistenceSuite) TearDownSuite() {
 func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 	testNamespaceUUID := uuid.New()
 
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -133,7 +133,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 	testNamespaceUUID := uuid.New()
 
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test-time-skew",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -191,7 +191,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 
 	// Create 2 executions
 	startTime1 := time.Now()
-	workflowExecution1 := executionpb.WorkflowExecution{
+	workflowExecution1 := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-pagination-test1",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -207,7 +207,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 	s.Nil(err0)
 
 	startTime2 := startTime1.Add(time.Second)
-	workflowExecution2 := executionpb.WorkflowExecution{
+	workflowExecution2 := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-pagination-test2",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
@@ -265,7 +265,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 	startTime := time.Now().UnixNano()
 
 	// Create 2 executions
-	workflowExecution1 := executionpb.WorkflowExecution{
+	workflowExecution1 := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test1",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -277,7 +277,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 	})
 	s.Nil(err0)
 
-	workflowExecution2 := executionpb.WorkflowExecution{
+	workflowExecution2 := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test2",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
@@ -345,7 +345,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	startTime := time.Now().UnixNano()
 
 	// Create 2 executions
-	workflowExecution1 := executionpb.WorkflowExecution{
+	workflowExecution1 := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test1",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -357,7 +357,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	})
 	s.Nil(err0)
 
-	workflowExecution2 := executionpb.WorkflowExecution{
+	workflowExecution2 := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test2",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
@@ -425,7 +425,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 	startTime := time.Now().UnixNano()
 
 	// Create 2 executions
-	workflowExecution1 := executionpb.WorkflowExecution{
+	workflowExecution1 := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test1",
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
@@ -437,7 +437,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 	})
 	s.Nil(err0)
 
-	workflowExecution2 := executionpb.WorkflowExecution{
+	workflowExecution2 := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-filtering-test2",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
@@ -491,7 +491,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 	testNamespaceUUID := uuid.New()
 
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "a3dbc7bf-deb1-4946-b57c-cf0615ea553f",
 	}
@@ -537,7 +537,7 @@ func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 // TestClosedWithoutStarted test
 func (s *VisibilityPersistenceSuite) TestClosedWithoutStarted() {
 	testNamespaceUUID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "1bdb0122-e8c9-4b35-b6f8-d692ab259b09",
 	}
@@ -575,7 +575,7 @@ func (s *VisibilityPersistenceSuite) TestClosedWithoutStarted() {
 func (s *VisibilityPersistenceSuite) TestMultipleUpserts() {
 	testNamespaceUUID := uuid.New()
 
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "a3dbc7bf-deb1-4946-b57c-cf0615ea553f",
 	}
@@ -624,7 +624,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 	testNamespaceUUID := uuid.New()
 	startTime := time.Now().Add(time.Second * -5).UnixNano()
 	for i := 0; i < nRows; i++ {
-		workflowExecution := executionpb.WorkflowExecution{
+		workflowExecution := commonpb.WorkflowExecution{
 			WorkflowId: uuid.New(),
 			RunId:      uuid.New(),
 		}
@@ -686,7 +686,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 			request: &p.UpsertWorkflowExecutionRequest{
 				NamespaceID:        "",
 				Namespace:          "",
-				Execution:          executionpb.WorkflowExecution{},
+				Execution:          commonpb.WorkflowExecution{},
 				WorkflowTypeName:   "",
 				StartTimestamp:     0,
 				ExecutionTimestamp: 0,
@@ -703,7 +703,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 			request: &p.UpsertWorkflowExecutionRequest{
 				NamespaceID:        "",
 				Namespace:          "",
-				Execution:          executionpb.WorkflowExecution{},
+				Execution:          commonpb.WorkflowExecution{},
 				WorkflowTypeName:   "",
 				StartTimestamp:     0,
 				ExecutionTimestamp: 0,

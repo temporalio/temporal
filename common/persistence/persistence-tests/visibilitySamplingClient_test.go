@@ -30,6 +30,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/temporal-proto/common"
 	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
@@ -53,7 +54,7 @@ type VisibilitySamplingSuite struct {
 var (
 	testNamespaceUUID     = "fb15e4b5-356f-466d-8c6d-a29223e5c536"
 	testNamespace         = "test-namespace"
-	testWorkflowExecution = executionpb.WorkflowExecution{
+	testWorkflowExecution = commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}

@@ -34,7 +34,6 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
 
@@ -118,7 +117,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	execTimeout := int32(70)
 	runTimeout := int32(60)
 	taskTimeout := int32(10)
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
 	}
@@ -193,7 +192,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 		InitialIntervalInSeconds: 1,
 		MaximumAttempts:          3,
 		MaximumIntervalInSeconds: 1,
-		NonRetriableErrorReasons: []string{"bad-bug"},
+		NonRetryableErrorTypes:   []string{"bad-bug"},
 		BackoffCoefficient:       1,
 	}
 	activity3ScheduledEvent, _ := s.addActivityTaskScheduledEvent(4, activity3ID, activity3Type,
@@ -327,7 +326,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 	execTimeout := int32(70)
 	runTimeout := int32(60)
 	taskTimeout := int32(10)
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
 	}
@@ -378,7 +377,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionScheduledFailures() {
 	execTimeout := int32(70)
 	runTimeout := int32(60)
 	taskTimeout := int32(10)
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
 	}
@@ -414,7 +413,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionStartedFailures() {
 	execTimeout := int32(70)
 	runTimeout := int32(60)
 	taskTimeout := int32(10)
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
 	}
@@ -471,7 +470,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	execTimeout := int32(70)
 	runTimeout := int32(60)
 	taskTimeout := int32(10)
-	we := executionpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      rid,
 	}
@@ -637,7 +636,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() 
 	execTimeout := int32(70)
 	runTimeout := int32(60)
 	taskTimeout := int32(10)
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -679,7 +678,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() 
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
 	targetNamespace := "some random target namespace"
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      "some random target run ID",
 	}
@@ -709,7 +708,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 	execTimeout := int32(70)
 	runTimeout := int32(60)
 	taskTimeout := int32(10)
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -751,7 +750,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
 	targetNamespace := "some random target namespace"
-	targetExecution := executionpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
 		RunId:      "some random target run ID",
 	}
@@ -786,7 +785,7 @@ func (s *historyBuilderSuite) getPreviousDecisionStartedEventID() int64 {
 	return s.msBuilder.GetExecutionInfo().LastProcessedEvent
 }
 
-func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we executionpb.WorkflowExecution, workflowType,
+func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we commonpb.WorkflowExecution, workflowType,
 	taskList string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout int32, identity string) *eventpb.HistoryEvent {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -905,7 +904,7 @@ func (s *historyBuilderSuite) addMarkerRecordedEvent(decisionCompletedEventID in
 }
 
 func (s *historyBuilderSuite) addRequestCancelExternalWorkflowExecutionInitiatedEvent(
-	decisionCompletedEventID int64, targetNamespace string, targetExecution executionpb.WorkflowExecution,
+	decisionCompletedEventID int64, targetNamespace string, targetExecution commonpb.WorkflowExecution,
 	childWorkflowOnly bool) *eventpb.HistoryEvent {
 	event, _, err := s.msBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		decisionCompletedEventID,
@@ -1077,7 +1076,7 @@ func (s *historyBuilderSuite) validateMarkerRecordedEvent(
 
 func (s *historyBuilderSuite) validateRequestCancelExternalWorkflowExecutionInitiatedEvent(
 	event *eventpb.HistoryEvent, eventID, decisionTaskCompletedEventID int64,
-	namespace string, execution executionpb.WorkflowExecution, childWorkflowOnly bool) {
+	namespace string, execution commonpb.WorkflowExecution, childWorkflowOnly bool) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_RequestCancelExternalWorkflowExecutionInitiated, event.EventType)
 	s.Equal(eventID, event.EventId)
@@ -1092,7 +1091,7 @@ func (s *historyBuilderSuite) validateRequestCancelExternalWorkflowExecutionInit
 
 func (s *historyBuilderSuite) validateExternalWorkflowExecutionCancelRequested(
 	event *eventpb.HistoryEvent, eventID, initiatedEventID int64,
-	namespace string, execution executionpb.WorkflowExecution) {
+	namespace string, execution commonpb.WorkflowExecution) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_ExternalWorkflowExecutionCancelRequested, event.EventType)
 	s.Equal(eventID, event.EventId)
@@ -1106,7 +1105,7 @@ func (s *historyBuilderSuite) validateExternalWorkflowExecutionCancelRequested(
 
 func (s *historyBuilderSuite) validateRequestCancelExternalWorkflowExecutionFailedEvent(
 	event *eventpb.HistoryEvent, eventID, decisionTaskCompletedEventID, initiatedEventID int64,
-	namespace string, execution executionpb.WorkflowExecution, cause eventpb.WorkflowExecutionFailedCause) {
+	namespace string, execution commonpb.WorkflowExecution, cause eventpb.WorkflowExecutionFailedCause) {
 	s.NotNil(event)
 	s.Equal(eventpb.EventType_RequestCancelExternalWorkflowExecutionFailed, event.EventType)
 	s.Equal(eventID, event.EventId)

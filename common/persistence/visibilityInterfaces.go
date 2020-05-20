@@ -44,7 +44,7 @@ type (
 	RecordWorkflowExecutionStartedRequest struct {
 		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
-		Execution          executionpb.WorkflowExecution
+		Execution          commonpb.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
@@ -60,7 +60,7 @@ type (
 	RecordWorkflowExecutionClosedRequest struct {
 		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
-		Execution          executionpb.WorkflowExecution
+		Execution          commonpb.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
@@ -78,7 +78,7 @@ type (
 	UpsertWorkflowExecutionRequest struct {
 		NamespaceID        string
 		Namespace          string // not persisted, used as config filter key
-		Execution          executionpb.WorkflowExecution
+		Execution          commonpb.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
@@ -158,7 +158,7 @@ type (
 	GetClosedWorkflowExecutionRequest struct {
 		NamespaceID string
 		Namespace   string // namespace name is not persisted, but used as config filter key
-		Execution   executionpb.WorkflowExecution
+		Execution   commonpb.WorkflowExecution
 	}
 
 	// GetClosedWorkflowExecutionResponse is the response to GetClosedWorkflowExecutionRequest

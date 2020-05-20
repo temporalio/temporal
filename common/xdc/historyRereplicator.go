@@ -30,7 +30,6 @@ import (
 
 	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -322,7 +321,7 @@ func (c *historyRereplicationContext) createReplicationRawRequest(
 
 	request := &historyservice.ReplicateRawEventsRequest{
 		NamespaceId: namespaceID,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -441,7 +440,7 @@ func (c *historyRereplicationContext) getHistory(
 
 	response, err := c.rereplicator.adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

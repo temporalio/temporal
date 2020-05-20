@@ -39,7 +39,6 @@ import (
 	commonpb "go.temporal.io/temporal-proto/common"
 	decisionpb "go.temporal.io/temporal-proto/decision"
 	eventpb "go.temporal.io/temporal-proto/event"
-	executionpb "go.temporal.io/temporal-proto/execution"
 	filterpb "go.temporal.io/temporal-proto/filter"
 	tasklistpb "go.temporal.io/temporal-proto/tasklist"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -105,7 +104,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 
 	activityCount := int32(4)
 	activityCounter := int32(0)
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
@@ -135,7 +134,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 		}}, nil
 	}
 
-	atHandler := func(execution *executionpb.WorkflowExecution, activityType *commonpb.ActivityType,
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -170,7 +169,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	// verify last event is terminated event
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},

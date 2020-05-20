@@ -608,7 +608,7 @@ type (
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
 	GetWorkflowExecutionRequest struct {
 		NamespaceID string
-		Execution   executionpb.WorkflowExecution
+		Execution   commonpb.WorkflowExecution
 	}
 
 	// GetWorkflowExecutionResponse is the response to GetworkflowExecutionRequest

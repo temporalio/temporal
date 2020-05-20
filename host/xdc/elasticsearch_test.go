@@ -250,7 +250,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	testListResult(engine2)
 
 	// upsert search attributes
-	dtHandler := func(execution *executionpb.WorkflowExecution, wt *commonpb.WorkflowType,
+	dtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *eventpb.History) ([]*decisionpb.Decision, error) {
 
 		upsertDecision := &decisionpb.Decision{
@@ -321,7 +321,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	terminateDetails := payloads.EncodeString("terminate details")
 	_, err = client1.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
-		WorkflowExecution: &executionpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 		Reason:   terminateReason,
@@ -334,7 +334,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	executionTerminated := false
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
-		Execution: &executionpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}

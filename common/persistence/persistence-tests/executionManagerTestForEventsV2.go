@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	commonpb "go.temporal.io/temporal-proto/common"
 	eventpb "go.temporal.io/temporal-proto/event"
 	executionpb "go.temporal.io/temporal-proto/execution"
 
@@ -109,7 +110,7 @@ func (s *ExecutionManagerSuiteForEventsV2) assertChecksumsEqual(expected checksu
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	defer failOnPanic(s.T())
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-eventsv2-workflow",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -206,7 +207,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistories() {
 	defer failOnPanic(s.T())
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-eventsv2-workflow-version-history",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
@@ -301,7 +302,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 //TestContinueAsNew test
 func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	namespaceID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "continue-as-new-workflow-test",
 		RunId:      "551c88d2-d9e6-404f-8131-9eec14f36643",
 	}
@@ -319,7 +320,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 
-	newWorkflowExecution := executionpb.WorkflowExecution{
+	newWorkflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "continue-as-new-workflow-test",
 		RunId:      "64c7e15a-3fd7-4182-9c6f-6f25a4fa2614",
 	}
@@ -399,7 +400,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-workflow-replication-state-test",
 		RunId:      runID,
 	}
@@ -612,7 +613,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	}
 }
 
-func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplication(namespaceID string, workflowExecution executionpb.WorkflowExecution,
+func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplication(namespaceID string, workflowExecution commonpb.WorkflowExecution,
 	taskList, wType string, wTimeout int32, decisionTimeout int32, nextEventID int64,
 	lastProcessedEventID int64, decisionScheduleID int64, state *p.ReplicationState, txTasks []p.Task, brToken []byte) (*p.CreateWorkflowExecutionResponse, error) {
 	var transferTasks []p.Task
@@ -674,7 +675,7 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicate() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-reset-workflow-with-replication-state-test",
 		RunId:      runID,
 	}
@@ -836,7 +837,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	}
 
 	newRunID := uuid.New()
-	newExecution := executionpb.WorkflowExecution{
+	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      newRunID,
 	}
@@ -1106,7 +1107,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-reset-workflow-with-replication-state-test",
 		RunId:      runID,
 	}
@@ -1250,7 +1251,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	updatedReplicationState := copyReplicationState(replicationState0)
 
 	newRunID := uuid.New()
-	newExecution := executionpb.WorkflowExecution{
+	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      newRunID,
 	}
@@ -1513,7 +1514,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() {
 	namespaceID := uuid.New()
 	runID := uuid.New()
-	workflowExecution := executionpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "test-reset-workflow-with-replication-state-test",
 		RunId:      runID,
 	}
@@ -1562,7 +1563,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 
 	newRunID := uuid.New()
-	newExecution := executionpb.WorkflowExecution{
+	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      newRunID,
 	}
